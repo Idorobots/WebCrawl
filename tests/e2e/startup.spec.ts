@@ -18,6 +18,7 @@ async function startGame(page: Page): Promise<void> {
   await expect(page.locator("#gameUi")).toBeVisible();
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-monsters", "0");
   await expect(page.locator("#statRooms")).toContainText("1 / 100");
 }
 

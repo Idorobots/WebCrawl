@@ -26,7 +26,7 @@ import {
 } from "./domain/generation";
 import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
-import { aStarPath, revealedRoomPath as findRevealedRoomPath } from "./domain/pathfinding";
+import { aStarPath } from "./domain/pathfinding";
 import { PhaserRenderer } from "./render/phaser-renderer";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
 import type {
@@ -80,12 +80,22 @@ const navigationHistory: string[] = [];
 const navigationReturnRooms: Array<number | null> = [];
 
 let currentLayout: DungeonLayout | null = null;
+let currentRoomsById = new Map<number, GraphNode>();
 let currentStairs: Stair[] = [];
 let currentLoot: LootItem[] = [];
 let currentMonsters: Monster[] = [];
 let currentDecorations: Decoration[] = [];
 const destroyedObstaclesByPage = new Map<string, Map<string, ObstacleState>>();
 let visitedRooms = new Set<number>();
+let roomRoutingDirty = true;
+let nextRoomTowardPlayer = new Map<number, number>();
+const SPATIAL_CELL_SIZE = 320;
+interface GeometryCell {
+  rooms: Set<GraphNode>;
+  links: Set<LayoutLink>;
+}
+let geometryCells = new Map<string, GeometryCell>();
+let obstacleCells = new Map<string, Set<Decoration>>();
 const discoveredRoomsByPage = new Map<string, Set<number>>();
 const monsterStatesByPage = new Map<string, Map<string, MonsterState>>();
 
@@ -209,6 +219,7 @@ function markVisited(room: GraphNode | null): void {
   if (!room || visitedRooms.has(room.id)) return;
 
   visitedRooms.add(room.id);
+  roomRoutingDirty = true;
 
   if (currentPageUrl) {
     discoveredRoomsByPage.set(currentStateId ?? currentPageUrl, new Set(visitedRooms));
@@ -256,6 +267,7 @@ function updateCurrentRoom(): void {
     const roomChanged = currentRoomId !== room.id;
     const alreadyVisited = visitedRooms.has(room.id);
     currentRoomId = room.id;
+    if (roomChanged) roomRoutingDirty = true;
     markVisited(room);
     if (roomChanged && alreadyVisited && !gameUi.hidden) updateHudPanels();
   }
@@ -704,7 +716,7 @@ function shootEnemyBullet(monster: Monster, direction: Point): void {
   renderBullets();
 }
 
-function hasLineOfSight(from: Point, to: Point, step = 14): boolean {
+function hasWalkableLine(from: Point, to: Point, radius: number, step: number): boolean {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const distance = Math.hypot(dx, dy);
@@ -715,11 +727,14 @@ function hasLineOfSight(from: Point, to: Point, step = 14): boolean {
       x: from.x + dx * (index / segments),
       y: from.y + dy * (index / segments),
     };
-    if (!isGeometryWalkable(sample.x, sample.y, BULLET_RADIUS)) return false;
-    if (pointBlockedByDecoration(sample.x, sample.y, BULLET_RADIUS)) return false;
+    if (!isWalkable(sample.x, sample.y, radius)) return false;
   }
 
   return true;
+}
+
+function hasLineOfSight(from: Point, to: Point, step = 14): boolean {
+  return hasWalkableLine(from, to, BULLET_RADIUS, step);
 }
 
 function monsterPathBounds(monster: Monster, target: Point): {
@@ -740,21 +755,24 @@ function updateMonsterPath(monster: Monster, target: Point, targetRoomId: number
   if (monster.kind === "sentry") return;
   if (timestamp < (monster.nextPathRefreshAt ?? 0) && monster.path?.length) return;
 
-  const path = aStarPath(
-    { x: monster.x, y: monster.y },
-    target,
-    point => isWalkable(point.x, point.y, MONSTER_RADIUS),
-    18,
-    2800,
-    monsterPathBounds(monster, target),
-  );
+  const start = { x: monster.x, y: monster.y };
+  const path = hasWalkableLine(start, target, MONSTER_RADIUS, 24)
+    ? [target]
+    : aStarPath(
+      start,
+      target,
+      point => isWalkable(point.x, point.y, MONSTER_RADIUS),
+      18,
+      1800,
+      monsterPathBounds(monster, target),
+    );
 
   monster.path = path ?? [];
   monster.pathIndex = path && path.length > 1 ? 1 : 0;
   monster.pathTargetRoomId = targetRoomId;
   monster.pathTargetX = target.x;
   monster.pathTargetY = target.y;
-  monster.nextPathRefreshAt = timestamp + 260;
+  monster.nextPathRefreshAt = timestamp + 420;
 }
 
 function moveMonsterTowards(monster: Monster, target: Point, dt: number): void {
@@ -913,6 +931,30 @@ function updateBullets(dt: number): void {
   renderBullets();
 }
 
+function rebuildRoomRouting(): void {
+  if (!roomRoutingDirty || !currentLayout || currentRoomId === null) return;
+  roomRoutingDirty = false;
+  nextRoomTowardPlayer = new Map([[currentRoomId, currentRoomId]]);
+  const adjacency = new Map<number, number[]>();
+  for (const room of currentLayout.nodes) {
+    if (visitedRooms.has(room.id)) adjacency.set(room.id, []);
+  }
+  for (const link of currentLayout.links) {
+    if (!visitedRooms.has(link.source.id) || !visitedRooms.has(link.target.id)) continue;
+    adjacency.get(link.source.id)?.push(link.target.id);
+    adjacency.get(link.target.id)?.push(link.source.id);
+  }
+  const queue = [currentRoomId];
+  for (let index = 0; index < queue.length; index += 1) {
+    const roomId = queue[index]!;
+    for (const neighbor of adjacency.get(roomId) ?? []) {
+      if (nextRoomTowardPlayer.has(neighbor)) continue;
+      nextRoomTowardPlayer.set(neighbor, roomId);
+      queue.push(neighbor);
+    }
+  }
+}
+
 
 function gameTick(timestamp: number): void {
   gameAnimationFrame = requestAnimationFrame(gameTick);
@@ -935,7 +977,7 @@ function gameTick(timestamp: number): void {
   if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
 
-  const roomsById = new Map(currentLayout.nodes.map(room => [room.id, room]));
+  rebuildRoomRouting();
 
   for (const monster of currentMonsters) {
     if (!monster.active || monster.dead) continue;
@@ -945,22 +987,20 @@ function gameTick(timestamp: number): void {
       monster.roomId = containingRoom.id;
     }
 
-    const path = findRevealedRoomPath(currentLayout, visitedRooms, monster.roomId, currentRoomId);
-    if (!path) continue;
+    const nextRoomId = nextRoomTowardPlayer.get(monster.roomId);
+    if (nextRoomId === undefined) continue;
 
     let targetX = player.x;
     let targetY = player.y;
 
-    if (monster.roomId !== currentRoomId && path.length >= 2) {
-      const nextRoom = roomsById.get(path[1]!);
+    if (monster.roomId !== currentRoomId) {
+      const nextRoom = currentRoomsById.get(nextRoomId);
       if (!nextRoom) continue;
       targetX = nextRoom.x;
       targetY = nextRoom.y;
     }
 
-    const targetRoomId = monster.roomId !== currentRoomId && path.length >= 2
-      ? path[1]!
-      : currentRoomId;
+    const targetRoomId = monster.roomId !== currentRoomId ? nextRoomId : currentRoomId;
 
     if (monster.kind === "sentry") {
       monster.moveDir = null;
@@ -983,7 +1023,7 @@ function gameTick(timestamp: number): void {
     const pathStale =
       !monster.path?.length ||
       monster.pathTargetRoomId !== targetRoomId ||
-      Math.hypot((monster.pathTargetX ?? targetX) - targetX, (monster.pathTargetY ?? targetY) - targetY) > 24;
+      Math.hypot((monster.pathTargetX ?? targetX) - targetX, (monster.pathTargetY ?? targetY) - targetY) > 48;
     if (pathStale) monster.nextPathRefreshAt = 0;
     updateMonsterPath(monster, targetPoint, targetRoomId, timestamp);
     moveMonsterTowards(monster, targetPoint, dt);
@@ -1014,8 +1054,76 @@ function startGameLoop(): void {
   gameAnimationFrame = requestAnimationFrame(gameTick);
 }
 
-function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_RADIUS): boolean {
+function spatialCellKey(x: number, y: number): string {
+  return `${Math.floor(x / SPATIAL_CELL_SIZE)},${Math.floor(y / SPATIAL_CELL_SIZE)}`;
+}
+
+function forSpatialCells(
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+  visit: (key: string) => void,
+): void {
+  const firstX = Math.floor(minX / SPATIAL_CELL_SIZE);
+  const lastX = Math.floor(maxX / SPATIAL_CELL_SIZE);
+  const firstY = Math.floor(minY / SPATIAL_CELL_SIZE);
+  const lastY = Math.floor(maxY / SPATIAL_CELL_SIZE);
+  for (let cellX = firstX; cellX <= lastX; cellX += 1) {
+    for (let cellY = firstY; cellY <= lastY; cellY += 1) visit(`${cellX},${cellY}`);
+  }
+}
+
+function rebuildSpatialIndexes(): void {
+  geometryCells = new Map();
+  obstacleCells = new Map();
+  if (!currentLayout) return;
+  const margin = MONSTER_RADIUS + 8;
+
+  for (const room of currentLayout.nodes) {
+    forSpatialCells(
+      room.x - room.width / 2 - margin,
+      room.x + room.width / 2 + margin,
+      room.y - room.height / 2 - margin,
+      room.y + room.height / 2 + margin,
+      key => {
+        const cell = geometryCells.get(key) ?? { rooms: new Set(), links: new Set() };
+        cell.rooms.add(room);
+        geometryCells.set(key, cell);
+      },
+    );
+  }
+  for (const link of currentLayout.links) {
+    const corridorMargin = link.width / 2 + margin;
+    for (let index = 1; index < link.points.length; index += 1) {
+      const start = link.points[index - 1]!;
+      const end = link.points[index]!;
+      forSpatialCells(
+        Math.min(start.x, end.x) - corridorMargin,
+        Math.max(start.x, end.x) + corridorMargin,
+        Math.min(start.y, end.y) - corridorMargin,
+        Math.max(start.y, end.y) + corridorMargin,
+        key => {
+          const cell = geometryCells.get(key) ?? { rooms: new Set(), links: new Set() };
+          cell.links.add(link);
+          geometryCells.set(key, cell);
+        },
+      );
+    }
+  }
   for (const item of currentDecorations) {
+    if (!item.obstacle) continue;
+    const extent = item.radius + margin;
+    forSpatialCells(item.x - extent, item.x + extent, item.y - extent, item.y + extent, key => {
+      const cell = obstacleCells.get(key) ?? new Set();
+      cell.add(item);
+      obstacleCells.set(key, cell);
+    });
+  }
+}
+
+function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_RADIUS): boolean {
+  for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
     if (!item.obstacle || item.destroyed) continue;
 
     const distance = Math.hypot(x - item.x, y - item.y);
@@ -1027,12 +1135,12 @@ function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_RADIUS):
 
 function isGeometryWalkable(x: number, y: number, radius = PLAYER_RADIUS): boolean {
   if (!currentLayout) return false;
-
-  for (const room of currentLayout.nodes) {
+  const cell = geometryCells.get(spatialCellKey(x, y));
+  if (!cell) return false;
+  for (const room of cell.rooms) {
     if (pointInRoom(x, y, room, radius)) return true;
   }
-
-  for (const link of currentLayout.links) {
+  for (const link of cell.links) {
     if (pointInCorridor(x, y, link, radius)) return true;
   }
 
@@ -1390,6 +1498,9 @@ function renderGraph(
   const { width, height } = renderer.viewportSize();
   const layout = layoutOrthogonal(graph, width, height);
   currentLayout = layout;
+  currentRoomsById = new Map(layout.nodes.map(room => [room.id, room]));
+  roomRoutingDirty = true;
+  nextRoomTowardPlayer = new Map();
 
   const savedDiscovery = discoveredRoomsByPage.get(currentStateId);
   visitedRooms = savedDiscovery
@@ -1402,6 +1513,7 @@ function renderGraph(
   currentStairs = objects.stairs;
   currentLoot = objects.loot;
   currentDecorations = buildDecorations(layout, pageUrl);
+  rebuildSpatialIndexes();
   currentLoot.push(...createSceneryDrops(currentDecorations, pageUrl, collectedLoot));
 
   currentMonsters = buildMonsters(layout, pageUrl);

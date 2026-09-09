@@ -62,6 +62,36 @@ function pointKey(x: number, y: number): string {
   return `${x},${y}`;
 }
 
+function pushOpen(open: AStarNode[], node: AStarNode): void {
+  open.push(node);
+  let index = open.length - 1;
+  while (index > 0) {
+    const parent = Math.floor((index - 1) / 2);
+    if (open[parent]!.f <= node.f) break;
+    open[index] = open[parent]!;
+    index = parent;
+  }
+  open[index] = node;
+}
+
+function popOpen(open: AStarNode[]): AStarNode | undefined {
+  const first = open[0];
+  const last = open.pop();
+  if (!first || !last || !open.length) return first;
+  let index = 0;
+  while (true) {
+    const left = index * 2 + 1;
+    const right = left + 1;
+    if (left >= open.length) break;
+    const child = right < open.length && open[right]!.f < open[left]!.f ? right : left;
+    if (open[child]!.f >= last.f) break;
+    open[index] = open[child]!;
+    index = child;
+  }
+  open[index] = last;
+  return first;
+}
+
 export function aStarPath(
   start: Point,
   goal: Point,
@@ -100,16 +130,16 @@ export function aStarPath(
     x: snappedStart.x,
     y: snappedStart.y,
     g: 0,
-    f: Math.hypot(snappedGoal.x - snappedStart.x, snappedGoal.y - snappedStart.y),
+    f: Math.hypot(snappedGoal.x - snappedStart.x, snappedGoal.y - snappedStart.y) / step,
   }];
   const previous = new Map<string, string | null>([[pointKey(snappedStart.x, snappedStart.y), null]]);
   const bestCost = new Map<string, number>([[pointKey(snappedStart.x, snappedStart.y), 0]]);
 
   for (let iterations = 0; open.length && iterations < maxIterations; iterations += 1) {
-    open.sort((left, right) => left.f - right.f);
-    const current = open.shift();
+    const current = popOpen(open);
     if (!current) break;
     const currentKey = pointKey(current.x, current.y);
+    if (current.g > (bestCost.get(currentKey) ?? Infinity)) continue;
     if (current.x === snappedGoal.x && current.y === snappedGoal.y) {
       const path: Point[] = [{ x: current.x, y: current.y }];
       let cursor = previous.get(currentKey) ?? null;
@@ -140,7 +170,7 @@ export function aStarPath(
 
       bestCost.set(nextKey, nextCost);
       previous.set(nextKey, currentKey);
-      open.push({
+      pushOpen(open, {
         x: next.x,
         y: next.y,
         g: nextCost,

@@ -19,6 +19,7 @@ export const BULLET_RADIUS = 5;
 export const BULLET_MAX_DISTANCE = 900;
 export const MONSTER_RADIUS = 16;
 export const CORRIDOR_HALF_WIDTH = 36;
+export const MAX_CORRIDOR_LENGTH = 720;
 export const STAIR_RADIUS = 25;
 export const LOOT_RADIUS = 26;
 export const CAMERA_SCALE = 0.92;

@@ -1,4 +1,4 @@
-import { CORRIDOR_HALF_WIDTH, ROOM_COLLISION_MARGIN } from "../config";
+import { CORRIDOR_HALF_WIDTH, MAX_CORRIDOR_LENGTH, ROOM_COLLISION_MARGIN } from "../config";
 import type {
   Direction,
   DungeonGraph,
@@ -94,12 +94,11 @@ function placementCandidates(parent: GraphNode, node: GraphNode): Point[] {
   return candidates;
 }
 
-function pointOnSide(room: GraphNode, side: Direction, slot: number, count: number): Point {
-  const spread = Math.min(
-    (side === "N" || side === "S" ? room.width : room.height) - 150,
-    Math.max(0, (count - 1) * 88),
-  );
-  const offset = count <= 1 ? 0 : -spread / 2 + spread * slot / (count - 1);
+function pointOnSide(room: GraphNode, side: Direction, slot: number): Point {
+  const extent = (side === "N" || side === "S" ? room.width : room.height) / 2 - 75;
+  const step = Math.min(88, Math.max(0, extent / 2));
+  const sequence = slot === 0 ? 0 : Math.ceil(slot / 2) * (slot % 2 ? -1 : 1);
+  const offset = Math.max(-extent, Math.min(extent, sequence * step));
   switch (side) {
     case "N": return { x: room.x + offset, y: room.y - room.height / 2 };
     case "E": return { x: room.x + room.width / 2, y: room.y + offset };
@@ -108,42 +107,69 @@ function pointOnSide(room: GraphNode, side: Direction, slot: number, count: numb
   }
 }
 
-function routeScore(points: Point[], rooms: readonly GraphNode[], sourceId: number, targetId: number): number {
-  let score = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    const start = points[index - 1]!;
-    const end = points[index]!;
-    const segmentBounds: Bounds = {
-      left: Math.min(start.x, end.x) - CORRIDOR_HALF_WIDTH,
-      right: Math.max(start.x, end.x) + CORRIDOR_HALF_WIDTH,
-      top: Math.min(start.y, end.y) - CORRIDOR_HALF_WIDTH,
-      bottom: Math.max(start.y, end.y) + CORRIDOR_HALF_WIDTH,
-    };
-    for (const room of rooms) {
-      if (room.id === sourceId || room.id === targetId) continue;
-      if (boundsOverlap(segmentBounds, roomBounds(room, room.x, room.y, 20))) score += 1;
-    }
-  }
-  return score;
+function segmentBounds(start: Point, end: Point, margin = CORRIDOR_HALF_WIDTH): Bounds {
+  return {
+    left: Math.min(start.x, end.x) - margin,
+    right: Math.max(start.x, end.x) + margin,
+    top: Math.min(start.y, end.y) - margin,
+    bottom: Math.max(start.y, end.y) + margin,
+  };
 }
 
-function corridorRoute(start: Point, end: Point, rooms: readonly GraphNode[], sourceId: number, targetId: number): Point[] {
-  if (Math.abs(start.x - end.x) < 1 || Math.abs(start.y - end.y) < 1) return [start, end];
-  const midX = (start.x + end.x) / 2;
-  const midY = (start.y + end.y) / 2;
-  const routes: Point[][] = [
-    [start, { x: end.x, y: start.y }, end],
-    [start, { x: start.x, y: end.y }, end],
-    [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end],
-    [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end],
-  ];
-  return routes.sort((left, right) =>
-    routeScore(left, rooms, sourceId, targetId) - routeScore(right, rooms, sourceId, targetId) || left.length - right.length
-  )[0]!;
+function corridorIntersectsBounds(points: readonly Point[], bounds: Bounds): boolean {
+  for (let index = 1; index < points.length; index += 1) {
+    if (boundsOverlap(segmentBounds(points[index - 1]!, points[index]!), bounds)) return true;
+  }
+  return false;
+}
+
+export function corridorIntersectsRoom(link: LayoutLink, room: GraphNode, margin = 20): boolean {
+  return corridorIntersectsBounds(link.points, roomBounds(room, room.x, room.y, margin));
+}
+
+export function corridorLength(points: readonly Point[]): number {
+  let length = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    length += Math.hypot(points[index]!.x - points[index - 1]!.x, points[index]!.y - points[index - 1]!.y);
+  }
+  return length;
+}
+
+function routeIsClear(points: readonly Point[], rooms: readonly GraphNode[], sourceId: number, targetId: number): boolean {
+  return rooms.every(room =>
+    room.id === sourceId || room.id === targetId ||
+    !corridorIntersectsBounds(points, roomBounds(room, room.x, room.y, 20))
+  );
+}
+
+function corridorRoute(
+  start: Point,
+  end: Point,
+  direction: Direction,
+  rooms: readonly GraphNode[],
+  sourceId: number,
+  targetId: number,
+): Point[] | null {
+  const routes: Point[][] = [];
+  if (direction === "E" || direction === "W") {
+    if (Math.abs(start.y - end.y) < 1) routes.push([start, end]);
+    for (const fraction of [0.5, 0.33, 0.67]) {
+      const x = start.x + (end.x - start.x) * fraction;
+      routes.push([start, { x, y: start.y }, { x, y: end.y }, end]);
+    }
+  } else {
+    if (Math.abs(start.x - end.x) < 1) routes.push([start, end]);
+    for (const fraction of [0.5, 0.33, 0.67]) {
+      const y = start.y + (end.y - start.y) * fraction;
+      routes.push([start, { x: start.x, y }, { x: end.x, y }, end]);
+    }
+  }
+  return routes.find(points =>
+    corridorLength(points) <= MAX_CORRIDOR_LENGTH && routeIsClear(points, rooms, sourceId, targetId)
+  ) ?? null;
 }
 
 export function layoutOrthogonal(graph: DungeonGraph, width: number, height: number): DungeonLayout {
-  const nodesById = new Map(graph.nodes.map(node => [node.id, node]));
   const childrenByParent = new Map<number, GraphNode[]>();
   for (const node of graph.nodes) {
     if (node.parentId === null) continue;
@@ -161,59 +187,73 @@ export function layoutOrthogonal(graph: DungeonGraph, width: number, height: num
   root.directionFromParent = null;
 
   const placed: GraphNode[] = [root];
-  const collides = (node: GraphNode, point: Point): boolean => {
+  const links: LayoutLink[] = [];
+  const sideSlots = new Map<string, number>();
+  const promotedHrefMap = new Map<number, Set<string>>();
+
+  const addPromotedHrefs = (target: GraphNode, hrefs: readonly string[]): void => {
+    if (!hrefs.length) return;
+    const promoted = promotedHrefMap.get(target.id) ?? new Set(target.hrefs);
+    for (const href of hrefs) promoted.add(href);
+    promotedHrefMap.set(target.id, promoted);
+  };
+  const collectSubtreeHrefs = (node: GraphNode, target: GraphNode): void => {
+    addPromotedHrefs(target, node.hrefs);
+    for (const child of childrenByParent.get(node.id) ?? []) collectSubtreeHrefs(child, target);
+  };
+  const roomPlacementIsClear = (node: GraphNode, point: Point): boolean => {
     const candidate = roomBounds(node, point.x, point.y, ROOM_COLLISION_MARGIN + 70);
-    return placed.some(other => boundsOverlap(candidate, roomBounds(other, other.x, other.y, ROOM_COLLISION_MARGIN + 70)));
+    if (placed.some(other => boundsOverlap(candidate, roomBounds(other, other.x, other.y, ROOM_COLLISION_MARGIN + 70)))) return false;
+    return links.every(link => !corridorIntersectsBounds(link.points, roomBounds(node, point.x, point.y, 20)));
   };
 
-  for (const node of graph.nodes) {
-    if (node.id === root.id) continue;
-    const parent = nodesById.get(node.parentId ?? root.id) ?? root;
-    let point = placementCandidates(parent, node).find(candidate => !collides(node, candidate));
-    if (!point) {
-      const index = placed.length;
-      const angle = index * 2.399963;
-      const radius = 900 + index * 170;
-      point = { x: root.x + Math.cos(angle) * radius, y: root.y + Math.sin(angle) * radius };
-      while (collides(node, point)) {
-        point = { x: point.x + Math.cos(angle) * 240, y: point.y + Math.sin(angle) * 240 };
-      }
+  const tryPlace = (node: GraphNode, parent: GraphNode): LayoutLink | null => {
+    for (const point of placementCandidates(parent, node)) {
+      if (!roomPlacementIsClear(node, point)) continue;
+      node.x = point.x;
+      node.y = point.y;
+      const direction = directionForDelta(node.x - parent.x, node.y - parent.y);
+      const sideKey = `${parent.id}:${direction}`;
+      const slot = sideSlots.get(sideKey) ?? 0;
+      const start = pointOnSide(parent, direction, slot);
+      const end = pointOnSide(node, opposite(direction), 0);
+      const points = corridorRoute(start, end, direction, placed, parent.id, node.id);
+      if (!points) continue;
+      node.directionFromParent = direction;
+      node.parentSide = opposite(direction);
+      sideSlots.set(sideKey, slot + 1);
+      return {
+        id: `${parent.id}->${node.id}`,
+        source: parent,
+        target: node,
+        direction,
+        ownerRoomId: parent.id,
+        width: CORRIDOR_HALF_WIDTH * 2,
+        points,
+      };
     }
-    node.x = point.x;
-    node.y = point.y;
-    node.directionFromParent = directionForDelta(node.x - parent.x, node.y - parent.y);
-    node.parentSide = opposite(node.directionFromParent);
-    placed.push(node);
-  }
+    return null;
+  };
 
-  const pending = placed.filter(node => node.id !== root.id).map(node => {
-    const source = nodesById.get(node.parentId ?? root.id) ?? root;
-    const sourceSide = directionForDelta(node.x - source.x, node.y - source.y);
-    return { node, source, sourceSide, targetSide: opposite(sourceSide) };
-  });
-  const sideTotals = new Map<string, number>();
-  for (const item of pending) {
-    const key = `${item.source.id}:${item.sourceSide}`;
-    sideTotals.set(key, (sideTotals.get(key) ?? 0) + 1);
+  const placeChildren = (parent: GraphNode): void => {
+    for (const child of childrenByParent.get(parent.id) ?? []) {
+      const link = tryPlace(child, parent);
+      if (!link) {
+        collectSubtreeHrefs(child, parent);
+        continue;
+      }
+      placed.push(child);
+      links.push(link);
+      placeChildren(child);
+    }
+  };
+  placeChildren(root);
+
+  for (const room of placed) {
+    const promoted = promotedHrefMap.get(room.id);
+    if (promoted) room.hrefs = [...promoted].slice(0, 10);
   }
-  const sideSlots = new Map<string, number>();
-  const links: LayoutLink[] = pending.map(item => {
-    const key = `${item.source.id}:${item.sourceSide}`;
-    const slot = sideSlots.get(key) ?? 0;
-    sideSlots.set(key, slot + 1);
-    const start = pointOnSide(item.source, item.sourceSide, slot, sideTotals.get(key) ?? 1);
-    const end = pointOnSide(item.node, item.targetSide, 0, 1);
-    return {
-      id: `${item.source.id}->${item.node.id}`,
-      source: item.source,
-      target: item.node,
-      direction: item.sourceSide,
-      ownerRoomId: item.source.id,
-      width: CORRIDOR_HALF_WIDTH * 2,
-      points: corridorRoute(start, end, placed, item.source.id, item.node.id),
-    };
-  });
-  return { nodes: placed, links, hiddenCount: 0 };
+  return { nodes: placed, links, hiddenCount: graph.nodes.length - placed.length };
 }
 
 export function corridorEndpoints(link: LayoutLink): { x1: number; y1: number; x2: number; y2: number } {

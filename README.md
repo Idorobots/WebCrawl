@@ -96,7 +96,7 @@ The backend is under `src/server`:
 
 Shared game entities are modeled in `src/client/types.ts`, while gameplay constants and asset manifests live in `src/client/config.ts`.
 
-Each retained DOM element becomes a deterministically shaped room. The layout supports rectangle, wide, tall, capsule, and octagon presets, expands rooms with many child exits, and routes straight or bent corridors between slotted doors. An outgoing corridor belongs to its parent room, so its scenery and enemies are generated from the parent's stable seed; links and floor portals are generated only inside rooms. The HUD remains HTML/CSS and minimaps use native canvas rendering.
+Each retained DOM element becomes a deterministically shaped room. The layout supports rectangle, wide, tall, capsule, and octagon presets, expands rooms with many child exits, and routes straight or bent corridors between slotted doors. Corridors are limited to 720 world units and cannot cross unrelated rooms; branches that cannot meet those constraints are skipped and their links are promoted to the nearest retained room. An outgoing corridor belongs to its parent room, so its scenery and enemies are generated from the parent's stable seed, except that corridors leaving the initial room never spawn enemies. Links and floor portals are generated only inside rooms. The HUD remains HTML/CSS and minimaps use native canvas rendering.
 
 ## Remote Fetching
 

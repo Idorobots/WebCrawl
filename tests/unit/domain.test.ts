@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ROOM_HEIGHT, ROOM_WIDTH } from "../../src/client/config";
+import { MAX_CORRIDOR_LENGTH, ROOM_HEIGHT, ROOM_WIDTH } from "../../src/client/config";
 import { distanceSquared, pointInCorridor, pointInRoom } from "../../src/client/domain/geometry";
 import {
   buildInteractiveObjects,
@@ -13,7 +13,7 @@ import {
 } from "../../src/client/domain/generation";
 import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
-import { corridorEndpoints, layoutOrthogonal } from "../../src/client/domain/layout";
+import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, revealedRoomPath } from "../../src/client/domain/pathfinding";
 import type { DungeonGraph, GraphNode } from "../../src/client/types";
 
@@ -121,11 +121,12 @@ describe("layout and geometry", () => {
     const monsters = monsterSpecsForCorridor(link, 3);
     expect(decorations).toEqual(decorationSpecsForCorridor(link));
     expect(monsters).toEqual(monsterSpecsForCorridor(link, 3));
+    expect(monsters).toEqual([]);
     expect(decorations.every(item => item.roomId === link.source.id)).toBe(true);
     expect(monsters.every(item => item.spawnRoomId === link.source.id)).toBe(true);
   });
 
-  it("retains the full room budget across all finite room presets", () => {
+  it("skips rooms rather than forcing corridors through rooms or beyond the length limit", () => {
     const nodes = Array.from({ length: 100 }, (_, id) => node(
       id,
       id === 0 ? null : Math.floor((id - 1) / 5),
@@ -140,12 +141,18 @@ describe("layout and geometry", () => {
       truncated: false,
     }, 1200, 800);
 
-    expect(denseLayout.nodes).toHaveLength(100);
-    expect(denseLayout.links).toHaveLength(99);
-    expect(denseLayout.hiddenCount).toBe(0);
-    expect(new Set(denseLayout.nodes.map(room => room.shape))).toEqual(
-      new Set(["rectangle", "wide", "tall", "capsule", "octagon"]),
-    );
+    expect(denseLayout.nodes.length).toBeGreaterThan(1);
+    expect(denseLayout.nodes.length).toBeLessThan(nodes.length);
+    expect(denseLayout.links).toHaveLength(denseLayout.nodes.length - 1);
+    expect(denseLayout.hiddenCount).toBe(nodes.length - denseLayout.nodes.length);
+    expect(new Set(denseLayout.nodes.map(room => room.shape)).size).toBeGreaterThan(1);
+    for (const link of denseLayout.links) {
+      expect(corridorLength(link.points)).toBeLessThanOrEqual(MAX_CORRIDOR_LENGTH);
+      for (const room of denseLayout.nodes) {
+        if (room.id === link.source.id || room.id === link.target.id) continue;
+        expect(corridorIntersectsRoom(link, room)).toBe(false);
+      }
+    }
   });
 
   it("routes around blocked doorway geometry with A*", () => {

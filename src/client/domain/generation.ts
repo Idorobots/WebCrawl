@@ -230,6 +230,7 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1): Monster[] {
 }
 
 export function monsterSpecsForCorridor(link: LayoutLink, floor = 1): Monster[] {
+  if (link.source.isRoot) return [];
   const corridorSeed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|monsters`);
   const count = corridorSeed % 3;
   const difficulty = floorDifficulty(floor);
