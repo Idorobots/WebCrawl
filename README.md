@@ -98,6 +98,8 @@ Shared game entities are modeled in `src/client/types.ts`, while gameplay consta
 
 Each retained DOM element becomes a deterministically shaped room. The layout supports rectangle, wide, tall, capsule, and octagon presets, expands rooms with many child exits, and routes straight or bent corridors between slotted doors. Corridors are limited to 720 world units and cannot cross unrelated rooms; branches that cannot meet those constraints are skipped and their links are promoted to the nearest retained room. An outgoing corridor belongs to its parent room, so its scenery and enemies are generated from the parent's stable seed, except that corridors leaving the initial room never spawn enemies. Links and floor portals are generated only inside rooms. The HUD remains HTML/CSS and minimaps use native canvas rendering.
 
+Floor instances preserve discovered rooms, collected loot, obstacle and spawner damage, spawner progress, and monster positions and health when revisited. Rooms contain more obstacles than earlier builds and non-root combat rooms contain zero to four destructible reinforcement spawners. Deeper floors increase the average spawner count, enemy populations and stats, reinforcement limits, and scenery strength while shortening spawner cooldowns.
+
 ## Remote Fetching
 
 The backend fetches remote HTML to avoid browser CORS restrictions. It rejects embedded credentials, localhost and internal hostnames, and private-network addresses. Redirect targets are validated independently. Responses are limited to 5 MB, requests time out after 12 seconds, and at most five redirects are followed.

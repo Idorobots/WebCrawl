@@ -23,6 +23,7 @@ import {
   buildMonsters as createMonsters,
   buildSceneryDrops as createSceneryDrops,
   lootKindForSeed,
+  monsterSpecForSpawner,
 } from "./domain/generation";
 import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
@@ -402,6 +403,10 @@ function stateIdForPage(url: string, floor = floorNumber()): string {
   return `${url}::floor-${floor}`;
 }
 
+function floorIdentity(pageUrl: string): string {
+  return currentStateId ?? stateIdForPage(pageUrl);
+}
+
 function closeMinimap(): void {
   minimapModal.classList.remove("open");
   minimapModal.hidden = true;
@@ -521,12 +526,13 @@ function saveObstacleState(item: Decoration): void {
 
   obstacleStateMapForPage(currentPageUrl).set(item.id, {
     hp: item.hp,
-    destroyed: item.destroyed
+    destroyed: item.destroyed,
+    spawnedCount: item.spawnedCount,
   });
 }
 
 function buildDecorations(layout: DungeonLayout, pageUrl: string): Decoration[] {
-  return createDecorations(layout, obstacleStateMapForPage(pageUrl));
+  return createDecorations(layout, obstacleStateMapForPage(pageUrl), floorNumber());
 }
 
 function renderDecorations(): void {
@@ -548,7 +554,7 @@ function damageObstacle(item: Decoration, amount: number): void {
     spawnExplosion(item.x, item.y);
     renderDecorations();
     if (currentPageUrl) {
-      const drops = createSceneryDrops([item], currentPageUrl, collectedLoot);
+      const drops = createSceneryDrops([item], floorIdentity(currentPageUrl), collectedLoot);
       currentLoot.push(...drops);
       if (drops.length) renderInteractiveObjects();
     }
@@ -571,6 +577,9 @@ function saveMonsterState(monster: Monster): void {
 
   const states = monsterStateMapForPage(currentPageUrl);
   states.set(monster.id, {
+    x: monster.x,
+    y: monster.y,
+    roomId: monster.roomId,
     hp: monster.hp,
     dead: monster.dead,
     active: monster.active,
@@ -582,8 +591,23 @@ function saveMonsterState(monster: Monster): void {
   });
 }
 
+function saveCurrentFloorState(): void {
+  if (!currentPageUrl || !currentStateId) return;
+  discoveredRoomsByPage.set(currentStateId, new Set(visitedRooms));
+  for (const item of currentDecorations) {
+    if (item.obstacle) saveObstacleState(item);
+  }
+  for (const monster of currentMonsters) saveMonsterState(monster);
+}
+
 function buildMonsters(layout: DungeonLayout, pageUrl: string): Monster[] {
-  const monsters = createMonsters(layout, monsterStateMapForPage(pageUrl), visitedRooms, floorNumber());
+  const monsters = createMonsters(
+    layout,
+    monsterStateMapForPage(pageUrl),
+    visitedRooms,
+    floorNumber(),
+    currentDecorations,
+  );
   for (const monster of monsters) {
     if (monster.dead && monster.droppedLoot && monster.dropId && !collectedLoot.has(monster.dropId)) {
       currentLoot.push({
@@ -610,6 +634,50 @@ function activateMonstersInRoom(roomId: number): void {
   }
 
   if (changed) renderMonsters();
+}
+
+function updateMonsterSpawners(timestamp: number): void {
+  let spawned = false;
+  for (const spawner of currentDecorations) {
+    if (
+      !spawner.spawner ||
+      spawner.destroyed ||
+      !visitedRooms.has(spawner.roomId) ||
+      (spawner.spawnedCount ?? 0) >= (spawner.spawnLimit ?? 0)
+    ) continue;
+
+    if (spawner.nextSpawnAt === undefined) {
+      spawner.nextSpawnAt = timestamp + (spawner.spawnIntervalMs ?? 7_000);
+      continue;
+    }
+    if (timestamp < spawner.nextSpawnAt) continue;
+
+    const index = spawner.spawnedCount ?? 0;
+    const monster = monsterSpecForSpawner(spawner, floorNumber(), index);
+    monster.hp = monster.maxHp;
+    monster.active = true;
+    const spawnOffsets: Point[] = [
+      { x: 64, y: 0 }, { x: -64, y: 0 }, { x: 0, y: 64 }, { x: 0, y: -64 },
+      { x: 78, y: 78 }, { x: -78, y: -78 },
+    ];
+    const safePosition = spawnOffsets
+      .map(offset => ({ x: spawner.x + offset.x, y: spawner.y + offset.y }))
+      .find(point => isWalkable(point.x, point.y, MONSTER_RADIUS));
+    if (!safePosition) {
+      spawner.nextSpawnAt = timestamp + 1_000;
+      continue;
+    }
+    monster.x = safePosition.x;
+    monster.y = safePosition.y;
+    currentMonsters.push(monster);
+    spawner.spawnedCount = index + 1;
+    spawner.nextSpawnAt = timestamp + (spawner.spawnIntervalMs ?? 7_000);
+    saveObstacleState(spawner);
+    saveMonsterState(monster);
+    spawnExplosion(monster.x, monster.y);
+    spawned = true;
+  }
+  if (spawned) renderMonsters();
 }
 
 function renderMonsters(): void {
@@ -641,9 +709,9 @@ function applyPlayerDamage(amount: number): void {
 }
 
 function monsterDrop(monster: Monster): void {
-  if (!monster.dropsLoot || monster.droppedLoot) return;
+  if (!currentPageUrl || !monster.dropsLoot || monster.droppedLoot) return;
 
-  const dropId = `${currentPageUrl}::${monster.id}::monster-drop`;
+  const dropId = `${floorIdentity(currentPageUrl)}::${monster.id}::monster-drop`;
   monster.droppedLoot = true;
   monster.dropId = dropId;
   monster.dropX = monster.x;
@@ -976,6 +1044,7 @@ function gameTick(timestamp: number): void {
   updatePlayerMovement(dt, timestamp);
   if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
+  updateMonsterSpawners(timestamp);
 
   rebuildRoomRouting();
 
@@ -1160,7 +1229,7 @@ function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
 } {
   return createInteractiveObjects(
     layout,
-    pageUrl,
+    floorIdentity(pageUrl),
     navigationHistory[navigationHistory.length - 1] ?? null,
     collectedLoot,
   );
@@ -1514,7 +1583,7 @@ function renderGraph(
   currentLoot = objects.loot;
   currentDecorations = buildDecorations(layout, pageUrl);
   rebuildSpatialIndexes();
-  currentLoot.push(...createSceneryDrops(currentDecorations, pageUrl, collectedLoot));
+  currentLoot.push(...createSceneryDrops(currentDecorations, floorIdentity(pageUrl), collectedLoot));
 
   currentMonsters = buildMonsters(layout, pageUrl);
 
@@ -1606,8 +1675,9 @@ async function loadPage(
 
     setStatus("Parsing HTML …");
     const graph = domToGraph(html, url);
+    saveCurrentFloorState();
 
-    if (pushCurrent && currentPageUrl && currentPageUrl !== url) {
+    if (pushCurrent && currentPageUrl) {
       navigationHistory.push(currentPageUrl);
       navigationReturnRooms.push(returnRoomId ?? currentRoomId);
     }

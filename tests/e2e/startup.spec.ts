@@ -150,5 +150,6 @@ test("spawns multiple enemies once another room is revealed", async ({ page }) =
     return Number(value?.split("/")[0]?.trim() ?? "0");
   }).toBeGreaterThanOrEqual(2);
   await expect.poll(async () => Number(await page.locator("#gameCanvas").getAttribute("data-active-monsters"))).toBeGreaterThanOrEqual(2);
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-spawners", /^[0-4]$/);
   await page.keyboard.up(key);
 });

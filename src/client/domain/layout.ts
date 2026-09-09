@@ -99,6 +99,32 @@ function pointOnSide(room: GraphNode, side: Direction, slot: number): Point {
   const step = Math.min(88, Math.max(0, extent / 2));
   const sequence = slot === 0 ? 0 : Math.ceil(slot / 2) * (slot % 2 ? -1 : 1);
   const offset = Math.max(-extent, Math.min(extent, sequence * step));
+  const halfWidth = room.width / 2;
+  const halfHeight = room.height / 2;
+  if (room.shape === "capsule") {
+    const radius = Math.min(halfWidth, halfHeight);
+    const straight = Math.max(0, halfWidth - radius);
+    if (side === "E" || side === "W") {
+      const y = Math.max(-radius, Math.min(radius, offset));
+      const x = straight + Math.sqrt(Math.max(0, radius ** 2 - y ** 2));
+      return { x: room.x + (side === "E" ? x : -x), y: room.y + y };
+    }
+    const x = Math.max(-halfWidth, Math.min(halfWidth, offset));
+    const curveX = Math.max(0, Math.abs(x) - straight);
+    const y = Math.sqrt(Math.max(0, radius ** 2 - curveX ** 2));
+    return { x: room.x + x, y: room.y + (side === "S" ? y : -y) };
+  }
+  if (room.shape === "octagon") {
+    const cut = Math.min(room.width, room.height) * 0.18;
+    if (side === "E" || side === "W") {
+      const inset = Math.max(0, Math.abs(offset) - (halfHeight - cut));
+      const x = halfWidth - inset;
+      return { x: room.x + (side === "E" ? x : -x), y: room.y + offset };
+    }
+    const inset = Math.max(0, Math.abs(offset) - (halfWidth - cut));
+    const y = halfHeight - inset;
+    return { x: room.x + offset, y: room.y + (side === "S" ? y : -y) };
+  }
   switch (side) {
     case "N": return { x: room.x + offset, y: room.y - room.height / 2 };
     case "E": return { x: room.x + room.width / 2, y: room.y + offset };

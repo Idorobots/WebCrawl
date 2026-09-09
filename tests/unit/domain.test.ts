@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CORRIDOR_LENGTH, ROOM_HEIGHT, ROOM_WIDTH } from "../../src/client/config";
+import { CORRIDOR_HALF_WIDTH, MAX_CORRIDOR_LENGTH, MONSTER_RADIUS, ROOM_HEIGHT, ROOM_WIDTH } from "../../src/client/config";
 import { distanceSquared, pointInCorridor, pointInRoom } from "../../src/client/domain/geometry";
 import {
+  buildDecorations,
   buildInteractiveObjects,
+  buildMonsters,
   buildSceneryDrops,
   decorationSpecsForCorridor,
   decorationSpecsForRoom,
   lootCountForRoom,
   monsterSpecsForCorridor,
   monsterSpecsForRoom,
+  monsterSpecForSpawner,
   sceneryDropKindForSeed,
 } from "../../src/client/domain/generation";
 import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
@@ -93,7 +96,7 @@ describe("layout and geometry", () => {
     expect(layout.nodes).toHaveLength(graph.nodes.length);
     expect(layout.hiddenCount).toBe(0);
     expect(layout.nodes[0]).toMatchObject({ x: 400, y: 300 });
-    expect(layout.links[0]).toMatchObject({ id: "0->1", ownerRoomId: 0, width: 72 });
+    expect(layout.links[0]).toMatchObject({ id: "0->1", ownerRoomId: 0, width: CORRIDOR_HALF_WIDTH * 2 });
     const endpoints = corridorEndpoints(layout.links[0]!);
     expect(endpoints).toEqual({
       x1: layout.links[0]!.points[0]!.x,
@@ -110,6 +113,33 @@ describe("layout and geometry", () => {
     expect(distanceSquared({ x: 1, y: 2 }, { x: 4, y: 6 })).toBe(25);
   });
 
+  it("keeps widened doorways and corridor obstacles traversable by monsters", () => {
+    const decorations = buildDecorations(layout, new Map(), 1);
+    for (const link of layout.links) {
+      const path = aStarPath(
+        link.source,
+        link.target,
+        point => {
+          const inFloor = layout.nodes.some(room => pointInRoom(point.x, point.y, room, MONSTER_RADIUS)) ||
+            layout.links.some(candidate => pointInCorridor(point.x, point.y, candidate, MONSTER_RADIUS));
+          const blocked = decorations.some(item =>
+            item.obstacle && !item.destroyed && Math.hypot(point.x - item.x, point.y - item.y) < item.radius + MONSTER_RADIUS
+          );
+          return inFloor && !blocked;
+        },
+        18,
+        6_000,
+        {
+          minX: Math.min(link.source.x, link.target.x) - 220,
+          maxX: Math.max(link.source.x, link.target.x) + 220,
+          minY: Math.min(link.source.y, link.target.y) - 220,
+          maxY: Math.max(link.source.y, link.target.y) + 220,
+        },
+      );
+      expect(path).not.toBeNull();
+    }
+  });
+
   it("finds paths only through revealed rooms", () => {
     expect(revealedRoomPath(layout, new Set([0, 1, 2]), 1, 2)).toEqual([1, 0, 2]);
     expect(revealedRoomPath(layout, new Set([0, 1]), 1, 2)).toBeNull();
@@ -120,6 +150,10 @@ describe("layout and geometry", () => {
     const decorations = decorationSpecsForCorridor(link);
     const monsters = monsterSpecsForCorridor(link, 3);
     expect(decorations).toEqual(decorationSpecsForCorridor(link));
+    expect(decorations.some(item => item.obstacle)).toBe(true);
+    expect(decorations.filter(item => item.obstacle).every(item =>
+      item.radius + MONSTER_RADIUS < link.width / 2
+    )).toBe(true);
     expect(monsters).toEqual(monsterSpecsForCorridor(link, 3));
     expect(monsters).toEqual([]);
     expect(decorations.every(item => item.roomId === link.source.id)).toBe(true);
@@ -148,6 +182,8 @@ describe("layout and geometry", () => {
     expect(new Set(denseLayout.nodes.map(room => room.shape)).size).toBeGreaterThan(1);
     for (const link of denseLayout.links) {
       expect(corridorLength(link.points)).toBeLessThanOrEqual(MAX_CORRIDOR_LENGTH);
+      expect(pointInRoom(link.points[0]!.x, link.points[0]!.y, link.source, 0)).toBe(true);
+      expect(pointInRoom(link.points.at(-1)!.x, link.points.at(-1)!.y, link.target, 0)).toBe(true);
       for (const room of denseLayout.nodes) {
         if (room.id === link.source.id || room.id === link.target.id) continue;
         expect(corridorIntersectsRoom(link, room)).toBe(false);
@@ -184,9 +220,9 @@ describe("deterministic room contents", () => {
   it("repeats decoration and monster specifications exactly", () => {
     const decorations = decorationSpecsForRoom(room);
     expect(decorations).toEqual(decorationSpecsForRoom(room));
-    expect(decorations.length).toBeGreaterThanOrEqual(3);
-    expect(decorations.length).toBeLessThanOrEqual(5);
-    expect(decorations.filter(item => item.obstacle).length).toBeGreaterThanOrEqual(2);
+    expect(decorations.length).toBeGreaterThanOrEqual(5);
+    expect(decorations.length).toBeLessThanOrEqual(7);
+    expect(decorations.filter(item => item.obstacle).length).toBeGreaterThanOrEqual(4);
     expect(new Set(decorations.map(item => `${item.x},${item.y}`)).size).toBe(decorations.length);
     expect(monsterSpecsForRoom(room)).toEqual([]);
   });
@@ -240,6 +276,91 @@ describe("deterministic room contents", () => {
     expect(sentry?.speed).toBe(0);
     expect(sentry?.projectileSpeed ?? 0).toBeGreaterThan(0);
     expect(sentry?.projectileRange ?? 0).toBeGreaterThan(0);
+  });
+
+  it("adds stronger, persistent monster spawners as floors deepen", () => {
+    const combatRooms = Array.from({ length: 500 }, (_, index) => node(index + 2_000, 0, 1, {
+      tag: "section",
+      isRoot: false,
+      lootSeed: stableHash(`spawner-room-${index}`),
+    }));
+    const floorOneCounts = combatRooms.map(room =>
+      decorationSpecsForRoom(room, 1).filter(item => item.spawner).length
+    );
+    const floorFourCounts = combatRooms.map(room =>
+      decorationSpecsForRoom(room, 4).filter(item => item.spawner).length
+    );
+    const floorSevenCounts = combatRooms.map(room =>
+      decorationSpecsForRoom(room, 7).filter(item => item.spawner).length
+    );
+    const floorTenCounts = combatRooms.map(room =>
+      decorationSpecsForRoom(room, 10).filter(item => item.spawner).length
+    );
+    expect(floorOneCounts.every(count => count >= 0 && count <= 4)).toBe(true);
+    expect(floorTenCounts.every(count => count >= 0 && count <= 4)).toBe(true);
+    expect(floorOneCounts).toContain(0);
+    expect(floorTenCounts).toContain(4);
+    expect(floorOneCounts.filter(Boolean).length).toBeLessThan(combatRooms.length / 4);
+    const totals = [floorOneCounts, floorFourCounts, floorSevenCounts, floorTenCounts]
+      .map(counts => counts.reduce((sum, count) => sum + count, 0));
+    expect(totals[1]).toBeGreaterThan(totals[0]!);
+    expect(totals[2]).toBeGreaterThan(totals[1]!);
+    expect(totals[3]).toBeGreaterThan(totals[2]!);
+    expect(floorOneCounts.every((count, index) => count === 0 || floorTenCounts[index]! > 0)).toBe(true);
+
+    const combatRoom = combatRooms.find(room =>
+      decorationSpecsForRoom(room, 1).some(item => item.spawner) &&
+      decorationSpecsForRoom(room, 10).some(item => item.spawner)
+    );
+    if (!combatRoom) throw new Error("Expected a room with spawners on both sampled floors");
+    const combatLayout = { nodes: [combatRoom], links: [], hiddenCount: 0 };
+    const floorOne = decorationSpecsForRoom(combatRoom, 1);
+    const floorTen = decorationSpecsForRoom(combatRoom, 10);
+    const earlySpawners = floorOne.filter(item => item.spawner);
+    const deepSpawners = floorTen.filter(item => item.spawner);
+
+    expect(deepSpawners[0]!.maxHp).toBeGreaterThan(earlySpawners[0]!.maxHp);
+    expect(deepSpawners[0]!.spawnLimit).toBeGreaterThan(earlySpawners[0]!.spawnLimit ?? 0);
+    expect(deepSpawners[0]!.spawnIntervalMs).toBeLessThan(earlySpawners[0]!.spawnIntervalMs ?? Infinity);
+
+    const spawner = deepSpawners[0]!;
+    const restoredDecorations = buildDecorations(combatLayout, new Map([[
+      spawner.id,
+      { hp: 2, destroyed: false, spawnedCount: 2 },
+    ]]), 10);
+    const restoredSpawner = restoredDecorations.find(item => item.id === spawner.id)!;
+    expect(restoredSpawner).toMatchObject({ hp: 2, spawnedCount: 2 });
+
+    const reinforcement = monsterSpecForSpawner(restoredSpawner, 10, 0);
+    const restoredMonsters = buildMonsters(combatLayout, new Map([[
+      reinforcement.id,
+      {
+        x: reinforcement.x + 31,
+        y: reinforcement.y - 17,
+        roomId: combatRoom.id,
+        hp: 1,
+        dead: false,
+        active: true,
+        droppedLoot: false,
+        dropId: null,
+        dropX: null,
+        dropY: null,
+        dropKind: null,
+      },
+    ]]), new Set([combatRoom.id]), 10, restoredDecorations);
+    expect(restoredMonsters.find(item => item.id === reinforcement.id)).toMatchObject({
+      x: reinforcement.x + 31,
+      y: reinforcement.y - 17,
+      hp: 1,
+      active: true,
+    });
+  });
+
+  it("namespaces collected loot to a specific floor instance", () => {
+    const floorOne = buildInteractiveObjects(layout, "https://example.com/::floor-1", null, new Set());
+    const floorTwo = buildInteractiveObjects(layout, "https://example.com/::floor-2", null, new Set());
+    expect(floorOne.loot.length).toBeGreaterThan(0);
+    expect(floorOne.loot.map(item => item.id)).not.toEqual(floorTwo.loot.map(item => item.id));
   });
 
   it("deterministically gives a small share of scenery loot and medkit drops", () => {

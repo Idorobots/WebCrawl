@@ -186,6 +186,9 @@ export class PhaserRenderer {
 
   renderDecorations(items: readonly Decoration[], visited: ReadonlySet<number>): void {
     this.currentDecorations = items.map(item => ({ ...item }));
+    this.host.dataset.activeSpawners = String(items.filter(item =>
+      item.spawner && !item.destroyed && visited.has(item.roomId)
+    ).length);
     this.destroyAll(this.decorations);
     const scene = this.scene;
     if (!scene) return;
@@ -193,6 +196,11 @@ export class PhaserRenderer {
       if (!visited.has(item.roomId) || item.destroyed) continue;
       const sprite = scene.add.image(0, 0, textureKey(item.asset)).setDisplaySize(item.size, item.size);
       const container = scene.add.container(item.x, item.y, [sprite]).setDepth(20);
+      if (item.spawner) {
+        sprite.setTint(0xe77cff);
+        const field = scene.add.circle(0, 0, item.radius + 8, 0x7d2c91, 0.22).setStrokeStyle(2, 0xf09cff, 0.85);
+        container.addAt(field, 0);
+      }
       if (item.obstacle) {
         const bg = scene.add.rectangle(-22, -35, 44, 5, 0x071018).setOrigin(0, 0.5);
         const hp = scene.add.rectangle(-22, -35, 44 * Math.max(0, item.hp) / Math.max(1, item.maxHp), 5, 0x62e6c8).setOrigin(0, 0.5);
@@ -244,7 +252,13 @@ export class PhaserRenderer {
       if (!visibleIds.has(item.id)) continue;
       let container = this.monsters.get(item.id);
       if (!container) {
-        const sprite = scene.add.image(0, 0, textureKey(assetFor(item))).setDisplaySize(62, 62).setName("sprite");
+        const assetKey = textureKey(assetFor(item));
+        const frame = scene.textures.getFrame(assetKey);
+        const cropTop = Math.ceil(frame.height * 0.14);
+        const sprite = scene.add.image(0, 0, assetKey)
+          .setCrop(0, cropTop, frame.width, frame.height - cropTop)
+          .setDisplaySize(62, 62)
+          .setName("sprite");
         const bg = scene.add.rectangle(-20, -34, 40, 5, 0x071018).setOrigin(0, 0.5);
         const hp = scene.add.rectangle(-20, -34, 40, 5, item.kind === "sentry" ? 0xc07cff : 0xff6b6b).setOrigin(0, 0.5).setName("hp");
         container = scene.add.container(item.x, item.y, [sprite, bg, hp]).setDepth(30);

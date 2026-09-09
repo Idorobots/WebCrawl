@@ -85,11 +85,17 @@ export interface Decoration extends Point {
   hp: number;
   destroyed: boolean;
   dropKind: LootKind | null;
+  spawner?: boolean;
+  spawnIntervalMs?: number;
+  spawnLimit?: number;
+  spawnedCount?: number;
+  nextSpawnAt?: number;
 }
 
 export interface ObstacleState {
   hp: number;
   destroyed: boolean;
+  spawnedCount?: number;
 }
 
 export interface Monster extends Point {
@@ -127,6 +133,9 @@ export interface Monster extends Point {
 }
 
 export interface MonsterState {
+  x: number;
+  y: number;
+  roomId: number;
   hp: number;
   dead: boolean;
   active: boolean;
