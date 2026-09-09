@@ -67,8 +67,9 @@ CHROMIUM_PATH=/path/to/chromium npm run test:e2e
 
 ## Controls
 
-- Arrow keys: move and face the player
-- Space: fire the pulse rifle
+- Arrow keys or WASD: move the player
+- Mouse: aim the player
+- Hold left click: fire the pulse rifle toward the cursor
 - Escape: close the tactical map if it is open
 - Walk onto a down portal: visit that room's link
 - Walk onto the root room's up portal: return to the previous page

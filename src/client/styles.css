@@ -86,10 +86,9 @@ button:hover { background: #242c37; }
   width: 100%;
   height: 100%;
   display: block;
-  cursor: grab;
+  cursor: crosshair;
+  user-select: none;
 }
-
-#map:active { cursor: grabbing; }
 
 .corridor {
   stroke: var(--corridor);
@@ -1028,6 +1027,7 @@ body {
   background:
     radial-gradient(circle at center, #07131d, #020508 72%);
   overflow: hidden;
+  cursor: crosshair;
 }
 
 #map {

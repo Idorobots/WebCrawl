@@ -11,7 +11,7 @@ export const ROOM_Y_SPACING = 426;
 export const ROOM_COLLISION_MARGIN = 4;
 
 export const PLAYER_RADIUS = 7;
-export const PLAYER_STEP = 14;
+export const PLAYER_SPEED = 220;
 export const PLAYER_MAX_HP = 10;
 export const PLAYER_FIRE_COOLDOWN_MS = 220;
 export const BULLET_SPEED = 520;
@@ -23,7 +23,6 @@ export const CORRIDOR_HALF_WIDTH = 36;
 export const STAIR_RADIUS = 25;
 export const LOOT_RADIUS = 26;
 export const CAMERA_SCALE = 0.92;
-export const CAMERA_TRANSITION_MS = 260;
 export const HIGH_SCORE_KEY = "alien-web-crawler-high-scores-v1";
 
 export const DIRECTIONS: Record<Direction, {

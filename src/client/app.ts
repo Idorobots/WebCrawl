@@ -6,7 +6,6 @@ import {
   BULLET_RADIUS,
   BULLET_SPEED,
   CAMERA_SCALE,
-  CAMERA_TRANSITION_MS,
   LOOT_ASSETS,
   LOOT_RADIUS,
   MAX_NODES,
@@ -17,7 +16,7 @@ import {
   PLAYER_FRAMES,
   PLAYER_MAX_HP,
   PLAYER_RADIUS,
-  PLAYER_STEP,
+  PLAYER_SPEED,
   STAIR_RADIUS,
 } from "./config";
 import { distanceSquared, pointInCorridor, pointInRoom } from "./domain/geometry";
@@ -57,6 +56,7 @@ type Layer = d3.Selection<SVGGElement, unknown, any, any>;
 type SvgSelection = d3.Selection<SVGSVGElement, unknown, any, any>;
 
 const svg = d3.select<SVGSVGElement, unknown>("#map");
+const gameViewport = requireElement<HTMLElement>("#gameViewport");
 const urlInput = requireElement<HTMLInputElement>("#urlInput");
 const form = requireElement<HTMLFormElement>("#urlForm");
 const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
@@ -105,8 +105,8 @@ let lastPlayerShotAt = -Infinity;
 let bullets: Bullet[] = [];
 let bulletLayer: Layer | null = null;
 
-let monsterAnimationFrame: number | null = null;
-let lastMonsterTick: number | null = null;
+let gameAnimationFrame: number | null = null;
+let lastGameTick: number | null = null;
 
 let lootScore = 0;
 const collectedLoot = new Set<string>();
@@ -120,8 +120,13 @@ const runStats: RunStats = {
 };
 
 let playerWalkFrameIndex = 0;
+let lastPlayerWalkFrameAt = -Infinity;
 let playerSpriteAnimationToken = 0;
-let playerSettleTimer: ReturnType<typeof setTimeout> | undefined;
+let playerMoving = false;
+let playerShooting = false;
+let primaryPointerDown = false;
+let pointerInViewport = false;
+const heldMovementKeys = new Set<string>();
 
 // These duplicate counters were removed from the bottom HUD in v19.
 // Keep guarded references because some legacy update paths still touch them.
@@ -172,14 +177,6 @@ roomPattern
   .attr("fill", "#3f617b");
 
 const rootLayer = svg.append("g");
-
-const zoomBehavior = d3.zoom<SVGSVGElement, unknown>()
-  .scaleExtent([0.08, 5])
-  .on("zoom", (event) => {
-    rootLayer.attr("transform", event.transform);
-  });
-
-svg.call(zoomBehavior);
 
 function setStatus(message: string, isError = false): void {
   if (isError) {
@@ -307,8 +304,11 @@ function updateCurrentRoom(): void {
   const room = roomContainingPoint(player.x, player.y);
 
   if (room) {
+    const roomChanged = currentRoomId !== room.id;
+    const alreadyVisited = visitedRooms.has(room.id);
     currentRoomId = room.id;
     markVisited(room);
+    if (roomChanged && alreadyVisited && !gameUi.hidden) updateHudPanels();
   }
 }
 
@@ -321,18 +321,8 @@ function cameraTransformForPlayer(): d3.ZoomTransform {
     .translate(-player.x, -player.y);
 }
 
-function centerCameraOnPlayer(animated = true): void {
-  const transform = cameraTransformForPlayer();
-
-  if (animated) {
-    svg
-      .transition()
-      .duration(CAMERA_TRANSITION_MS)
-      .ease(d3.easeCubicOut)
-      .call(zoomBehavior.transform, transform);
-  } else {
-    svg.call(zoomBehavior.transform, transform);
-  }
+function centerCameraOnPlayer(): void {
+  rootLayer.attr("transform", cameraTransformForPlayer().toString());
 }
 
 function minimapVisibleLayout(): Pick<DungeonLayout, "nodes" | "links"> {
@@ -874,6 +864,7 @@ function applyPlayerDamage(amount: number): void {
 
   if (playerHp <= 0) {
     playerAlive = false;
+    resetPlayerInput();
     const hud = document.querySelector("#hud");
     hud?.classList.add("game-over");
     setStatus("Operative signal lost.", true);
@@ -963,10 +954,8 @@ function shootBullet(): void {
   if (now - lastPlayerShotAt < PLAYER_FIRE_COOLDOWN_MS) return;
   lastPlayerShotAt = now;
   runStats.shotsFired += 1;
-  updateHudPanels();
-  updatePlayerFacingAsset();
-  setPlayerAnimation("shoot");
-  settlePlayerAnimationSoon();
+  statShotsEl.textContent = String(runStats.shotsFired);
+  playPlayerShootFrames();
 
   const muzzleDistance = PLAYER_RADIUS + 12;
   const x = player.x + playerFacing.x * muzzleDistance;
@@ -1054,22 +1043,25 @@ function updateBullets(dt: number): void {
 }
 
 
-function monsterTick(timestamp: number): void {
-  monsterAnimationFrame = requestAnimationFrame(monsterTick);
+function gameTick(timestamp: number): void {
+  gameAnimationFrame = requestAnimationFrame(gameTick);
 
   if (!playerAlive || !minimapModal.hidden || !currentLayout) {
-    lastMonsterTick = timestamp;
+    lastGameTick = timestamp;
+    setPlayerMoving(false, timestamp);
     return;
   }
 
-  if (lastMonsterTick == null) {
-    lastMonsterTick = timestamp;
+  if (lastGameTick == null) {
+    lastGameTick = timestamp;
     return;
   }
 
-  const dt = Math.min(0.05, Math.max(0, (timestamp - lastMonsterTick) / 1000));
-  lastMonsterTick = timestamp;
+  const dt = Math.min(0.05, Math.max(0, (timestamp - lastGameTick) / 1000));
+  lastGameTick = timestamp;
 
+  updatePlayerMovement(dt, timestamp);
+  if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
 
   const roomsById = new Map(currentLayout.nodes.map(room => [room.id, room]));
@@ -1134,13 +1126,13 @@ function monsterTick(timestamp: number): void {
   updateMonsterPositions();
 }
 
-function startMonsterLoop(): void {
-  if (monsterAnimationFrame !== null) {
-    cancelAnimationFrame(monsterAnimationFrame);
+function startGameLoop(): void {
+  if (gameAnimationFrame !== null) {
+    cancelAnimationFrame(gameAnimationFrame);
   }
 
-  lastMonsterTick = null;
-  monsterAnimationFrame = requestAnimationFrame(monsterTick);
+  lastGameTick = null;
+  gameAnimationFrame = requestAnimationFrame(gameTick);
 }
 
 function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_RADIUS): boolean {
@@ -1287,6 +1279,7 @@ function renderInteractiveObjects(): void {
     .attr("height", 5);
 
   updatePlayerVisual();
+  updatePlayerAnimationClasses();
   updateHealthUi();
 }
 
@@ -1295,9 +1288,9 @@ function updatePlayerVisual(): void {
     playerLayer.attr("transform", `translate(${player.x},${player.y})`);
   }
 
-  if (!gameUi.hidden) {
-    updateHudPanels();
-  }
+  sideMinimapSvg
+    .select(".minimap-player")
+    .attr("transform", `translate(${player.x},${player.y})`);
 }
 
 function checkLoot(): void {
@@ -1364,16 +1357,24 @@ function setPlayerSpriteAsset(asset: string): void {
     playerLayer.select(".avatar").attr("href", asset);
   }
 
+  sideMinimapSvg.select(".minimap-player image").attr("href", asset);
+
   if (playerHudPortraitEl) {
     playerHudPortraitEl.src = asset;
   }
 }
 
 function updatePlayerFacingAsset(): void {
-  setPlayerSpriteAsset(playerAssetForDirection());
+  updatePlayerAnimationClasses();
+  if (!playerShooting) {
+    const frames = playerFramesFor(playerDirectionName(), "walk");
+    setPlayerSpriteAsset(frames[playerWalkFrameIndex % frames.length]!);
+  }
 }
 
-function advancePlayerWalkFrame(): void {
+function advancePlayerWalkFrame(timestamp: number): void {
+  if (timestamp - lastPlayerWalkFrameAt < 90) return;
+  lastPlayerWalkFrameAt = timestamp;
   const frames = playerFramesFor(playerDirectionName(), "walk");
   playerWalkFrameIndex = (playerWalkFrameIndex + 1) % frames.length;
   setPlayerSpriteAsset(frames[playerWalkFrameIndex]!);
@@ -1381,20 +1382,24 @@ function advancePlayerWalkFrame(): void {
 
 function playPlayerShootFrames(): void {
   const token = ++playerSpriteAnimationToken;
-  const direction = playerDirectionName();
-  const frames = playerFramesFor(direction, "shoot");
+  const frameCount = playerFramesFor(playerDirectionName(), "shoot").length;
+  playerShooting = true;
+  updatePlayerAnimationClasses();
 
-  frames.forEach((asset, index) => {
+  for (let index = 0; index < frameCount; index++) {
     setTimeout(() => {
       if (token !== playerSpriteAnimationToken) return;
-      setPlayerSpriteAsset(asset);
+      const frames = playerFramesFor(playerDirectionName(), "shoot");
+      setPlayerSpriteAsset(frames[index % frames.length]!);
     }, index * 55);
-  });
+  }
 
   setTimeout(() => {
     if (token !== playerSpriteAnimationToken) return;
-    setPlayerSpriteAsset(playerAssetForDirection(direction));
-  }, frames.length * 55 + 10);
+    playerShooting = false;
+    updatePlayerAnimationClasses();
+    updatePlayerFacingAsset();
+  }, frameCount * 55 + 10);
 }
 
 function playerDirectionName(): PlayerDirection {
@@ -1405,7 +1410,7 @@ function playerDirectionName(): PlayerDirection {
   return playerFacing.y < 0 ? "up" : "down";
 }
 
-function setPlayerAnimation(kind: "move" | "shoot"): void {
+function updatePlayerAnimationClasses(): void {
   if (!playerLayer) return;
 
   playerLayer
@@ -1419,90 +1424,184 @@ function setPlayerAnimation(kind: "move" | "shoot"): void {
     .classed("shooting-right", false);
 
   const direction = playerDirectionName();
-
-  if (kind === "move") {
-    playerLayer.classed(`moving-${direction}`, true);
-    advancePlayerWalkFrame();
-  } else if (kind === "shoot") {
-    playerLayer.classed(`shooting-${direction}`, true);
-    playPlayerShootFrames();
-  }
+  if (playerMoving) playerLayer.classed(`moving-${direction}`, true);
+  if (playerShooting) playerLayer.classed(`shooting-${direction}`, true);
 }
 
-function settlePlayerAnimationSoon(): void {
-  clearTimeout(playerSettleTimer);
-  playerSettleTimer = setTimeout(() => {
-    playerLayer
-      ?.classed("moving-up", false)
-      .classed("moving-down", false)
-      .classed("moving-left", false)
-      .classed("moving-right", false)
-      .classed("shooting-up", false)
-      .classed("shooting-down", false)
-      .classed("shooting-left", false)
-      .classed("shooting-right", false);
-  }, 180);
-}
+function setPlayerMoving(moving: boolean, timestamp: number): void {
+  if (playerMoving !== moving) {
+    playerMoving = moving;
+    updatePlayerAnimationClasses();
 
-function movePlayer(dx: number, dy: number): void {
-  if (!playerAlive) return;
-
-  const magnitude = Math.hypot(dx, dy);
-  if (magnitude > 0) {
-    playerFacing = {
-      x: dx / magnitude,
-      y: dy / magnitude
-    };
-    updatePlayerFacingAsset();
+    if (!moving && !playerShooting) {
+      playerWalkFrameIndex = 0;
+      updatePlayerFacingAsset();
+    }
   }
 
+  if (moving && !playerShooting) advancePlayerWalkFrame(timestamp);
+}
+
+const movementDirections: Record<string, Point> = {
+  ArrowUp: { x: 0, y: -1 },
+  KeyW: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+  KeyS: { x: 0, y: 1 },
+  ArrowLeft: { x: -1, y: 0 },
+  KeyA: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+  KeyD: { x: 1, y: 0 },
+};
+
+function updatePlayerMovement(dt: number, timestamp: number): void {
+  if (!playerAlive) {
+    setPlayerMoving(false, timestamp);
+    return;
+  }
+
+  let inputX = 0;
+  let inputY = 0;
+  for (const code of heldMovementKeys) {
+    const direction = movementDirections[code];
+    if (!direction) continue;
+    inputX += direction.x;
+    inputY += direction.y;
+  }
+
+  const magnitude = Math.hypot(inputX, inputY);
+  if (magnitude === 0) {
+    setPlayerMoving(false, timestamp);
+    return;
+  }
+
+  const distance = PLAYER_SPEED * dt;
+  const dx = inputX / magnitude * distance;
+  const dy = inputY / magnitude * distance;
   const next = {
     x: player.x + dx,
-    y: player.y + dy
+    y: player.y + dy,
   };
 
-  if (!isWalkable(next.x, next.y)) return;
+  let moved = false;
+  if (isWalkable(next.x, next.y)) {
+    player = next;
+    moved = true;
+  } else {
+    if (dx !== 0 && isWalkable(player.x + dx, player.y)) {
+      player.x += dx;
+      moved = true;
+    }
+    if (dy !== 0 && isWalkable(player.x, player.y + dy)) {
+      player.y += dy;
+      moved = true;
+    }
+  }
 
-  setPlayerAnimation("move");
-  settlePlayerAnimationSoon();
-  player = next;
+  setPlayerMoving(moved, timestamp);
+  if (!moved) return;
+
   updatePlayerVisual();
   revealRoomsFromCorridor(player.x, player.y);
   updateCurrentRoom();
-  centerCameraOnPlayer(true);
+  centerCameraOnPlayer();
   checkLoot();
-  checkStairs();
+  if (checkStairs()) heldMovementKeys.clear();
 }
 
 window.addEventListener("keydown", event => {
-  const key = event.key.toLowerCase();
-  if (key === "escape" && !minimapModal.hidden) {
+  if (event.key === "Escape" && !minimapModal.hidden) {
     event.preventDefault();
     closeMinimap();
     return;
   }
 
-  if (!minimapModal.hidden) return;
-
-  if (event.code === "Space") {
-    event.preventDefault();
-    if (!event.repeat) shootBullet();
-    return;
-  }
-
-  const moves: Partial<Record<string, [number, number]>> = {
-    ArrowUp: [0, -PLAYER_STEP],
-    ArrowDown: [0, PLAYER_STEP],
-    ArrowLeft: [-PLAYER_STEP, 0],
-    ArrowRight: [PLAYER_STEP, 0]
-  };
-
-  const move = moves[event.key];
-  if (!move) return;
+  if (!(event.code in movementDirections)) return;
+  if (
+    !minimapModal.hidden ||
+    gameUi.hidden ||
+    event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLTextAreaElement ||
+    (event.target instanceof HTMLElement && event.target.isContentEditable)
+  ) return;
 
   event.preventDefault();
-  movePlayer(move[0], move[1]);
+  if (!event.repeat) heldMovementKeys.add(event.code);
 }, { passive: false });
+
+window.addEventListener("keyup", event => {
+  if (!(event.code in movementDirections)) return;
+  heldMovementKeys.delete(event.code);
+});
+
+function updatePlayerAim(clientX: number, clientY: number): void {
+  const bounds = gameViewport.getBoundingClientRect();
+  const dx = clientX - (bounds.left + bounds.width / 2);
+  const dy = clientY - (bounds.top + bounds.height / 2);
+  const magnitude = Math.hypot(dx, dy);
+  if (magnitude < 1) return;
+
+  playerFacing = { x: dx / magnitude, y: dy / magnitude };
+  updatePlayerFacingAsset();
+}
+
+function resetPlayerInput(): void {
+  heldMovementKeys.clear();
+  primaryPointerDown = false;
+  playerSpriteAnimationToken += 1;
+  playerShooting = false;
+  setPlayerMoving(false, performance.now());
+  updatePlayerFacingAsset();
+}
+
+gameViewport.addEventListener("pointerenter", event => {
+  pointerInViewport = true;
+  if (!gameUi.hidden) updatePlayerAim(event.clientX, event.clientY);
+});
+
+gameViewport.addEventListener("pointermove", event => {
+  pointerInViewport = true;
+  if (primaryPointerDown && (event.buttons & 1) === 0) primaryPointerDown = false;
+  if (!gameUi.hidden) updatePlayerAim(event.clientX, event.clientY);
+});
+
+gameViewport.addEventListener("pointerdown", event => {
+  if (
+    event.button !== 0 ||
+    gameUi.hidden ||
+    !currentLayout ||
+    !playerAlive ||
+    !minimapModal.hidden
+  ) return;
+
+  event.preventDefault();
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  pointerInViewport = true;
+  primaryPointerDown = true;
+  updatePlayerAim(event.clientX, event.clientY);
+  shootBullet();
+});
+
+gameViewport.addEventListener("pointerleave", () => {
+  pointerInViewport = false;
+  primaryPointerDown = false;
+});
+
+window.addEventListener("pointerup", event => {
+  if (event.button === 0) primaryPointerDown = false;
+});
+
+window.addEventListener("pointercancel", () => {
+  primaryPointerDown = false;
+});
+
+window.addEventListener("blur", () => {
+  pointerInViewport = false;
+  resetPlayerInput();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) resetPlayerInput();
+});
 
 function renderGraph(
   graph: DungeonGraph,
@@ -1530,8 +1629,6 @@ function renderGraph(
     : new Set();
 
   currentRoomId = null;
-
-  svg.call(zoomBehavior.transform, d3.zoomIdentity);
 
   const corridorGroup = rootLayer.append("g");
 
@@ -1674,9 +1771,9 @@ function renderGraph(
   renderInteractiveObjects();
   updatePlayerFacingAsset();
   revealRoomsFromCorridor(player.x, player.y);
-  centerCameraOnPlayer(false);
+  centerCameraOnPlayer();
   updateHudPanels();
-  startMonsterLoop();
+  startGameLoop();
 
   setStatus(
     `Map: ${layout.nodes.length} visible rooms · ${layout.links.length} corridors` +
@@ -1699,6 +1796,7 @@ async function loadPage(
     spawnRoomId = null
   }: LoadPageOptions = {},
 ): Promise<void> {
+  resetPlayerInput();
   const requestId = ++currentRequest;
 
   let url: string;
@@ -1764,6 +1862,6 @@ welcomeForm.addEventListener("submit", (event) => {
 
 setInterval(() => {
   if (!gameUi.hidden && playerAlive) {
-    updateHudPanels();
+    statTimeEl.textContent = formatRunTime();
   }
 }, 1000);
