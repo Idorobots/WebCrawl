@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebCrawl</title>
+  <script type="module" src="/src/client/main.ts"></script>
+</head>
+<body>
+  <div id="welcomeScreen">
+    <div class="welcome-visual"></div>
+    <section class="welcome-card">
+      <div class="welcome-mark">◈</div>
+      <h1>WEBCRAWL</h1>
+      <div class="welcome-tagline">EXPLORE <span>•</span> LOOT <span>•</span> SURVIVE</div>
+      
+      <p class="welcome-copy">
+        Strange pages. Hidden places. Every DOM is another alien deck waiting
+        to be mapped. Descend through links, recover what you can, and survive
+        whatever is crawling between the nodes.
+      </p>
+      <form id="welcomeForm">
+        <label for="welcomeUrlInput">ENTER A URL TO EXPLORE</label>
+        <div class="welcome-url-row">
+          <input
+            id="welcomeUrlInput"
+            type="url"
+            required
+            spellcheck="false"
+            value="https://blog.idorobots.org"
+          />
+          <button type="submit">BEGIN CRAWL</button>
+        </div>
+      </form>
+      <p class="welcome-quote">THE WEB IS DEEPER THAN YOU THINK...</p>
+    </section>
+  </div>
+
+  <div id="gameUi" hidden>
+    <header id="topBar">
+      <div class="brand-block">
+        <div class="brand-icon">◈</div>
+        <div>
+          <div class="brand-name">WEBCRAWL</div>
+          <div class="brand-tagline">EXPLORE • LOOT • SURVIVE</div>
+        </div>
+      </div>
+
+      <form id="urlForm" class="top-url-form">
+        <span class="url-globe">◎</span>
+        <input
+          id="urlInput"
+          type="url"
+          required
+          spellcheck="false"
+          placeholder="https://blog.idorobots.org"
+          value="https://blog.idorobots.org"
+        />
+        <button type="submit">GO</button>
+      </form>
+
+      <div class="top-quote">THE WEB IS DEEPER<br/>THAN YOU THINK...</div>
+</header>
+
+    <main id="gameViewport">
+      <svg id="map" aria-label="WebCrawl dungeon"></svg>
+    </main>
+
+    <aside id="rightHud">
+      <section class="hud-panel minimap-panel">
+        <div class="hud-panel-title">
+          <span>MINIMAP</span>
+          <span id="sideFloorLabel">FLOOR 1</span>
+        </div>
+        <svg id="sideMinimapSvg"></svg>
+      </section>
+
+      <section class="hud-panel stats-panel">
+        <div class="hud-panel-title">LEVEL STATS</div>
+        <div class="stat-row"><span>Rooms discovered</span><strong id="statRooms">0 / 100</strong></div>
+        <div class="stat-row"><span>Current floor</span><strong id="statFloor">1</strong></div>
+        <div class="stat-row"><span>Loot collected</span><strong id="statLoot">0</strong></div>
+        <div class="stat-row"><span>Monsters killed</span><strong id="statKills">0</strong></div>
+        <div class="stat-row"><span>Shots fired</span><strong id="statShots">0</strong></div>
+        <div class="stat-row"><span>Time survived</span><strong id="statTime">00:00</strong></div>
+        <div class="stats-flavour">EXPLORE FURTHER.<br/>FIND MORE.<br/>THE WEB IS DEEPER THAN YOU THINK...</div>
+      </section>
+    </aside>
+
+    <footer id="bottomHud">
+      <section class="player-status-card">
+        <img id="playerHudPortrait" src="assets/player_frames/east/walk/east_walk_01.png" alt="Player" />
+        <div class="player-status-main">
+          <div class="status-label">OPERATIVE</div>
+          <div class="hp-line">HP <strong id="hpCount">10</strong> / 10</div>
+          <div class="big-health-track"><span id="hudHealthFill"></span></div>
+        </div>
+      </section>
+
+      <section class="weapon-status-card">
+        <span class="weapon-name">PULSE RIFLE</span>
+        <span class="ammo">∞</span>
+        <span class="controls">ARROWS MOVE · SPACE FIRE</span>
+      </section>
+    </footer>
+
+    <div id="linkMenu" hidden></div>
+
+    <div id="minimapModal" hidden>
+      <div id="minimapPanel" role="dialog" aria-modal="true" aria-label="Tactical map">
+        <div id="minimapHeader">
+          <strong>TACTICAL MAP</strong>
+          <button id="minimapClose" type="button">Close</button>
+        </div>
+        <svg id="minimapSvg"></svg>
+      </div>
+    </div>
+
+    <div id="deathModal" hidden>
+      <div id="deathPanel" role="dialog" aria-modal="true" aria-label="Run over">
+        <h2>Signal Lost — Operative Slain</h2>
+        <div id="deathScore"></div>
+        <div id="newHighScore"></div>
+        <div class="death-stats">
+          <div>Robots destroyed: <strong id="deathKills">0</strong></div>
+          <div>Fast drones: <strong id="deathFastKills">0</strong></div>
+          <div>Heavy drones: <strong id="deathSlowKills">0</strong></div>
+          <div>Shots fired: <strong id="deathShots">0</strong></div>
+        </div>
+        <h3>High scores — loot recovered</h3>
+        <table id="highScoreTable">
+          <thead><tr><th>#</th><th>Loot</th><th>Kills</th><th>Date</th></tr></thead>
+          <tbody id="highScoreRows"></tbody>
+        </table>
+        <button id="restartButton" type="button">Restart expedition</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

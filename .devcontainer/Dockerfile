@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     git \
     unzip \
     npm \
+    chromium \
     && rm -rf /var/lib/apt/lists/*
 
 USER ubuntu
@@ -20,10 +21,6 @@ USER ubuntu
 RUN npm config set prefix '~/.local/'
 RUN npm i -g opencode-ai@latest
 RUN mkdir -p ~/.local/share/opencode
-
-# Install TypeScript & Electron
-RUN npm i -g typescript@latest
-RUN npm i -g electron@latest
 
 # Set working directory
 WORKDIR /workspace
