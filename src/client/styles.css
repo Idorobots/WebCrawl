@@ -251,6 +251,10 @@ button:hover { background: #242c37; }
   filter: saturate(1.35) brightness(1.12);
 }
 
+.monster.sentry .monster-sprite {
+  filter: hue-rotate(160deg) saturate(1.2) brightness(1.22);
+}
+
 .monster .hp-bg {
   fill: #241010;
   stroke: none;

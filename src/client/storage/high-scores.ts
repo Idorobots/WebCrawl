@@ -4,7 +4,12 @@ import type { HighScore } from "../types";
 export function loadHighScores(storage: Storage = localStorage): HighScore[] {
   try {
     const value: unknown = JSON.parse(storage.getItem(HIGH_SCORE_KEY) || "[]");
-    return Array.isArray(value) ? value as HighScore[] : [];
+    return Array.isArray(value)
+      ? value.map((entry) => ({
+          sentryKills: 0,
+          ...entry as HighScore,
+        }))
+      : [];
   } catch {
     return [];
   }

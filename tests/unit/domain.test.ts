@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ROOM_HEIGHT, ROOM_WIDTH } from "../../src/client/config";
 import { distanceSquared, pointInCorridor, pointInRoom } from "../../src/client/domain/geometry";
-import { buildInteractiveObjects, decorationSpecsForRoom, lootCountForRoom, monsterSpecsForRoom } from "../../src/client/domain/generation";
+import { buildInteractiveObjects, buildSceneryDrops, decorationSpecsForRoom, lootCountForRoom, monsterSpecsForRoom, sceneryDropKindForSeed } from "../../src/client/domain/generation";
 import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, layoutOrthogonal } from "../../src/client/domain/layout";
-import { revealedRoomPath } from "../../src/client/domain/pathfinding";
+import { aStarPath, revealedRoomPath } from "../../src/client/domain/pathfinding";
 import type { DungeonGraph, GraphNode } from "../../src/client/types";
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
@@ -93,6 +93,21 @@ describe("layout and geometry", () => {
     expect(revealedRoomPath(layout, new Set([0, 1, 2]), 1, 2)).toEqual([1, 0, 2]);
     expect(revealedRoomPath(layout, new Set([0, 1]), 1, 2)).toBeNull();
   });
+
+  it("routes around blocked doorway geometry with A*", () => {
+    const blocked = new Set(["18,18"]);
+    const path = aStarPath(
+      { x: 0, y: 0 },
+      { x: 36, y: 36 },
+      ({ x, y }) => !blocked.has(`${x},${y}`),
+      18,
+      200,
+      { minX: -18, maxX: 54, minY: -18, maxY: 54 },
+    );
+
+    expect(path).not.toBeNull();
+    expect(path?.some(point => point.x === 18 && point.y === 18)).toBe(false);
+  });
 });
 
 describe("deterministic room contents", () => {
@@ -106,15 +121,96 @@ describe("deterministic room contents", () => {
   const layout = { nodes: [room], links: [], hiddenCount: 0 };
 
   it("repeats decoration and monster specifications exactly", () => {
-    expect(decorationSpecsForRoom(room)).toEqual(decorationSpecsForRoom(room));
+    const decorations = decorationSpecsForRoom(room);
+    expect(decorations).toEqual(decorationSpecsForRoom(room));
+    expect(decorations.length).toBeGreaterThanOrEqual(3);
+    expect(decorations.length).toBeLessThanOrEqual(5);
+    expect(decorations.filter(item => item.obstacle).length).toBeGreaterThanOrEqual(2);
+    expect(new Set(decorations.map(item => `${item.x},${item.y}`)).size).toBe(decorations.length);
     expect(monsterSpecsForRoom(room)).toEqual([]);
   });
 
   it("creates rich image-room loot and capped stairs", () => {
     const generated = buildInteractiveObjects(layout, "https://example.com/", null, new Set());
-    expect(lootCountForRoom(room)).toBeGreaterThanOrEqual(2);
-    expect(lootCountForRoom(room)).toBeLessThanOrEqual(4);
+    expect(lootCountForRoom(room)).toBeGreaterThanOrEqual(3);
+    expect(lootCountForRoom(room)).toBeLessThanOrEqual(5);
     expect(generated.loot).toHaveLength(lootCountForRoom(room));
     expect(generated.stairs.map(({ url }) => url)).toEqual(room.hrefs);
+  });
+
+  it("generates denser deterministic monster and loot populations", () => {
+    const rooms = Array.from({ length: 500 }, (_, index) => node(index + 20, 0, 1, {
+      tag: "section",
+      lootSeed: stableHash(`room-${index}`),
+      isRoot: false,
+    }));
+    const floorOneCounts = rooms.map(candidate => monsterSpecsForRoom(candidate, 1).length);
+    const floorFiveCounts = rooms.map(candidate => monsterSpecsForRoom(candidate, 5).length);
+    const lootCounts = rooms.map(candidate => lootCountForRoom(candidate));
+
+    expect(floorOneCounts.every(count => count === 2 || count === 3)).toBe(true);
+    expect(floorFiveCounts.every(count => count === 4 || count === 5)).toBe(true);
+    expect(floorFiveCounts.reduce((sum, count) => sum + count, 0)).toBeGreaterThan(
+      floorOneCounts.reduce((sum, count) => sum + count, 0),
+    );
+    expect(lootCounts.filter(count => count > 0).length).toBeGreaterThan(100);
+    expect(lootCounts.every(count => count >= 0 && count <= 2)).toBe(true);
+  });
+
+  it("scales monster stats and includes sentries on deeper floors", () => {
+    const rooms = Array.from({ length: 200 }, (_, index) => node(index + 1200, 0, 1, {
+      tag: "article",
+      lootSeed: stableHash(`depth-room-${index}`),
+      isRoot: false,
+    }));
+    const floorOne = rooms.flatMap(room => monsterSpecsForRoom(room, 1));
+    const floorSeven = rooms.flatMap(room => monsterSpecsForRoom(room, 7));
+
+    const earlyCombatant = floorOne.find(monster => monster.kind !== "sentry");
+    const deepCombatant = floorSeven.find(monster => monster.kind === (earlyCombatant?.kind ?? "fast"));
+    expect(earlyCombatant).toBeDefined();
+    expect(deepCombatant).toBeDefined();
+    expect((deepCombatant?.maxHp ?? 0)).toBeGreaterThanOrEqual(earlyCombatant?.maxHp ?? 0);
+    expect((deepCombatant?.speed ?? 0)).toBeGreaterThanOrEqual(earlyCombatant?.speed ?? 0);
+    expect((deepCombatant?.attackDamage ?? 0)).toBeGreaterThanOrEqual(earlyCombatant?.attackDamage ?? 0);
+
+    const sentry = floorSeven.find(monster => monster.kind === "sentry");
+    expect(sentry).toBeDefined();
+    expect(sentry?.speed).toBe(0);
+    expect(sentry?.projectileSpeed ?? 0).toBeGreaterThan(0);
+    expect(sentry?.projectileRange ?? 0).toBeGreaterThan(0);
+  });
+
+  it("deterministically gives a small share of scenery loot and medkit drops", () => {
+    const drops = Array.from({ length: 1_000 }, (_, index) =>
+      sceneryDropKindForSeed(stableHash(`scenery-${index}`)),
+    ).filter(kind => kind !== null);
+
+    expect(drops.length).toBeGreaterThan(100);
+    expect(drops.length).toBeLessThan(200);
+    expect(drops).toContain("medkit");
+    expect(drops.some(kind => kind !== "medkit")).toBe(true);
+    expect(sceneryDropKindForSeed(12345)).toBe(sceneryDropKindForSeed(12345));
+  });
+
+  it("restores uncollected drops from destroyed scenery", () => {
+    const decorations = Array.from({ length: 100 }, (_, index) =>
+      decorationSpecsForRoom(node(index + 600, 0, 1, { lootSeed: stableHash(`decor-${index}`) })),
+    ).flat();
+    const droppingItem = decorations.find(item => item.obstacle && item.dropKind);
+    if (!droppingItem) throw new Error("Expected deterministic scenery drop fixture");
+
+    const destroyedItem = { ...droppingItem, hp: 0, destroyed: true };
+    const drops = buildSceneryDrops([destroyedItem], "https://example.com/", new Set());
+
+    expect(drops).toEqual([{
+      id: `https://example.com/::${destroyedItem.id}::scenery-drop`,
+      roomId: destroyedItem.roomId,
+      x: destroyedItem.x,
+      y: destroyedItem.y,
+      kind: destroyedItem.dropKind,
+    }]);
+    expect(buildSceneryDrops([droppingItem], "https://example.com/", new Set())).toEqual([]);
+    expect(buildSceneryDrops([destroyedItem], "https://example.com/", new Set([drops[0]!.id]))).toEqual([]);
   });
 });

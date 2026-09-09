@@ -2,6 +2,8 @@ export type Direction = "N" | "E" | "S" | "W";
 export type PlayerDirection = "up" | "down" | "left" | "right";
 export type PlayerAnimation = "walk" | "shoot";
 export type LootKind = "credit" | "crystal" | "core" | "medkit";
+export type MonsterKind = "slow" | "fast" | "sentry";
+export type BulletOwner = "player" | "enemy";
 
 export interface Point {
   x: number;
@@ -75,6 +77,7 @@ export interface Decoration extends Point {
   maxHp: number;
   hp: number;
   destroyed: boolean;
+  dropKind: LootKind | null;
 }
 
 export interface ObstacleState {
@@ -85,20 +88,30 @@ export interface ObstacleState {
 export interface Monster extends Point {
   id: string;
   seed: number;
+   kind: MonsterKind;
   spawnRoomId: number;
   roomId: number;
   maxHp: number;
   hp: number;
   speed: number;
   fast: boolean;
+  attackRange: number;
   attackDamage: number;
   attackCooldownMs: number;
+  projectileSpeed: number;
+  projectileRange: number;
   dropsLoot: boolean;
   lastAttackAt: number;
   active: boolean;
   dead: boolean;
   deathAnimating?: boolean;
   moveDir?: "left" | "right" | null;
+  path?: Point[];
+  pathIndex?: number;
+  pathTargetRoomId?: number | null;
+  pathTargetX?: number;
+  pathTargetY?: number;
+  nextPathRefreshAt?: number;
   droppedLoot?: boolean;
   dropId?: string | null;
   dropX?: number | null;
@@ -119,6 +132,8 @@ export interface MonsterState {
 
 export interface Bullet extends Point {
   id: string;
+  owner: BulletOwner;
+  damage: number;
   vx: number;
   vy: number;
   traveled: number;
@@ -128,6 +143,7 @@ export interface RunStats {
   kills: number;
   fastKills: number;
   slowKills: number;
+  sentryKills?: number;
   shotsFired: number;
 }
 
@@ -141,4 +157,5 @@ export interface LoadPageOptions {
   popBack?: boolean;
   returnRoomId?: number | null;
   spawnRoomId?: number | null;
+  stateId?: string | null;
 }

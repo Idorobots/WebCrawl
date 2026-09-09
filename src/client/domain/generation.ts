@@ -6,6 +6,7 @@ import type {
   LootItem,
   LootKind,
   Monster,
+  MonsterKind,
   MonsterState,
   ObstacleState,
   Point,
@@ -18,24 +19,41 @@ export function lootKindForSeed(seed: number): LootKind {
   return kinds[(seed >>> 3) % kinds.length] ?? "crystal";
 }
 
+export function sceneryDropKindForSeed(seed: number): LootKind | null {
+  if (stableHash(`${seed}|drop`) % 100 >= 15) return null;
+
+  const kindRoll = stableHash(`${seed}|drop-kind`) % 100;
+  if (kindRoll < 30) return "medkit";
+
+  const kinds: LootKind[] = ["credit", "crystal", "core"];
+  return kinds[kindRoll % kinds.length] ?? "credit";
+}
+
 export function decorationSpecsForRoom(room: GraphNode): Decoration[] {
   const seed = stableHash(`${room.lootSeed}|decor`);
-  const count = 1 + (seed % 3);
+  const count = 3 + (seed % 3);
   const slots: Array<[number, number]> = [
-    [-210, -120], [210, -120], [-210, 120], [210, 120], [0, -145], [0, 145],
+    [-220, -130], [220, -130], [-220, 130], [220, 130], [-110, -145],
+    [110, -145], [-110, 145], [110, 145], [-220, -65], [220, -65],
+    [-220, 65], [220, 65],
   ];
-  const types = [
-    { kind: "debris", asset: ASSETS.decorDebris, obstacle: false, radius: 0, size: 42 },
+  const obstacleTypes = [
     { kind: "plant", asset: ASSETS.decorPlant, obstacle: true, radius: 25, size: 56 },
     { kind: "barrel", asset: ASSETS.decorBarrel, obstacle: true, radius: 24, size: 52 },
     { kind: "crate", asset: ASSETS.decorCrate, obstacle: true, radius: 26, size: 54 },
     { kind: "terminal", asset: ASSETS.decorTerminal, obstacle: true, radius: 23, size: 50 },
   ];
+  const debris = { kind: "debris", asset: ASSETS.decorDebris, obstacle: false, radius: 0, size: 42 };
+  const slotSteps = [1, 5, 7, 11];
+  const slotStep = slotSteps[(seed >>> 8) % slotSteps.length]!;
 
   return Array.from({ length: count }, (_, index) => {
-    const slot = slots[((seed >>> (index * 5)) + index * 2) % slots.length]!;
-    const type = types[((seed >>> (index * 7 + 4)) + index) % types.length]!;
-    const hp = type.obstacle ? 2 + ((seed >>> (index * 3 + 9)) % 4) : 0;
+    const itemSeed = stableHash(`${room.lootSeed}|decor|${index}`);
+    const slot = slots[(seed + index * slotStep) % slots.length]!;
+    const type = index >= 2 && itemSeed % 5 === 0
+      ? debris
+      : obstacleTypes[(itemSeed >>> 4) % obstacleTypes.length]!;
+    const hp = type.obstacle ? 2 + ((itemSeed >>> 9) % 4) : 0;
     return {
       id: `${room.id}::decor-${index}`,
       roomId: room.id,
@@ -44,6 +62,7 @@ export function decorationSpecsForRoom(room: GraphNode): Decoration[] {
       maxHp: hp,
       hp,
       destroyed: false,
+      dropKind: type.obstacle ? sceneryDropKindForSeed(itemSeed) : null,
       ...type,
     };
   });
@@ -59,34 +78,94 @@ export function buildDecorations(
   });
 }
 
-export function monsterSpecsForRoom(room: GraphNode): Monster[] {
+export function buildSceneryDrops(
+  decorations: readonly Decoration[],
+  pageUrl: string,
+  collectedLoot: ReadonlySet<string>,
+): LootItem[] {
+  return decorations.flatMap((item) => {
+    if (!item.destroyed || !item.dropKind) return [];
+
+    const id = `${pageUrl}::${item.id}::scenery-drop`;
+    if (collectedLoot.has(id)) return [];
+
+    return [{
+      id,
+      roomId: item.roomId,
+      x: item.x,
+      y: item.y,
+      kind: item.dropKind,
+    }];
+  });
+}
+
+function floorDifficulty(floor: number): number {
+  return Math.max(0, floor - 1);
+}
+
+function monsterCountForRoom(room: GraphNode, floor: number): number {
+  const difficulty = floorDifficulty(floor);
+  const min = Math.min(5, 2 + Math.floor(difficulty / 2));
+  const max = Math.min(5, min + 1);
+  const countSeed = stableHash(`${room.lootSeed}|monster-count|${floor}`);
+  return min + (countSeed % (max - min + 1));
+}
+
+function monsterKindForSeed(seed: number): MonsterKind {
+  if ((seed >>> 6) % 100 < 20) return "sentry";
+  return ((seed >>> 7) % 100) < 38 ? "fast" : "slow";
+}
+
+export function monsterSpecsForRoom(room: GraphNode, floor = 1): Monster[] {
   if (room.isRoot || room.tag === "img") return [];
   const roomSeed = stableHash(`${room.lootSeed}|monsters`);
-  if ((roomSeed % 100) >= 72) return [];
 
-  const count = 1 + (((roomSeed >>> 8) % 100) < 16 ? 1 : 0);
-  const offsets: Array<[number, number]> = [[-68, -46], [68, 42]];
+  const difficulty = floorDifficulty(floor);
+  const count = monsterCountForRoom(room, floor);
+  const offsets: Array<[number, number]> = [
+    [-90, -55], [90, 55], [80, -65], [-80, 70], [0, -92],
+  ];
   return Array.from({ length: count }, (_, index) => {
-    const seed = stableHash(`${roomSeed}|${index}`);
-    const fast = ((seed >>> 7) % 100) < 32;
+    const seed = stableHash(`${roomSeed}|${floor}|${index}`);
+    const kind = monsterKindForSeed(seed);
+    const fast = kind === "fast";
+    const sentry = kind === "sentry";
     const offset = offsets[index % offsets.length]!;
+    const hpBase = sentry ? 2 : 1;
+    const hpBonus = Math.min(6, Math.floor(difficulty / 2));
+    const speed = sentry ? 0 : (fast ? 150 : 80) + Math.min(95, difficulty * (fast ? 11 : 8));
+    const attackDamage = (sentry ? 1 : 1 + ((seed >>> 19) % 2)) + Math.min(3, Math.floor(difficulty / 3));
+    const attackCooldownMs = Math.max(420, (sentry ? 1500 : 1150) - difficulty * (sentry ? 70 : 35) + ((seed >>> 15) % 140));
+    const projectileSpeed = sentry ? 220 + Math.min(260, difficulty * 18) : 0;
+    const projectileRange = sentry ? 980 + Math.min(420, difficulty * 40) : 0;
+    const attackRange = sentry ? 820 : 38 + Math.min(48, difficulty * 4);
     return {
       id: `${room.id}::monster-${index}`,
       seed,
+      kind,
       spawnRoomId: room.id,
       roomId: room.id,
       x: room.x + offset[0],
       y: room.y + offset[1],
-      maxHp: 1 + ((seed >>> 11) % 5),
-      speed: fast ? 400 : 200,
+      maxHp: hpBase + ((seed >>> 11) % (sentry ? 5 : 6)) + hpBonus,
+      speed,
       fast,
-      attackDamage: 1 + ((seed >>> 19) % 2),
-      attackCooldownMs: 1150 + ((seed >>> 15) % 750),
+      attackRange,
+      attackDamage,
+      attackCooldownMs,
+      projectileSpeed,
+      projectileRange,
       dropsLoot: ((seed >>> 23) % 100) < 18,
       lastAttackAt: -Infinity,
       active: false,
       dead: false,
       hp: 1,
+      path: [],
+      pathIndex: 0,
+      pathTargetRoomId: null,
+      pathTargetX: room.x,
+      pathTargetY: room.y,
+      nextPathRefreshAt: 0,
     };
   });
 }
@@ -95,8 +174,9 @@ export function buildMonsters(
   layout: DungeonLayout,
   savedStates: ReadonlyMap<string, MonsterState>,
   visitedRooms: ReadonlySet<number>,
+  floor = 1,
 ): Monster[] {
-  return layout.nodes.flatMap((room) => monsterSpecsForRoom(room).map((spec) => {
+  return layout.nodes.flatMap((room) => monsterSpecsForRoom(room, floor).map((spec) => {
     const saved = savedStates.get(spec.id);
     return {
       ...spec,
@@ -113,8 +193,10 @@ export function buildMonsters(
 }
 
 export function lootCountForRoom(room: GraphNode): number {
-  const seed = room.lootSeed >>> 0;
-  return room.tag === "img" ? 2 + (seed % 3) : (seed % 10) === 0 ? 1 : 0;
+  const seed = stableHash(`${room.lootSeed}|loot-count`);
+  if (room.tag === "img") return 3 + (seed % 3);
+  if (seed % 100 >= 30) return 0;
+  return 1 + ((seed >>> 8) % 2);
 }
 
 export function lootPositions(room: GraphNode, count: number): Point[] {

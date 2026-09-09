@@ -10,7 +10,6 @@ import {
   LOOT_RADIUS,
   MAX_NODES,
   MAX_ROOMS_AFTER_COALESCE,
-  MONSTER_ATTACK_RANGE,
   MONSTER_RADIUS,
   PLAYER_FIRE_COOLDOWN_MS,
   PLAYER_FRAMES,
@@ -24,11 +23,12 @@ import {
   buildDecorations as createDecorations,
   buildInteractiveObjects as createInteractiveObjects,
   buildMonsters as createMonsters,
+  buildSceneryDrops as createSceneryDrops,
   lootKindForSeed,
 } from "./domain/generation";
 import { domToGraph } from "./domain/graph";
 import { corridorEndpoints, layoutOrthogonal } from "./domain/layout";
-import { revealedRoomPath as findRevealedRoomPath } from "./domain/pathfinding";
+import { aStarPath, revealedRoomPath as findRevealedRoomPath } from "./domain/pathfinding";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
 import type {
   Bullet,
@@ -78,6 +78,7 @@ const playerHudPortraitEl = requireElement<HTMLImageElement>("#playerHudPortrait
 
 let currentRequest = 0;
 let currentPageUrl: string | null = null;
+let currentStateId: string | null = null;
 const navigationHistory: string[] = [];
 const navigationReturnRooms: Array<number | null> = [];
 
@@ -116,6 +117,7 @@ const runStats: RunStats = {
   kills: 0,
   fastKills: 0,
   slowKills: 0,
+  sentryKills: 0,
   shotsFired: 0
 };
 
@@ -141,6 +143,7 @@ const newHighScoreEl = requireElement<HTMLElement>("#newHighScore");
 const deathKillsEl = requireElement<HTMLElement>("#deathKills");
 const deathFastKillsEl = requireElement<HTMLElement>("#deathFastKills");
 const deathSlowKillsEl = requireElement<HTMLElement>("#deathSlowKills");
+const deathSentryKillsEl = requireElement<HTMLElement>("#deathSentryKills");
 const deathShotsEl = requireElement<HTMLElement>("#deathShots");
 const highScoreRowsEl = requireElement<HTMLTableSectionElement>("#highScoreRows");
 const restartButton = requireElement<HTMLButtonElement>("#restartButton");
@@ -194,9 +197,11 @@ function hideLinkMenu(): void {
 function navigateTo(url: string, returnRoomId = currentRoomId): void {
   hideLinkMenu();
   urlInput.value = url;
+  const nextStateId = stateIdForPage(url, floorNumber() + 1);
   loadPage(url, {
     pushCurrent: true,
-    returnRoomId
+    returnRoomId,
+    stateId: nextStateId,
   });
 }
 
@@ -209,9 +214,11 @@ function goBack(): void {
 
   hideLinkMenu();
   urlInput.value = previous;
+  const previousStateId = stateIdForPage(previous, Math.max(1, floorNumber() - 1));
   loadPage(previous, {
     popBack: true,
-    spawnRoomId: returnRoomId
+    spawnRoomId: returnRoomId,
+    stateId: previousStateId,
   });
 }
 
@@ -262,7 +269,7 @@ function markVisited(room: GraphNode | null): void {
   visitedRooms.add(room.id);
 
   if (currentPageUrl) {
-    discoveredRoomsByPage.set(currentPageUrl, new Set(visitedRooms));
+    discoveredRoomsByPage.set(currentStateId ?? currentPageUrl, new Set(visitedRooms));
   }
 
   updateFogOfWar();
@@ -486,6 +493,14 @@ function updateHudPanels(): void {
   renderSideMinimap();
 }
 
+function floorNumber(): number {
+  return navigationHistory.length + 1;
+}
+
+function stateIdForPage(url: string, floor = floorNumber()): string {
+  return `${url}::floor-${floor}`;
+}
+
 function closeMinimap(): void {
   minimapModal.classList.remove("open");
   minimapModal.hidden = true;
@@ -518,6 +533,7 @@ function recordHighScore(): { scores: HighScore[]; rank: number | null } {
     kills: runStats.kills,
     fastKills: runStats.fastKills,
     slowKills: runStats.slowKills,
+    sentryKills: runStats.sentryKills,
     shotsFired: runStats.shotsFired,
     at: new Date().toISOString()
   };
@@ -534,6 +550,7 @@ function showDeathModal(): void {
   deathKillsEl.textContent = String(runStats.kills);
   deathFastKillsEl.textContent = String(runStats.fastKills);
   deathSlowKillsEl.textContent = String(runStats.slowKills);
+  deathSentryKillsEl.textContent = String(runStats.sentryKills ?? 0);
   deathShotsEl.textContent = String(runStats.shotsFired);
 
   newHighScoreEl.textContent =
@@ -575,7 +592,16 @@ function lootAsset(kind: LootKind): string {
   return LOOT_ASSETS[kind];
 }
 
+function monsterLabel(monster: Monster): string {
+  if (monster.kind === "sentry") return "Sentry";
+  return monster.fast ? "Fast drone" : "Heavy drone";
+}
+
 function monsterAsset(monster: Monster): string {
+  if (monster.kind === "sentry") {
+    return ASSETS.monsterScout;
+  }
+
   if (monster.fast) {
     return (monster.seed & 1)
       ? ASSETS.monsterFast
@@ -588,10 +614,11 @@ function monsterAsset(monster: Monster): string {
 }
 
 function obstacleStateMapForPage(pageUrl: string): Map<string, ObstacleState> {
-  if (!destroyedObstaclesByPage.has(pageUrl)) {
-    destroyedObstaclesByPage.set(pageUrl, new Map());
+  const key = currentStateId ?? stateIdForPage(pageUrl);
+  if (!destroyedObstaclesByPage.has(key)) {
+    destroyedObstaclesByPage.set(key, new Map());
   }
-  return destroyedObstaclesByPage.get(pageUrl)!;
+  return destroyedObstaclesByPage.get(key)!;
 }
 
 function saveObstacleState(item: Decoration): void {
@@ -710,6 +737,11 @@ function damageObstacle(item: Decoration, amount: number): void {
     saveObstacleState(item);
     spawnExplosion(item.x, item.y);
     renderDecorations();
+    if (currentPageUrl) {
+      const drops = createSceneryDrops([item], currentPageUrl, collectedLoot);
+      currentLoot.push(...drops);
+      if (drops.length) renderInteractiveObjects();
+    }
   } else {
     saveObstacleState(item);
     renderDecorations();
@@ -717,10 +749,11 @@ function damageObstacle(item: Decoration, amount: number): void {
 }
 
 function monsterStateMapForPage(pageUrl: string): Map<string, MonsterState> {
-  if (!monsterStatesByPage.has(pageUrl)) {
-    monsterStatesByPage.set(pageUrl, new Map());
+  const key = currentStateId ?? stateIdForPage(pageUrl);
+  if (!monsterStatesByPage.has(key)) {
+    monsterStatesByPage.set(key, new Map());
   }
-  return monsterStatesByPage.get(pageUrl)!;
+  return monsterStatesByPage.get(key)!;
 }
 
 function saveMonsterState(monster: Monster): void {
@@ -740,7 +773,7 @@ function saveMonsterState(monster: Monster): void {
 }
 
 function buildMonsters(layout: DungeonLayout, pageUrl: string): Monster[] {
-  const monsters = createMonsters(layout, monsterStateMapForPage(pageUrl), visitedRooms);
+  const monsters = createMonsters(layout, monsterStateMapForPage(pageUrl), visitedRooms, floorNumber());
   for (const monster of monsters) {
     if (monster.dead && monster.droppedLoot && monster.dropId && !collectedLoot.has(monster.dropId)) {
       currentLoot.push({
@@ -785,7 +818,7 @@ function renderMonsters(): void {
       enter => {
         const g = enter
           .append("g")
-          .attr("class", d => `monster${d.fast ? " fast" : ""}`);
+          .attr("class", d => `monster${d.fast ? " fast" : ""}${d.kind === "sentry" ? " sentry" : ""}`);
 
         g.append("image")
           .attr("class", "monster-sprite")
@@ -809,7 +842,7 @@ function renderMonsters(): void {
           .attr("height", 5);
 
         g.append("title")
-          .text(d => `${d.fast ? "Fast" : "Slow"} monster · ${d.maxHp} HP`);
+          .text(d => `${monsterLabel(d)} · ${d.maxHp} HP`);
 
         return g;
       },
@@ -819,6 +852,7 @@ function renderMonsters(): void {
     .attr("class", d =>
       "monster" +
       (d.fast ? " fast" : "") +
+      (d.kind === "sentry" ? " sentry" : "") +
       (d.deathAnimating ? " dying" : "") +
       (d.moveDir === "left" ? " moving-left" : "") +
       (d.moveDir === "right" ? " moving-right" : "")
@@ -838,6 +872,7 @@ function updateMonsterPositions(): void {
     .attr("class", d =>
       "monster" +
       (d.fast ? " fast" : "") +
+      (d.kind === "sentry" ? " sentry" : "") +
       (d.deathAnimating ? " dying" : "") +
       (d.moveDir === "left" ? " moving-left" : "") +
       (d.moveDir === "right" ? " moving-right" : "")
@@ -905,6 +940,8 @@ function damageMonster(monster: Monster, amount: number): void {
 
     if (monster.fast) {
       runStats.fastKills += 1;
+    } else if (monster.kind === "sentry") {
+      runStats.sentryKills = (runStats.sentryKills ?? 0) + 1;
     } else {
       runStats.slowKills += 1;
     }
@@ -924,6 +961,120 @@ function damageMonster(monster: Monster, amount: number): void {
   } else {
     saveMonsterState(monster);
     updateMonsterPositions();
+  }
+}
+
+function shootEnemyBullet(monster: Monster, direction: Point): void {
+  const now = performance.now();
+  const muzzleDistance = MONSTER_RADIUS + 10;
+
+  bullets.push({
+    id: `${monster.id}-${now}`,
+    owner: "enemy",
+    damage: monster.attackDamage,
+    x: monster.x + direction.x * muzzleDistance,
+    y: monster.y + direction.y * muzzleDistance,
+    vx: direction.x * monster.projectileSpeed,
+    vy: direction.y * monster.projectileSpeed,
+    traveled: 0,
+  });
+
+  monster.lastAttackAt = now;
+  renderBullets();
+}
+
+function hasLineOfSight(from: Point, to: Point, step = 14): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const distance = Math.hypot(dx, dy);
+  const segments = Math.max(1, Math.ceil(distance / step));
+
+  for (let index = 1; index <= segments; index += 1) {
+    const sample = {
+      x: from.x + dx * (index / segments),
+      y: from.y + dy * (index / segments),
+    };
+    if (!isGeometryWalkable(sample.x, sample.y, BULLET_RADIUS)) return false;
+    if (pointBlockedByDecoration(sample.x, sample.y, BULLET_RADIUS)) return false;
+  }
+
+  return true;
+}
+
+function monsterPathBounds(monster: Monster, target: Point): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} {
+  return {
+    minX: Math.min(monster.x, target.x) - 180,
+    maxX: Math.max(monster.x, target.x) + 180,
+    minY: Math.min(monster.y, target.y) - 180,
+    maxY: Math.max(monster.y, target.y) + 180,
+  };
+}
+
+function updateMonsterPath(monster: Monster, target: Point, targetRoomId: number | null, timestamp: number): void {
+  if (monster.kind === "sentry") return;
+  if (timestamp < (monster.nextPathRefreshAt ?? 0) && monster.path?.length) return;
+
+  const path = aStarPath(
+    { x: monster.x, y: monster.y },
+    target,
+    point => isWalkable(point.x, point.y, MONSTER_RADIUS),
+    18,
+    2800,
+    monsterPathBounds(monster, target),
+  );
+
+  monster.path = path ?? [];
+  monster.pathIndex = path && path.length > 1 ? 1 : 0;
+  monster.pathTargetRoomId = targetRoomId;
+  monster.pathTargetX = target.x;
+  monster.pathTargetY = target.y;
+  monster.nextPathRefreshAt = timestamp + 260;
+}
+
+function moveMonsterTowards(monster: Monster, target: Point, dt: number): void {
+  const waypoint = monster.path?.[monster.pathIndex ?? 0] ?? target;
+  const dx = waypoint.x - monster.x;
+  const dy = waypoint.y - monster.y;
+  const distance = Math.hypot(dx, dy);
+
+  if (distance <= 10 && monster.path && (monster.pathIndex ?? 0) < monster.path.length - 1) {
+    monster.pathIndex = (monster.pathIndex ?? 0) + 1;
+    moveMonsterTowards(monster, target, dt);
+    return;
+  }
+
+  if (distance <= 0.001) {
+    monster.moveDir = null;
+    return;
+  }
+
+  const step = Math.min(distance, monster.speed * dt);
+  const nextX = monster.x + dx / distance * step;
+  const nextY = monster.y + dy / distance * step;
+
+  monster.moveDir =
+    Math.abs(dx) > Math.abs(dy)
+      ? (dx < 0 ? "left" : "right")
+      : null;
+
+  if (isWalkable(nextX, nextY, MONSTER_RADIUS)) {
+    monster.x = nextX;
+    monster.y = nextY;
+    return;
+  }
+
+  if (Math.abs(dx) > Math.abs(dy) && isWalkable(nextX, monster.y, MONSTER_RADIUS)) {
+    monster.x = nextX;
+  } else if (isWalkable(monster.x, nextY, MONSTER_RADIUS)) {
+    monster.y = nextY;
+  } else {
+    monster.path = [];
+    monster.nextPathRefreshAt = 0;
   }
 }
 
@@ -963,6 +1114,8 @@ function shootBullet(): void {
 
   bullets.push({
     id: `${now}-${Math.random()}`,
+    owner: "player",
+    damage: 1,
     x,
     y,
     vx: playerFacing.x * BULLET_SPEED,
@@ -1003,7 +1156,7 @@ function updateBullets(dt: number): void {
       }
 
       for (const monster of currentMonsters) {
-        if (!monster.active || monster.dead) continue;
+        if (bullet.owner !== "player" || !monster.active || monster.dead) continue;
 
         const hitDistance = Math.hypot(
           bullet.x - monster.x,
@@ -1011,13 +1164,26 @@ function updateBullets(dt: number): void {
         );
 
         if (hitDistance <= MONSTER_RADIUS + BULLET_RADIUS) {
-          damageMonster(monster, 1);
+          damageMonster(monster, bullet.damage);
           alive = false;
           break;
         }
       }
 
       if (!alive) break;
+
+      if (bullet.owner === "enemy") {
+        const playerDistance = Math.hypot(
+          bullet.x - player.x,
+          bullet.y - player.y
+        );
+
+        if (playerDistance <= PLAYER_RADIUS + BULLET_RADIUS) {
+          applyPlayerDamage(bullet.damage);
+          alive = false;
+          break;
+        }
+      }
 
       for (const item of currentDecorations) {
         if (!item.obstacle || item.destroyed) continue;
@@ -1087,27 +1253,35 @@ function gameTick(timestamp: number): void {
       targetY = nextRoom.y;
     }
 
-    const dx = targetX - monster.x;
-    const dy = targetY - monster.y;
-    const distance = Math.hypot(dx, dy);
+    const targetRoomId = monster.roomId !== currentRoomId && path.length >= 2
+      ? path[1]!
+      : currentRoomId;
 
-    if (distance > 0.001) {
-      const step = Math.min(distance, monster.speed * dt);
-      const nextX = monster.x + dx / distance * step;
-      const nextY = monster.y + dy / distance * step;
-
-      monster.moveDir =
-        Math.abs(dx) > Math.abs(dy)
-          ? (dx < 0 ? "left" : "right")
-          : null;
-
-      if (isWalkable(nextX, nextY, MONSTER_RADIUS)) {
-        monster.x = nextX;
-        monster.y = nextY;
-      }
-    } else {
+    if (monster.kind === "sentry") {
       monster.moveDir = null;
+      const playerDistance = Math.hypot(player.x - monster.x, player.y - monster.y);
+      if (
+        playerDistance <= monster.projectileRange &&
+        timestamp - monster.lastAttackAt >= monster.attackCooldownMs &&
+        hasLineOfSight(monster, player)
+      ) {
+        const direction = {
+          x: (player.x - monster.x) / playerDistance,
+          y: (player.y - monster.y) / playerDistance,
+        };
+        shootEnemyBullet(monster, direction);
+      }
+      continue;
     }
+
+    const targetPoint = { x: targetX, y: targetY };
+    const pathStale =
+      !monster.path?.length ||
+      monster.pathTargetRoomId !== targetRoomId ||
+      Math.hypot((monster.pathTargetX ?? targetX) - targetX, (monster.pathTargetY ?? targetY) - targetY) > 24;
+    if (pathStale) monster.nextPathRefreshAt = 0;
+    updateMonsterPath(monster, targetPoint, targetRoomId, timestamp);
+    moveMonsterTowards(monster, targetPoint, dt);
 
     const playerDistance = Math.hypot(
       player.x - monster.x,
@@ -1115,7 +1289,7 @@ function gameTick(timestamp: number): void {
     );
 
     if (
-      playerDistance <= MONSTER_ATTACK_RANGE &&
+      playerDistance <= monster.attackRange &&
       timestamp - monster.lastAttackAt >= monster.attackCooldownMs
     ) {
       monster.lastAttackAt = timestamp;
@@ -1606,8 +1780,9 @@ document.addEventListener("visibilitychange", () => {
 function renderGraph(
   graph: DungeonGraph,
   pageUrl: string,
-  { spawnRoomId = null }: Pick<LoadPageOptions, "spawnRoomId"> = {},
+  { spawnRoomId = null, stateId = null }: Pick<LoadPageOptions, "spawnRoomId" | "stateId"> = {},
 ): void {
+  currentStateId = stateId ?? stateIdForPage(pageUrl);
   rootLayer.selectAll("*").remove();
   hpCountEl.textContent = String(playerHp);
   if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
@@ -1623,7 +1798,7 @@ function renderGraph(
   const layout = layoutOrthogonal(graph, width, height);
   currentLayout = layout;
 
-  const savedDiscovery = discoveredRoomsByPage.get(pageUrl);
+  const savedDiscovery = discoveredRoomsByPage.get(currentStateId);
   visitedRooms = savedDiscovery
     ? new Set([...savedDiscovery].filter(id => layout.nodes.some(node => node.id === id)))
     : new Set();
@@ -1721,6 +1896,7 @@ function renderGraph(
   currentStairs = objects.stairs;
   currentLoot = objects.loot;
   currentDecorations = buildDecorations(layout, pageUrl);
+  currentLoot.push(...createSceneryDrops(currentDecorations, pageUrl, collectedLoot));
 
   currentMonsters = buildMonsters(layout, pageUrl);
 
@@ -1751,7 +1927,7 @@ function renderGraph(
       visitedRooms.add(root.id);
     }
 
-    discoveredRoomsByPage.set(pageUrl, new Set(visitedRooms));
+    discoveredRoomsByPage.set(currentStateId, new Set(visitedRooms));
   }
 
   updateFogOfWar();
@@ -1793,7 +1969,8 @@ async function loadPage(
     pushCurrent = false,
     popBack = false,
     returnRoomId = null,
-    spawnRoomId = null
+    spawnRoomId = null,
+    stateId = null
   }: LoadPageOptions = {},
 ): Promise<void> {
   resetPlayerInput();
@@ -1831,7 +2008,8 @@ async function loadPage(
     }
 
     currentPageUrl = url;
-    renderGraph(graph, url, { spawnRoomId });
+    currentStateId = stateId ?? stateIdForPage(url);
+    renderGraph(graph, url, { spawnRoomId, stateId: currentStateId });
   } catch (err) {
     if (requestId !== currentRequest) return;
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -1851,6 +2029,9 @@ form.addEventListener("submit", (event) => {
 welcomeForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
+  navigationHistory.length = 0;
+  navigationReturnRooms.length = 0;
+  currentStateId = null;
   gameUi.hidden = false;
   welcomeScreen.hidden = true;
   runStartedAt = performance.now();

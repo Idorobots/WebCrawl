@@ -109,3 +109,15 @@ test("does not pan or zoom the game viewport", async ({ page }) => {
 
   await expect(rootLayer).toHaveAttribute("transform", initialTransform ?? "");
 });
+
+test("spawns multiple enemies once another room is revealed", async ({ page }) => {
+  await startGame(page);
+
+  await page.keyboard.down("ArrowUp");
+  await expect.poll(async () => {
+    const value = await page.locator("#statRooms").textContent();
+    return Number(value?.split("/")[0]?.trim() ?? "0");
+  }).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () => Number(await page.locator("g.monster").count())).toBeGreaterThanOrEqual(2);
+  await page.keyboard.up("ArrowUp");
+});
