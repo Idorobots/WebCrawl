@@ -11,7 +11,7 @@ export const ROOM_Y_SPACING = 426;
 export const ROOM_COLLISION_MARGIN = 4;
 
 export const PLAYER_RADIUS = 7;
-export const PLAYER_SPEED = 220;
+export const PLAYER_SPEED = 400;
 export const PLAYER_MAX_HP = 10;
 export const PLAYER_FIRE_COOLDOWN_MS = 220;
 export const BULLET_SPEED = 520;

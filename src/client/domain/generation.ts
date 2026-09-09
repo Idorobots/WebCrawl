@@ -78,7 +78,7 @@ export function monsterSpecsForRoom(room: GraphNode): Monster[] {
       x: room.x + offset[0],
       y: room.y + offset[1],
       maxHp: 1 + ((seed >>> 11) % 5),
-      speed: fast ? 105 : 58,
+      speed: fast ? 400 : 200,
       fast,
       attackDamage: 1 + ((seed >>> 19) % 2),
       attackCooldownMs: 1150 + ((seed >>> 15) % 750),
