@@ -1,11 +1,23 @@
 export type Direction = "N" | "E" | "S" | "W";
 export type PlayerDirection = "up" | "down" | "left" | "right";
 export type PlayerAnimation = "walk" | "shoot";
-export type LootKind = "credit" | "crystal" | "core" | "medkit";
+export type LootKind = "credit" | "crystal" | "core" | "medkit" | "weapon";
 export type BossKind = "packet-storm" | "fork-bomb" | "heap-titan";
 export type MonsterKind = "slow" | "fast" | "sentry" | BossKind;
 export type BulletOwner = "player" | "enemy";
 export type BulletStyle = "player" | "enemy" | "boss" | "shockwave";
+export type WeaponKind =
+  | "pulse-rifle"
+  | "byte-repeater"
+  | "scatter-array"
+  | "fork-driver"
+  | "trident"
+  | "needle-rail"
+  | "packet-lobber"
+  | "cross-compiler"
+  | "nova-cache"
+  | "helix-emitter"
+  | "sideband-projector";
 export type RoomShape = "rectangle" | "wide" | "tall" | "capsule" | "octagon";
 
 export interface Point {
@@ -73,6 +85,29 @@ export interface LootItem extends Point {
   id: string;
   roomId: number;
   kind: LootKind;
+  weapon?: WeaponSpec;
+  weaponAmmo?: number | null;
+}
+
+export interface WeaponSpec {
+  kind: WeaponKind;
+  name: string;
+  fireCooldownMs: number;
+  projectileSpeed: number;
+  projectileRange: number;
+  projectileRadius: number;
+  damage: number;
+  maxAmmo: number | null;
+  ammoPerLoot: number;
+}
+
+export interface WeaponProjectile {
+  direction: Point;
+  lateralOffset: number;
+  speed: number;
+  range: number;
+  radius: number;
+  damage: number;
 }
 
 export interface Decoration extends Point {
@@ -166,6 +201,7 @@ export interface Bullet extends Point {
   radius?: number;
   maxDistance?: number;
   style?: BulletStyle;
+  weaponKind?: WeaponKind;
 }
 
 export interface RunStats {

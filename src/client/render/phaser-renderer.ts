@@ -1,11 +1,13 @@
 import Phaser from "phaser";
 import { ASSETS, BULLET_RADIUS, CAMERA_SCALE, PLAYER_FRAMES } from "../config";
+import { WEAPON_COLORS } from "../domain/weapons";
 import type {
   Bullet,
   Decoration,
   DungeonLayout,
   GraphNode,
   LootItem,
+  LootKind,
   Monster,
   Point,
   Stair,
@@ -35,7 +37,7 @@ export class PhaserRenderer {
   private currentLoot: LootItem[] = [];
   private currentMonsters: Monster[] = [];
   private currentBullets: Bullet[] = [];
-  private currentLootAssets: Record<string, string> = {};
+  private currentLootAssets: Partial<Record<LootKind, string>> = {};
   private currentMonsterAssetFor: (monster: Monster) => string = () => ASSETS.monsterScout;
 
   constructor(private readonly host: HTMLElement) {}
@@ -106,6 +108,13 @@ export class PhaserRenderer {
     this.currentBullets = [];
     delete this.host.dataset.rooms;
     delete this.host.dataset.corridors;
+    delete this.host.dataset.availableWeapons;
+    delete this.host.dataset.firstWeaponX;
+    delete this.host.dataset.firstWeaponY;
+    delete this.host.dataset.firstWeaponKind;
+    delete this.host.dataset.firstLootX;
+    delete this.host.dataset.firstLootY;
+    delete this.host.dataset.firstLootKind;
   }
 
   setWorld(layout: DungeonLayout, visited: ReadonlySet<number>): void {
@@ -214,10 +223,44 @@ export class PhaserRenderer {
     }
   }
 
-  renderObjects(stairs: readonly Stair[], loot: readonly LootItem[], visited: ReadonlySet<number>, lootAssets: Record<string, string>): void {
+  renderObjects(
+    stairs: readonly Stair[],
+    loot: readonly LootItem[],
+    visited: ReadonlySet<number>,
+    lootAssets: Partial<Record<LootKind, string>>,
+  ): void {
     this.currentStairs = stairs.map(item => ({ ...item }));
     this.currentLoot = loot.map(item => ({ ...item }));
     this.currentLootAssets = lootAssets;
+    const visibleItems = loot.filter(item => visited.has(item.roomId));
+    const byDistance = (left: LootItem, right: LootItem): number =>
+      Math.hypot(left.x - this.currentPlayer.x, left.y - this.currentPlayer.y) -
+      Math.hypot(right.x - this.currentPlayer.x, right.y - this.currentPlayer.y);
+    const visibleWeapon = visibleItems
+      .filter(item => item.kind === "weapon" && item.weapon)
+      .sort(byDistance)[0];
+    const visibleLoot = visibleItems
+      .filter(item => item.kind !== "weapon")
+      .sort(byDistance)[0];
+    this.host.dataset.availableWeapons = String(visibleItems.filter(item => item.kind === "weapon").length);
+    if (visibleWeapon?.weapon) {
+      this.host.dataset.firstWeaponX = String(Math.round(visibleWeapon.x));
+      this.host.dataset.firstWeaponY = String(Math.round(visibleWeapon.y));
+      this.host.dataset.firstWeaponKind = visibleWeapon.weapon.kind;
+    } else {
+      delete this.host.dataset.firstWeaponX;
+      delete this.host.dataset.firstWeaponY;
+      delete this.host.dataset.firstWeaponKind;
+    }
+    if (visibleLoot) {
+      this.host.dataset.firstLootX = String(Math.round(visibleLoot.x));
+      this.host.dataset.firstLootY = String(Math.round(visibleLoot.y));
+      this.host.dataset.firstLootKind = visibleLoot.kind;
+    } else {
+      delete this.host.dataset.firstLootX;
+      delete this.host.dataset.firstLootY;
+      delete this.host.dataset.firstLootKind;
+    }
     this.destroyAll(this.objects);
     const scene = this.scene;
     if (!scene) return;
@@ -232,6 +275,16 @@ export class PhaserRenderer {
     }
     for (const item of loot) {
       if (!visited.has(item.roomId)) continue;
+      if (item.kind === "weapon" && item.weapon) {
+        const color = WEAPON_COLORS[item.weapon.kind];
+        const field = scene.add.circle(0, 0, 25, color, 0.2).setStrokeStyle(3, color, 0.95);
+        const core = scene.add.rectangle(0, 0, 24, 10, color, 1).setRotation(-0.25);
+        const marker = scene.add.text(0, 0, "W", {
+          color: "#071018", fontSize: "11px", fontStyle: "bold",
+        }).setOrigin(0.5);
+        this.objects.push(scene.add.container(item.x, item.y, [field, core, marker]).setDepth(25));
+        continue;
+      }
       const asset = lootAssets[item.kind];
       if (!asset) continue;
       const sprite = scene.add.image(0, 0, textureKey(asset)).setDisplaySize(42, 42);
@@ -325,7 +378,11 @@ export class PhaserRenderer {
         ? 0xffa34d
         : bullet.style === "boss"
           ? 0xee78ff
-          : bullet.owner === "enemy" ? 0xff596e : 0x86fff0;
+          : bullet.owner === "enemy"
+            ? 0xff596e
+            : bullet.weaponKind
+              ? WEAPON_COLORS[bullet.weaponKind]
+              : 0x86fff0;
       this.bulletsGraphics.fillStyle(color, 1);
       this.bulletsGraphics.fillCircle(bullet.x, bullet.y, bullet.radius ?? BULLET_RADIUS);
     }

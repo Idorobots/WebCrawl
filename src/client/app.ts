@@ -3,13 +3,11 @@ import {
   ASSETS,
   BULLET_MAX_DISTANCE,
   BULLET_RADIUS,
-  BULLET_SPEED,
   LOOT_ASSETS,
   LOOT_RADIUS,
   MAX_NODES,
   MAX_ROOMS_AFTER_COALESCE,
   MONSTER_RADIUS,
-  PLAYER_FIRE_COOLDOWN_MS,
   PLAYER_FRAMES,
   PLAYER_MAX_HP,
   PLAYER_RADIUS,
@@ -30,6 +28,7 @@ import {
 import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { aStarPath } from "./domain/pathfinding";
+import { DEFAULT_WEAPON, projectilesForWeapon, replenishWeaponAmmo } from "./domain/weapons";
 import { PhaserRenderer } from "./render/phaser-renderer";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
 import type {
@@ -51,6 +50,7 @@ import type {
   Point,
   RunStats,
   Stair,
+  WeaponSpec,
 } from "./types";
 import { requireElement } from "./ui/elements";
 
@@ -109,8 +109,16 @@ let playerFacing: Point = { x: 0, y: -1 };
 let playerHp = PLAYER_MAX_HP;
 let playerAlive = true;
 let lastPlayerShotAt = -Infinity;
+let currentWeapon: WeaponSpec = { ...DEFAULT_WEAPON };
+let currentWeaponAmmo: number | null = null;
+let weaponShotSequence = 0;
 
 let bullets: Bullet[] = [];
+const extraLootByPage = new Map<string, LootItem[]>();
+const extraLootSerialByPage = new Map<string, number>();
+let lastDroppedWeapon: LootItem | null = null;
+let queuedLootDrops: LootItem[] = [];
+const temporarilyBlockedLoot = new Set<string>();
 
 let gameAnimationFrame: number | null = null;
 let lastGameTick: number | null = null;
@@ -143,6 +151,8 @@ const lootCountEl = document.querySelector<HTMLElement>("#lootCount");
 const hpCountEl = requireElement<HTMLElement>("#hpCount");
 const killsCountEl = document.querySelector<HTMLElement>("#killsCount");
 const hudHealthFillEl = requireElement<HTMLElement>("#hudHealthFill");
+const weaponNameEl = requireElement<HTMLElement>("#weaponName");
+const ammoCountEl = requireElement<HTMLElement>("#ammoCount");
 
 const deathModal = requireElement<HTMLDivElement>("#deathModal");
 const deathScoreEl = requireElement<HTMLElement>("#deathScore");
@@ -442,6 +452,75 @@ function updateHealthUi(): void {
   }
 }
 
+function updateWeaponUi(): void {
+  weaponNameEl.textContent = currentWeapon.name;
+  ammoCountEl.textContent = currentWeaponAmmo === null
+    ? "∞"
+    : `${currentWeaponAmmo} / ${currentWeapon.maxAmmo}`;
+  gameCanvasHost.dataset.weaponKind = currentWeapon.kind;
+  gameCanvasHost.dataset.weaponAmmo = currentWeaponAmmo === null ? "infinite" : String(currentWeaponAmmo);
+}
+
+function equipWeapon(weapon: WeaponSpec): void {
+  equipWeaponWithAmmo(weapon, weapon.maxAmmo);
+}
+
+function equipWeaponWithAmmo(weapon: WeaponSpec, ammo: number | null): void {
+  currentWeapon = { ...weapon };
+  currentWeaponAmmo = weapon.maxAmmo === null || ammo === null
+    ? weapon.maxAmmo
+    : Math.max(0, Math.min(weapon.maxAmmo, ammo));
+  weaponShotSequence = 0;
+  updateWeaponUi();
+}
+
+function equipDefaultWeapon(): void {
+  equipWeapon(DEFAULT_WEAPON);
+}
+
+function lootReplenishesAmmo(item: LootItem): boolean {
+  return item.kind === "crystal" || item.kind === "core";
+}
+
+function extraLootForCurrentPage(): LootItem[] {
+  if (!currentPageUrl) return [];
+  const key = floorIdentity(currentPageUrl);
+  const items = extraLootByPage.get(key);
+  if (items) return items;
+  const created: LootItem[] = [];
+  extraLootByPage.set(key, created);
+  return created;
+}
+
+function nextExtraLootId(prefix: string): string | null {
+  if (!currentPageUrl) return null;
+  const key = floorIdentity(currentPageUrl);
+  const serial = (extraLootSerialByPage.get(key) ?? 0) + 1;
+  extraLootSerialByPage.set(key, serial);
+  return `${key}::${prefix}-${serial}`;
+}
+
+function persistDroppedWeapon(weapon: WeaponSpec, ammo: number, position: Point, roomId: number): void {
+  if (!currentPageUrl || weapon.maxAmmo === null || ammo <= 0) return;
+  const id = nextExtraLootId(`dropped-weapon::${weapon.kind}`);
+  if (!id) return;
+  const dropped: LootItem = {
+    id,
+    roomId,
+    x: position.x,
+    y: position.y,
+    kind: "weapon",
+    weapon: { ...weapon },
+    weaponAmmo: ammo,
+  };
+  const items = extraLootForCurrentPage();
+  if (items.some(item => item.id === dropped.id)) return;
+  items.push(dropped);
+  queuedLootDrops.push(dropped);
+  temporarilyBlockedLoot.add(dropped.id);
+  lastDroppedWeapon = dropped;
+}
+
 function recordHighScore(): { scores: HighScore[]; rank: number | null } {
   const entry: HighScore = {
     score: lootScore,
@@ -617,7 +696,12 @@ function lootDropsForMonster(monster: Monster): LootItem[] {
     if (!monster.dropId || !monster.dropKind) return [];
     return [{ id: monster.dropId, roomId: monster.roomId, x, y, kind: monster.dropKind }];
   }
-  return bossLootDrops({ ...monster, dropX: x, dropY: y }, namespace, floorNumber());
+  return bossLootDrops(
+    { ...monster, dropX: x, dropY: y },
+    namespace,
+    floorNumber(),
+    currentRoomsById.get(monster.spawnRoomId),
+  );
 }
 
 function saveCurrentFloorState(): void {
@@ -1071,26 +1155,40 @@ function shootBullet(): void {
   if (!playerAlive || !minimapModal.hidden) return;
 
   const now = performance.now();
-  if (now - lastPlayerShotAt < PLAYER_FIRE_COOLDOWN_MS) return;
+  if (now - lastPlayerShotAt < currentWeapon.fireCooldownMs) return;
   lastPlayerShotAt = now;
   runStats.shotsFired += 1;
   statShotsEl.textContent = String(runStats.shotsFired);
   playPlayerShootFrames();
 
-  const muzzleDistance = PLAYER_RADIUS + 12;
-  const x = player.x + playerFacing.x * muzzleDistance;
-  const y = player.y + playerFacing.y * muzzleDistance;
-
-  bullets.push({
-    id: `${now}-${Math.random()}`,
-    owner: "player",
-    damage: 1,
-    x,
-    y,
-    vx: playerFacing.x * BULLET_SPEED,
-    vy: playerFacing.y * BULLET_SPEED,
-    traveled: 0
-  });
+  const projectiles = projectilesForWeapon(currentWeapon, playerFacing, weaponShotSequence);
+  const perpendicular = { x: -playerFacing.y, y: playerFacing.x };
+  for (const [index, projectile] of projectiles.entries()) {
+    const muzzleDistance = PLAYER_RADIUS + projectile.radius + 7;
+    const x = player.x + playerFacing.x * muzzleDistance + perpendicular.x * projectile.lateralOffset;
+    const y = player.y + playerFacing.y * muzzleDistance + perpendicular.y * projectile.lateralOffset;
+    bullets.push({
+      id: `${now}-${weaponShotSequence}-${index}`,
+      owner: "player",
+      damage: projectile.damage,
+      x,
+      y,
+      vx: projectile.direction.x * projectile.speed,
+      vy: projectile.direction.y * projectile.speed,
+      traveled: 0,
+      radius: projectile.radius,
+      maxDistance: projectile.range,
+      style: "player",
+      weaponKind: currentWeapon.kind,
+    });
+  }
+  gameCanvasHost.dataset.lastPlayerVolley = String(projectiles.length);
+  weaponShotSequence += 1;
+  if (currentWeaponAmmo !== null) {
+    currentWeaponAmmo -= 1;
+    if (currentWeaponAmmo <= 0) equipDefaultWeapon();
+    else updateWeaponUi();
+  }
 
   renderBullets();
 }
@@ -1411,12 +1509,16 @@ function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
   stairs: Stair[];
   loot: LootItem[];
 } {
-  return createInteractiveObjects(
+  const base = createInteractiveObjects(
     layout,
     floorIdentity(pageUrl),
     navigationHistory[navigationHistory.length - 1] ?? null,
     collectedLoot,
   );
+  return {
+    stairs: base.stairs,
+    loot: [...base.loot, ...extraLootForCurrentPage().filter(item => !collectedLoot.has(item.id))],
+  };
 }
 
 function renderInteractiveObjects(): void {
@@ -1433,13 +1535,40 @@ function updatePlayerVisual(): void {
 
 function checkLoot(): void {
   let changed = false;
+  queuedLootDrops = [];
+
+  for (const item of currentLoot) {
+    if (
+      temporarilyBlockedLoot.has(item.id) &&
+      distanceSquared(player, item) > LOOT_RADIUS * LOOT_RADIUS
+    ) {
+      temporarilyBlockedLoot.delete(item.id);
+    }
+  }
 
   currentLoot = currentLoot.filter(item => {
-    if (distanceSquared(player, item) <= LOOT_RADIUS * LOOT_RADIUS) {
+    if (
+      distanceSquared(player, item) <= LOOT_RADIUS * LOOT_RADIUS &&
+      !temporarilyBlockedLoot.has(item.id)
+    ) {
       collectedLoot.add(item.id);
       lootScore += 1;
       if (lootCountEl) lootCountEl.textContent = String(lootScore);
       updateHudPanels();
+
+      if (item.kind === "weapon" && item.weapon) {
+        if (currentWeapon.maxAmmo !== null && currentWeaponAmmo !== null && currentWeaponAmmo > 0) {
+          persistDroppedWeapon(currentWeapon, currentWeaponAmmo, item, item.roomId);
+        }
+        equipWeaponWithAmmo(item.weapon, item.weaponAmmo ?? item.weapon.maxAmmo);
+        setStatus(`Equipped ${item.weapon.name} · ${item.weaponAmmo ?? item.weapon.maxAmmo} / ${item.weapon.maxAmmo} ammo`);
+      } else if (lootReplenishesAmmo(item)) {
+        const replenishedAmmo = replenishWeaponAmmo(currentWeapon, currentWeaponAmmo);
+        if (replenishedAmmo !== currentWeaponAmmo) {
+          currentWeaponAmmo = replenishedAmmo;
+          updateWeaponUi();
+        }
+      }
 
       if (item.kind === "medkit" && playerAlive) {
         const restored = playerHp < PLAYER_MAX_HP ? 1 : 0;
@@ -1456,6 +1585,17 @@ function checkLoot(): void {
     }
     return true;
   });
+
+  if (queuedLootDrops.length) {
+    const existing = new Set(currentLoot.map(item => item.id));
+    for (const item of queuedLootDrops) {
+      if (existing.has(item.id)) continue;
+      currentLoot.push(item);
+      existing.add(item.id);
+      changed = true;
+    }
+  }
+  queuedLootDrops = [];
 
   if (changed) {
     renderInteractiveObjects();
@@ -1628,6 +1768,50 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
   if (checkStairs()) heldMovementKeys.clear();
 }
 
+function teleportPlayerTo(x: number, y: number): void {
+  if (!currentLayout || !isWalkable(x, y)) return;
+  player = { x, y };
+  updatePlayerVisual();
+  revealRoomsFromCorridor(player.x, player.y);
+  updateCurrentRoom();
+  centerCameraOnPlayer();
+  checkLoot();
+}
+
+(window as Window & {
+  __webcrawlTest?: {
+    teleportPlayerTo: (x: number, y: number) => void;
+    setWeaponAmmo: (ammo: number) => void;
+    loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null }>;
+    lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null } | null;
+  };
+}).__webcrawlTest = {
+  teleportPlayerTo,
+  setWeaponAmmo(ammo: number): void {
+    if (currentWeapon.maxAmmo === null) return;
+    currentWeaponAmmo = Math.max(0, Math.min(currentWeapon.maxAmmo, ammo));
+    updateWeaponUi();
+  },
+  loot: () => currentLoot.map(item => ({
+    id: item.id,
+    kind: item.kind,
+    x: item.x,
+    y: item.y,
+    ammo: item.weaponAmmo ?? item.weapon?.maxAmmo ?? null,
+    name: item.weapon?.name ?? null,
+  })),
+  lastDroppedWeapon: () => lastDroppedWeapon
+    ? {
+      id: lastDroppedWeapon.id,
+      x: lastDroppedWeapon.x,
+      y: lastDroppedWeapon.y,
+      ammo: lastDroppedWeapon.weaponAmmo ?? lastDroppedWeapon.weapon?.maxAmmo ?? null,
+      maxAmmo: lastDroppedWeapon.weapon?.maxAmmo ?? null,
+      name: lastDroppedWeapon.weapon?.name ?? null,
+    }
+    : null,
+};
+
 window.addEventListener("keydown", event => {
   if (event.key === "Escape" && !minimapModal.hidden) {
     event.preventDefault();
@@ -1744,6 +1928,7 @@ function renderGraph(
   hpCountEl.textContent = String(playerHp);
   if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
   updateHealthUi();
+  updateWeaponUi();
   bullets = [];
   hideLinkMenu();
   closeMinimap();
@@ -1905,6 +2090,7 @@ welcomeForm.addEventListener("submit", (event) => {
   welcomeScreen.hidden = true;
   renderer.start();
   runStartedAt = performance.now();
+  equipDefaultWeapon();
 
   urlInput.value = welcomeUrlInput.value;
   loadPage(welcomeUrlInput.value);

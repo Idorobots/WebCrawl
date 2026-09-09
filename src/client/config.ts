@@ -68,7 +68,7 @@ export const PLAYER_FRAMES: Record<PlayerDirection, Record<PlayerAnimation, stri
   right: { walk: framePaths("east", "walk", 6), shoot: framePaths("east", "shoot", 4) },
 };
 
-export const LOOT_ASSETS: Record<LootKind, string> = {
+export const LOOT_ASSETS: Partial<Record<LootKind, string>> = {
   credit: ASSETS.lootCredit,
   crystal: ASSETS.lootCrystal,
   core: ASSETS.lootCore,

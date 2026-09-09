@@ -15,17 +15,28 @@ import type {
   Stair,
 } from "../types";
 import { stableHash } from "./hash";
+import { weaponForRoom, type WeaponSource } from "./weapons";
 
 export function lootKindForSeed(seed: number): LootKind {
   const kinds: LootKind[] = ["credit", "crystal", "core", "medkit"];
   return kinds[(seed >>> 3) % kinds.length] ?? "crystal";
 }
 
-export function bossLootDrops(monster: Monster, floorIdentity: string, floor: number): LootItem[] {
+export function bossLootDrops(
+  monster: Monster,
+  floorIdentity: string,
+  floor: number,
+  sourceRoom?: Pick<GraphNode, "tag" | "title" | "lootSeed">,
+): LootItem[] {
   if (!monster.bossKind) return [];
   const count = 8 + Math.min(8, Math.floor(floor / 2));
   const x = monster.dropX ?? monster.x;
   const y = monster.dropY ?? monster.y;
+  const weaponRoom = sourceRoom ?? {
+    tag: "script",
+    title: `<script> ${monster.bossKind}`,
+    lootSeed: monster.seed,
+  };
   return Array.from({ length: count }, (_, index) => {
     const angle = index / count * Math.PI * 2;
     const radius = 46 + (index % 2) * 28;
@@ -34,9 +45,25 @@ export function bossLootDrops(monster: Monster, floorIdentity: string, floor: nu
       roomId: monster.roomId,
       x: x + Math.cos(angle) * radius,
       y: y + Math.sin(angle) * radius,
-      kind: index === 0 ? "medkit" : index % 3 === 0 ? "core" : lootKindForSeed(monster.seed + index * 7_919),
+      kind: index === 0 ? "medkit" : index === 1 ? "weapon" : index % 3 === 0 ? "core" : lootKindForSeed(monster.seed + index * 7_919),
+      weapon: index === 1 ? weaponForRoom(weaponRoom, "boss") : undefined,
     };
   });
+}
+
+export function weaponLootForRoom(room: GraphNode, pageUrl: string): LootItem | null {
+  if (room.isRoot || room.tag === "script") return null;
+  const source: WeaponSource = room.isHidden ? "hidden" : "room";
+  const chance = room.isHidden ? 100 : room.tag === "img" ? 25 : 10;
+  if (stableHash(`${room.lootSeed}|weapon-drop`) % 100 >= chance) return null;
+  return {
+    id: `${pageUrl}::${room.id}::weapon`,
+    roomId: room.id,
+    x: room.x,
+    y: room.y - Math.min(135, room.height * 0.3),
+    kind: "weapon",
+    weapon: weaponForRoom(room, source),
+  };
 }
 
 export function sceneryDropKindForSeed(seed: number): LootKind | null {
@@ -704,6 +731,8 @@ export function buildInteractiveObjects(
         kind: lootKindForSeed(stableHash(`${room.lootSeed}|loot|${index}`)),
       });
     }
+    const weaponLoot = weaponLootForRoom(room, pageUrl);
+    if (weaponLoot && !collectedLoot.has(weaponLoot.id)) loot.push(weaponLoot);
   }
   return { stairs, loot };
 }

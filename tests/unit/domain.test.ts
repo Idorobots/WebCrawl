@@ -16,12 +16,14 @@ import {
   monsterSpecsForRoom,
   monsterSpecForBossSummon,
   monsterSpecForSpawner,
+  weaponLootForRoom,
   sceneryDropKindForSeed,
 } from "../../src/client/domain/generation";
 import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, revealedRoomPath } from "../../src/client/domain/pathfinding";
+import { DEFAULT_WEAPON, projectilesForWeapon, replenishWeaponAmmo, weaponForRoom, weaponKinds } from "../../src/client/domain/weapons";
 import type { DungeonGraph, GraphNode } from "../../src/client/types";
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
@@ -235,7 +237,7 @@ describe("deterministic room contents", () => {
     const generated = buildInteractiveObjects(layout, "https://example.com/", null, new Set());
     expect(lootCountForRoom(room)).toBeGreaterThanOrEqual(3);
     expect(lootCountForRoom(room)).toBeLessThanOrEqual(5);
-    expect(generated.loot).toHaveLength(lootCountForRoom(room));
+    expect(generated.loot.filter(item => item.kind !== "weapon")).toHaveLength(lootCountForRoom(room));
     expect(generated.stairs.map(({ url }) => url)).toEqual(room.hrefs);
   });
 
@@ -311,6 +313,8 @@ describe("deterministic room contents", () => {
     expect(earlyLoot).toHaveLength(8);
     expect(deepLoot.length).toBeGreaterThan(earlyLoot.length);
     expect(earlyLoot[0]?.kind).toBe("medkit");
+    expect(earlyLoot[1]?.kind).toBe("weapon");
+    expect(earlyLoot[1]?.weapon?.maxAmmo).not.toBeNull();
     expect(earlyLoot.some(item => item.kind === "core")).toBe(true);
     expect(new Set(earlyLoot.map(item => item.id)).size).toBe(earlyLoot.length);
 
@@ -385,6 +389,103 @@ describe("deterministic room contents", () => {
       attackSequence: 3,
       summonedCount: 3,
     });
+  });
+
+  it("generates deterministic procedural weapons and exposes all archetypes", () => {
+    const hiddenRoom = node(7_000, 0, 1, {
+      tag: "section",
+      title: "<section> Hidden cache",
+      lootSeed: stableHash("hidden-weapon-room"),
+      isHidden: true,
+      x: 400,
+      y: 400,
+      isRoot: false,
+    });
+    const hiddenWeapon = weaponLootForRoom(hiddenRoom, "https://example.com/floor-1");
+    expect(hiddenWeapon).not.toBeNull();
+    expect(hiddenWeapon?.kind).toBe("weapon");
+    expect(hiddenWeapon?.weapon).toEqual(weaponForRoom(hiddenRoom, "hidden"));
+    expect(hiddenWeapon?.weapon?.maxAmmo ?? 0).toBeGreaterThan(0);
+    expect(hiddenWeapon?.weapon?.name).not.toBe(DEFAULT_WEAPON.name);
+
+    const samples = Array.from({ length: 500 }, (_, index) => node(index + 7_100, 0, 1, {
+      tag: index % 3 === 0 ? "section" : index % 3 === 1 ? "article" : "aside",
+      title: `<node> Weapon sample ${index}`,
+      lootSeed: stableHash(`weapon-sample-${index}`),
+      isRoot: false,
+    }));
+    const kinds = new Set(samples.map(room => weaponForRoom(room).kind));
+    expect(kinds).toEqual(new Set(weaponKinds().filter(kind => kind !== "pulse-rifle")));
+    expect(samples.some(room => weaponLootForRoom(room, "https://example.com/room") !== null)).toBe(true);
+  });
+
+  it("preserves dropped weapon ammo inside weapon loot payloads", () => {
+    const room = node(7_500, 0, 1, {
+      tag: "article",
+      title: "<article> Weapon carrier",
+      lootSeed: stableHash("weapon-carrier-room"),
+      isRoot: false,
+      isHidden: true,
+      x: 300,
+      y: 300,
+    });
+    const weaponLoot = weaponLootForRoom(room, "https://example.com/floor-2");
+    expect(weaponLoot?.weapon?.maxAmmo).toBeGreaterThan(0);
+    expect(weaponLoot?.weapon?.ammoPerLoot).toBeGreaterThan(0);
+    expect(weaponLoot?.weaponAmmo).toBeUndefined();
+  });
+
+  it("emits expected projectile patterns and ammo replenishment", () => {
+    const room = node(8_000, 0, 1, {
+      tag: "main",
+      title: "<main> Arsenal",
+      lootSeed: stableHash("weapon-pattern-room"),
+      isRoot: false,
+    });
+    const forward = { x: 1, y: 0 };
+    const scatter = projectilesForWeapon({
+      ...weaponForRoom({ ...room, lootSeed: stableHash("scatter-room") }),
+      kind: "scatter-array",
+      name: "TEST SCATTER ARRAY",
+      projectileSpeed: 440,
+      projectileRange: 460,
+      projectileRadius: 4,
+      damage: 1,
+      maxAmmo: 20,
+      ammoPerLoot: 3,
+    }, forward, 0);
+    expect(scatter).toHaveLength(7);
+    expect(scatter.some(projectile => projectile.direction.y !== 0)).toBe(true);
+
+    const nova = projectilesForWeapon({
+      ...weaponForRoom({ ...room, lootSeed: stableHash("nova-room") }),
+      kind: "nova-cache",
+      name: "TEST NOVA CACHE",
+      projectileSpeed: 420,
+      projectileRange: 590,
+      projectileRadius: 5,
+      damage: 1,
+      maxAmmo: 12,
+      ammoPerLoot: 2,
+    }, forward, 0);
+    expect(nova).toHaveLength(8);
+    expect(new Set(nova.map(projectile => `${Math.round(projectile.direction.x * 100)},${Math.round(projectile.direction.y * 100)}`)).size).toBe(8);
+
+    const helixBase = {
+      ...weaponForRoom({ ...room, lootSeed: stableHash("helix-room") }),
+      kind: "helix-emitter" as const,
+      name: "TEST HELIX EMITTER",
+      maxAmmo: 30,
+      ammoPerLoot: 5,
+    };
+    const helixA = projectilesForWeapon(helixBase, forward, 0);
+    const helixB = projectilesForWeapon(helixBase, forward, 1);
+    expect(helixA).toHaveLength(2);
+    expect(helixB).toHaveLength(2);
+    expect(helixA).not.toEqual(helixB);
+    expect(replenishWeaponAmmo(helixBase, 10)).toBe(15);
+    expect(replenishWeaponAmmo(helixBase, helixBase.maxAmmo)).toBe(helixBase.maxAmmo);
+    expect(replenishWeaponAmmo(DEFAULT_WEAPON, null)).toBeNull();
   });
 
   it("adds stronger, persistent monster spawners as floors deepen", () => {
