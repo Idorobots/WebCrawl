@@ -49,6 +49,62 @@ test("keeps the Phaser viewport playable on mobile", async ({ page }) => {
   expect(bounds?.height).toBeGreaterThan(500);
 });
 
+test("activates a deterministic boss when revealing a script room", async ({ page }) => {
+  await page.route("**/api/fetch?**", route => route.fulfill({
+    status: 200,
+    contentType: "text/html",
+    body: "<!doctype html><html><body><script>const boss = true;</script><main><h1>Boss deck</h1></main></body></html>",
+  }));
+  await page.goto("/");
+  await page.locator("#welcomeUrlInput").fill("https://example.com/boss");
+  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  const game = page.locator("#gameCanvas");
+  await expect(game).toHaveAttribute("data-active-bosses", "0");
+
+  const direction = await game.getAttribute("data-first-exit");
+  const door = {
+    x: Number(await game.getAttribute("data-first-door-x")),
+    y: Number(await game.getAttribute("data-first-door-y")),
+  };
+  const position = await playerPosition(page);
+  const horizontal = door.x < position.x ? "ArrowLeft" : "ArrowRight";
+  const vertical = door.y < position.y ? "ArrowUp" : "ArrowDown";
+  const alignKey = direction === "N" || direction === "S" ? horizontal : vertical;
+  const alignDistance = direction === "N" || direction === "S"
+    ? Math.abs(door.x - position.x)
+    : Math.abs(door.y - position.y);
+  if (alignDistance > 8) {
+    await page.keyboard.down(alignKey);
+    await page.waitForTimeout(alignDistance / 400 * 1_000);
+    await page.keyboard.up(alignKey);
+  }
+  const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
+  await page.keyboard.down(exitKey);
+  await expect.poll(async () => {
+    const value = await page.locator("#statRooms").textContent();
+    return Number(value?.split("/")[0]?.trim() ?? "0");
+  }).toBeGreaterThanOrEqual(2);
+  await page.keyboard.up(exitKey);
+
+  await expect(game).toHaveAttribute("data-active-bosses", "1");
+  await expect(game).toHaveAttribute("data-active-boss-kind", /^(packet-storm|fork-bomb|heap-titan)$/);
+  const initialBossPosition = {
+    x: Number(await game.getAttribute("data-active-boss-x")),
+    y: Number(await game.getAttribute("data-active-boss-y")),
+  };
+  const retreatKey = { N: "ArrowDown", E: "ArrowLeft", S: "ArrowUp", W: "ArrowRight" }[direction ?? "N"] ?? "ArrowDown";
+  await page.keyboard.down(retreatKey);
+  try {
+    await expect.poll(async () => {
+      const x = Number(await game.getAttribute("data-active-boss-x"));
+      const y = Number(await game.getAttribute("data-active-boss-y"));
+      return Math.hypot(x - initialBossPosition.x, y - initialBossPosition.y);
+    }, { timeout: 8_000 }).toBeGreaterThan(12);
+  } finally {
+    await page.keyboard.up(retreatKey);
+  }
+});
+
 test("moves continuously with WASD and arrow keys", async ({ page }) => {
   await startGame(page);
 

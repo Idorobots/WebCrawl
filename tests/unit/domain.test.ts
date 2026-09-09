@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { CORRIDOR_HALF_WIDTH, MAX_CORRIDOR_LENGTH, MONSTER_RADIUS, ROOM_HEIGHT, ROOM_WIDTH } from "../../src/client/config";
 import { distanceSquared, pointInCorridor, pointInRoom } from "../../src/client/domain/geometry";
 import {
+  bossKindForRoom,
+  bossLootDrops,
+  bossSpecForRoom,
   buildDecorations,
   buildInteractiveObjects,
   buildMonsters,
@@ -11,6 +14,7 @@ import {
   lootCountForRoom,
   monsterSpecsForCorridor,
   monsterSpecsForRoom,
+  monsterSpecForBossSummon,
   monsterSpecForSpawner,
   sceneryDropKindForSeed,
 } from "../../src/client/domain/generation";
@@ -276,6 +280,111 @@ describe("deterministic room contents", () => {
     expect(sentry?.speed).toBe(0);
     expect(sentry?.projectileSpeed ?? 0).toBeGreaterThan(0);
     expect(sentry?.projectileRange ?? 0).toBeGreaterThan(0);
+  });
+
+  it("turns every script room into a scaled boss arena without removing ambient threats", () => {
+    const root = node(0, null, 0);
+    const scriptRoom = node(1, 0, 1, {
+      tag: "script",
+      lootSeed: stableHash("boss-script"),
+    });
+    const bossLayout = layoutOrthogonal({
+      nodes: [root, scriptRoom],
+      links: [{ source: 0, target: 1 }],
+      originalCount: 2,
+      coalescedCount: 0,
+      truncated: false,
+    }, 1_200, 800);
+    const arena = bossLayout.nodes.find(room => room.tag === "script")!;
+    expect(arena).toMatchObject({ shape: "octagon", width: 900, height: 650 });
+
+    const floorOne = monsterSpecsForRoom(arena, 1);
+    const floorEight = monsterSpecsForRoom(arena, 8);
+    expect(floorOne.filter(monster => monster.bossKind)).toHaveLength(1);
+    expect(floorOne.filter(monster => !monster.bossKind).length).toBeGreaterThanOrEqual(2);
+    expect(floorEight.find(monster => monster.bossKind)!.maxHp).toBeGreaterThan(
+      floorOne.find(monster => monster.bossKind)!.maxHp,
+    );
+    const boss = floorOne.find(monster => monster.bossKind)!;
+    const earlyLoot = bossLootDrops(boss, "boss-floor-1", 1);
+    const deepLoot = bossLootDrops(boss, "boss-floor-10", 10);
+    expect(earlyLoot).toHaveLength(8);
+    expect(deepLoot.length).toBeGreaterThan(earlyLoot.length);
+    expect(earlyLoot[0]?.kind).toBe("medkit");
+    expect(earlyLoot.some(item => item.kind === "core")).toBe(true);
+    expect(new Set(earlyLoot.map(item => item.id)).size).toBe(earlyLoot.length);
+
+    const sampledScripts = Array.from({ length: 200 }, (_, index) => node(index + 3_000, 0, 1, {
+      tag: "script",
+      lootSeed: stableHash(`boss-kind-${index}`),
+      isRoot: false,
+    }));
+    expect(new Set(sampledScripts.map(bossKindForRoom))).toEqual(
+      new Set(["packet-storm", "fork-bomb", "heap-titan"]),
+    );
+    const rosterRoot = node(5_000, null, 0, { lootSeed: stableHash("boss-roster-root") });
+    const rosterScripts = Array.from({ length: 6 }, (_, index) => node(5_001 + index, rosterRoot.id, 1, {
+      tag: "script",
+      lootSeed: stableHash(`roster-script-${index}`),
+      isRoot: false,
+      x: index * 1_000,
+    }));
+    const roster = buildMonsters(
+      { nodes: [rosterRoot, ...rosterScripts], links: [], hiddenCount: 0 },
+      new Map(),
+      new Set(),
+      1,
+    ).filter(monster => monster.bossKind);
+    expect(new Set(roster.map(monster => monster.bossKind))).toEqual(
+      new Set(["packet-storm", "fork-bomb", "heap-titan"]),
+    );
+    expect(roster.map(monster => monster.bossKind).slice(0, 3)).toEqual(
+      roster.map(monster => monster.bossKind).slice(3, 6),
+    );
+    expect(sampledScripts.some(room => decorationSpecsForRoom(room, 10).some(item => item.spawner))).toBe(true);
+  });
+
+  it("reconstructs deterministic Fork Bomb summons from boss state", () => {
+    const scriptRooms = Array.from({ length: 100 }, (_, index) => node(index + 4_000, 0, 1, {
+      tag: "script",
+      lootSeed: stableHash(`summoner-boss-${index}`),
+      isRoot: false,
+      x: 500,
+      y: 400,
+    }));
+    const room = scriptRooms.find(candidate => bossKindForRoom(candidate) === "fork-bomb")!;
+    const boss = bossSpecForRoom(room, 6);
+    const firstSummon = monsterSpecForBossSummon(boss, 6, 0);
+    expect(firstSummon).toEqual(monsterSpecForBossSummon(boss, 6, 0));
+    const monsters = buildMonsters(
+      { nodes: [room], links: [], hiddenCount: 0 },
+      new Map([[
+        boss.id,
+        {
+          x: boss.x,
+          y: boss.y,
+          roomId: room.id,
+          hp: boss.maxHp - 5,
+          dead: false,
+          active: true,
+          droppedLoot: false,
+          dropId: null,
+          dropX: null,
+          dropY: null,
+          dropKind: null,
+          attackSequence: 3,
+          summonedCount: 3,
+        },
+      ]]),
+      new Set([room.id]),
+      6,
+    );
+    expect(monsters.filter(monster => monster.id.startsWith(`${boss.id}::summon-`))).toHaveLength(3);
+    expect(monsters.find(monster => monster.id === boss.id)).toMatchObject({
+      hp: boss.maxHp - 5,
+      attackSequence: 3,
+      summonedCount: 3,
+    });
   });
 
   it("adds stronger, persistent monster spawners as floors deepen", () => {

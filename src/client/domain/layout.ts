@@ -37,6 +37,12 @@ function configureRoom(node: GraphNode, childCount: number): void {
   const exitBonus = Math.max(0, childCount - 3) * 46;
   node.shape = shape;
   node.childCount = childCount;
+  if (node.tag === "script") {
+    node.shape = "octagon";
+    node.width = 900 + exitBonus;
+    node.height = 650;
+    return;
+  }
   switch (shape) {
     case "wide":
       node.width = 720 + exitBonus;

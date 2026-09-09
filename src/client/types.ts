@@ -2,8 +2,10 @@ export type Direction = "N" | "E" | "S" | "W";
 export type PlayerDirection = "up" | "down" | "left" | "right";
 export type PlayerAnimation = "walk" | "shoot";
 export type LootKind = "credit" | "crystal" | "core" | "medkit";
-export type MonsterKind = "slow" | "fast" | "sentry";
+export type BossKind = "packet-storm" | "fork-bomb" | "heap-titan";
+export type MonsterKind = "slow" | "fast" | "sentry" | BossKind;
 export type BulletOwner = "player" | "enemy";
+export type BulletStyle = "player" | "enemy" | "boss" | "shockwave";
 export type RoomShape = "rectangle" | "wide" | "tall" | "capsule" | "octagon";
 
 export interface Point {
@@ -108,6 +110,9 @@ export interface Monster extends Point {
   hp: number;
   speed: number;
   fast: boolean;
+  radius: number;
+  size: number;
+  bossKind?: BossKind;
   attackRange: number;
   attackDamage: number;
   attackCooldownMs: number;
@@ -125,6 +130,9 @@ export interface Monster extends Point {
   pathTargetX?: number;
   pathTargetY?: number;
   nextPathRefreshAt?: number;
+  attackSequence?: number;
+  summonedCount?: number;
+  nextSpecialAt?: number;
   droppedLoot?: boolean;
   dropId?: string | null;
   dropX?: number | null;
@@ -144,6 +152,8 @@ export interface MonsterState {
   dropX: number | null;
   dropY: number | null;
   dropKind: LootKind | null;
+  attackSequence?: number;
+  summonedCount?: number;
 }
 
 export interface Bullet extends Point {
@@ -153,6 +163,9 @@ export interface Bullet extends Point {
   vx: number;
   vy: number;
   traveled: number;
+  radius?: number;
+  maxDistance?: number;
+  style?: BulletStyle;
 }
 
 export interface RunStats {
@@ -160,6 +173,7 @@ export interface RunStats {
   fastKills: number;
   slowKills: number;
   sentryKills?: number;
+  bossKills?: number;
   shotsFired: number;
 }
 

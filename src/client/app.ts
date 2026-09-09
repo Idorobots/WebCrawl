@@ -22,7 +22,9 @@ import {
   buildInteractiveObjects as createInteractiveObjects,
   buildMonsters as createMonsters,
   buildSceneryDrops as createSceneryDrops,
+  bossLootDrops,
   lootKindForSeed,
+  monsterSpecForBossSummon,
   monsterSpecForSpawner,
 } from "./domain/generation";
 import { domToGraph } from "./domain/graph";
@@ -32,6 +34,7 @@ import { PhaserRenderer } from "./render/phaser-renderer";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
 import type {
   Bullet,
+  BulletStyle,
   Decoration,
   DungeonGraph,
   DungeonLayout,
@@ -121,6 +124,7 @@ const runStats: RunStats = {
   fastKills: 0,
   slowKills: 0,
   sentryKills: 0,
+  bossKills: 0,
   shotsFired: 0
 };
 
@@ -147,6 +151,7 @@ const deathKillsEl = requireElement<HTMLElement>("#deathKills");
 const deathFastKillsEl = requireElement<HTMLElement>("#deathFastKills");
 const deathSlowKillsEl = requireElement<HTMLElement>("#deathSlowKills");
 const deathSentryKillsEl = requireElement<HTMLElement>("#deathSentryKills");
+const deathBossKillsEl = requireElement<HTMLElement>("#deathBossKills");
 const deathShotsEl = requireElement<HTMLElement>("#deathShots");
 const highScoreRowsEl = requireElement<HTMLTableSectionElement>("#highScoreRows");
 const restartButton = requireElement<HTMLButtonElement>("#restartButton");
@@ -268,6 +273,7 @@ function updateCurrentRoom(): void {
     const roomChanged = currentRoomId !== room.id;
     const alreadyVisited = visitedRooms.has(room.id);
     currentRoomId = room.id;
+    gameCanvasHost.dataset.currentRoomTag = room.tag;
     if (roomChanged) roomRoutingDirty = true;
     markVisited(room);
     if (roomChanged && alreadyVisited && !gameUi.hidden) updateHudPanels();
@@ -443,6 +449,7 @@ function recordHighScore(): { scores: HighScore[]; rank: number | null } {
     fastKills: runStats.fastKills,
     slowKills: runStats.slowKills,
     sentryKills: runStats.sentryKills,
+    bossKills: runStats.bossKills,
     shotsFired: runStats.shotsFired,
     at: new Date().toISOString()
   };
@@ -460,6 +467,7 @@ function showDeathModal(): void {
   deathFastKillsEl.textContent = String(runStats.fastKills);
   deathSlowKillsEl.textContent = String(runStats.slowKills);
   deathSentryKillsEl.textContent = String(runStats.sentryKills ?? 0);
+  deathBossKillsEl.textContent = String(runStats.bossKills ?? 0);
   deathShotsEl.textContent = String(runStats.shotsFired);
 
   newHighScoreEl.textContent =
@@ -498,6 +506,9 @@ function showDeathModal(): void {
 restartButton.addEventListener("click", () => location.reload());
 
 function monsterAsset(monster: Monster): string {
+  if (monster.bossKind === "packet-storm") return ASSETS.monsterScout;
+  if (monster.bossKind === "fork-bomb") return ASSETS.monsterFast;
+  if (monster.bossKind === "heap-titan") return ASSETS.monsterSlow;
   if (monster.kind === "sentry") {
     return ASSETS.monsterScout;
   }
@@ -511,6 +522,10 @@ function monsterAsset(monster: Monster): string {
   return ((monster.seed >>> 4) & 1)
     ? ASSETS.monsterSlow
     : ASSETS.monsterScout;
+}
+
+function isBoss(monster: Monster): boolean {
+  return monster.bossKind !== undefined;
 }
 
 function obstacleStateMapForPage(pageUrl: string): Map<string, ObstacleState> {
@@ -587,8 +602,22 @@ function saveMonsterState(monster: Monster): void {
     dropId: monster.dropId || null,
     dropX: monster.dropX ?? null,
     dropY: monster.dropY ?? null,
-    dropKind: monster.dropKind ?? null
+    dropKind: monster.dropKind ?? null,
+    attackSequence: monster.attackSequence,
+    summonedCount: monster.summonedCount,
   });
+}
+
+function lootDropsForMonster(monster: Monster): LootItem[] {
+  if (!currentPageUrl) return [];
+  const namespace = floorIdentity(currentPageUrl);
+  const x = monster.dropX ?? monster.x;
+  const y = monster.dropY ?? monster.y;
+  if (!isBoss(monster)) {
+    if (!monster.dropId || !monster.dropKind) return [];
+    return [{ id: monster.dropId, roomId: monster.roomId, x, y, kind: monster.dropKind }];
+  }
+  return bossLootDrops({ ...monster, dropX: x, dropY: y }, namespace, floorNumber());
 }
 
 function saveCurrentFloorState(): void {
@@ -609,17 +638,20 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string): Monster[] {
     currentDecorations,
   );
   for (const monster of monsters) {
-    if (monster.dead && monster.droppedLoot && monster.dropId && !collectedLoot.has(monster.dropId)) {
-      currentLoot.push({
-        id: monster.dropId,
-        roomId: monster.roomId,
-        x: monster.dropX ?? monster.x,
-        y: monster.dropY ?? monster.y,
-        kind: monster.dropKind || lootKindForSeed(monster.seed),
-      });
+    if (monster.dead && monster.droppedLoot) {
+      currentLoot.push(...lootDropsForMonster(monster).filter(item => !collectedLoot.has(item.id)));
     }
   }
   return monsters;
+}
+
+function updateBossGates(): void {
+  const lockedRooms = new Set(currentMonsters
+    .filter(monster => isBoss(monster) && !monster.dead)
+    .map(monster => monster.spawnRoomId));
+  for (const stair of currentStairs) {
+    if (stair.type === "down") stair.enabled = !lockedRooms.has(stair.roomId);
+  }
 }
 
 function activateMonstersInRoom(roomId: number): void {
@@ -711,22 +743,14 @@ function applyPlayerDamage(amount: number): void {
 function monsterDrop(monster: Monster): void {
   if (!currentPageUrl || !monster.dropsLoot || monster.droppedLoot) return;
 
-  const dropId = `${floorIdentity(currentPageUrl)}::${monster.id}::monster-drop`;
   monster.droppedLoot = true;
-  monster.dropId = dropId;
   monster.dropX = monster.x;
   monster.dropY = monster.y;
-  monster.dropKind = lootKindForSeed(monster.seed);
-
-  if (!collectedLoot.has(dropId)) {
-    currentLoot.push({
-      id: dropId,
-      roomId: monster.roomId,
-      x: monster.x,
-      y: monster.y,
-      kind: monster.dropKind
-    });
+  if (!isBoss(monster)) {
+    monster.dropId = `${floorIdentity(currentPageUrl)}::${monster.id}::monster-drop`;
+    monster.dropKind = lootKindForSeed(monster.seed);
   }
+  currentLoot.push(...lootDropsForMonster(monster).filter(item => !collectedLoot.has(item.id)));
 }
 
 function damageMonster(monster: Monster, amount: number): void {
@@ -739,7 +763,10 @@ function damageMonster(monster: Monster, amount: number): void {
     monster.deathAnimating = true;
     runStats.kills += 1;
 
-    if (monster.fast) {
+    if (isBoss(monster)) {
+      runStats.bossKills = (runStats.bossKills ?? 0) + 1;
+      updateBossGates();
+    } else if (monster.fast) {
       runStats.fastKills += 1;
     } else if (monster.kind === "sentry") {
       runStats.sentryKills = (runStats.sentryKills ?? 0) + 1;
@@ -765,23 +792,115 @@ function damageMonster(monster: Monster, amount: number): void {
   }
 }
 
-function shootEnemyBullet(monster: Monster, direction: Point): void {
-  const now = performance.now();
-  const muzzleDistance = MONSTER_RADIUS + 10;
-
+function queueEnemyBullet(
+  monster: Monster,
+  direction: Point,
+  {
+    speed = monster.projectileSpeed,
+    damage = monster.attackDamage,
+    radius = BULLET_RADIUS,
+    maxDistance = monster.projectileRange,
+    style = "enemy",
+  }: {
+    speed?: number;
+    damage?: number;
+    radius?: number;
+    maxDistance?: number;
+    style?: BulletStyle;
+  } = {},
+): void {
+  const muzzleDistance = monster.radius + radius + 5;
   bullets.push({
-    id: `${monster.id}-${now}`,
+    id: `${monster.id}-${performance.now()}-${bullets.length}`,
     owner: "enemy",
-    damage: monster.attackDamage,
+    damage,
     x: monster.x + direction.x * muzzleDistance,
     y: monster.y + direction.y * muzzleDistance,
-    vx: direction.x * monster.projectileSpeed,
-    vy: direction.y * monster.projectileSpeed,
+    vx: direction.x * speed,
+    vy: direction.y * speed,
     traveled: 0,
+    radius,
+    maxDistance,
+    style,
   });
+}
 
+function shootEnemyBullet(monster: Monster, direction: Point): void {
+  const now = performance.now();
+  queueEnemyBullet(monster, direction);
   monster.lastAttackAt = now;
   renderBullets();
+}
+
+function rotatedDirection(direction: Point, angle: number): Point {
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+  return {
+    x: direction.x * cosine - direction.y * sine,
+    y: direction.x * sine + direction.y * cosine,
+  };
+}
+
+function fireBossVolley(monster: Monster, timestamp: number): void {
+  const sequence = monster.attackSequence ?? 0;
+  const enraged = monster.hp <= monster.maxHp / 2;
+  const toPlayer = { x: player.x - monster.x, y: player.y - monster.y };
+  const playerDistance = Math.max(1, Math.hypot(toPlayer.x, toPlayer.y));
+  const aimed = { x: toPlayer.x / playerDistance, y: toPlayer.y / playerDistance };
+
+  if (monster.bossKind === "packet-storm" && sequence % 2 === 0) {
+    const count = 10 + Math.min(6, floorNumber()) + (enraged ? 4 : 0);
+    const offset = sequence * 0.19;
+    for (let index = 0; index < count; index += 1) {
+      const angle = offset + index / count * Math.PI * 2;
+      queueEnemyBullet(monster, { x: Math.cos(angle), y: Math.sin(angle) }, {
+        radius: 6,
+        style: "boss",
+      });
+    }
+  } else {
+    const count = monster.bossKind === "fork-bomb" ? (enraged ? 5 : 3) : (enraged ? 7 : 5);
+    const spread = monster.bossKind === "fork-bomb" ? 0.19 : 0.14;
+    for (let index = 0; index < count; index += 1) {
+      queueEnemyBullet(monster, rotatedDirection(aimed, (index - (count - 1) / 2) * spread), {
+        radius: 6,
+        style: "boss",
+      });
+    }
+  }
+  monster.attackSequence = sequence + 1;
+  monster.lastAttackAt = timestamp;
+  saveMonsterState(monster);
+  renderBullets();
+}
+
+function summonBossMinions(boss: Monster, timestamp: number): void {
+  const totalLimit = 7 + Math.min(9, floorNumber());
+  const aliveLimit = 3 + Math.min(4, Math.floor(floorNumber() / 3));
+  const prefix = `${boss.id}::summon-`;
+  const alive = currentMonsters.filter(monster => monster.id.startsWith(prefix) && !monster.dead).length;
+  const summonedCount = boss.summonedCount ?? 0;
+  if (alive >= aliveLimit || summonedCount >= totalLimit) {
+    boss.nextSpecialAt = timestamp + 1_500;
+    return;
+  }
+  const waveSize = boss.hp <= boss.maxHp / 2 ? 2 : 1;
+  let added = 0;
+  for (let offset = 0; offset < waveSize && alive + added < aliveLimit && summonedCount + added < totalLimit; offset += 1) {
+    const index = summonedCount + added;
+    const minion = monsterSpecForBossSummon(boss, floorNumber(), index);
+    if (!isWalkable(minion.x, minion.y, minion.radius)) continue;
+    minion.hp = minion.maxHp;
+    minion.active = true;
+    currentMonsters.push(minion);
+    saveMonsterState(minion);
+    spawnExplosion(minion.x, minion.y);
+    added += 1;
+  }
+  boss.summonedCount = summonedCount + added;
+  boss.nextSpecialAt = timestamp + Math.max(2_800, 6_500 - floorNumber() * 260);
+  saveMonsterState(boss);
+  if (added) renderMonsters();
 }
 
 function hasWalkableLine(from: Point, to: Point, radius: number, step: number): boolean {
@@ -824,12 +943,12 @@ function updateMonsterPath(monster: Monster, target: Point, targetRoomId: number
   if (timestamp < (monster.nextPathRefreshAt ?? 0) && monster.path?.length) return;
 
   const start = { x: monster.x, y: monster.y };
-  const path = hasWalkableLine(start, target, MONSTER_RADIUS, 24)
+  const path = hasWalkableLine(start, target, monster.radius, 24)
     ? [target]
     : aStarPath(
       start,
       target,
-      point => isWalkable(point.x, point.y, MONSTER_RADIUS),
+      point => isWalkable(point.x, point.y, monster.radius),
       18,
       1800,
       monsterPathBounds(monster, target),
@@ -869,19 +988,78 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number): void {
       ? (dx < 0 ? "left" : "right")
       : null;
 
-  if (isWalkable(nextX, nextY, MONSTER_RADIUS)) {
+  if (isWalkable(nextX, nextY, monster.radius)) {
     monster.x = nextX;
     monster.y = nextY;
     return;
   }
 
-  if (Math.abs(dx) > Math.abs(dy) && isWalkable(nextX, monster.y, MONSTER_RADIUS)) {
+  if (Math.abs(dx) > Math.abs(dy) && isWalkable(nextX, monster.y, monster.radius)) {
     monster.x = nextX;
-  } else if (isWalkable(monster.x, nextY, MONSTER_RADIUS)) {
+  } else if (isWalkable(monster.x, nextY, monster.radius)) {
     monster.y = nextY;
   } else {
     monster.path = [];
     monster.nextPathRefreshAt = 0;
+  }
+}
+
+function updateBoss(monster: Monster, dt: number, timestamp: number): void {
+  if (currentRoomId === null) return;
+  const sharesPlayerRoom = monster.roomId === currentRoomId;
+  let target: Point = player;
+  let targetRoomId = currentRoomId;
+  if (!sharesPlayerRoom) {
+    const nextRoomId = nextRoomTowardPlayer.get(monster.roomId);
+    const nextRoom = nextRoomId === undefined ? undefined : currentRoomsById.get(nextRoomId);
+    if (!nextRoom) return;
+    target = nextRoom;
+    targetRoomId = nextRoom.id;
+  }
+  if (monster.bossKind === "heap-titan" || !sharesPlayerRoom) {
+    updateMonsterPath(monster, target, targetRoomId, timestamp);
+    moveMonsterTowards(monster, target, dt);
+  }
+  const playerDistance = Math.hypot(player.x - monster.x, player.y - monster.y);
+
+  if (monster.bossKind === "packet-storm") {
+    if (
+      playerDistance <= monster.projectileRange &&
+      timestamp - monster.lastAttackAt >= monster.attackCooldownMs
+    ) fireBossVolley(monster, timestamp);
+    return;
+  }
+
+  if (monster.bossKind === "fork-bomb") {
+    if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 2_800;
+    if (sharesPlayerRoom && timestamp >= monster.nextSpecialAt) summonBossMinions(monster, timestamp);
+    if (
+      playerDistance <= monster.projectileRange &&
+      timestamp - monster.lastAttackAt >= monster.attackCooldownMs
+    ) fireBossVolley(monster, timestamp);
+    return;
+  }
+
+  if (playerDistance <= monster.attackRange && timestamp - monster.lastAttackAt >= monster.attackCooldownMs) {
+    monster.lastAttackAt = timestamp;
+    applyPlayerDamage(monster.attackDamage);
+  }
+  if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 2_000;
+  if (timestamp >= monster.nextSpecialAt && playerDistance <= monster.projectileRange) {
+    const count = monster.hp <= monster.maxHp / 2 ? 12 : 8;
+    for (let index = 0; index < count; index += 1) {
+      const angle = index / count * Math.PI * 2;
+      queueEnemyBullet(monster, { x: Math.cos(angle), y: Math.sin(angle) }, {
+        damage: Math.max(1, Math.floor(monster.attackDamage / 2)),
+        radius: 8,
+        maxDistance: monster.projectileRange,
+        style: "shockwave",
+      });
+    }
+    monster.nextSpecialAt = timestamp + Math.max(1_800, 3_600 - floorNumber() * 90);
+    monster.attackSequence = (monster.attackSequence ?? 0) + 1;
+    saveMonsterState(monster);
+    renderBullets();
   }
 }
 
@@ -937,10 +1115,11 @@ function updateBullets(dt: number): void {
       bullet.x += dx;
       bullet.y += dy;
       bullet.traveled += Math.hypot(dx, dy);
+      const bulletRadius = bullet.radius ?? BULLET_RADIUS;
 
       if (
-        bullet.traveled >= BULLET_MAX_DISTANCE ||
-        !isGeometryWalkable(bullet.x, bullet.y, BULLET_RADIUS)
+        bullet.traveled >= (bullet.maxDistance ?? BULLET_MAX_DISTANCE) ||
+        !isGeometryWalkable(bullet.x, bullet.y, bulletRadius)
       ) {
         alive = false;
         break;
@@ -954,7 +1133,7 @@ function updateBullets(dt: number): void {
           bullet.y - monster.y
         );
 
-        if (hitDistance <= MONSTER_RADIUS + BULLET_RADIUS) {
+        if (hitDistance <= monster.radius + bulletRadius) {
           damageMonster(monster, bullet.damage);
           alive = false;
           break;
@@ -969,7 +1148,7 @@ function updateBullets(dt: number): void {
           bullet.y - player.y
         );
 
-        if (playerDistance <= PLAYER_RADIUS + BULLET_RADIUS) {
+        if (playerDistance <= PLAYER_RADIUS + bulletRadius) {
           applyPlayerDamage(bullet.damage);
           alive = false;
           break;
@@ -984,7 +1163,7 @@ function updateBullets(dt: number): void {
           bullet.y - item.y
         );
 
-        if (hitDistance <= item.radius + BULLET_RADIUS) {
+        if (hitDistance <= item.radius + bulletRadius) {
           damageObstacle(item, 1);
           alive = false;
           break;
@@ -1054,6 +1233,11 @@ function gameTick(timestamp: number): void {
     const containingRoom = roomContainingPoint(monster.x, monster.y);
     if (containingRoom && visitedRooms.has(containingRoom.id)) {
       monster.roomId = containingRoom.id;
+    }
+
+    if (isBoss(monster)) {
+      updateBoss(monster, dt, timestamp);
+      continue;
     }
 
     const nextRoomId = nextRoomTowardPlayer.get(monster.roomId);
@@ -1147,7 +1331,7 @@ function rebuildSpatialIndexes(): void {
   geometryCells = new Map();
   obstacleCells = new Map();
   if (!currentLayout) return;
-  const margin = MONSTER_RADIUS + 8;
+  const margin = 48;
 
   for (const room of currentLayout.nodes) {
     forSpatialCells(
@@ -1586,6 +1770,7 @@ function renderGraph(
   currentLoot.push(...createSceneryDrops(currentDecorations, floorIdentity(pageUrl), collectedLoot));
 
   currentMonsters = buildMonsters(layout, pageUrl);
+  updateBossGates();
 
   const root =
     layout.nodes.find(node => node.isRoot) ||
@@ -1608,6 +1793,7 @@ function renderGraph(
     }
 
     currentRoomId = spawnRoom.id;
+    gameCanvasHost.dataset.currentRoomTag = spawnRoom.tag;
     visitedRooms.add(spawnRoom.id);
 
     if (root) {

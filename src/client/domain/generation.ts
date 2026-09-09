@@ -1,6 +1,7 @@
 import { ASSETS, MONSTER_RADIUS } from "../config";
 import type {
   Decoration,
+  BossKind,
   DungeonLayout,
   GraphNode,
   LayoutLink,
@@ -18,6 +19,24 @@ import { stableHash } from "./hash";
 export function lootKindForSeed(seed: number): LootKind {
   const kinds: LootKind[] = ["credit", "crystal", "core", "medkit"];
   return kinds[(seed >>> 3) % kinds.length] ?? "crystal";
+}
+
+export function bossLootDrops(monster: Monster, floorIdentity: string, floor: number): LootItem[] {
+  if (!monster.bossKind) return [];
+  const count = 8 + Math.min(8, Math.floor(floor / 2));
+  const x = monster.dropX ?? monster.x;
+  const y = monster.dropY ?? monster.y;
+  return Array.from({ length: count }, (_, index) => {
+    const angle = index / count * Math.PI * 2;
+    const radius = 46 + (index % 2) * 28;
+    return {
+      id: `${floorIdentity}::${monster.id}::boss-drop-${index}`,
+      roomId: monster.roomId,
+      x: x + Math.cos(angle) * radius,
+      y: y + Math.sin(angle) * radius,
+      kind: index === 0 ? "medkit" : index % 3 === 0 ? "core" : lootKindForSeed(monster.seed + index * 7_919),
+    };
+  });
 }
 
 export function sceneryDropKindForSeed(seed: number): LootKind | null {
@@ -294,7 +313,86 @@ function monsterKindForSeed(seed: number, difficulty = 0): MonsterKind {
   return ((seed >>> 7) % 100) < 38 ? "fast" : "slow";
 }
 
-export function monsterSpecsForRoom(room: GraphNode, floor = 1): Monster[] {
+const BOSS_KINDS: BossKind[] = ["packet-storm", "fork-bomb", "heap-titan"];
+
+export function bossKindForRoom(room: GraphNode): BossKind {
+  return BOSS_KINDS[stableHash(`${room.lootSeed}|boss-kind`) % BOSS_KINDS.length]!;
+}
+
+export function bossSpecForRoom(
+  room: GraphNode,
+  floor = 1,
+  bossKind: BossKind = bossKindForRoom(room),
+): Monster {
+  const difficulty = floorDifficulty(floor);
+  const seed = stableHash(`${room.lootSeed}|boss|${floor}`);
+  const common = {
+    id: `${room.id}::boss`,
+    seed,
+    kind: bossKind,
+    bossKind,
+    spawnRoomId: room.id,
+    roomId: room.id,
+    x: room.x,
+    y: room.y - 24,
+    fast: false,
+    dropsLoot: true,
+    lastAttackAt: -Infinity,
+    active: false,
+    dead: false,
+    hp: 1,
+    path: [] as Point[],
+    pathIndex: 0,
+    pathTargetRoomId: null,
+    pathTargetX: room.x,
+    pathTargetY: room.y,
+    nextPathRefreshAt: 0,
+    attackSequence: 0,
+    summonedCount: 0,
+  };
+  if (bossKind === "packet-storm") {
+    return {
+      ...common,
+      maxHp: 42 + difficulty * 8 + (seed % 12),
+      speed: 72 + Math.min(38, difficulty * 3),
+      radius: 28,
+      size: 108,
+      attackRange: 1_200,
+      attackDamage: 1 + Math.floor(difficulty / 4),
+      attackCooldownMs: Math.max(620, 1_150 - difficulty * 45),
+      projectileSpeed: 190 + difficulty * 14,
+      projectileRange: 1_100,
+    };
+  }
+  if (bossKind === "fork-bomb") {
+    return {
+      ...common,
+      maxHp: 54 + difficulty * 9 + (seed % 15),
+      speed: 64 + Math.min(36, difficulty * 3),
+      radius: 31,
+      size: 120,
+      attackRange: 1_000,
+      attackDamage: 1 + Math.floor(difficulty / 4),
+      attackCooldownMs: Math.max(800, 1_650 - difficulty * 55),
+      projectileSpeed: 235 + difficulty * 15,
+      projectileRange: 1_000,
+    };
+  }
+  return {
+    ...common,
+    maxHp: 92 + difficulty * 14 + (seed % 22),
+    speed: 48 + Math.min(52, difficulty * 4),
+    radius: 39,
+    size: 154,
+    attackRange: 62,
+    attackDamage: 4 + Math.floor(difficulty / 2),
+    attackCooldownMs: Math.max(650, 1_250 - difficulty * 35),
+    projectileSpeed: 155 + difficulty * 8,
+    projectileRange: 230,
+  };
+}
+
+export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossKind): Monster[] {
   if (room.isRoot || room.tag === "img") return [];
   const roomSeed = stableHash(`${room.lootSeed}|monsters`);
 
@@ -303,7 +401,7 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1): Monster[] {
   const offsets: Array<[number, number]> = [
     [-90, -55], [90, 55], [80, -65], [-80, 70], [0, -92],
   ];
-  return Array.from({ length: count }, (_, index) => {
+  const regularMonsters = Array.from({ length: count }, (_, index): Monster => {
     const seed = stableHash(`${roomSeed}|${floor}|${index}`);
     const kind = monsterKindForSeed(seed, difficulty);
     const fast = kind === "fast";
@@ -328,6 +426,8 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1): Monster[] {
       maxHp: hpBase + ((seed >>> 11) % (sentry ? 5 : 6)) + hpBonus,
       speed,
       fast,
+      radius: 16,
+      size: 62,
       attackRange,
       attackDamage,
       attackCooldownMs,
@@ -346,6 +446,9 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1): Monster[] {
       nextPathRefreshAt: 0,
     };
   });
+  return room.tag === "script"
+    ? [bossSpecForRoom(room, floor, bossKind), ...regularMonsters]
+    : regularMonsters;
 }
 
 export function monsterSpecsForCorridor(link: LayoutLink, floor = 1): Monster[] {
@@ -372,6 +475,8 @@ export function monsterSpecsForCorridor(link: LayoutLink, floor = 1): Monster[] 
       hp: 1,
       speed: sentry ? 0 : (fast ? 150 : 80) + Math.min(95, difficulty * (fast ? 11 : 8)),
       fast,
+      radius: 16,
+      size: 62,
       attackRange: sentry ? 820 : 38 + Math.min(48, difficulty * 4),
       attackDamage: 1 + Math.min(3, Math.floor(difficulty / 3)),
       attackCooldownMs: Math.max(420, (sentry ? 1500 : 1150) - difficulty * (sentry ? 70 : 35) + ((seed >>> 15) % 140)),
@@ -412,6 +517,8 @@ export function monsterSpecForSpawner(spawner: Decoration, floor: number, index:
     hp: 1,
     speed: sentry ? 0 : (fast ? 165 : 92) + Math.min(110, difficulty * (fast ? 12 : 9)),
     fast,
+    radius: 16,
+    size: 62,
     attackRange: sentry ? 860 : 42 + Math.min(52, difficulty * 4),
     attackDamage: 1 + Math.min(4, Math.floor(difficulty / 2)),
     attackCooldownMs: Math.max(380, (sentry ? 1_350 : 1_000) - difficulty * 45 + ((seed >>> 15) % 120)),
@@ -430,6 +537,46 @@ export function monsterSpecForSpawner(spawner: Decoration, floor: number, index:
   };
 }
 
+export function monsterSpecForBossSummon(boss: Monster, floor: number, index: number): Monster {
+  const difficulty = floorDifficulty(floor);
+  const seed = stableHash(`${boss.id}|summon|${floor}|${index}`);
+  const kind = monsterKindForSeed(seed, difficulty);
+  const fast = kind === "fast";
+  const sentry = kind === "sentry";
+  const angle = index * 2.399963;
+  const distance = boss.radius + 58;
+  return {
+    id: `${boss.id}::summon-${index}`,
+    seed,
+    kind,
+    spawnRoomId: boss.spawnRoomId,
+    roomId: boss.spawnRoomId,
+    x: boss.x + Math.cos(angle) * distance,
+    y: boss.y + Math.sin(angle) * distance,
+    maxHp: 2 + (seed % 4) + Math.min(5, Math.floor(difficulty / 2)),
+    hp: 1,
+    speed: sentry ? 0 : (fast ? 170 : 95) + Math.min(100, difficulty * 9),
+    fast,
+    radius: 16,
+    size: 62,
+    attackRange: sentry ? 760 : 40 + Math.min(42, difficulty * 3),
+    attackDamage: 1 + Math.min(3, Math.floor(difficulty / 3)),
+    attackCooldownMs: Math.max(450, (sentry ? 1_400 : 1_050) - difficulty * 40),
+    projectileSpeed: sentry ? 235 + difficulty * 16 : 0,
+    projectileRange: sentry ? 900 + difficulty * 32 : 0,
+    dropsLoot: false,
+    lastAttackAt: -Infinity,
+    active: false,
+    dead: false,
+    path: [],
+    pathIndex: 0,
+    pathTargetRoomId: null,
+    pathTargetX: boss.x,
+    pathTargetY: boss.y,
+    nextPathRefreshAt: 0,
+  };
+}
+
 export function buildMonsters(
   layout: DungeonLayout,
   savedStates: ReadonlyMap<string, MonsterState>,
@@ -437,8 +584,21 @@ export function buildMonsters(
   floor = 1,
   decorations: readonly Decoration[] = [],
 ): Monster[] {
+  const scriptRooms = layout.nodes.filter(room => room.tag === "script");
+  const rosterOffset = stableHash(`${layout.nodes.find(room => room.isRoot)?.lootSeed ?? 0}|boss-roster`) % BOSS_KINDS.length;
+  const bossKindsByRoom = new Map(scriptRooms.map((room, index) => [
+    room.id,
+    BOSS_KINDS[(rosterOffset + index) % BOSS_KINDS.length]!,
+  ]));
+  const roomSpecs = layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor, bossKindsByRoom.get(room.id)));
+  const bossSummons = roomSpecs
+    .filter(monster => monster.bossKind === "fork-bomb")
+    .flatMap(boss => Array.from(
+      { length: savedStates.get(boss.id)?.summonedCount ?? 0 },
+      (_, index) => monsterSpecForBossSummon(boss, floor, index),
+    ));
   const specs = [
-    ...layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor)),
+    ...roomSpecs,
     ...layout.links.flatMap(link => monsterSpecsForCorridor(link, floor)),
     ...decorations
       .filter(item => item.spawner)
@@ -446,6 +606,7 @@ export function buildMonsters(
         { length: item.spawnedCount ?? 0 },
         (_, index) => monsterSpecForSpawner(item, floor, index),
       )),
+    ...bossSummons,
   ];
   return specs.map((spec) => {
     const saved = savedStates.get(spec.id);
@@ -462,6 +623,8 @@ export function buildMonsters(
       dropX: saved?.dropX ?? null,
       dropY: saved?.dropY ?? null,
       dropKind: saved?.dropKind ?? null,
+      attackSequence: saved?.attackSequence ?? spec.attackSequence,
+      summonedCount: saved?.summonedCount ?? spec.summonedCount,
     };
   });
 }

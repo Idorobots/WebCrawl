@@ -146,9 +146,13 @@ export class PhaserRenderer {
 
     for (const room of this.layout.nodes) {
       const visible = this.visited.has(room.id);
-      const fill = room.isRoot ? 0x162e3a : 0x121c27;
+      const fill = room.tag === "script" ? 0x29142f : room.isRoot ? 0x162e3a : 0x121c27;
       graphics.fillStyle(visible ? fill : 0x080d13, visible ? 1 : 0.6);
-      graphics.lineStyle(room.isRoot ? 5 : 3, room.isRoot ? 0x55d6be : 0x315267, visible ? 0.95 : 0.16);
+      graphics.lineStyle(
+        room.isRoot ? 5 : room.tag === "script" ? 5 : 3,
+        room.tag === "script" ? 0xe77cff : room.isRoot ? 0x55d6be : 0x315267,
+        visible ? 0.95 : 0.16,
+      );
       this.drawRoom(graphics, room, true);
       if (visible) {
         graphics.lineStyle(1, 0x253747, 0.65);
@@ -239,6 +243,19 @@ export class PhaserRenderer {
     this.currentMonsters = items.map(item => ({ ...item }));
     this.currentMonsterAssetFor = assetFor;
     this.host.dataset.activeMonsters = String(items.filter(item => item.active && !item.dead).length);
+    this.host.dataset.activeBosses = String(items.filter(item => item.active && item.bossKind && !item.dead).length);
+    const activeBoss = items.find(item => item.active && item.bossKind && !item.dead);
+    if (activeBoss?.bossKind) {
+      this.host.dataset.activeBossKind = activeBoss.bossKind;
+      this.host.dataset.activeBossX = String(Math.round(activeBoss.x));
+      this.host.dataset.activeBossY = String(Math.round(activeBoss.y));
+      this.host.dataset.activeBossRoom = String(activeBoss.roomId);
+    } else {
+      delete this.host.dataset.activeBossKind;
+      delete this.host.dataset.activeBossX;
+      delete this.host.dataset.activeBossY;
+      delete this.host.dataset.activeBossRoom;
+    }
     const scene = this.scene;
     if (!scene) return;
     const visibleIds = new Set(items.filter(item => item.active && (!item.dead || item.deathAnimating)).map(item => item.id));
@@ -257,16 +274,33 @@ export class PhaserRenderer {
         const cropTop = Math.ceil(frame.height * 0.14);
         const sprite = scene.add.image(0, 0, assetKey)
           .setCrop(0, cropTop, frame.width, frame.height - cropTop)
-          .setDisplaySize(62, 62)
+          .setDisplaySize(item.size, item.size)
           .setName("sprite");
-        const bg = scene.add.rectangle(-20, -34, 40, 5, 0x071018).setOrigin(0, 0.5);
-        const hp = scene.add.rectangle(-20, -34, 40, 5, item.kind === "sentry" ? 0xc07cff : 0xff6b6b).setOrigin(0, 0.5).setName("hp");
-        container = scene.add.container(item.x, item.y, [sprite, bg, hp]).setDepth(30);
+        const barWidth = item.bossKind ? 110 : 40;
+        const barY = -item.size / 2 - 9;
+        const children: Phaser.GameObjects.GameObject[] = [];
+        if (item.bossKind) {
+          const bossColors = { "packet-storm": 0xd975ff, "fork-bomb": 0x55e3cf, "heap-titan": 0xff8b4d };
+          const color = bossColors[item.bossKind];
+          sprite.setTint(color);
+          children.push(scene.add.circle(0, 0, item.radius + 11, color, 0.16).setStrokeStyle(3, color, 0.8));
+        }
+        children.push(sprite);
+        children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, item.bossKind ? 9 : 5, 0x071018).setOrigin(0, 0.5));
+        children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, item.bossKind ? 7 : 5, item.bossKind ? 0xf09cff : item.kind === "sentry" ? 0xc07cff : 0xff6b6b).setOrigin(0, 0.5).setName("hp"));
+        if (item.bossKind) {
+          const labels = { "packet-storm": "PACKET STORM", "fork-bomb": "FORK BOMB", "heap-titan": "HEAP TITAN" };
+          children.push(scene.add.text(0, barY - 13, labels[item.bossKind], {
+            color: "#f7ddff", fontSize: "11px", fontStyle: "bold",
+          }).setOrigin(0.5));
+        }
+        container = scene.add.container(item.x, item.y, children).setDepth(30);
+        container.setData("hpWidth", barWidth);
         this.monsters.set(item.id, container);
       }
       container.setPosition(item.x, item.y).setAlpha(item.deathAnimating ? 0.35 : 1);
       const hp = container.getByName("hp") as Phaser.GameObjects.Rectangle;
-      hp.width = 40 * Math.max(0, item.hp) / Math.max(1, item.maxHp);
+      hp.width = Number(container.getData("hpWidth") ?? 40) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
     }
   }
 
@@ -276,7 +310,7 @@ export class PhaserRenderer {
       if (!container) continue;
       container.setPosition(item.x, item.y);
       const hp = container.getByName("hp") as Phaser.GameObjects.Rectangle;
-      hp.width = 40 * Math.max(0, item.hp) / Math.max(1, item.maxHp);
+      hp.width = Number(container.getData("hpWidth") ?? 40) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
     }
   }
 
@@ -287,8 +321,13 @@ export class PhaserRenderer {
     this.bulletsGraphics ??= this.scene.add.graphics().setDepth(40);
     this.bulletsGraphics.clear();
     for (const bullet of items) {
-      this.bulletsGraphics.fillStyle(bullet.owner === "enemy" ? 0xff596e : 0x86fff0, 1);
-      this.bulletsGraphics.fillCircle(bullet.x, bullet.y, BULLET_RADIUS);
+      const color = bullet.style === "shockwave"
+        ? 0xffa34d
+        : bullet.style === "boss"
+          ? 0xee78ff
+          : bullet.owner === "enemy" ? 0xff596e : 0x86fff0;
+      this.bulletsGraphics.fillStyle(color, 1);
+      this.bulletsGraphics.fillCircle(bullet.x, bullet.y, bullet.radius ?? BULLET_RADIUS);
     }
   }
 

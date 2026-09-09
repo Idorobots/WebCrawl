@@ -100,6 +100,8 @@ Each retained DOM element becomes a deterministically shaped room. The layout su
 
 Floor instances preserve discovered rooms, collected loot, obstacle and spawner damage, spawner progress, and monster positions and health when revisited. Rooms contain more obstacles than earlier builds and non-root combat rooms contain zero to four destructible reinforcement spawners. Deeper floors increase the average spawner count, enemy populations and stats, reinforcement limits, and scenery strength while shortening spawner cooldowns.
 
+Every retained `script` element becomes a large octagonal boss arena while keeping its ambient enemies and possible reinforcement spawners. Script rooms rotate deterministically through the radial-burst Packet Storm, the minion-summoning Fork Bomb, and the slow, high-damage Heap Titan. All bosses pursue the player through revealed rooms and corridors; Packet Storm and Fork Bomb hold their ground once they reach the player's room. Boss health, attacks, and summons scale with floor depth; defeating one unlocks its room's down portals and drops a persistent cache of artifacts and a guaranteed medkit.
+
 ## Remote Fetching
 
 The backend fetches remote HTML to avoid browser CORS restrictions. It rejects embedded credentials, localhost and internal hostnames, and private-network addresses. Redirect targets are validated independently. Responses are limited to 5 MB, requests time out after 12 seconds, and at most five redirects are followed.
