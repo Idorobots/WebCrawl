@@ -4,6 +4,7 @@ export type PlayerAnimation = "walk" | "shoot";
 export type LootKind = "credit" | "crystal" | "core" | "medkit";
 export type MonsterKind = "slow" | "fast" | "sentry";
 export type BulletOwner = "player" | "enemy";
+export type RoomShape = "rectangle" | "wide" | "tall" | "capsule" | "octagon";
 
 export interface Point {
   x: number;
@@ -26,6 +27,8 @@ export interface GraphNode extends Point {
   isHidden: boolean;
   parentSide: Direction | null;
   directionFromParent: Direction | null;
+  shape: RoomShape;
+  childCount: number;
 }
 
 export interface GraphLink {
@@ -42,9 +45,13 @@ export interface DungeonGraph {
 }
 
 export interface LayoutLink {
+  id: string;
   source: GraphNode;
   target: GraphNode;
   direction: Direction;
+  ownerRoomId: number;
+  width: number;
+  points: Point[];
 }
 
 export interface DungeonLayout {

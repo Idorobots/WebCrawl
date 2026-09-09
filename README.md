@@ -70,6 +70,7 @@ CHROMIUM_PATH=/path/to/chromium npm run test:e2e
 - Arrow keys or WASD: move the player
 - Mouse: aim the player
 - Hold left click: fire the pulse rifle toward the cursor
+- M: open or close the tactical map
 - Escape: close the tactical map if it is open
 - Walk onto a down portal: visit that room's link
 - Walk onto the root room's up portal: return to the previous page
@@ -80,6 +81,7 @@ The browser application is composed from typed modules under `src/client`:
 
 - `api`: communication with the same-origin fetch endpoint
 - `domain`: deterministic graph generation, layout, content generation, geometry, and pathfinding
+- `render`: the Phaser 3 world renderer for rooms, corridors, entities, effects, and camera tracking
 - `storage`: browser persistence adapters
 - `app.ts`: game state, rendering orchestration, input, and the animation loop
 - `main.ts`: browser composition entry point
@@ -93,6 +95,8 @@ The backend is under `src/server`:
 - `index.ts`: production process entry point
 
 Shared game entities are modeled in `src/client/types.ts`, while gameplay constants and asset manifests live in `src/client/config.ts`.
+
+Each retained DOM element becomes a deterministically shaped room. The layout supports rectangle, wide, tall, capsule, and octagon presets, expands rooms with many child exits, and routes straight or bent corridors between slotted doors. An outgoing corridor belongs to its parent room, so its scenery and enemies are generated from the parent's stable seed; links and floor portals are generated only inside rooms. The HUD remains HTML/CSS and minimaps use native canvas rendering.
 
 ## Remote Fetching
 

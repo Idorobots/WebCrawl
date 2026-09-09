@@ -63,7 +63,7 @@
 </header>
 
     <main id="gameViewport">
-      <svg id="map" aria-label="WebCrawl dungeon"></svg>
+      <div id="gameCanvas" role="img" aria-label="WebCrawl dungeon"></div>
     </main>
 
     <aside id="rightHud">
@@ -72,7 +72,7 @@
           <span>MINIMAP</span>
           <span id="sideFloorLabel">FLOOR 1</span>
         </div>
-        <svg id="sideMinimapSvg"></svg>
+        <canvas id="sideMinimapCanvas" aria-label="Discovered rooms minimap"></canvas>
       </section>
 
       <section class="hud-panel stats-panel">
@@ -112,7 +112,7 @@
           <strong>TACTICAL MAP</strong>
           <button id="minimapClose" type="button">Close</button>
         </div>
-        <svg id="minimapSvg"></svg>
+        <canvas id="minimapCanvas" aria-label="Tactical map"></canvas>
       </div>
     </div>
 

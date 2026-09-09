@@ -16,20 +16,36 @@ async function startGame(page: Page): Promise<void> {
   await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
 
   await expect(page.locator("#gameUi")).toBeVisible();
-  await expect(page.locator("g.room")).toHaveCount(6);
+  await expect(page.locator("#gameCanvas canvas")).toBeVisible();
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
   await expect(page.locator("#statRooms")).toContainText("1 / 100");
 }
 
 async function playerPosition(page: Page): Promise<{ x: number; y: number }> {
-  const transform = await page.locator("g.player").getAttribute("transform");
-  const match = transform?.match(/translate\(([-\d.]+),([-\d.]+)\)/);
-  if (!match) throw new Error(`Unexpected player transform: ${transform}`);
-  return { x: Number(match[1]), y: Number(match[2]) };
+  const player = page.locator("#gameCanvas");
+  return {
+    x: Number(await player.getAttribute("data-player-x")),
+    y: Number(await player.getAttribute("data-player-y")),
+  };
 }
 
 test("starts a crawl and renders a playable floor", async ({ page }) => {
   await startGame(page);
   await expect(page.locator("#gameViewport")).toHaveCSS("cursor", "crosshair");
+  await page.keyboard.press("m");
+  await expect(page.locator("#minimapModal")).toBeVisible();
+  await expect(page.locator("#minimapCanvas")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#minimapModal")).toBeHidden();
+});
+
+test("keeps the Phaser viewport playable on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 720 });
+  await startGame(page);
+  await expect(page.locator("#rightHud")).toBeHidden();
+  const bounds = await page.locator("#gameViewport").boundingBox();
+  expect(bounds?.width).toBeGreaterThanOrEqual(390);
+  expect(bounds?.height).toBeGreaterThan(500);
 });
 
 test("moves continuously with WASD and arrow keys", async ({ page }) => {
@@ -62,7 +78,7 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
   const aimX = bounds.x + bounds.width * 0.78;
   const aimY = bounds.y + bounds.height * 0.3;
   await page.mouse.move(aimX, aimY);
-  await expect(page.locator("g.player .avatar")).toHaveAttribute("href", /assets\/player_frames\/east\//);
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", /assets\/player_frames\/east\//);
 
   await page.keyboard.press("Space");
   await expect(page.locator("#statShots")).toHaveText("0");
@@ -74,14 +90,8 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
 
   const moving = await playerPosition(page);
   expect(moving.x).toBeLessThan(start.x - 20);
-  await expect(page.locator("g.player .avatar")).toHaveAttribute("href", /assets\/player_frames\/east\//);
-
-  const bullet = page.locator("circle.bullet").last();
-  await expect(bullet).toBeAttached();
-  const bulletX = Number(await bullet.getAttribute("cx"));
-  const bulletY = Number(await bullet.getAttribute("cy"));
-  expect(bulletX).toBeGreaterThan(moving.x);
-  expect(bulletY).toBeLessThan(moving.y);
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", /assets\/player_frames\/east\//);
+  await expect.poll(async () => Number(await page.locator("#gameCanvas").getAttribute("data-bullets"))).toBeGreaterThan(0);
 
   await page.mouse.up();
   await page.keyboard.up("a");
@@ -98,8 +108,8 @@ test("does not pan or zoom the game viewport", async ({ page }) => {
   if (!bounds) throw new Error("Game viewport has no bounds");
   const centerX = bounds.x + bounds.width / 2;
   const centerY = bounds.y + bounds.height / 2;
-  const rootLayer = page.locator("#map > g");
-  const initialTransform = await rootLayer.getAttribute("transform");
+  const canvas = page.locator("#gameCanvas canvas");
+  const initialPosition = await playerPosition(page);
 
   await page.mouse.move(centerX, centerY);
   await page.mouse.wheel(0, -500);
@@ -107,17 +117,37 @@ test("does not pan or zoom the game viewport", async ({ page }) => {
   await page.mouse.move(centerX + 80, centerY + 50);
   await page.mouse.up({ button: "middle" });
 
-  await expect(rootLayer).toHaveAttribute("transform", initialTransform ?? "");
+  await expect(canvas).toHaveCSS("transform", "none");
+  expect(await playerPosition(page)).toEqual(initialPosition);
 });
 
 test("spawns multiple enemies once another room is revealed", async ({ page }) => {
   await startGame(page);
 
-  await page.keyboard.down("ArrowUp");
+  const game = page.locator("#gameCanvas");
+  const direction = await game.getAttribute("data-first-exit");
+  const door = {
+    x: Number(await game.getAttribute("data-first-door-x")),
+    y: Number(await game.getAttribute("data-first-door-y")),
+  };
+  const position = await playerPosition(page);
+  const horizontal = door.x < position.x ? "ArrowLeft" : "ArrowRight";
+  const vertical = door.y < position.y ? "ArrowUp" : "ArrowDown";
+  const alignKey = direction === "N" || direction === "S" ? horizontal : vertical;
+  const alignDistance = direction === "N" || direction === "S"
+    ? Math.abs(door.x - position.x)
+    : Math.abs(door.y - position.y);
+  if (alignDistance > 8) {
+    await page.keyboard.down(alignKey);
+    await page.waitForTimeout(alignDistance / 400 * 1000);
+    await page.keyboard.up(alignKey);
+  }
+  const key = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
+  await page.keyboard.down(key);
   await expect.poll(async () => {
     const value = await page.locator("#statRooms").textContent();
     return Number(value?.split("/")[0]?.trim() ?? "0");
   }).toBeGreaterThanOrEqual(2);
-  await expect.poll(async () => Number(await page.locator("g.monster").count())).toBeGreaterThanOrEqual(2);
-  await page.keyboard.up("ArrowUp");
+  await expect.poll(async () => Number(await page.locator("#gameCanvas").getAttribute("data-active-monsters"))).toBeGreaterThanOrEqual(2);
+  await page.keyboard.up(key);
 });

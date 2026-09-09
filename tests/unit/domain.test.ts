@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { ROOM_HEIGHT, ROOM_WIDTH } from "../../src/client/config";
 import { distanceSquared, pointInCorridor, pointInRoom } from "../../src/client/domain/geometry";
-import { buildInteractiveObjects, buildSceneryDrops, decorationSpecsForRoom, lootCountForRoom, monsterSpecsForRoom, sceneryDropKindForSeed } from "../../src/client/domain/generation";
+import {
+  buildInteractiveObjects,
+  buildSceneryDrops,
+  decorationSpecsForCorridor,
+  decorationSpecsForRoom,
+  lootCountForRoom,
+  monsterSpecsForCorridor,
+  monsterSpecsForRoom,
+  sceneryDropKindForSeed,
+} from "../../src/client/domain/generation";
 import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, layoutOrthogonal } from "../../src/client/domain/layout";
@@ -26,6 +35,8 @@ const node = (id: number, parentId: number | null, depth: number, overrides: Par
   y: 0,
   parentSide: null,
   directionFromParent: null,
+  shape: "rectangle",
+  childCount: 0,
   ...overrides,
 });
 
@@ -74,24 +85,67 @@ describe("layout and geometry", () => {
   };
   const layout = layoutOrthogonal(graph, 800, 600);
 
-  it("places rooms on the deterministic orthogonal grid", () => {
-    expect(layout.nodes.map(({ id, x, y }) => ({ id, x, y }))).toEqual([
-      { id: 0, x: 400, y: 300 },
-      { id: 1, x: 400, y: -126 },
-      { id: 2, x: 1026, y: 300 },
-    ]);
-    expect(corridorEndpoints(layout.links[0]!)).toEqual({ x1: 400, y1: 100, x2: 400, y2: 74 });
+  it("places every room deterministically with owned, routed corridors", () => {
+    const repeated = layoutOrthogonal(graph, 800, 600);
+    expect(layout.nodes.map(({ id, x, y, shape }) => ({ id, x, y, shape }))).toEqual(
+      repeated.nodes.map(({ id, x, y, shape }) => ({ id, x, y, shape })),
+    );
+    expect(layout.nodes).toHaveLength(graph.nodes.length);
+    expect(layout.hiddenCount).toBe(0);
+    expect(layout.nodes[0]).toMatchObject({ x: 400, y: 300 });
+    expect(layout.links[0]).toMatchObject({ id: "0->1", ownerRoomId: 0, width: 72 });
+    const endpoints = corridorEndpoints(layout.links[0]!);
+    expect(endpoints).toEqual({
+      x1: layout.links[0]!.points[0]!.x,
+      y1: layout.links[0]!.points[0]!.y,
+      x2: layout.links[0]!.points.at(-1)!.x,
+      y2: layout.links[0]!.points.at(-1)!.y,
+    });
   });
 
   it("recognizes rooms, corridors, and point distances", () => {
     expect(pointInRoom(400, 300, layout.nodes[0]!)).toBe(true);
-    expect(pointInCorridor(400, 87, layout.links[0]!)).toBe(true);
+    const [start, end] = layout.links[0]!.points;
+    expect(pointInCorridor((start!.x + end!.x) / 2, (start!.y + end!.y) / 2, layout.links[0]!)).toBe(true);
     expect(distanceSquared({ x: 1, y: 2 }, { x: 4, y: 6 })).toBe(25);
   });
 
   it("finds paths only through revealed rooms", () => {
     expect(revealedRoomPath(layout, new Set([0, 1, 2]), 1, 2)).toEqual([1, 0, 2]);
     expect(revealedRoomPath(layout, new Set([0, 1]), 1, 2)).toBeNull();
+  });
+
+  it("generates deterministic content owned by each corridor's parent room", () => {
+    const link = layout.links[0]!;
+    const decorations = decorationSpecsForCorridor(link);
+    const monsters = monsterSpecsForCorridor(link, 3);
+    expect(decorations).toEqual(decorationSpecsForCorridor(link));
+    expect(monsters).toEqual(monsterSpecsForCorridor(link, 3));
+    expect(decorations.every(item => item.roomId === link.source.id)).toBe(true);
+    expect(monsters.every(item => item.spawnRoomId === link.source.id)).toBe(true);
+  });
+
+  it("retains the full room budget across all finite room presets", () => {
+    const nodes = Array.from({ length: 100 }, (_, id) => node(
+      id,
+      id === 0 ? null : Math.floor((id - 1) / 5),
+      id === 0 ? 0 : 1,
+      { lootSeed: id + 100 },
+    ));
+    const denseLayout = layoutOrthogonal({
+      nodes,
+      links: [],
+      originalCount: nodes.length,
+      coalescedCount: 0,
+      truncated: false,
+    }, 1200, 800);
+
+    expect(denseLayout.nodes).toHaveLength(100);
+    expect(denseLayout.links).toHaveLength(99);
+    expect(denseLayout.hiddenCount).toBe(0);
+    expect(new Set(denseLayout.nodes.map(room => room.shape))).toEqual(
+      new Set(["rectangle", "wide", "tall", "capsule", "octagon"]),
+    );
   });
 
   it("routes around blocked doorway geometry with A*", () => {

@@ -89,6 +89,8 @@ export function domToGraph(html: string, pageUrl: string): DungeonGraph {
       y: 0,
       parentSide: null,
       directionFromParent: null,
+      shape: "rectangle",
+      childCount: 0,
     };
   };
 

@@ -1,11 +1,9 @@
-import * as d3 from "d3";
 import { fetchHtml, normalizeUrl } from "./api/fetch-html";
 import {
   ASSETS,
   BULLET_MAX_DISTANCE,
   BULLET_RADIUS,
   BULLET_SPEED,
-  CAMERA_SCALE,
   LOOT_ASSETS,
   LOOT_RADIUS,
   MAX_NODES,
@@ -27,8 +25,9 @@ import {
   lootKindForSeed,
 } from "./domain/generation";
 import { domToGraph } from "./domain/graph";
-import { corridorEndpoints, layoutOrthogonal } from "./domain/layout";
+import { layoutOrthogonal } from "./domain/layout";
 import { aStarPath, revealedRoomPath as findRevealedRoomPath } from "./domain/pathfinding";
+import { PhaserRenderer } from "./render/phaser-renderer";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
 import type {
   Bullet,
@@ -40,7 +39,6 @@ import type {
   LayoutLink,
   LoadPageOptions,
   LootItem,
-  LootKind,
   Monster,
   MonsterState,
   ObstacleState,
@@ -52,11 +50,9 @@ import type {
 } from "./types";
 import { requireElement } from "./ui/elements";
 
-type Layer = d3.Selection<SVGGElement, unknown, any, any>;
-type SvgSelection = d3.Selection<SVGSVGElement, unknown, any, any>;
-
-const svg = d3.select<SVGSVGElement, unknown>("#map");
 const gameViewport = requireElement<HTMLElement>("#gameViewport");
+const gameCanvasHost = requireElement<HTMLElement>("#gameCanvas");
+const renderer = new PhaserRenderer(gameCanvasHost);
 const urlInput = requireElement<HTMLInputElement>("#urlInput");
 const form = requireElement<HTMLFormElement>("#urlForm");
 const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
@@ -66,7 +62,8 @@ const welcomeForm = requireElement<HTMLFormElement>("#welcomeForm");
 const welcomeUrlInput = requireElement<HTMLInputElement>("#welcomeUrlInput");
 const gameUi = requireElement<HTMLDivElement>("#gameUi");
 
-const sideMinimapSvg = d3.select<SVGSVGElement, unknown>("#sideMinimapSvg");
+const sideMinimapCanvas = requireElement<HTMLCanvasElement>("#sideMinimapCanvas");
+const minimapCanvas = requireElement<HTMLCanvasElement>("#minimapCanvas");
 const sideFloorLabelEl = requireElement<HTMLElement>("#sideFloorLabel");
 const statRoomsEl = requireElement<HTMLElement>("#statRooms");
 const statFloorEl = requireElement<HTMLElement>("#statFloor");
@@ -86,11 +83,8 @@ let currentLayout: DungeonLayout | null = null;
 let currentStairs: Stair[] = [];
 let currentLoot: LootItem[] = [];
 let currentMonsters: Monster[] = [];
-let monsterLayer: Layer | null = null;
 let currentDecorations: Decoration[] = [];
-let decorationLayer: Layer | null = null;
 const destroyedObstaclesByPage = new Map<string, Map<string, ObstacleState>>();
-let explosionLayer: Layer | null = null;
 let visitedRooms = new Set<number>();
 const discoveredRoomsByPage = new Map<string, Set<number>>();
 const monsterStatesByPage = new Map<string, Map<string, MonsterState>>();
@@ -98,13 +92,11 @@ const monsterStatesByPage = new Map<string, Map<string, MonsterState>>();
 let currentRoomId: number | null = null;
 let player: Point = { x: 0, y: 0 };
 let playerFacing: Point = { x: 0, y: -1 };
-let playerLayer: Layer | null = null;
 let playerHp = PLAYER_MAX_HP;
 let playerAlive = true;
 let lastPlayerShotAt = -Infinity;
 
 let bullets: Bullet[] = [];
-let bulletLayer: Layer | null = null;
 
 let gameAnimationFrame: number | null = null;
 let lastGameTick: number | null = null;
@@ -149,37 +141,6 @@ const highScoreRowsEl = requireElement<HTMLTableSectionElement>("#highScoreRows"
 const restartButton = requireElement<HTMLButtonElement>("#restartButton");
 const minimapModal = requireElement<HTMLDivElement>("#minimapModal");
 const minimapClose = requireElement<HTMLButtonElement>("#minimapClose");
-
-const defs = svg.append("defs");
-
-const roomPattern = defs
-  .append("pattern")
-  .attr("id", "roomFloorPattern")
-  .attr("width", 34)
-  .attr("height", 34)
-  .attr("patternUnits", "userSpaceOnUse");
-
-roomPattern
-  .append("rect")
-  .attr("width", 34)
-  .attr("height", 34)
-  .attr("fill", "#121c27");
-
-roomPattern
-  .append("path")
-  .attr("d", "M 34 0 L 0 0 0 34")
-  .attr("fill", "none")
-  .attr("stroke", "#253747")
-  .attr("stroke-width", 1.5);
-
-roomPattern
-  .append("circle")
-  .attr("cx", 29)
-  .attr("cy", 29)
-  .attr("r", 1.4)
-  .attr("fill", "#3f617b");
-
-const rootLayer = svg.append("g");
 
 function setStatus(message: string, isError = false): void {
   if (isError) {
@@ -237,26 +198,7 @@ function roomContainingPoint(x: number, y: number): GraphNode | null {
 }
 
 function updateFogOfWar(): void {
-  rootLayer
-    .selectAll<SVGGElement, GraphNode>(".room")
-    .classed("visited", d => visitedRooms.has(d.id))
-    .classed("unvisited", d => !visitedRooms.has(d.id));
-
-  rootLayer
-    .selectAll<SVGLineElement, LayoutLink>(".corridor")
-    .classed("visited", d =>
-      visitedRooms.has(d.source.id) ||
-      visitedRooms.has(d.target.id)
-    );
-
-  rootLayer
-    .selectAll<SVGLineElement, LayoutLink>(".corridor-light")
-    .style("opacity", d =>
-      visitedRooms.has(d.source.id) ||
-      visitedRooms.has(d.target.id)
-        ? 0.45
-        : 0
-    );
+  renderer.setFog(visitedRooms);
 
   if (!gameUi.hidden) {
     updateHudPanels();
@@ -319,17 +261,8 @@ function updateCurrentRoom(): void {
   }
 }
 
-function cameraTransformForPlayer(): d3.ZoomTransform {
-  const { width, height } = svg.node()!.getBoundingClientRect();
-
-  return d3.zoomIdentity
-    .translate(width / 2, height / 2)
-    .scale(CAMERA_SCALE)
-    .translate(-player.x, -player.y);
-}
-
 function centerCameraOnPlayer(): void {
-  rootLayer.attr("transform", cameraTransformForPlayer().toString());
+  renderer.centerCamera(player);
 }
 
 function minimapVisibleLayout(): Pick<DungeonLayout, "nodes" | "links"> {
@@ -350,34 +283,21 @@ function minimapVisibleLayout(): Pick<DungeonLayout, "nodes" | "links"> {
   };
 }
 
-function drawMinimapStair(layer: Layer, stair: Stair): void {
-  const g = layer
-    .append("g")
-    .attr("class", `minimap-stair ${stair.type}`)
-    .attr("transform", `translate(${stair.x},${stair.y}) scale(0.55)`);
-
-  g.append("rect")
-    .attr("x", -18)
-    .attr("y", -14)
-    .attr("width", 36)
-    .attr("height", 28)
-    .attr("rx", 2);
-
-  for (let y = -8; y <= 8; y += 8) {
-    g.append("line")
-      .attr("x1", -11)
-      .attr("x2", 11)
-      .attr("y1", y)
-      .attr("y2", y);
-  }
-}
-
-function renderMapInto(targetSvg: SvgSelection): void {
+function renderMapInto(canvas: HTMLCanvasElement): void {
   const { nodes, links } = minimapVisibleLayout();
   const visibleIds = new Set(nodes.map(node => node.id));
-
-  targetSvg.selectAll("*").remove();
-
+  const boundsRect = canvas.getBoundingClientRect();
+  const width = Math.max(1, Math.round(boundsRect.width || canvas.clientWidth || 320));
+  const height = Math.max(1, Math.round(boundsRect.height || canvas.clientHeight || 220));
+  const ratio = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = "#071018";
+  context.fillRect(0, 0, width, height);
   if (!nodes.length) return;
 
   const bounds = nodes.reduce((acc, node) => ({
@@ -393,82 +313,51 @@ function renderMapInto(targetSvg: SvgSelection): void {
   });
 
   for (const link of links) {
-    const p = corridorEndpoints(link);
-    bounds.minX = Math.min(bounds.minX, p.x1, p.x2);
-    bounds.maxX = Math.max(bounds.maxX, p.x1, p.x2);
-    bounds.minY = Math.min(bounds.minY, p.y1, p.y2);
-    bounds.maxY = Math.max(bounds.maxY, p.y1, p.y2);
+    for (const point of link.points) {
+      bounds.minX = Math.min(bounds.minX, point.x);
+      bounds.maxX = Math.max(bounds.maxX, point.x);
+      bounds.minY = Math.min(bounds.minY, point.y);
+      bounds.maxY = Math.max(bounds.maxY, point.y);
+    }
   }
-
-  const viewWidth = Math.max(1, bounds.maxX - bounds.minX);
-  const viewHeight = Math.max(1, bounds.maxY - bounds.minY);
-  const pad = 110;
-
-  targetSvg.attr(
-    "viewBox",
-    `${bounds.minX - pad} ${bounds.minY - pad} ${viewWidth + pad * 2} ${viewHeight + pad * 2}`
-  );
-
-  targetSvg
-    .append("g")
-    .selectAll<SVGLineElement, LayoutLink>("line")
-    .data(links)
-    .join("line")
-    .attr("class", "minimap-corridor")
-    .each(function(this: SVGLineElement, link) {
-      const p = corridorEndpoints(link);
-      d3.select(this)
-        .attr("x1", p.x1)
-        .attr("y1", p.y1)
-        .attr("x2", p.x2)
-        .attr("y2", p.y2);
-    });
-
-  const rooms = targetSvg
-    .append("g")
-    .selectAll<SVGGElement, GraphNode>("g")
-    .data(nodes)
-    .join("g")
-    .attr("class", d =>
-      "minimap-room" +
-      (d.isRoot ? " root" : "") +
-      (d.id === currentRoomId ? " current" : "")
-    )
-    .attr("transform", d => `translate(${d.x},${d.y})`);
-
-  rooms
-    .append("rect")
-    .attr("x", d => -d.width / 2)
-    .attr("y", d => -d.height / 2)
-    .attr("width", d => d.width)
-    .attr("height", d => d.height);
-
-  const visibleStairs = currentStairs.filter(stair =>
-    visibleIds.has(stair.roomId)
-  );
-
-  const stairLayer = targetSvg.append("g");
-  for (const stair of visibleStairs) {
-    drawMinimapStair(stairLayer, stair);
+  const pad = 18;
+  const scale = Math.min((width - pad * 2) / Math.max(1, bounds.maxX - bounds.minX), (height - pad * 2) / Math.max(1, bounds.maxY - bounds.minY));
+  const mapX = (x: number): number => pad + (x - bounds.minX) * scale;
+  const mapY = (y: number): number => pad + (y - bounds.minY) * scale;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeStyle = "#315267";
+  context.lineWidth = Math.max(2, 20 * scale);
+  for (const link of links) {
+    context.beginPath();
+    link.points.forEach((point, index) => index ? context.lineTo(mapX(point.x), mapY(point.y)) : context.moveTo(mapX(point.x), mapY(point.y)));
+    context.stroke();
   }
-
-  const minimapPlayer = targetSvg
-    .append("g")
-    .attr("class", "minimap-player")
-    .attr("transform", `translate(${player.x},${player.y})`);
-
-  minimapPlayer
-    .append("image")
-    .attr("href", playerAssetForDirection())
-    .attr("x", -18.75)
-    .attr("y", -25)
-    .attr("width", 37.5)
-    .attr("height", 50)
-    .attr("preserveAspectRatio", "xMidYMid meet");
+  for (const room of nodes) {
+    const x = mapX(room.x - room.width / 2);
+    const y = mapY(room.y - room.height / 2);
+    const roomWidth = Math.max(3, room.width * scale);
+    const roomHeight = Math.max(3, room.height * scale);
+    context.fillStyle = room.id === currentRoomId ? "#57d9c1" : room.isRoot ? "#244d59" : "#1a303e";
+    context.fillRect(x, y, roomWidth, roomHeight);
+    context.strokeStyle = room.id === currentRoomId ? "#bafff1" : "#568198";
+    context.lineWidth = 1;
+    context.strokeRect(x, y, roomWidth, roomHeight);
+  }
+  for (const stair of currentStairs.filter(item => visibleIds.has(item.roomId))) {
+    context.fillStyle = stair.type === "up" ? "#62e6c8" : "#c07cff";
+    context.beginPath();
+    context.arc(mapX(stair.x), mapY(stair.y), 3, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.fillStyle = "#ffffff";
+  context.beginPath();
+  context.arc(mapX(player.x), mapY(player.y), 4, 0, Math.PI * 2);
+  context.fill();
 }
 
 function renderSideMinimap(): void {
-  renderMapInto(sideMinimapSvg);
+  renderMapInto(sideMinimapCanvas);
 }
 
 function formatRunTime(): string {
@@ -506,6 +395,13 @@ function closeMinimap(): void {
   minimapModal.hidden = true;
 }
 
+function openMinimap(): void {
+  if (!currentLayout) return;
+  minimapModal.hidden = false;
+  minimapModal.classList.add("open");
+  requestAnimationFrame(() => renderMapInto(minimapCanvas));
+}
+
 minimapClose.addEventListener("click", closeMinimap);
 minimapModal.addEventListener("click", event => {
   if (event.target === minimapModal) closeMinimap();
@@ -516,11 +412,7 @@ function updateHealthUi(): void {
   hpCountEl.textContent = String(playerHp);
   hudHealthFillEl.style.width = `${ratio * 100}%`;
 
-  if (playerLayer) {
-    playerLayer
-      .select(".player-hp-fill")
-      .attr("width", 62 * ratio);
-  }
+  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, playerAssetForDirection());
 
   if (playerHudPortraitEl) {
     playerHudPortraitEl.src = playerAssetForDirection();
@@ -588,15 +480,6 @@ function showDeathModal(): void {
 
 restartButton.addEventListener("click", () => location.reload());
 
-function lootAsset(kind: LootKind): string {
-  return LOOT_ASSETS[kind];
-}
-
-function monsterLabel(monster: Monster): string {
-  if (monster.kind === "sentry") return "Sentry";
-  return monster.fast ? "Fast drone" : "Heavy drone";
-}
-
 function monsterAsset(monster: Monster): string {
   if (monster.kind === "sentry") {
     return ASSETS.monsterScout;
@@ -635,96 +518,11 @@ function buildDecorations(layout: DungeonLayout, pageUrl: string): Decoration[] 
 }
 
 function renderDecorations(): void {
-  if (!decorationLayer) {
-    decorationLayer = rootLayer.append("g").attr("class", "decorations");
-  }
-
-  const visible = currentDecorations.filter(item =>
-    visitedRooms.has(item.roomId) && !item.destroyed
-  );
-
-  const decor = decorationLayer
-    .selectAll<SVGGElement, Decoration>("g.decoration")
-    .data(visible, d => d.id)
-    .join(
-      enter => {
-        const g = enter
-          .append("g")
-          .attr("class", d => `decoration${d.obstacle ? " obstacle" : ""}`);
-
-        g.append("image")
-          .attr("class", "decor-sprite");
-
-        g.filter(d => d.obstacle)
-          .append("rect")
-          .attr("class", "obstacle-hp-bg")
-          .attr("x", -22)
-          .attr("y", -35)
-          .attr("width", 44)
-          .attr("height", 5);
-
-        g.filter(d => d.obstacle)
-          .append("rect")
-          .attr("class", "obstacle-hp-fill")
-          .attr("x", -22)
-          .attr("y", -35)
-          .attr("height", 5);
-
-        return g;
-      },
-      update => update,
-      exit => exit.remove()
-    )
-    .attr("class", d =>
-      `decoration${d.obstacle ? " obstacle" : ""}${d.obstacle && d.hp < d.maxHp ? " damaged" : ""}`
-    )
-    .attr("transform", d => `translate(${d.x},${d.y})`);
-
-  decor
-    .select(".decor-sprite")
-    .attr("href", d => d.asset)
-    .attr("x", d => -d.size / 2)
-    .attr("y", d => -d.size / 2)
-    .attr("width", d => d.size)
-    .attr("height", d => d.size);
-
-  decor
-    .select(".obstacle-hp-fill")
-    .attr("width", d =>
-      d.obstacle ? 44 * Math.max(0, d.hp) / Math.max(1, d.maxHp) : 0
-    );
+  renderer.renderDecorations(currentDecorations, visitedRooms);
 }
 
 function spawnExplosion(x: number, y: number): void {
-  if (!explosionLayer) {
-    explosionLayer = rootLayer.append("g").attr("class", "explosions");
-  }
-
-  // Keep world-position translation on an outer group. The inner group
-  // owns the CSS scale/rotation animation, so animation transforms cannot
-  // override the obstacle's x/y position.
-  const anchor = explosionLayer
-    .append("g")
-    .attr("transform", `translate(${x},${y})`);
-
-  const g = anchor
-    .append("g")
-    .attr("class", "explosion");
-
-  g.append("circle")
-    .attr("class", "blast")
-    .attr("r", 20);
-
-  g.append("circle")
-    .attr("class", "ring")
-    .attr("r", 31);
-
-  g.append("path")
-    .attr("d", "M -30 0 L 30 0 M 0 -30 L 0 30 M -21 -21 L 21 21 M -21 21 L 21 -21")
-    .attr("stroke", "#ffe79c")
-    .attr("stroke-width", 5);
-
-  setTimeout(() => anchor.remove(), 520);
+  renderer.spawnExplosion(x, y);
 }
 
 function damageObstacle(item: Decoration, amount: number): void {
@@ -803,85 +601,11 @@ function activateMonstersInRoom(roomId: number): void {
 }
 
 function renderMonsters(): void {
-  if (!monsterLayer) {
-    monsterLayer = rootLayer.append("g").attr("class", "monsters");
-  }
-
-  const visibleMonsters = currentMonsters.filter(monster =>
-    monster.active && (!monster.dead || monster.deathAnimating)
-  );
-
-  const monsters = monsterLayer
-    .selectAll<SVGGElement, Monster>("g.monster")
-    .data(visibleMonsters, d => d.id)
-    .join(
-      enter => {
-        const g = enter
-          .append("g")
-          .attr("class", d => `monster${d.fast ? " fast" : ""}${d.kind === "sentry" ? " sentry" : ""}`);
-
-        g.append("image")
-          .attr("class", "monster-sprite")
-          .attr("href", d => monsterAsset(d))
-          .attr("x", -31)
-          .attr("y", -31)
-          .attr("width", 62)
-          .attr("height", 62);
-
-        g.append("rect")
-          .attr("class", "hp-bg")
-          .attr("x", -20)
-          .attr("y", -31)
-          .attr("width", 40)
-          .attr("height", 5);
-
-        g.append("rect")
-          .attr("class", "hp-fill")
-          .attr("x", -20)
-          .attr("y", -31)
-          .attr("height", 5);
-
-        g.append("title")
-          .text(d => `${monsterLabel(d)} · ${d.maxHp} HP`);
-
-        return g;
-      },
-      update => update,
-      exit => exit.remove()
-    )
-    .attr("class", d =>
-      "monster" +
-      (d.fast ? " fast" : "") +
-      (d.kind === "sentry" ? " sentry" : "") +
-      (d.deathAnimating ? " dying" : "") +
-      (d.moveDir === "left" ? " moving-left" : "") +
-      (d.moveDir === "right" ? " moving-right" : "")
-    )
-    .attr("transform", d => `translate(${d.x},${d.y})`);
-
-  monsters
-    .select(".hp-fill")
-    .attr("width", d => 40 * Math.max(0, d.hp) / d.maxHp);
+  renderer.renderMonsters(currentMonsters, monsterAsset);
 }
 
 function updateMonsterPositions(): void {
-  if (!monsterLayer) return;
-
-  monsterLayer
-    .selectAll<SVGGElement, Monster>("g.monster")
-    .attr("class", d =>
-      "monster" +
-      (d.fast ? " fast" : "") +
-      (d.kind === "sentry" ? " sentry" : "") +
-      (d.deathAnimating ? " dying" : "") +
-      (d.moveDir === "left" ? " moving-left" : "") +
-      (d.moveDir === "right" ? " moving-right" : "")
-    )
-    .attr("transform", d => `translate(${d.x},${d.y})`);
-
-  monsterLayer
-    .selectAll<SVGRectElement, Monster>(".hp-fill")
-    .attr("width", d => 40 * Math.max(0, d.hp) / d.maxHp);
+  renderer.updateMonsterPositions(currentMonsters);
 }
 
 function applyPlayerDamage(amount: number): void {
@@ -890,10 +614,7 @@ function applyPlayerDamage(amount: number): void {
   playerHp = Math.max(0, playerHp - amount);
   hpCountEl.textContent = String(playerHp);
 
-  if (playerLayer) {
-    playerLayer.classed("hit", true);
-    setTimeout(() => playerLayer?.classed("hit", false), 120);
-  }
+  renderer.flashPlayer();
 
   updateHealthUi();
 
@@ -1079,23 +800,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number): void {
 }
 
 function renderBullets(): void {
-  if (!bulletLayer) {
-    bulletLayer = rootLayer.append("g").attr("class", "bullets");
-  }
-
-  bulletLayer
-    .selectAll<SVGCircleElement, Bullet>("circle.bullet")
-    .data(bullets, d => d.id)
-    .join(
-      enter => enter
-        .append("circle")
-        .attr("class", "bullet")
-        .attr("r", BULLET_RADIUS),
-      update => update,
-      exit => exit.remove()
-    )
-    .attr("cx", d => d.x)
-    .attr("cy", d => d.y);
+  renderer.renderBullets(bullets);
 }
 
 function shootBullet(): void {
@@ -1341,41 +1046,6 @@ function isWalkable(x: number, y: number, radius = PLAYER_RADIUS): boolean {
   );
 }
 
-function drawStaircase(layer: Layer, stair: Stair): void {
-  const g = layer
-    .append("g")
-    .attr("class", `stairs ${stair.type}${stair.enabled === false ? " inactive" : ""}`)
-    .attr("transform", `translate(${stair.x},${stair.y})`);
-
-  g.append("circle")
-    .attr("class", "portal-ring")
-    .attr("r", 27);
-
-  g.append("circle")
-    .attr("class", "portal-core")
-    .attr("r", 20);
-
-  for (let y = -11; y <= 11; y += 7) {
-    g.append("line")
-      .attr("class", "step-line")
-      .attr("x1", -12)
-      .attr("x2", 12)
-      .attr("y1", y)
-      .attr("y2", y);
-  }
-
-  g.append("text")
-    .attr("class", "arrow")
-    .attr("y", stair.type === "up" ? -39 : 39)
-    .text(stair.type === "up" ? "▲" : "▼");
-
-  g.append("title").text(
-    stair.type === "up"
-      ? (stair.enabled === false ? "Entrance portal" : `Up to ${stair.url}`)
-      : `Down to ${stair.url}`
-  );
-}
-
 function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
   stairs: Stair[];
   loot: LootItem[];
@@ -1389,82 +1059,15 @@ function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
 }
 
 function renderInteractiveObjects(): void {
-  rootLayer.select("g.objects").remove();
-  playerLayer?.remove();
-
-  const objectLayer = rootLayer
-    .append("g")
-    .attr("class", "objects");
-
-  for (const stair of currentStairs) {
-    if (visitedRooms.has(stair.roomId)) {
-      drawStaircase(objectLayer, stair);
-    }
-  }
-
-  const lootLayer = objectLayer
-    .append("g")
-    .selectAll<SVGGElement, LootItem>("g")
-    .data(currentLoot.filter(item => visitedRooms.has(item.roomId)))
-    .join("g")
-    .attr("class", "loot")
-    .attr("transform", d => `translate(${d.x},${d.y})`);
-
-  lootLayer
-    .append("image")
-    .attr("class", "loot-sprite")
-    .attr("href", d => lootAsset(d.kind))
-    .attr("x", -21)
-    .attr("y", -21)
-    .attr("width", 42)
-    .attr("height", 42);
-
-  lootLayer
-    .append("title")
-    .text(d => `Recovered ${d.kind || "alien artifact"}`);
-
-  playerLayer = rootLayer
-    .append("g")
-    .attr("class", "player");
-
-  playerLayer
-    .append("image")
-    .attr("class", "avatar")
-    .attr("href", playerAssetForDirection())
-    .attr("x", -37.5)
-    .attr("y", -50)
-    .attr("width", 75)
-    .attr("height", 100)
-    .attr("preserveAspectRatio", "xMidYMid meet");
-
-  playerLayer
-    .append("rect")
-    .attr("class", "player-hp-bg")
-    .attr("x", -32)
-    .attr("y", -47)
-    .attr("width", 64)
-    .attr("height", 7);
-
-  playerLayer
-    .append("rect")
-    .attr("class", "player-hp-fill")
-    .attr("x", -31)
-    .attr("y", -46)
-    .attr("height", 5);
-
+  renderer.renderObjects(currentStairs, currentLoot, visitedRooms, LOOT_ASSETS);
+  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, playerAssetForDirection());
   updatePlayerVisual();
   updatePlayerAnimationClasses();
   updateHealthUi();
 }
 
 function updatePlayerVisual(): void {
-  if (playerLayer) {
-    playerLayer.attr("transform", `translate(${player.x},${player.y})`);
-  }
-
-  sideMinimapSvg
-    .select(".minimap-player")
-    .attr("transform", `translate(${player.x},${player.y})`);
+  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, playerAssetForDirection());
 }
 
 function checkLoot(): void {
@@ -1527,11 +1130,7 @@ function playerAssetForDirection(direction: PlayerDirection = playerDirectionNam
 }
 
 function setPlayerSpriteAsset(asset: string): void {
-  if (playerLayer) {
-    playerLayer.select(".avatar").attr("href", asset);
-  }
-
-  sideMinimapSvg.select(".minimap-player image").attr("href", asset);
+  renderer.setPlayerAsset(asset);
 
   if (playerHudPortraitEl) {
     playerHudPortraitEl.src = asset;
@@ -1585,21 +1184,7 @@ function playerDirectionName(): PlayerDirection {
 }
 
 function updatePlayerAnimationClasses(): void {
-  if (!playerLayer) return;
-
-  playerLayer
-    .classed("moving-up", false)
-    .classed("moving-down", false)
-    .classed("moving-left", false)
-    .classed("moving-right", false)
-    .classed("shooting-up", false)
-    .classed("shooting-down", false)
-    .classed("shooting-left", false)
-    .classed("shooting-right", false);
-
-  const direction = playerDirectionName();
-  if (playerMoving) playerLayer.classed(`moving-${direction}`, true);
-  if (playerShooting) playerLayer.classed(`shooting-${direction}`, true);
+  // Frame changes are applied directly to the Phaser player sprite.
 }
 
 function setPlayerMoving(moving: boolean, timestamp: number): void {
@@ -1686,6 +1271,17 @@ window.addEventListener("keydown", event => {
   if (event.key === "Escape" && !minimapModal.hidden) {
     event.preventDefault();
     closeMinimap();
+    return;
+  }
+
+  if (event.key.toLowerCase() === "m" && !gameUi.hidden) {
+    event.preventDefault();
+    if (minimapModal.hidden) {
+      resetPlayerInput();
+      openMinimap();
+    } else {
+      closeMinimap();
+    }
     return;
   }
 
@@ -1783,18 +1379,15 @@ function renderGraph(
   { spawnRoomId = null, stateId = null }: Pick<LoadPageOptions, "spawnRoomId" | "stateId"> = {},
 ): void {
   currentStateId = stateId ?? stateIdForPage(pageUrl);
-  rootLayer.selectAll("*").remove();
+  renderer.clear();
   hpCountEl.textContent = String(playerHp);
   if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
   updateHealthUi();
   bullets = [];
-  bulletLayer = null;
-  decorationLayer = null;
-  explosionLayer = null;
   hideLinkMenu();
   closeMinimap();
 
-  const { width, height } = svg.node()!.getBoundingClientRect();
+  const { width, height } = renderer.viewportSize();
   const layout = layoutOrthogonal(graph, width, height);
   currentLayout = layout;
 
@@ -1804,93 +1397,6 @@ function renderGraph(
     : new Set();
 
   currentRoomId = null;
-
-  const corridorGroup = rootLayer.append("g");
-
-  corridorGroup
-    .selectAll<SVGLineElement, LayoutLink>("line.corridor")
-    .data(layout.links)
-    .join("line")
-    .attr("class", "corridor")
-    .each(function(this: SVGLineElement, link) {
-      const p = corridorEndpoints(link);
-      d3.select(this)
-        .attr("x1", p.x1)
-        .attr("y1", p.y1)
-        .attr("x2", p.x2)
-        .attr("y2", p.y2);
-    });
-
-  corridorGroup
-    .selectAll<SVGLineElement, LayoutLink>("line.corridor-light")
-    .data(layout.links)
-    .join("line")
-    .attr("class", "corridor-light")
-    .style("opacity", d =>
-      visitedRooms.has(d.source.id) || visitedRooms.has(d.target.id)
-        ? 0.45
-        : 0
-    )
-    .each(function(this: SVGLineElement, link) {
-      const p = corridorEndpoints(link);
-      d3.select(this)
-        .attr("x1", p.x1)
-        .attr("y1", p.y1)
-        .attr("x2", p.x2)
-        .attr("y2", p.y2);
-    });
-
-  const room = rootLayer
-    .append("g")
-    .selectAll<SVGGElement, GraphNode>("g")
-    .data(layout.nodes)
-    .join("g")
-    .attr("class", d =>
-      "room" +
-      (d.isRoot ? " root" : "") +
-      (d.isHidden ? " hidden" : "") +
-      " unvisited"
-    )
-    .attr("transform", d => `translate(${d.x},${d.y})`);
-
-  room
-    .append("rect")
-    .attr("x", d => -d.width / 2)
-    .attr("y", d => -d.height / 2)
-    .attr("width", d => d.width)
-    .attr("height", d => d.height);
-
-  room
-    .append("rect")
-    .attr("class", "room-shell")
-    .attr("x", d => -d.width / 2 + 14)
-    .attr("y", d => -d.height / 2 + 14)
-    .attr("width", d => d.width - 28)
-    .attr("height", d => d.height - 28)
-    .attr("rx", 6)
-    .attr("ry", 6);
-
-  room.each(function(this: SVGGElement, d) {
-    const g = d3.select(this);
-    const points: Array<[number, number]> = [
-      [-d.width / 2 + 18, -d.height / 2 + 18],
-      [ d.width / 2 - 18, -d.height / 2 + 18],
-      [-d.width / 2 + 18,  d.height / 2 - 18],
-      [ d.width / 2 - 18,  d.height / 2 - 18]
-    ];
-
-    g.selectAll<SVGCircleElement, [number, number]>("circle.room-corner")
-      .data(points)
-      .join("circle")
-      .attr("class", "room-corner")
-      .attr("cx", p => p[0])
-      .attr("cy", p => p[1])
-      .attr("r", 4);
-  });
-
-  room
-    .append("title")
-    .text(d => d.title);
 
   const objects = buildInteractiveObjects(layout, pageUrl);
   currentStairs = objects.stairs;
@@ -1930,14 +1436,9 @@ function renderGraph(
     discoveredRoomsByPage.set(currentStateId, new Set(visitedRooms));
   }
 
+  renderer.setWorld(layout, visitedRooms);
   updateFogOfWar();
-
-  decorationLayer = rootLayer.append("g").attr("class", "decorations");
-  explosionLayer = rootLayer.append("g").attr("class", "explosions");
   renderDecorations();
-
-  monsterLayer = rootLayer.append("g").attr("class", "monsters");
-  bulletLayer = rootLayer.append("g").attr("class", "bullets");
 
   for (const roomId of visitedRooms) {
     activateMonstersInRoom(roomId);
@@ -2034,6 +1535,7 @@ welcomeForm.addEventListener("submit", (event) => {
   currentStateId = null;
   gameUi.hidden = false;
   welcomeScreen.hidden = true;
+  renderer.start();
   runStartedAt = performance.now();
 
   urlInput.value = welcomeUrlInput.value;

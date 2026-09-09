@@ -2,7 +2,7 @@ import type { Direction, LootKind, PlayerAnimation, PlayerDirection } from "./ty
 
 export const MAX_NODES = 450;
 export const MAX_ROOMS_AFTER_COALESCE = 100;
-export const MAX_CHILDREN_PER_ROOM = 3;
+export const MAX_CHILDREN_PER_ROOM = 10;
 
 export const ROOM_WIDTH = 600;
 export const ROOM_HEIGHT = 400;

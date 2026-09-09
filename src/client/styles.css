@@ -82,7 +82,8 @@ button:hover { background: #242c37; }
 
 #status.error { color: var(--danger); }
 
-#map {
+#gameCanvas,
+#gameCanvas canvas {
   width: 100%;
   height: 100%;
   display: block;
@@ -337,7 +338,7 @@ button:hover { background: #242c37; }
   padding: 4px 8px;
 }
 
-#minimapSvg {
+#minimapCanvas {
   width: 100%;
   height: 100%;
   display: block;
@@ -1034,7 +1035,8 @@ body {
   cursor: crosshair;
 }
 
-#map {
+#gameCanvas,
+#gameCanvas canvas {
   width: 100%;
   height: 100%;
 }
@@ -1070,7 +1072,7 @@ body {
   font-weight: 700;
 }
 
-#sideMinimapSvg {
+#sideMinimapCanvas {
   width: 100%;
   height: calc(100% - 34px);
   display: block;
@@ -1241,4 +1243,50 @@ body {
   #topBar { grid-template-columns: 230px 1fr; }
   .top-quote { display: none; }
   #bottomHud { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 720px) {
+  #topBar {
+    height: 64px;
+    grid-template-columns: 1fr;
+    padding: 8px;
+  }
+  .brand-block,
+  #rightHud,
+  .weapon-status-card .controls {
+    display: none;
+  }
+  #gameViewport {
+    top: 64px;
+    right: 0;
+    bottom: 82px;
+  }
+  #bottomHud {
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
+    height: 70px;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+  #bottomHud > section {
+    padding: 6px 8px;
+  }
+  #playerHudPortrait {
+    width: 46px;
+    height: 54px;
+  }
+  .hp-line,
+  .weapon-name {
+    font-size: 12px;
+  }
+  .ammo {
+    font-size: 22px;
+  }
+  .welcome-url-row {
+    flex-direction: column;
+  }
+  .welcome-url-row button {
+    min-height: 46px;
+  }
 }

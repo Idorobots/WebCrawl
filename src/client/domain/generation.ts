@@ -3,6 +3,7 @@ import type {
   Decoration,
   DungeonLayout,
   GraphNode,
+  LayoutLink,
   LootItem,
   LootKind,
   Monster,
@@ -32,10 +33,12 @@ export function sceneryDropKindForSeed(seed: number): LootKind | null {
 export function decorationSpecsForRoom(room: GraphNode): Decoration[] {
   const seed = stableHash(`${room.lootSeed}|decor`);
   const count = 3 + (seed % 3);
+  const edgeX = Math.max(100, room.width / 2 - 70);
+  const edgeY = Math.max(90, room.height / 2 - 70);
   const slots: Array<[number, number]> = [
-    [-220, -130], [220, -130], [-220, 130], [220, 130], [-110, -145],
-    [110, -145], [-110, 145], [110, 145], [-220, -65], [220, -65],
-    [-220, 65], [220, 65],
+    [-edgeX, -edgeY], [edgeX, -edgeY], [-edgeX, edgeY], [edgeX, edgeY], [-edgeX / 2, -edgeY],
+    [edgeX / 2, -edgeY], [-edgeX / 2, edgeY], [edgeX / 2, edgeY], [-edgeX, -edgeY / 2], [edgeX, -edgeY / 2],
+    [-edgeX, edgeY / 2], [edgeX, edgeY / 2],
   ];
   const obstacleTypes = [
     { kind: "plant", asset: ASSETS.decorPlant, obstacle: true, radius: 25, size: 56 },
@@ -68,11 +71,67 @@ export function decorationSpecsForRoom(room: GraphNode): Decoration[] {
   });
 }
 
+function pointAlongCorridor(link: LayoutLink, fraction: number, lateral = 0): Point {
+  const lengths = link.points.slice(1).map((point, index) =>
+    Math.hypot(point.x - link.points[index]!.x, point.y - link.points[index]!.y)
+  );
+  const total = lengths.reduce((sum, length) => sum + length, 0);
+  let remaining = total * Math.max(0, Math.min(1, fraction));
+  for (let index = 0; index < lengths.length; index += 1) {
+    const length = lengths[index]!;
+    if (remaining > length && index < lengths.length - 1) {
+      remaining -= length;
+      continue;
+    }
+    const start = link.points[index]!;
+    const end = link.points[index + 1]!;
+    const t = length ? remaining / length : 0;
+    const normalX = length ? -(end.y - start.y) / length : 0;
+    const normalY = length ? (end.x - start.x) / length : 0;
+    return {
+      x: start.x + (end.x - start.x) * t + normalX * lateral,
+      y: start.y + (end.y - start.y) * t + normalY * lateral,
+    };
+  }
+  return { ...link.points[link.points.length - 1]! };
+}
+
+export function decorationSpecsForCorridor(link: LayoutLink): Decoration[] {
+  const seed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|decor`);
+  const count = 1 + (seed % 3);
+  const assets = [ASSETS.decorDebris, ASSETS.decorTerminal, ASSETS.decorPlant];
+  return Array.from({ length: count }, (_, index) => {
+    const itemSeed = stableHash(`${seed}|${index}`);
+    const position = pointAlongCorridor(
+      link,
+      (index + 1) / (count + 1),
+      (index % 2 ? 1 : -1) * Math.min(18, link.width * 0.22),
+    );
+    return {
+      id: `${link.id}::decor-${index}`,
+      roomId: link.ownerRoomId,
+      ...position,
+      kind: index === 0 ? "debris" : "corridor-prop",
+      asset: assets[itemSeed % assets.length]!,
+      obstacle: false,
+      radius: 0,
+      size: 30 + (itemSeed % 14),
+      maxHp: 0,
+      hp: 0,
+      destroyed: false,
+      dropKind: null,
+    };
+  });
+}
+
 export function buildDecorations(
   layout: DungeonLayout,
   savedStates: ReadonlyMap<string, ObstacleState>,
 ): Decoration[] {
-  return layout.nodes.flatMap(decorationSpecsForRoom).map((item) => {
+  return [
+    ...layout.nodes.flatMap(decorationSpecsForRoom),
+    ...layout.links.flatMap(decorationSpecsForCorridor),
+  ].map((item) => {
     const state = savedStates.get(item.id);
     return { ...item, hp: state?.hp ?? item.hp, destroyed: state?.destroyed ?? false };
   });
@@ -170,26 +229,72 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1): Monster[] {
   });
 }
 
+export function monsterSpecsForCorridor(link: LayoutLink, floor = 1): Monster[] {
+  const corridorSeed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|monsters`);
+  const count = corridorSeed % 3;
+  const difficulty = floorDifficulty(floor);
+  return Array.from({ length: count }, (_, index) => {
+    const seed = stableHash(`${corridorSeed}|${floor}|${index}`);
+    const kind = monsterKindForSeed(seed);
+    const fast = kind === "fast";
+    const sentry = kind === "sentry";
+    const position = pointAlongCorridor(link, (index + 1) / (count + 1), 0);
+    const hpBase = sentry ? 2 : 1;
+    const hpBonus = Math.min(6, Math.floor(difficulty / 2));
+    return {
+      id: `${link.id}::monster-${index}`,
+      seed,
+      kind,
+      spawnRoomId: link.ownerRoomId,
+      roomId: link.ownerRoomId,
+      ...position,
+      maxHp: hpBase + ((seed >>> 11) % (sentry ? 5 : 6)) + hpBonus,
+      hp: 1,
+      speed: sentry ? 0 : (fast ? 150 : 80) + Math.min(95, difficulty * (fast ? 11 : 8)),
+      fast,
+      attackRange: sentry ? 820 : 38 + Math.min(48, difficulty * 4),
+      attackDamage: 1 + Math.min(3, Math.floor(difficulty / 3)),
+      attackCooldownMs: Math.max(420, (sentry ? 1500 : 1150) - difficulty * (sentry ? 70 : 35) + ((seed >>> 15) % 140)),
+      projectileSpeed: sentry ? 220 + Math.min(260, difficulty * 18) : 0,
+      projectileRange: sentry ? 980 + Math.min(420, difficulty * 40) : 0,
+      dropsLoot: ((seed >>> 23) % 100) < 18,
+      lastAttackAt: -Infinity,
+      active: false,
+      dead: false,
+      path: [],
+      pathIndex: 0,
+      pathTargetRoomId: null,
+      pathTargetX: position.x,
+      pathTargetY: position.y,
+      nextPathRefreshAt: 0,
+    };
+  });
+}
+
 export function buildMonsters(
   layout: DungeonLayout,
   savedStates: ReadonlyMap<string, MonsterState>,
   visitedRooms: ReadonlySet<number>,
   floor = 1,
 ): Monster[] {
-  return layout.nodes.flatMap((room) => monsterSpecsForRoom(room, floor).map((spec) => {
+  const specs = [
+    ...layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor)),
+    ...layout.links.flatMap(link => monsterSpecsForCorridor(link, floor)),
+  ];
+  return specs.map((spec) => {
     const saved = savedStates.get(spec.id);
     return {
       ...spec,
       hp: saved?.hp ?? spec.maxHp,
       dead: saved?.dead ?? false,
-      active: saved?.active ?? visitedRooms.has(room.id),
+      active: saved?.active ?? visitedRooms.has(spec.spawnRoomId),
       droppedLoot: saved?.droppedLoot ?? false,
       dropId: saved?.dropId ?? null,
       dropX: saved?.dropX ?? null,
       dropY: saved?.dropY ?? null,
       dropKind: saved?.dropKind ?? null,
     };
-  }));
+  });
 }
 
 export function lootCountForRoom(room: GraphNode): number {
