@@ -1,0 +1,4171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebCrawl</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --panel: #12161c;
+      --panel-2: #1a2029;
+      --text: #e7edf5;
+      --muted: #8d99a8;
+      --wall: #7f8c9d;
+      --corridor: #46515f;
+      --link: #d3b66b;
+      --link-hover: #ffe099;
+      --danger: #ff8f8f;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    body {
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    header {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      background: var(--panel);
+      border-bottom: 1px solid #28313d;
+      z-index: 10;
+    }
+
+    form {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+    }
+
+    input {
+      min-width: 0;
+      flex: 1;
+      border: 1px solid #394555;
+      border-radius: 6px;
+      background: #0d1117;
+      color: var(--text);
+      padding: 9px 10px;
+      font: inherit;
+      outline: none;
+    }
+
+    input:focus { border-color: #6f8198; }
+
+    button {
+      border: 1px solid #4e5c6e;
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover { background: #242c37; }
+
+    #status {
+      max-width: 35vw;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    #status.error { color: var(--danger); }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+    }
+
+    #map:active { cursor: grabbing; }
+
+    .corridor {
+      stroke: var(--corridor);
+      stroke-width: 72;
+      stroke-linecap: butt;
+      opacity: 0;
+      transition: opacity 220ms ease;
+    }
+
+    .corridor.visited {
+      opacity: 0.82;
+    }
+
+    .room rect {
+      fill: #111923;
+      stroke: var(--wall);
+      stroke-width: 2;
+      rx: 2;
+      ry: 2;
+    }
+
+    .room text {
+      fill: #d7dee8;
+      font-size: 9px;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .room.link rect {
+      stroke: var(--link);
+      stroke-width: 2.5;
+    }
+
+    .room.root rect {
+      stroke: #61d982;
+      stroke-width: 3;
+    }
+
+    .room.root.has-back {
+      cursor: pointer;
+    }
+
+    .room.root.has-back:hover rect {
+      filter: brightness(1.18);
+    }
+
+    .room.hidden {
+      opacity: 0.24;
+    }
+
+    .room.hidden rect {
+      fill: transparent;
+      stroke-dasharray: 10 8;
+    }
+
+
+    .room .room-label {
+      font-size: 16px;
+    }
+
+    .room .room-subtitle {
+      fill: var(--muted);
+      font-size: 12px;
+    }
+
+    .room .loot-icon {
+      font-size: 28px;
+    }
+
+    .stairs, .loot, .player {
+      pointer-events: none;
+    }
+
+    .stairs .shaft {
+      fill: #2b313a;
+      stroke-width: 3;
+    }
+
+    .stairs.down .shaft,
+    .stairs.down line {
+      stroke: #d3b66b;
+    }
+
+    .stairs.up .shaft,
+    .stairs.up line {
+      stroke: #61d982;
+    }
+
+    .stairs.inactive {
+      opacity: 0.45;
+    }
+
+    .stairs.inactive .shaft,
+    .stairs.inactive line {
+      stroke: #7f8c9d;
+    }
+
+    .stairs line {
+      stroke-width: 3;
+    }
+
+    .loot .loot-sprite {
+      image-rendering: pixelated;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .decoration {
+      pointer-events: none;
+    }
+
+    .decoration .decor-sprite {
+      image-rendering: pixelated;
+      mix-blend-mode: screen;
+      opacity: 0.88;
+    }
+
+    .decoration.obstacle .decor-sprite {
+      opacity: 1;
+    }
+
+    .sprite-image {
+      image-rendering: pixelated;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .player .avatar {
+      image-rendering: pixelated;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .player .player-hp-bg {
+      fill: #270d11;
+      stroke: #05090d;
+      stroke-width: 2;
+    }
+
+    .player .player-hp-fill {
+      fill: #44d17a;
+      stroke: none;
+    }
+
+    .player.hit .avatar {
+      filter: brightness(1.7) saturate(1.6);
+    }
+
+    .monster {
+      pointer-events: none;
+    }
+
+    .monster .monster-sprite {
+      image-rendering: pixelated;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .monster.fast .monster-sprite {
+      filter: saturate(1.35) brightness(1.12);
+    }
+
+    .monster .hp-bg {
+      fill: #241010;
+      stroke: none;
+    }
+
+    .monster .hp-fill {
+      fill: #d85b5b;
+      stroke: none;
+    }
+
+    .bullet {
+      fill: #f7f1c8;
+      stroke: #756a2a;
+      stroke-width: 2;
+      pointer-events: none;
+    }
+
+    .player.hit circle {
+      filter: brightness(1.8);
+    }
+
+    .game-over {
+      color: #ff9a9a;
+      font-weight: bold;
+    }
+
+    .room.unvisited {
+      opacity: 0;
+    }
+
+    .room.visited {
+      opacity: 1;
+      transition: opacity 220ms ease;
+    }
+
+    #minimapModal {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: grid;
+      place-items: center;
+      background: rgba(0, 0, 0, 0.72);
+    }
+
+    #minimapModal[hidden] {
+      display: none;
+    }
+
+    #minimapModal.open {
+      display: grid;
+    }
+
+    #minimapPanel {
+      width: min(760px, calc(100vw - 40px));
+      height: min(560px, calc(100vh - 40px));
+      border: 1px solid #46515f;
+      border-radius: 10px;
+      background: #0d1117;
+      box-shadow: 0 20px 60px rgba(0,0,0,.45);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      overflow: hidden;
+    }
+
+    #minimapHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid #28313d;
+      background: #12161c;
+    }
+
+    #minimapHeader strong {
+      font-size: 13px;
+    }
+
+    #minimapClose {
+      padding: 4px 8px;
+    }
+
+    #minimapSvg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #0b0d10;
+    }
+
+    .minimap-room rect {
+      fill: #171d25;
+      stroke: #7f8c9d;
+      stroke-width: 2;
+    }
+
+    .minimap-room.root rect {
+      stroke: #61d982;
+      stroke-width: 3;
+    }
+
+    .minimap-room.current rect {
+      stroke: #f2f5f8;
+      stroke-width: 4;
+    }
+
+    .minimap-corridor {
+      stroke: #46515f;
+      stroke-width: 8;
+      stroke-linecap: butt;
+    }
+
+    .minimap-player image {
+      image-rendering: pixelated;
+      mix-blend-mode: screen;
+    }
+
+    .minimap-stair.down rect,
+    .minimap-stair.down line {
+      stroke: #d3b66b;
+    }
+
+    .minimap-stair.up rect,
+    .minimap-stair.up line {
+      stroke: #61d982;
+    }
+
+    .minimap-stair rect {
+      fill: #20262f;
+      stroke-width: 2;
+    }
+
+    .minimap-stair line {
+      stroke-width: 2;
+    }
+
+    .hud-health-track {
+      display: inline-block;
+      width: 120px;
+      height: 9px;
+      margin: 0 6px;
+      vertical-align: middle;
+      border: 1px solid #536171;
+      background: #210b0d;
+    }
+
+    #hudHealthFill {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #44d17a;
+      transition: width 140ms linear;
+    }
+
+    #deathModal {
+      position: fixed;
+      inset: 0;
+      z-index: 140;
+      display: grid;
+      place-items: center;
+      background: rgba(2, 5, 9, 0.86);
+    }
+
+    #deathModal[hidden] {
+      display: none;
+    }
+
+    #deathModal.open {
+      display: grid;
+    }
+
+
+    #deathPanel {
+      width: min(620px, calc(100vw - 36px));
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+      border: 1px solid #7f3942;
+      border-radius: 10px;
+      background:
+        linear-gradient(180deg, rgba(62,16,22,.75), rgba(10,15,21,.97) 28%),
+        #0b1016;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6);
+      padding: 22px;
+    }
+
+    #deathPanel h2 {
+      margin: 0 0 6px;
+      color: #ff858f;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    #deathScore {
+      font-size: 24px;
+      margin: 10px 0 18px;
+    }
+
+    .death-stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 8px 16px;
+      margin: 14px 0 20px;
+      color: #c8d1dc;
+    }
+
+    #highScoreTable {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 18px;
+    }
+
+    #highScoreTable th,
+    #highScoreTable td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #293541;
+      text-align: left;
+      font-size: 12px;
+    }
+
+    #highScoreTable th {
+      color: #8da0b6;
+    }
+
+    #restartButton {
+      width: 100%;
+      padding: 10px 12px;
+      border-color: #5d9bd0;
+      background: #162433;
+    }
+
+    #newHighScore {
+      color: #ffd86b;
+      font-weight: 700;
+      min-height: 1.2em;
+    }
+
+    #hud {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      z-index: 20;
+      padding: 8px 10px;
+      border: 1px solid #303a47;
+      border-radius: 6px;
+      background: rgba(18, 22, 28, 0.92);
+      color: var(--text);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    .room.link {
+      cursor: pointer;
+    }
+
+    .room.link:hover rect {
+      stroke: var(--link-hover);
+      filter: brightness(1.2);
+    }
+
+    #linkMenu {
+      position: fixed;
+      z-index: 30;
+      min-width: 240px;
+      max-width: min(480px, calc(100vw - 24px));
+      max-height: 50vh;
+      overflow: auto;
+      padding: 6px;
+      border: 1px solid #4e5c6e;
+      border-radius: 7px;
+      background: rgba(18, 22, 28, 0.98);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+
+    #linkMenu[hidden] { display: none; }
+
+    #linkMenu button {
+      display: block;
+      width: 100%;
+      margin: 0;
+      padding: 7px 8px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      text-align: left;
+      color: var(--text);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    #linkMenu button:hover {
+      background: #242c37;
+    }
+
+    .legend {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      padding: 8px 10px;
+      border: 1px solid #303a47;
+      border-radius: 6px;
+      background: rgba(18, 22, 28, 0.92);
+      color: var(--muted);
+      font-size: 11px;
+      pointer-events: none;
+    }
+  
+    /* ---- Alien station room skin ---- */
+    .room rect {
+      fill:
+        url(#roomFloorPattern);
+      stroke: #50677e;
+      stroke-width: 5;
+      rx: 10;
+      ry: 10;
+      filter: drop-shadow(0 8px 12px rgba(0,0,0,.45));
+    }
+
+    .room.root rect {
+      stroke: #52e08a;
+      stroke-width: 7;
+    }
+
+    .room.hidden rect {
+      fill-opacity: .12;
+      stroke-opacity: .28;
+    }
+
+    .room-shell {
+      pointer-events: none;
+      fill: none;
+      stroke: rgba(97, 156, 205, .22);
+      stroke-width: 2;
+      stroke-dasharray: 20 8;
+    }
+
+    .room-corner {
+      fill: #173149;
+      stroke: #56c9ff;
+      stroke-width: 2;
+      opacity: .7;
+    }
+
+    .corridor {
+      stroke: #263b4d;
+      stroke-width: 76;
+      stroke-linecap: butt;
+      opacity: 0;
+      transition: opacity 220ms ease;
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,.35));
+    }
+
+    .corridor.visited {
+      opacity: .96;
+    }
+
+    .corridor-light {
+      stroke: #54d7ff;
+      stroke-width: 5;
+      opacity: .45;
+      stroke-dasharray: 12 14;
+      pointer-events: none;
+    }
+
+    /* ---- New stair/portal graphics ---- */
+    .stairs .portal-ring {
+      fill: #101923;
+      stroke-width: 4;
+    }
+
+    .stairs.down .portal-ring {
+      stroke: #f4be4d;
+      filter: drop-shadow(0 0 8px rgba(244,190,77,.65));
+    }
+
+    .stairs.up .portal-ring {
+      stroke: #54e595;
+      filter: drop-shadow(0 0 8px rgba(84,229,149,.65));
+    }
+
+    .stairs .portal-core {
+      fill: #091018;
+      stroke-width: 2;
+    }
+
+    .stairs.down .portal-core { stroke: #b77c13; }
+    .stairs.up .portal-core { stroke: #238b52; }
+
+    .stairs .step-line {
+      stroke-width: 4;
+      stroke-linecap: round;
+    }
+
+    .stairs.down .step-line { stroke: #ffd66e; }
+    .stairs.up .step-line { stroke: #7ff8b7; }
+
+    .stairs .arrow {
+      font-size: 20px;
+      font-weight: 800;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+
+    .stairs.down .arrow { fill: #ffd66e; }
+    .stairs.up .arrow { fill: #7ff8b7; }
+
+    /* ---- Player directional movement/shooting ---- */
+    .player .avatar {
+      transform-box: fill-box;
+      transform-origin: center;
+      will-change: transform, filter;
+    }
+
+    .player.moving-up .avatar { animation: playerWalkUp .28s steps(2,end) infinite; }
+    .player.moving-down .avatar { animation: playerWalkDown .28s steps(2,end) infinite; }
+    .player.moving-left .avatar { animation: playerWalkLeft .28s steps(2,end) infinite; }
+    .player.moving-right .avatar { animation: playerWalkRight .28s steps(2,end) infinite; }
+
+    .player.shooting-up .avatar { animation: playerShootUp .16s ease-out; }
+    .player.shooting-down .avatar { animation: playerShootDown .16s ease-out; }
+    .player.shooting-left .avatar { animation: playerShootLeft .16s ease-out; }
+    .player.shooting-right .avatar { animation: playerShootRight .16s ease-out; }
+
+    @keyframes playerWalkUp {
+      0% { transform: translateY(0) rotate(-2deg); }
+      50% { transform: translateY(-4px) rotate(2deg); }
+      100% { transform: translateY(0) rotate(-2deg); }
+    }
+    @keyframes playerWalkDown {
+      0% { transform: translateY(0) rotate(2deg); }
+      50% { transform: translateY(4px) rotate(-2deg); }
+      100% { transform: translateY(0) rotate(2deg); }
+    }
+    @keyframes playerWalkLeft {
+      0% { transform: translateX(0) scaleX(1) rotate(-2deg); }
+      50% { transform: translateX(-4px) scaleX(1) rotate(2deg); }
+      100% { transform: translateX(0) scaleX(1) rotate(-2deg); }
+    }
+    @keyframes playerWalkRight {
+      0% { transform: translateX(0) scaleX(1) rotate(2deg); }
+      50% { transform: translateX(4px) scaleX(1) rotate(-2deg); }
+      100% { transform: translateX(0) scaleX(1) rotate(2deg); }
+    }
+
+    @keyframes playerShootUp {
+      0% { transform: translateY(0); filter: brightness(1); }
+      35% { transform: translateY(6px); filter: brightness(1.8); }
+      100% { transform: translateY(0); filter: brightness(1); }
+    }
+    @keyframes playerShootDown {
+      0% { transform: translateY(0); filter: brightness(1); }
+      35% { transform: translateY(-6px); filter: brightness(1.8); }
+      100% { transform: translateY(0); filter: brightness(1); }
+    }
+    @keyframes playerShootLeft {
+      0% { transform: translateX(0) scaleX(1); filter: brightness(1); }
+      35% { transform: translateX(7px) scaleX(1); filter: brightness(1.8); }
+      100% { transform: translateX(0) scaleX(1); filter: brightness(1); }
+    }
+    @keyframes playerShootRight {
+      0% { transform: translateX(0); filter: brightness(1); }
+      35% { transform: translateX(-7px); filter: brightness(1.8); }
+      100% { transform: translateX(0); filter: brightness(1); }
+    }
+
+    /* ---- Animated robot enemies ---- */
+    .monster .monster-sprite {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: monsterIdle .75s ease-in-out infinite alternate;
+    }
+
+    .monster.moving-left .monster-sprite {
+      transform: scaleX(1);
+      animation: monsterMoveLeft .32s ease-in-out infinite alternate;
+    }
+
+    .monster.moving-right .monster-sprite {
+      transform: scaleX(1);
+      animation: monsterMoveRight .32s ease-in-out infinite alternate;
+    }
+
+    .monster.dying {
+      pointer-events: none;
+      animation: monsterDeath .45s ease-out forwards;
+    }
+
+    @keyframes monsterIdle {
+      from { transform: translateY(0) rotate(-2deg); filter: brightness(1); }
+      to   { transform: translateY(-3px) rotate(2deg); filter: brightness(1.14); }
+    }
+
+    @keyframes monsterMoveLeft {
+      from { transform: translateX(0) scaleX(-1) rotate(-2deg); }
+      to   { transform: translateX(-4px) scaleX(-1) rotate(3deg); }
+    }
+
+    @keyframes monsterMoveRight {
+      from { transform: translateX(0) scaleX(1) rotate(2deg); }
+      to   { transform: translateX(4px) scaleX(1) rotate(-3deg); }
+    }
+
+    @keyframes monsterDeath {
+      0% { opacity: 1; transform: scale(1) rotate(0); filter: brightness(1); }
+      35% { opacity: 1; transform: scale(1.3) rotate(14deg); filter: brightness(2.2) saturate(1.8); }
+      100% { opacity: 0; transform: scale(.12) rotate(80deg); filter: brightness(3); }
+    }
+
+    /* ---- Destructible environmental props ---- */
+    .decoration.obstacle .decor-sprite {
+      filter: drop-shadow(0 4px 4px rgba(0,0,0,.35));
+    }
+
+    .decoration.damaged .decor-sprite {
+      filter: brightness(1.25) saturate(1.4);
+    }
+
+    .obstacle-hp-bg {
+      fill: #1d0c0c;
+      opacity: .8;
+    }
+
+    .obstacle-hp-fill {
+      fill: #e3954b;
+    }
+
+    .explosion {
+      pointer-events: none;
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: explode .5s ease-out forwards;
+    }
+
+    .explosion .blast {
+      fill: rgba(255, 192, 71, .78);
+      stroke: #fff2b0;
+      stroke-width: 5;
+    }
+
+    .explosion .ring {
+      fill: none;
+      stroke: #ff7d3b;
+      stroke-width: 7;
+    }
+
+    @keyframes explode {
+      0% { opacity: 1; transform: scale(.15) rotate(0deg); }
+      45% { opacity: 1; transform: scale(1.15) rotate(45deg); }
+      100% { opacity: 0; transform: scale(1.9) rotate(100deg); }
+    }
+
+    /* ---- Mockup-inspired top HUD ---- */
+    #hud {
+      left: 14px;
+      right: 14px;
+      bottom: 14px;
+      max-width: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-color: #2d8cc0;
+      background:
+        linear-gradient(180deg, rgba(14,31,45,.97), rgba(5,12,18,.97));
+      box-shadow:
+        inset 0 0 0 1px rgba(87,198,255,.08),
+        0 12px 40px rgba(0,0,0,.4);
+      letter-spacing: .04em;
+    }
+
+    .legend {
+      top: 74px;
+      right: 14px;
+      bottom: auto;
+      border-color: #23688d;
+      background: rgba(6,17,26,.94);
+    }
+
+  
+    /* ===== WebCrawl mockup-inspired application shell ===== */
+    body {
+      display: block;
+      background: #03070b;
+    }
+
+    #welcomeScreen {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background:
+        linear-gradient(90deg, rgba(2,7,13,.96) 0%, rgba(2,7,13,.88) 42%, rgba(2,7,13,.48) 72%, rgba(2,7,13,.72) 100%),
+        url("assets/mockups/webcrawl_mockup_07.png") center / cover no-repeat;
+    }
+
+    #welcomeScreen[hidden] { display: none; }
+
+    .welcome-visual {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 75% 40%, rgba(38,159,255,.16), transparent 30%),
+        linear-gradient(180deg, transparent 60%, rgba(0,0,0,.62));
+      pointer-events: none;
+    }
+
+    .welcome-card {
+      position: relative;
+      width: min(620px, calc(100vw - 40px));
+      margin-right: min(38vw, 560px);
+      padding: 36px;
+      border: 1px solid #1f7cae;
+      background: linear-gradient(180deg, rgba(6,20,31,.94), rgba(2,9,15,.97));
+      box-shadow: 0 24px 90px rgba(0,0,0,.6), inset 0 0 40px rgba(31,127,178,.09);
+    }
+
+    .welcome-mark {
+      color: #62d7ff;
+      font-size: 38px;
+      text-shadow: 0 0 16px #2cb8ef;
+    }
+
+    .welcome-card h1 {
+      margin: 4px 0 0;
+      font-size: clamp(44px, 7vw, 82px);
+      line-height: .9;
+      letter-spacing: .08em;
+      color: #c7edff;
+      text-shadow: 0 0 20px rgba(71,195,255,.35);
+    }
+
+    .welcome-tagline,
+    .brand-tagline {
+      color: #68cfff;
+      letter-spacing: .24em;
+      font-size: 12px;
+    }
+
+    .welcome-tagline span { color: #d5eefb; }
+
+    .welcome-quote {
+      margin: 24px 0 0;
+      color: #9fb9cd;
+      letter-spacing: .22em;
+      font-size: 14px;
+    }
+
+    .welcome-copy {
+      max-width: 520px;
+      color: #aebdca;
+      line-height: 1.65;
+      margin-bottom: 28px;
+    }
+
+    #welcomeForm {
+      display: block;
+    }
+
+    #welcomeForm label {
+      display: block;
+      margin-bottom: 8px;
+      color: #69d0ff;
+      font-size: 12px;
+      letter-spacing: .12em;
+    }
+
+    .welcome-url-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .welcome-url-row input {
+      min-height: 48px;
+      border-color: #228bc0;
+      box-shadow: inset 0 0 18px rgba(26,127,181,.1);
+    }
+
+    .welcome-url-row button {
+      min-width: 150px;
+      border-color: #43baf4;
+      background: linear-gradient(#1772be, #0b3d71);
+      box-shadow: 0 0 18px rgba(39,160,233,.25);
+    }
+
+    #gameUi {
+      position: fixed;
+      inset: 0;
+      background: #03070b;
+    }
+
+    #gameUi[hidden] { display: none; }
+
+    #topBar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 78px;
+      padding: 10px 16px;
+      display: grid;
+      grid-template-columns: 320px minmax(300px, 1fr) 245px;
+      gap: 16px;
+      align-items: center;
+      background: linear-gradient(180deg, #071624, #040b12);
+      border-bottom: 1px solid #1c6f9b;
+      box-shadow: 0 8px 28px rgba(0,0,0,.4);
+      z-index: 40;
+    }
+
+    .brand-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #278abd;
+      color: #66d4ff;
+      font-size: 28px;
+      transform: rotate(45deg);
+    }
+
+    .brand-name {
+      font-size: 28px;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: .08em;
+      color: #d4f2ff;
+    }
+
+    .top-url-form {
+      display: grid;
+      grid-template-columns: 24px 1fr 64px;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid #1a6e9c;
+      padding: 5px 6px 5px 10px;
+      background: #06101a;
+    }
+
+    .top-url-form input {
+      border: 0;
+      background: transparent;
+      padding: 8px 4px;
+    }
+
+    .top-url-form button {
+      border-color: #49c2ff;
+      background: #0e63a7;
+    }
+
+    .url-globe {
+      color: #5bcfff;
+      font-size: 20px;
+    }
+
+    .top-quote {
+      justify-self: end;
+      color: #7fa0b9;
+      letter-spacing: .18em;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    #gameViewport {
+      position: fixed;
+      top: 78px;
+      left: 0;
+      right: 332px;
+      bottom: 102px;
+      background:
+        radial-gradient(circle at center, #07131d, #020508 72%);
+      overflow: hidden;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    #rightHud {
+      position: fixed;
+      top: 88px;
+      right: 10px;
+      bottom: 112px;
+      width: 312px;
+      display: grid;
+      grid-template-rows: minmax(260px, 1.15fr) minmax(250px, .85fr);
+      gap: 10px;
+      z-index: 35;
+    }
+
+    .hud-panel {
+      min-height: 0;
+      border: 1px solid #1f78a6;
+      background: linear-gradient(180deg, rgba(6,21,33,.97), rgba(3,11,18,.98));
+      box-shadow: inset 0 0 30px rgba(26,119,164,.08), 0 12px 32px rgba(0,0,0,.28);
+      padding: 10px;
+    }
+
+    .hud-panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #66d4ff;
+      border-bottom: 1px solid #164f70;
+      padding: 2px 2px 8px;
+      letter-spacing: .08em;
+      font-weight: 700;
+    }
+
+    #sideMinimapSvg {
+      width: 100%;
+      height: calc(100% - 34px);
+      display: block;
+      margin-top: 6px;
+      background: #030a10;
+    }
+
+    .stats-panel {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 8px 4px;
+      border-bottom: 1px solid rgba(35,92,121,.35);
+      color: #a9c2d5;
+      font-size: 12px;
+    }
+
+    .stat-row strong { color: #e3f4fc; }
+
+    .stats-flavour {
+      margin-top: auto;
+      padding: 14px 4px 4px;
+      color: #5f8fac;
+      font-size: 10px;
+      line-height: 1.55;
+      letter-spacing: .12em;
+    }
+
+    #bottomHud {
+      position: fixed;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      height: 82px;
+      z-index: 38;
+      display: grid;
+      grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
+      gap: 8px;
+    }
+
+    #bottomHud > section {
+      border: 1px solid #1e719d;
+      background: linear-gradient(180deg, rgba(7,22,34,.98), rgba(3,11,18,.98));
+      display: flex;
+      align-items: center;
+      padding: 9px 13px;
+      min-width: 0;
+    }
+
+    .player-status-card { gap: 12px; }
+
+    #playerHudPortrait {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 0 10px rgba(70,192,244,.22));
+    }
+
+    .player-status-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .status-label {
+      color: #86a8bf;
+      font-size: 10px;
+      letter-spacing: .12em;
+    }
+
+    .hp-line {
+      margin: 4px 0 7px;
+      font-size: 18px;
+      color: #f0f7fa;
+    }
+
+    .big-health-track {
+      height: 12px;
+      border: 1px solid #51677a;
+      background: #21090d;
+    }
+
+    #hudHealthFill {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #f3484e, #ff6b61);
+      transition: width 140ms linear;
+    }
+
+    .loot-status-card {
+      justify-content: center;
+      gap: 12px;
+      font-size: 20px;
+    }
+
+    .status-separator { color: #466579; }
+
+    .weapon-status-card {
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .weapon-name {
+      color: #d6ebf5;
+      font-size: 15px;
+    }
+
+    .ammo {
+      font-size: 30px;
+      color: #fff;
+    }
+
+    .controls {
+      flex-basis: 100%;
+      text-align: center;
+      font-size: 9px;
+      color: #668ba4;
+      letter-spacing: .08em;
+    }
+
+    .floor-status-card {
+      display: grid !important;
+      align-content: center;
+      gap: 6px;
+      color: #a9c3d5;
+      letter-spacing: .06em;
+      font-size: 12px;
+    }
+
+    /* Keep the M-key tactical map as a larger overlay. */
+    #minimapModal {
+      background: rgba(0,5,10,.86);
+    }
+
+    #minimapPanel {
+      width: min(900px, calc(100vw - 50px));
+      height: min(700px, calc(100vh - 50px));
+      border-color: #2f9bd2;
+      background: #040c13;
+    }
+
+    /* Correct monster death positioning: animate the sprite, not the
+       translated world-position group. */
+    .monster.dying {
+      pointer-events: none;
+      animation: none !important;
+    }
+
+    .monster.dying .monster-sprite {
+      animation: monsterDeath .45s ease-out forwards !important;
+    }
+
+    .monster.dying .hp-bg,
+    .monster.dying .hp-fill {
+      opacity: 0;
+    }
+
+    @media (max-width: 980px) {
+      #rightHud { width: 260px; }
+      #gameViewport { right: 280px; }
+      #topBar { grid-template-columns: 230px 1fr; }
+      .top-quote { display: none; }
+      #bottomHud { grid-template-columns: 1fr 1fr; }
+    }
+
+  </style>
+</head>
+<body>
+  <div id="welcomeScreen">
+    <div class="welcome-visual"></div>
+    <section class="welcome-card">
+      <div class="welcome-mark">◈</div>
+      <h1>WEBCRAWL</h1>
+      <div class="welcome-tagline">EXPLORE <span>•</span> LOOT <span>•</span> SURVIVE</div>
+      
+      <p class="welcome-copy">
+        Strange pages. Hidden places. Every DOM is another alien deck waiting
+        to be mapped. Descend through links, recover what you can, and survive
+        whatever is crawling between the nodes.
+      </p>
+      <form id="welcomeForm">
+        <label for="welcomeUrlInput">ENTER A URL TO EXPLORE</label>
+        <div class="welcome-url-row">
+          <input
+            id="welcomeUrlInput"
+            type="url"
+            required
+            spellcheck="false"
+            value="https://blog.idorobots.org"
+          />
+          <button type="submit">BEGIN CRAWL</button>
+        </div>
+      </form>
+      <p class="welcome-quote">THE WEB IS DEEPER THAN YOU THINK...</p>
+    </section>
+  </div>
+
+  <div id="gameUi" hidden>
+    <header id="topBar">
+      <div class="brand-block">
+        <div class="brand-icon">◈</div>
+        <div>
+          <div class="brand-name">WEBCRAWL</div>
+          <div class="brand-tagline">EXPLORE • LOOT • SURVIVE</div>
+        </div>
+      </div>
+
+      <form id="urlForm" class="top-url-form">
+        <span class="url-globe">◎</span>
+        <input
+          id="urlInput"
+          type="url"
+          required
+          spellcheck="false"
+          placeholder="https://blog.idorobots.org"
+          value="https://blog.idorobots.org"
+        />
+        <button type="submit">GO</button>
+      </form>
+
+      <div class="top-quote">THE WEB IS DEEPER<br/>THAN YOU THINK...</div>
+</header>
+
+    <main id="gameViewport">
+      <svg id="map" aria-label="WebCrawl dungeon"></svg>
+    </main>
+
+    <aside id="rightHud">
+      <section class="hud-panel minimap-panel">
+        <div class="hud-panel-title">
+          <span>MINIMAP</span>
+          <span id="sideFloorLabel">FLOOR 1</span>
+        </div>
+        <svg id="sideMinimapSvg"></svg>
+      </section>
+
+      <section class="hud-panel stats-panel">
+        <div class="hud-panel-title">LEVEL STATS</div>
+        <div class="stat-row"><span>Rooms discovered</span><strong id="statRooms">0 / 100</strong></div>
+        <div class="stat-row"><span>Current floor</span><strong id="statFloor">1</strong></div>
+        <div class="stat-row"><span>Loot collected</span><strong id="statLoot">0</strong></div>
+        <div class="stat-row"><span>Monsters killed</span><strong id="statKills">0</strong></div>
+        <div class="stat-row"><span>Shots fired</span><strong id="statShots">0</strong></div>
+        <div class="stat-row"><span>Time survived</span><strong id="statTime">00:00</strong></div>
+        <div class="stats-flavour">EXPLORE FURTHER.<br/>FIND MORE.<br/>THE WEB IS DEEPER THAN YOU THINK...</div>
+      </section>
+    </aside>
+
+    <footer id="bottomHud">
+      <section class="player-status-card">
+        <img id="playerHudPortrait" src="assets/player_frames/east/walk/east_walk_01.png" alt="Player" />
+        <div class="player-status-main">
+          <div class="status-label">OPERATIVE</div>
+          <div class="hp-line">HP <strong id="hpCount">10</strong> / 10</div>
+          <div class="big-health-track"><span id="hudHealthFill"></span></div>
+        </div>
+      </section>
+
+      <section class="weapon-status-card">
+        <span class="weapon-name">PULSE RIFLE</span>
+        <span class="ammo">∞</span>
+        <span class="controls">ARROWS MOVE · SPACE FIRE</span>
+      </section>
+    </footer>
+
+    <div id="linkMenu" hidden></div>
+
+    <div id="minimapModal" hidden>
+      <div id="minimapPanel" role="dialog" aria-modal="true" aria-label="Tactical map">
+        <div id="minimapHeader">
+          <strong>TACTICAL MAP</strong>
+          <button id="minimapClose" type="button">Close</button>
+        </div>
+        <svg id="minimapSvg"></svg>
+      </div>
+    </div>
+
+    <div id="deathModal" hidden>
+      <div id="deathPanel" role="dialog" aria-modal="true" aria-label="Run over">
+        <h2>Signal Lost — Operative Slain</h2>
+        <div id="deathScore"></div>
+        <div id="newHighScore"></div>
+        <div class="death-stats">
+          <div>Robots destroyed: <strong id="deathKills">0</strong></div>
+          <div>Fast drones: <strong id="deathFastKills">0</strong></div>
+          <div>Heavy drones: <strong id="deathSlowKills">0</strong></div>
+          <div>Shots fired: <strong id="deathShots">0</strong></div>
+        </div>
+        <h3>High scores — loot recovered</h3>
+        <table id="highScoreTable">
+          <thead><tr><th>#</th><th>Loot</th><th>Kills</th><th>Date</th></tr></thead>
+          <tbody id="highScoreRows"></tbody>
+        </table>
+        <button id="restartButton" type="button">Restart expedition</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const svg = d3.select("#map");
+    const statusEl = document.querySelector("#status");
+    const urlInput = document.querySelector("#urlInput");
+    const form = document.querySelector("#urlForm");
+    const linkMenu = document.querySelector("#linkMenu");
+
+    const welcomeScreen = document.querySelector("#welcomeScreen");
+    const welcomeForm = document.querySelector("#welcomeForm");
+    const welcomeUrlInput = document.querySelector("#welcomeUrlInput");
+    const gameUi = document.querySelector("#gameUi");
+
+    const sideMinimapSvg = d3.select("#sideMinimapSvg");
+    const sideFloorLabelEl = document.querySelector("#sideFloorLabel");
+    const statRoomsEl = document.querySelector("#statRooms");
+    const statFloorEl = document.querySelector("#statFloor");
+    const statLootEl = document.querySelector("#statLoot");
+    const statKillsEl = document.querySelector("#statKills");
+    const statShotsEl = document.querySelector("#statShots");
+    const statTimeEl = document.querySelector("#statTime");
+    const playerHudPortraitEl = document.querySelector("#playerHudPortrait");
+
+    // Prevent very large pages from freezing the browser.
+    // Increase this if you want a more literal 1-node-per-element rendering.
+    const MAX_NODES = 450;
+    const MAX_ROOMS_AFTER_COALESCE = 100;
+    const MAX_CHILDREN_PER_ROOM = 3;
+
+    // Fixed-grid dungeon layout. A non-root room has one side reserved for
+    // its parent corridor, leaving the other three sides for child rooms.
+    const ROOM_WIDTH = 600;
+    const ROOM_HEIGHT = 400;
+    const ROOM_X_SPACING = 626;
+    const ROOM_Y_SPACING = 426;
+    const ROOM_COLLISION_MARGIN = 4;
+
+    const DIRECTIONS = {
+      N: { name: "N", dx: 0, dy: -1, opposite: "S" },
+      E: { name: "E", dx: 1, dy: 0, opposite: "W" },
+      S: { name: "S", dx: 0, dy: 1, opposite: "N" },
+      W: { name: "W", dx: -1, dy: 0, opposite: "E" }
+    };
+
+    // The Node server that hosts this page also fetches remote HTML for us,
+    // avoiding browser CORS restrictions.
+    const proxyUrl = (url) =>
+      "/api/fetch?url=" + encodeURIComponent(url);
+
+    let currentRequest = 0;
+    let currentPageUrl = null;
+    const navigationHistory = [];
+    const navigationReturnRooms = [];
+
+    const PLAYER_RADIUS = 7;
+    const PLAYER_STEP = 14;
+    const PLAYER_MAX_HP = 10;
+    const PLAYER_FIRE_COOLDOWN_MS = 220;
+
+    const BULLET_SPEED = 520;
+    const BULLET_RADIUS = 5;
+    const BULLET_MAX_DISTANCE = 900;
+
+    const MONSTER_RADIUS = 16;
+    const MONSTER_ATTACK_RANGE = 38;
+
+    const CORRIDOR_HALF_WIDTH = 36;
+    const STAIR_RADIUS = 25;
+    const LOOT_RADIUS = 26;
+
+    let currentLayout = null;
+    let currentStairs = [];
+    let currentLoot = [];
+    let currentMonsters = [];
+    let monsterLayer = null;
+    let currentDecorations = [];
+    let decorationLayer = null;
+    const destroyedObstaclesByPage = new Map();
+    let explosionLayer = null;
+    let lastPlayerMoveAt = 0;
+    let visitedRooms = new Set();
+    const discoveredRoomsByPage = new Map();
+    const monsterStatesByPage = new Map();
+
+    let currentRoomId = null;
+    let player = { x: 0, y: 0 };
+    let playerFacing = { x: 0, y: -1 };
+    let playerLayer = null;
+    let playerHp = PLAYER_MAX_HP;
+    let playerAlive = true;
+    let lastPlayerShotAt = -Infinity;
+
+    let bullets = [];
+    let bulletLayer = null;
+
+    let monsterAnimationFrame = null;
+    let lastMonsterTick = null;
+
+    let lootScore = 0;
+    const collectedLoot = new Set();
+    let runStartedAt = null;
+
+    const runStats = {
+      kills: 0,
+      fastKills: 0,
+      slowKills: 0,
+      shotsFired: 0
+    };
+
+    const HIGH_SCORE_KEY = "alien-web-crawler-high-scores-v1";
+
+    const ASSETS = {
+      player: "assets/player_frames/east/walk/east_walk_01.png",
+      playerRight: "assets/player_frames/east/walk/east_walk_01.png",
+      playerLeft: "assets/player_frames/west/walk/west_walk_01.png",
+      playerUp: "assets/player_frames/north/walk/north_walk_01.png",
+      playerDown: "assets/player_frames/south/walk/south_walk_01.png",
+      monsterFast: "assets/monster_fast.png",
+      monsterSlow: "assets/monster_slow.png",
+      monsterScout: "assets/monster_scout.png",
+      lootCrystal: "assets/loot_crystal.png",
+      lootMedkit: "assets/loot_medkit.png",
+      lootCredit: "assets/loot_credit.png",
+      lootCore: "assets/loot_core.png",
+      decorPlant: "assets/decor_plant.png",
+      decorBarrel: "assets/decor_barrel.png",
+      decorCrate: "assets/decor_crate.png",
+      decorTerminal: "assets/decor_terminal.png",
+      decorDebris: "assets/decor_debris.png"
+    };
+
+    const PLAYER_FRAMES = {
+      up: {
+        walk: ["assets/player_frames/north/walk/north_walk_01.png", "assets/player_frames/north/walk/north_walk_02.png", "assets/player_frames/north/walk/north_walk_03.png", "assets/player_frames/north/walk/north_walk_04.png", "assets/player_frames/north/walk/north_walk_05.png", "assets/player_frames/north/walk/north_walk_06.png"],
+        shoot: ["assets/player_frames/north/shoot/north_shoot_01.png", "assets/player_frames/north/shoot/north_shoot_02.png", "assets/player_frames/north/shoot/north_shoot_03.png", "assets/player_frames/north/shoot/north_shoot_04.png"]
+      },
+      down: {
+        walk: ["assets/player_frames/south/walk/south_walk_01.png", "assets/player_frames/south/walk/south_walk_02.png", "assets/player_frames/south/walk/south_walk_03.png", "assets/player_frames/south/walk/south_walk_04.png", "assets/player_frames/south/walk/south_walk_05.png", "assets/player_frames/south/walk/south_walk_06.png"],
+        shoot: ["assets/player_frames/south/shoot/south_shoot_01.png", "assets/player_frames/south/shoot/south_shoot_02.png", "assets/player_frames/south/shoot/south_shoot_03.png", "assets/player_frames/south/shoot/south_shoot_04.png"]
+      },
+      left: {
+        walk: ["assets/player_frames/west/walk/west_walk_01.png", "assets/player_frames/west/walk/west_walk_02.png", "assets/player_frames/west/walk/west_walk_03.png", "assets/player_frames/west/walk/west_walk_04.png", "assets/player_frames/west/walk/west_walk_05.png", "assets/player_frames/west/walk/west_walk_06.png"],
+        shoot: ["assets/player_frames/west/shoot/west_shoot_01.png", "assets/player_frames/west/shoot/west_shoot_02.png", "assets/player_frames/west/shoot/west_shoot_03.png", "assets/player_frames/west/shoot/west_shoot_04.png"]
+      },
+      right: {
+        walk: ["assets/player_frames/east/walk/east_walk_01.png", "assets/player_frames/east/walk/east_walk_02.png", "assets/player_frames/east/walk/east_walk_03.png", "assets/player_frames/east/walk/east_walk_04.png", "assets/player_frames/east/walk/east_walk_05.png", "assets/player_frames/east/walk/east_walk_06.png"],
+        shoot: ["assets/player_frames/east/shoot/east_shoot_01.png", "assets/player_frames/east/shoot/east_shoot_02.png", "assets/player_frames/east/shoot/east_shoot_03.png", "assets/player_frames/east/shoot/east_shoot_04.png"]
+      }
+    };
+
+    let playerWalkFrameIndex = 0;
+    let playerSpriteAnimationToken = 0;
+
+    // These duplicate counters were removed from the bottom HUD in v19.
+    // Keep guarded references because some legacy update paths still touch them.
+    const lootCountEl = document.querySelector("#lootCount");
+    const hpCountEl = document.querySelector("#hpCount");
+    const killsCountEl = document.querySelector("#killsCount");
+    const hudHealthFillEl = document.querySelector("#hudHealthFill");
+
+    const deathModal = document.querySelector("#deathModal");
+    const deathScoreEl = document.querySelector("#deathScore");
+    const newHighScoreEl = document.querySelector("#newHighScore");
+    const deathKillsEl = document.querySelector("#deathKills");
+    const deathFastKillsEl = document.querySelector("#deathFastKills");
+    const deathSlowKillsEl = document.querySelector("#deathSlowKills");
+    const deathShotsEl = document.querySelector("#deathShots");
+    const highScoreRowsEl = document.querySelector("#highScoreRows");
+    const restartButton = document.querySelector("#restartButton");
+    const minimapModal = document.querySelector("#minimapModal");
+    const minimapClose = document.querySelector("#minimapClose");
+    const minimapSvg = d3.select("#minimapSvg");
+
+    const defs = svg.append("defs");
+
+    const roomPattern = defs
+      .append("pattern")
+      .attr("id", "roomFloorPattern")
+      .attr("width", 34)
+      .attr("height", 34)
+      .attr("patternUnits", "userSpaceOnUse");
+
+    roomPattern
+      .append("rect")
+      .attr("width", 34)
+      .attr("height", 34)
+      .attr("fill", "#121c27");
+
+    roomPattern
+      .append("path")
+      .attr("d", "M 34 0 L 0 0 0 34")
+      .attr("fill", "none")
+      .attr("stroke", "#253747")
+      .attr("stroke-width", 1.5);
+
+    roomPattern
+      .append("circle")
+      .attr("cx", 29)
+      .attr("cy", 29)
+      .attr("r", 1.4)
+      .attr("fill", "#3f617b");
+
+    const rootLayer = svg.append("g");
+
+    const zoomBehavior = d3.zoom()
+      .scaleExtent([0.08, 5])
+      .on("zoom", (event) => {
+        rootLayer.attr("transform", event.transform);
+      });
+
+    const CAMERA_SCALE = 0.92;
+    const CAMERA_TRANSITION_MS = 260;
+
+    svg.call(zoomBehavior);
+
+    function setStatus(message, isError = false) {
+      if (isError) {
+        console.error(`[WebCrawl] ${message}`);
+      } else {
+        console.log(`[WebCrawl] ${message}`);
+      }
+    }
+
+    function normalizeUrl(raw) {
+      let value = raw.trim();
+      if (!/^https?:\/\//i.test(value)) value = "https://" + value;
+      return new URL(value).href;
+    }
+
+    async function fetchHtml(url) {
+      const response = await fetch(proxyUrl(url), {
+        headers: { "Accept": "text/html,application/xhtml+xml" }
+      });
+
+      if (!response.ok) {
+        let message = `Fetch failed (${response.status})`;
+        try {
+          const body = await response.json();
+          if (body.error) message = body.error;
+        } catch (_) {}
+        throw new Error(message);
+      }
+
+      return await response.text();
+    }
+
+
+    function stableHash(value) {
+      // FNV-1a style 32-bit hash for deterministic game generation.
+      let hash = 2166136261;
+
+      for (let i = 0; i < value.length; i++) {
+        hash ^= value.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+
+      return hash >>> 0;
+    }
+
+    function nodeLootSeed(el, text) {
+      return stableHash([
+        el.tagName.toLowerCase(),
+        el.id || "",
+        typeof el.className === "string" ? el.className : "",
+        el.getAttribute("href") || "",
+        el.getAttribute("src") || "",
+        text.slice(0, 240)
+      ].join("|"));
+    }
+
+    function collectLinks(el, pageUrl) {
+      if (!el || el.tagName?.toLowerCase() !== "a") {
+        return [];
+      }
+
+      const rawHref = el.getAttribute("href");
+      if (!rawHref) return [];
+
+      try {
+        const resolved = new URL(rawHref, pageUrl);
+
+        if (
+          resolved.protocol === "http:" ||
+          resolved.protocol === "https:"
+        ) {
+          return [resolved.href];
+        }
+      } catch (_) {}
+
+      return [];
+    }
+
+    function domToGraph(html, pageUrl) {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const body = doc.body;
+
+      if (!body) {
+        throw new Error("The fetched page did not contain a body element.");
+      }
+
+      const nodes = [];
+      const links = [];
+      let nextId = 0;
+      let truncated = false;
+
+      function makeNode(el, parentNode, depth) {
+        const tag = el.tagName.toLowerCase();
+        const text = (el.textContent || "").replace(/\s+/g, " ").trim();
+        const hrefs = collectLinks(el, pageUrl);
+
+        const node = {
+          id: nextId++,
+          parentId: parentNode ? parentNode.id : null,
+          tag,
+          depth,
+          hrefs,
+          coalescedCount: 0,
+          label: makeLabel(el, text),
+          title: makeTitle(el, text, hrefs[0] || null),
+          width: ROOM_WIDTH,
+          height: ROOM_HEIGHT,
+          lootSeed: nodeLootSeed(el, text),
+          isRoot: parentNode === null,
+          isHidden: /(?:^|;)\s*display\s*:\s*none\s*(?:!important)?\s*(?:;|$)/i.test(
+            el.getAttribute("style") || ""
+          )
+        };
+
+        return node;
+      }
+
+      // Breadth-first traversal: populate rooms evenly outward from <body>.
+      // Each node contributes at most MAX_CHILDREN_PER_ROOM direct children,
+      // matching the dungeon's maximum-exit constraint.
+      const rootNode = makeNode(body, null, 0);
+      nodes.push(rootNode);
+
+      const queue = [{ el: body, node: rootNode, depth: 0 }];
+
+      while (queue.length && nodes.length < MAX_NODES) {
+        const current = queue.shift();
+        const childElements = Array.from(current.el.children)
+          .slice(0, MAX_CHILDREN_PER_ROOM);
+
+        for (const childEl of childElements) {
+          if (nodes.length >= MAX_NODES) {
+            truncated = true;
+            break;
+          }
+
+          const childNode = makeNode(
+            childEl,
+            current.node,
+            current.depth + 1
+          );
+
+          nodes.push(childNode);
+          links.push({
+            source: current.node.id,
+            target: childNode.id
+          });
+
+          queue.push({
+            el: childEl,
+            node: childNode,
+            depth: current.depth + 1
+          });
+        }
+      }
+
+      if (queue.length) truncated = true;
+
+      const originalCount = nodes.length;
+      const coalescedNodes = coalesceLeaves(
+        nodes,
+        MAX_ROOMS_AFTER_COALESCE
+      );
+
+      const survivingIds = new Set(
+        coalescedNodes.map(node => node.id)
+      );
+
+      const survivingLinks = coalescedNodes
+        .filter(node =>
+          node.parentId !== null &&
+          survivingIds.has(node.parentId)
+        )
+        .map(node => ({
+          source: node.parentId,
+          target: node.id
+        }));
+
+      return {
+        nodes: coalescedNodes,
+        links: survivingLinks,
+        originalCount,
+        coalescedCount: originalCount - coalescedNodes.length,
+        truncated
+      };
+    }
+
+    function coalesceLeaves(inputNodes, limit) {
+      if (inputNodes.length <= limit) return inputNodes;
+
+      const nodes = inputNodes.map(d => ({
+        ...d,
+        hrefs: [...d.hrefs]
+      }));
+
+      const byId = new Map(nodes.map(d => [d.id, d]));
+      const alive = new Set(nodes.map(d => d.id));
+
+      function childCounts() {
+        const counts = new Map();
+        for (const id of alive) counts.set(id, 0);
+
+        for (const id of alive) {
+          const node = byId.get(id);
+          if (node.parentId !== null && alive.has(node.parentId)) {
+            counts.set(node.parentId, (counts.get(node.parentId) || 0) + 1);
+          }
+        }
+        return counts;
+      }
+
+      while (alive.size > limit) {
+        const counts = childCounts();
+
+        let leaves = [...alive]
+          .map(id => byId.get(id))
+          .filter(node =>
+            node.parentId !== null &&
+            alive.has(node.parentId) &&
+            (counts.get(node.id) || 0) === 0
+          );
+
+        if (!leaves.length) break;
+
+        // Only cull leaves at the deepest currently-surviving depth.
+        // This prevents a shallow leaf from being removed while any deeper
+        // leaf still exists elsewhere in the graph.
+        const deepestLeafDepth = Math.max(...leaves.map(node => node.depth));
+        leaves = leaves.filter(node => node.depth === deepestLeafDepth);
+
+        // Preserve explicit hyperlink rooms for as long as possible *within
+        // that deepest layer*. If all deepest leaves are links, fold them too
+        // and promote their URLs to the surviving parent.
+        const nonLinkLeaves = leaves.filter(node => node.hrefs.length === 0);
+        if (nonLinkLeaves.length) leaves = nonLinkLeaves;
+
+        leaves.sort((a, b) => b.id - a.id);
+
+        const toRemove = Math.min(leaves.length, alive.size - limit);
+
+        for (const leaf of leaves.slice(0, toRemove)) {
+          const parent = byId.get(leaf.parentId);
+          if (!parent || !alive.has(parent.id)) continue;
+
+          parent.coalescedCount += 1 + leaf.coalescedCount;
+          parent.hrefs = [...new Set([...parent.hrefs, ...leaf.hrefs])];
+
+          if (leaf.hrefs.length || leaf.coalescedCount) {
+            const extra = [];
+            if (leaf.hrefs.length) extra.push(`${leaf.hrefs.length} inherited link${leaf.hrefs.length === 1 ? "" : "s"}`);
+            if (leaf.coalescedCount) extra.push(`${leaf.coalescedCount} nested room${leaf.coalescedCount === 1 ? "" : "s"}`);
+            parent.title += `\nFolded <${leaf.tag}> (${extra.join(", ") || "leaf room"})`;
+          }
+
+          alive.delete(leaf.id);
+        }
+      }
+
+      return nodes
+        .filter(d => alive.has(d.id))
+        .map(d => {
+          if (d.coalescedCount > 0) {
+            d.label = `${d.label} +${d.coalescedCount}`;
+            if (d.label.length > 24) d.label = d.label.slice(0, 23) + "…";
+            d.title += `\nCoalesced rooms: ${d.coalescedCount}`;
+          }
+          if (d.hrefs.length) {
+            d.title += `\nLinks: ${d.hrefs.join("\n")}`;
+          }
+          return d;
+        });
+    }
+
+    function makeLabel(el, text) {
+      const tag = el.tagName.toLowerCase();
+      let extra = "";
+
+      if (el.id) extra = "#" + el.id;
+      else if (el.classList.length) extra = "." + el.classList[0];
+      else if (tag === "a" && text) extra = " " + text.slice(0, 16);
+
+      const label = `<${tag}>${extra}`;
+      return label.length > 24 ? label.slice(0, 23) + "…" : label;
+    }
+
+    function makeTitle(el, text, href) {
+      const parts = [`<${el.tagName.toLowerCase()}>`];
+      if (el.id) parts.push(`#${el.id}`);
+      if (el.className && typeof el.className === "string") {
+        parts.push("." + el.className.trim().replace(/\s+/g, "."));
+      }
+      if (text) parts.push(text.slice(0, 120));
+      if (href) parts.push("→ " + href);
+      return parts.join("\n");
+    }
+
+
+
+    function hideLinkMenu() {
+      linkMenu.hidden = true;
+      linkMenu.replaceChildren();
+    }
+
+    function navigateTo(url, returnRoomId = currentRoomId) {
+      hideLinkMenu();
+      urlInput.value = url;
+      loadPage(url, {
+        pushCurrent: true,
+        returnRoomId
+      });
+    }
+
+    function goBack() {
+      const previous = navigationHistory[navigationHistory.length - 1];
+      if (!previous) return;
+
+      const returnRoomId =
+        navigationReturnRooms[navigationReturnRooms.length - 1] ?? null;
+
+      hideLinkMenu();
+      urlInput.value = previous;
+      loadPage(previous, {
+        popBack: true,
+        spawnRoomId: returnRoomId
+      });
+    }
+
+    function handleRoomClick(event, node) {
+      if (node.isRoot && navigationHistory.length) {
+        event.stopPropagation();
+        goBack();
+        return;
+      }
+
+      activateNodeLinks(event, node);
+    }
+
+    function activateNodeLinks(event, node) {
+      if (!node.hrefs || node.hrefs.length === 0) return;
+
+      event.stopPropagation();
+
+      if (node.hrefs.length === 1) {
+        navigateTo(node.hrefs[0]);
+        return;
+      }
+
+      linkMenu.replaceChildren();
+
+      for (const href of node.hrefs) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = href;
+        button.title = href;
+        button.addEventListener("click", () => navigateTo(href));
+        linkMenu.appendChild(button);
+      }
+
+      const margin = 8;
+      linkMenu.hidden = false;
+
+      const menuRect = linkMenu.getBoundingClientRect();
+      const left = Math.min(
+        event.clientX + 8,
+        window.innerWidth - menuRect.width - margin
+      );
+      const top = Math.min(
+        event.clientY + 8,
+        window.innerHeight - menuRect.height - margin
+      );
+
+      linkMenu.style.left = Math.max(margin, left) + "px";
+      linkMenu.style.top = Math.max(margin, top) + "px";
+    }
+
+    document.addEventListener("click", (event) => {
+      if (!linkMenu.contains(event.target)) hideLinkMenu();
+    });
+
+    function directionOrder(parentSide, node) {
+      if (!parentSide) {
+        // The root has no incoming corridor. Rotate its unused side between
+        // maps/nodes so layouts don't always lean in exactly the same way.
+        const rootOrders = [
+          ["N", "E", "S", "W"],
+          ["E", "S", "W", "N"],
+          ["S", "W", "N", "E"],
+          ["W", "N", "E", "S"]
+        ];
+        return rootOrders[node.id % rootOrders.length];
+      }
+
+      // Continue away from the parent first, then use the two side exits.
+      const away = DIRECTIONS[parentSide].opposite;
+      const sidePair =
+        parentSide === "N" || parentSide === "S"
+          ? ["E", "W"]
+          : ["N", "S"];
+
+      if (node.id % 2) sidePair.reverse();
+
+      return [away, ...sidePair];
+    }
+
+    function roomBounds(node, x = node.x, y = node.y, margin = 0) {
+      return {
+        left: x - node.width / 2 - margin,
+        right: x + node.width / 2 + margin,
+        top: y - node.height / 2 - margin,
+        bottom: y + node.height / 2 + margin
+      };
+    }
+
+    function boundsOverlap(a, b) {
+      return !(
+        a.right <= b.left ||
+        a.left >= b.right ||
+        a.bottom <= b.top ||
+        a.top >= b.bottom
+      );
+    }
+
+    function layoutOrthogonal(graph, width, height) {
+      const nodesById = new Map(graph.nodes.map(node => [node.id, node]));
+      const childrenByParent = new Map();
+
+      for (const node of graph.nodes) {
+        if (node.parentId === null) continue;
+        if (!childrenByParent.has(node.parentId)) {
+          childrenByParent.set(node.parentId, []);
+        }
+        childrenByParent.get(node.parentId).push(node);
+      }
+
+      const root =
+        graph.nodes.find(node => node.isRoot) ||
+        graph.nodes.find(node => node.parentId === null);
+
+      if (!root) {
+        return {
+          nodes: [],
+          links: [],
+          hiddenCount: graph.nodes.length
+        };
+      }
+
+      const placed = [];
+      const placedIds = new Set();
+      const visualParentById = new Map();
+      const promotedHrefMap = new Map();
+
+      function addPromotedHrefs(targetNode, hrefs) {
+        if (!hrefs?.length) return;
+
+        if (!promotedHrefMap.has(targetNode.id)) {
+          promotedHrefMap.set(targetNode.id, new Set(targetNode.hrefs || []));
+        }
+
+        const set = promotedHrefMap.get(targetNode.id);
+        for (const href of hrefs) set.add(href);
+      }
+
+      function collides(node, x, y) {
+        const candidate = roomBounds(node, x, y, ROOM_COLLISION_MARGIN);
+        return placed.some(other =>
+          boundsOverlap(
+            candidate,
+            roomBounds(
+              other,
+              other.x,
+              other.y,
+              ROOM_COLLISION_MARGIN
+            )
+          )
+        );
+      }
+
+      root.x = width / 2;
+      root.y = height / 2;
+      root.parentSide = null;
+      root.directionFromParent = null;
+      placed.push(root);
+      placedIds.add(root.id);
+
+      function tryPlaceNode(node, visualParent, availableDirections) {
+        for (let i = 0; i < availableDirections.length; i++) {
+          const dir = DIRECTIONS[availableDirections[i]];
+          const x = visualParent.x + dir.dx * ROOM_X_SPACING;
+          const y = visualParent.y + dir.dy * ROOM_Y_SPACING;
+
+          if (!collides(node, x, y)) {
+            availableDirections.splice(i, 1);
+
+            node.x = x;
+            node.y = y;
+            node.directionFromParent = dir.name;
+            node.parentSide = dir.opposite;
+
+            placed.push(node);
+            placedIds.add(node.id);
+            visualParentById.set(node.id, visualParent.id);
+
+            return true;
+          }
+        }
+
+        return false;
+      }
+
+      function promoteSubtree(hiddenNode, visualParent, availableDirections) {
+        // Preserve links found on the hidden room by moving them to the nearest
+        // rendered ancestor.
+        addPromotedHrefs(visualParent, hiddenNode.hrefs || []);
+
+        const descendants = childrenByParent.get(hiddenNode.id) || [];
+
+        for (const descendant of descendants) {
+          if (!availableDirections.length) {
+            // No visible doorway slots left; still preserve all subtree links.
+            collectSubtreeHrefs(descendant, visualParent);
+            continue;
+          }
+
+          const placedHere = tryPlaceNode(
+            descendant,
+            visualParent,
+            availableDirections
+          );
+
+          if (placedHere) {
+            placeChildren(descendant);
+          } else {
+            // Keep flattening until we find something renderable.
+            promoteSubtree(
+              descendant,
+              visualParent,
+              availableDirections
+            );
+          }
+        }
+      }
+
+      function collectSubtreeHrefs(node, visualParent) {
+        addPromotedHrefs(visualParent, node.hrefs || []);
+
+        for (const child of childrenByParent.get(node.id) || []) {
+          collectSubtreeHrefs(child, visualParent);
+        }
+      }
+
+      function placeChildren(parent) {
+        const children = childrenByParent.get(parent.id) || [];
+        const availableDirections =
+          directionOrder(parent.parentSide, parent).slice();
+
+        // Siblings get first shot at exits.
+        for (const child of children) {
+          if (!availableDirections.length) {
+            collectSubtreeHrefs(child, parent);
+            continue;
+          }
+
+          const placedHere = tryPlaceNode(
+            child,
+            parent,
+            availableDirections
+          );
+
+          if (placedHere) {
+            placeChildren(child);
+          } else {
+            // Child overlaps: hide that room, but flatten its subtree upward
+            // and preserve any links on the hidden nodes.
+            promoteSubtree(
+              child,
+              parent,
+              availableDirections
+            );
+          }
+        }
+      }
+
+      placeChildren(root);
+
+      // Apply promoted hrefs after layout so rendering/gameplay sees them.
+      for (const node of placed) {
+        const promoted = promotedHrefMap.get(node.id);
+        if (promoted) {
+          node.hrefs = [...promoted].slice(0, 10);
+        }
+      }
+
+      const visibleLinks = [];
+
+      for (const node of placed) {
+        if (node.id === root.id) continue;
+
+        const visualParentId =
+          visualParentById.get(node.id) ??
+          node.parentId;
+
+        const visualParent = nodesById.get(visualParentId);
+
+        if (visualParent && placedIds.has(visualParent.id)) {
+          visibleLinks.push({
+            source: visualParent,
+            target: node,
+            direction: node.directionFromParent
+          });
+        }
+      }
+
+      return {
+        nodes: placed,
+        links: visibleLinks,
+        hiddenCount: graph.nodes.length - placed.length
+      };
+    }
+
+    function corridorEndpoints(link) {
+      const source = link.source;
+      const target = link.target;
+
+      switch (link.direction) {
+        case "N":
+          return {
+            x1: source.x,
+            y1: source.y - source.height / 2,
+            x2: target.x,
+            y2: target.y + target.height / 2
+          };
+        case "E":
+          return {
+            x1: source.x + source.width / 2,
+            y1: source.y,
+            x2: target.x - target.width / 2,
+            y2: target.y
+          };
+        case "S":
+          return {
+            x1: source.x,
+            y1: source.y + source.height / 2,
+            x2: target.x,
+            y2: target.y - target.height / 2
+          };
+        case "W":
+          return {
+            x1: source.x - source.width / 2,
+            y1: source.y,
+            x2: target.x + target.width / 2,
+            y2: target.y
+          };
+        default:
+          return {
+            x1: source.x,
+            y1: source.y,
+            x2: target.x,
+            y2: target.y
+          };
+      }
+    }
+
+
+
+    function roomContainingPoint(x, y) {
+      if (!currentLayout) return null;
+
+      for (const room of currentLayout.nodes) {
+        if (pointInRoom(x, y, room, 0)) return room;
+      }
+
+      return null;
+    }
+
+    function updateFogOfWar() {
+      rootLayer
+        .selectAll(".room")
+        .classed("visited", d => visitedRooms.has(d.id))
+        .classed("unvisited", d => !visitedRooms.has(d.id));
+
+      rootLayer
+        .selectAll(".corridor")
+        .classed("visited", d =>
+          visitedRooms.has(d.source.id) ||
+          visitedRooms.has(d.target.id)
+        );
+
+      rootLayer
+        .selectAll(".corridor-light")
+        .style("opacity", d =>
+          visitedRooms.has(d.source.id) ||
+          visitedRooms.has(d.target.id)
+            ? 0.45
+            : 0
+        );
+
+      if (!gameUi.hidden) {
+        updateHudPanels();
+      }
+    }
+
+    function markVisited(room) {
+      if (!room || visitedRooms.has(room.id)) return;
+
+      visitedRooms.add(room.id);
+
+      if (currentPageUrl) {
+        discoveredRoomsByPage.set(currentPageUrl, new Set(visitedRooms));
+      }
+
+      updateFogOfWar();
+      activateMonstersInRoom(room.id);
+      renderDecorations();
+      renderInteractiveObjects();
+    }
+
+    function corridorContainingPoint(x, y) {
+      if (!currentLayout) return null;
+
+      for (const link of currentLayout.links) {
+        if (pointInCorridor(x, y, link, 0)) {
+          return link;
+        }
+      }
+
+      return null;
+    }
+
+    function revealRoomsFromCorridor(x, y) {
+      const link = corridorContainingPoint(x, y);
+      if (!link) return;
+
+      // If either end of this corridor is already known, reveal the other end.
+      // This lets the player see/activate the destination before crossing a
+      // doorway that might be obstructed by generated room props.
+      const sourceVisited = visitedRooms.has(link.source.id);
+      const targetVisited = visitedRooms.has(link.target.id);
+
+      if (sourceVisited && !targetVisited) {
+        markVisited(link.target);
+      } else if (targetVisited && !sourceVisited) {
+        markVisited(link.source);
+      }
+    }
+
+    function updateCurrentRoom() {
+      const room = roomContainingPoint(player.x, player.y);
+
+      if (room) {
+        currentRoomId = room.id;
+        markVisited(room);
+      }
+    }
+
+    function cameraTransformForPlayer() {
+      const { width, height } = svg.node().getBoundingClientRect();
+
+      return d3.zoomIdentity
+        .translate(width / 2, height / 2)
+        .scale(CAMERA_SCALE)
+        .translate(-player.x, -player.y);
+    }
+
+    function centerCameraOnPlayer(animated = true) {
+      const transform = cameraTransformForPlayer();
+
+      if (animated) {
+        svg
+          .transition()
+          .duration(CAMERA_TRANSITION_MS)
+          .ease(d3.easeCubicOut)
+          .call(zoomBehavior.transform, transform);
+      } else {
+        svg.call(zoomBehavior.transform, transform);
+      }
+    }
+
+    function minimapVisibleLayout() {
+      if (!currentLayout) return { nodes: [], links: [] };
+
+      const visibleIds = new Set(
+        currentLayout.nodes
+          .filter(room => visitedRooms.has(room.id))
+          .map(room => room.id)
+      );
+
+      return {
+        nodes: currentLayout.nodes.filter(room => visibleIds.has(room.id)),
+        links: currentLayout.links.filter(link =>
+          visibleIds.has(link.source.id) ||
+          visibleIds.has(link.target.id)
+        )
+      };
+    }
+
+    function drawMinimapStair(layer, stair) {
+      const g = layer
+        .append("g")
+        .attr("class", `minimap-stair ${stair.type}`)
+        .attr("transform", `translate(${stair.x},${stair.y}) scale(0.55)`);
+
+      g.append("rect")
+        .attr("x", -18)
+        .attr("y", -14)
+        .attr("width", 36)
+        .attr("height", 28)
+        .attr("rx", 2);
+
+      for (let y = -8; y <= 8; y += 8) {
+        g.append("line")
+          .attr("x1", -11)
+          .attr("x2", 11)
+          .attr("y1", y)
+          .attr("y2", y);
+      }
+    }
+
+    function renderMapInto(targetSvg) {
+      const { nodes, links } = minimapVisibleLayout();
+      const visibleIds = new Set(nodes.map(node => node.id));
+
+      targetSvg.selectAll("*").remove();
+
+      if (!nodes.length) return;
+
+      const bounds = nodes.reduce((acc, node) => ({
+        minX: Math.min(acc.minX, node.x - node.width / 2),
+        maxX: Math.max(acc.maxX, node.x + node.width / 2),
+        minY: Math.min(acc.minY, node.y - node.height / 2),
+        maxY: Math.max(acc.maxY, node.y + node.height / 2)
+      }), {
+        minX: Infinity,
+        maxX: -Infinity,
+        minY: Infinity,
+        maxY: -Infinity
+      });
+
+      for (const link of links) {
+        const p = corridorEndpoints(link);
+        bounds.minX = Math.min(bounds.minX, p.x1, p.x2);
+        bounds.maxX = Math.max(bounds.maxX, p.x1, p.x2);
+        bounds.minY = Math.min(bounds.minY, p.y1, p.y2);
+        bounds.maxY = Math.max(bounds.maxY, p.y1, p.y2);
+      }
+
+      const viewWidth = Math.max(1, bounds.maxX - bounds.minX);
+      const viewHeight = Math.max(1, bounds.maxY - bounds.minY);
+      const pad = 110;
+
+      targetSvg.attr(
+        "viewBox",
+        `${bounds.minX - pad} ${bounds.minY - pad} ${viewWidth + pad * 2} ${viewHeight + pad * 2}`
+      );
+
+      targetSvg
+        .append("g")
+        .selectAll("line")
+        .data(links)
+        .join("line")
+        .attr("class", "minimap-corridor")
+        .each(function(link) {
+          const p = corridorEndpoints(link);
+          d3.select(this)
+            .attr("x1", p.x1)
+            .attr("y1", p.y1)
+            .attr("x2", p.x2)
+            .attr("y2", p.y2);
+        });
+
+      const rooms = targetSvg
+        .append("g")
+        .selectAll("g")
+        .data(nodes)
+        .join("g")
+        .attr("class", d =>
+          "minimap-room" +
+          (d.isRoot ? " root" : "") +
+          (d.id === currentRoomId ? " current" : "")
+        )
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      rooms
+        .append("rect")
+        .attr("x", d => -d.width / 2)
+        .attr("y", d => -d.height / 2)
+        .attr("width", d => d.width)
+        .attr("height", d => d.height);
+
+      const visibleStairs = currentStairs.filter(stair =>
+        visibleIds.has(stair.roomId)
+      );
+
+      const stairLayer = targetSvg.append("g");
+      for (const stair of visibleStairs) {
+        drawMinimapStair(stairLayer, stair);
+      }
+
+      const minimapPlayer = targetSvg
+        .append("g")
+        .attr("class", "minimap-player")
+        .attr("transform", `translate(${player.x},${player.y})`);
+
+      minimapPlayer
+        .append("image")
+        .attr("href", playerAssetForDirection())
+        .attr("x", -18.75)
+        .attr("y", -25)
+        .attr("width", 37.5)
+        .attr("height", 50)
+        .attr("preserveAspectRatio", "xMidYMid meet");
+    }
+
+    function renderMinimap() {
+      renderMapInto(minimapSvg);
+    }
+
+    function renderSideMinimap() {
+      renderMapInto(sideMinimapSvg);
+    }
+
+    function formatRunTime() {
+      if (!runStartedAt) return "00:00";
+      const seconds = Math.max(0, Math.floor((performance.now() - runStartedAt) / 1000));
+      const mins = String(Math.floor(seconds / 60)).padStart(2, "0");
+      const secs = String(seconds % 60).padStart(2, "0");
+      return `${mins}:${secs}`;
+    }
+
+    function updateHudPanels() {
+      const floor = navigationHistory.length + 1;
+      const rooms = visitedRooms.size;
+
+      sideFloorLabelEl.textContent = `FLOOR ${floor}`;
+      statRoomsEl.textContent = `${rooms} / ${MAX_ROOMS_AFTER_COALESCE}`;
+      statFloorEl.textContent = String(floor);
+      statLootEl.textContent = String(lootScore);
+      statKillsEl.textContent = String(runStats.kills);
+      statShotsEl.textContent = String(runStats.shotsFired);
+      statTimeEl.textContent = formatRunTime();
+      renderSideMinimap();
+    }
+
+    function openMinimap() {
+      renderMinimap();
+      minimapModal.hidden = false;
+      minimapModal.classList.add("open");
+    }
+
+    function closeMinimap() {
+      minimapModal.classList.remove("open");
+      minimapModal.hidden = true;
+    }
+
+    minimapClose.addEventListener("click", closeMinimap);
+    minimapModal.addEventListener("click", event => {
+      if (event.target === minimapModal) closeMinimap();
+    });
+
+    function updateHealthUi() {
+      const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_MAX_HP));
+      hpCountEl.textContent = String(playerHp);
+      hudHealthFillEl.style.width = `${ratio * 100}%`;
+
+      if (playerLayer) {
+        playerLayer
+          .select(".player-hp-fill")
+          .attr("width", 62 * ratio);
+      }
+
+      if (playerHudPortraitEl) {
+        playerHudPortraitEl.src = playerAssetForDirection();
+      }
+    }
+
+    function loadHighScores() {
+      try {
+        const value = JSON.parse(localStorage.getItem(HIGH_SCORE_KEY) || "[]");
+        return Array.isArray(value) ? value : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function storeHighScores(scores) {
+      try {
+        localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify(scores));
+      } catch (_) {}
+    }
+
+    function recordHighScore() {
+      const entry = {
+        score: lootScore,
+        kills: runStats.kills,
+        fastKills: runStats.fastKills,
+        slowKills: runStats.slowKills,
+        shotsFired: runStats.shotsFired,
+        at: new Date().toISOString()
+      };
+
+      const scores = [...loadHighScores(), entry]
+        .sort((a, b) =>
+          (b.score - a.score) ||
+          (b.kills - a.kills) ||
+          String(a.at).localeCompare(String(b.at))
+        )
+        .slice(0, 10);
+
+      storeHighScores(scores);
+
+      const rank = scores.findIndex(item => item === entry);
+      return { scores, rank: rank >= 0 ? rank + 1 : null };
+    }
+
+    function showDeathModal() {
+      const { scores, rank } = recordHighScore();
+
+      deathScoreEl.textContent = `Loot recovered: ${lootScore}`;
+      deathKillsEl.textContent = String(runStats.kills);
+      deathFastKillsEl.textContent = String(runStats.fastKills);
+      deathSlowKillsEl.textContent = String(runStats.slowKills);
+      deathShotsEl.textContent = String(runStats.shotsFired);
+
+      newHighScoreEl.textContent =
+        rank === 1
+          ? "New expedition high score."
+          : rank
+            ? `Run placed #${rank}.`
+            : "";
+
+      highScoreRowsEl.replaceChildren();
+
+      scores.slice(0, 5).forEach((score, index) => {
+        const tr = document.createElement("tr");
+        const date = score.at
+          ? new Date(score.at).toLocaleDateString()
+          : "—";
+
+        for (const value of [
+          index + 1,
+          score.score ?? 0,
+          score.kills ?? 0,
+          date
+        ]) {
+          const td = document.createElement("td");
+          td.textContent = String(value);
+          tr.appendChild(td);
+        }
+
+        highScoreRowsEl.appendChild(tr);
+      });
+
+      deathModal.hidden = false;
+      deathModal.classList.add("open");
+    }
+
+    restartButton.addEventListener("click", () => location.reload());
+
+    function lootKindForSeed(seed) {
+      const kinds = ["credit", "crystal", "core", "medkit"];
+      return kinds[(seed >>> 3) % kinds.length];
+    }
+
+    function lootAsset(kind) {
+      return {
+        credit: ASSETS.lootCredit,
+        crystal: ASSETS.lootCrystal,
+        core: ASSETS.lootCore,
+        medkit: ASSETS.lootMedkit
+      }[kind] || ASSETS.lootCrystal;
+    }
+
+    function monsterAsset(monster) {
+      if (monster.fast) {
+        return (monster.seed & 1)
+          ? ASSETS.monsterFast
+          : ASSETS.monsterScout;
+      }
+
+      return ((monster.seed >>> 4) & 1)
+        ? ASSETS.monsterSlow
+        : ASSETS.monsterScout;
+    }
+
+    function decorationSpecsForRoom(room) {
+      const seed = stableHash(`${room.lootSeed}|decor`);
+      const count = 1 + (seed % 3);
+      const slots = [
+        [-210, -120],
+        [210, -120],
+        [-210, 120],
+        [210, 120],
+        [0, -145],
+        [0, 145]
+      ];
+
+      const types = [
+        { kind: "debris", asset: ASSETS.decorDebris, obstacle: false, radius: 0, size: 42 },
+        { kind: "plant", asset: ASSETS.decorPlant, obstacle: true, radius: 25, size: 56 },
+        { kind: "barrel", asset: ASSETS.decorBarrel, obstacle: true, radius: 24, size: 52 },
+        { kind: "crate", asset: ASSETS.decorCrate, obstacle: true, radius: 26, size: 54 },
+        { kind: "terminal", asset: ASSETS.decorTerminal, obstacle: true, radius: 23, size: 50 }
+      ];
+
+      const decorations = [];
+
+      for (let i = 0; i < count; i++) {
+        const slotIndex = ((seed >>> (i * 5)) + i * 2) % slots.length;
+        const typeIndex = ((seed >>> (i * 7 + 4)) + i) % types.length;
+        const slot = slots[slotIndex];
+        const type = types[typeIndex];
+
+        const hp = type.obstacle
+          ? 2 + ((seed >>> (i * 3 + 9)) % 4)
+          : 0;
+
+        decorations.push({
+          id: `${room.id}::decor-${i}`,
+          roomId: room.id,
+          x: room.x + slot[0],
+          y: room.y + slot[1],
+          maxHp: hp,
+          hp,
+          destroyed: false,
+          ...type
+        });
+      }
+
+      return decorations;
+    }
+
+    function obstacleStateMapForPage(pageUrl) {
+      if (!destroyedObstaclesByPage.has(pageUrl)) {
+        destroyedObstaclesByPage.set(pageUrl, new Map());
+      }
+      return destroyedObstaclesByPage.get(pageUrl);
+    }
+
+    function saveObstacleState(item) {
+      if (!currentPageUrl || !item.obstacle) return;
+
+      obstacleStateMapForPage(currentPageUrl).set(item.id, {
+        hp: item.hp,
+        destroyed: item.destroyed
+      });
+    }
+
+    function buildDecorations(layout, pageUrl) {
+      const saved = obstacleStateMapForPage(pageUrl);
+
+      return layout.nodes
+        .flatMap(room => decorationSpecsForRoom(room))
+        .map(item => {
+          const state = saved.get(item.id);
+          return {
+            ...item,
+            hp: state?.hp ?? item.hp,
+            destroyed: state?.destroyed ?? false
+          };
+        });
+    }
+
+    function renderDecorations() {
+      if (!decorationLayer) {
+        decorationLayer = rootLayer.append("g").attr("class", "decorations");
+      }
+
+      const visible = currentDecorations.filter(item =>
+        visitedRooms.has(item.roomId) && !item.destroyed
+      );
+
+      const decor = decorationLayer
+        .selectAll("g.decoration")
+        .data(visible, d => d.id)
+        .join(
+          enter => {
+            const g = enter
+              .append("g")
+              .attr("class", d => `decoration${d.obstacle ? " obstacle" : ""}`);
+
+            g.append("image")
+              .attr("class", "decor-sprite");
+
+            g.filter(d => d.obstacle)
+              .append("rect")
+              .attr("class", "obstacle-hp-bg")
+              .attr("x", -22)
+              .attr("y", -35)
+              .attr("width", 44)
+              .attr("height", 5);
+
+            g.filter(d => d.obstacle)
+              .append("rect")
+              .attr("class", "obstacle-hp-fill")
+              .attr("x", -22)
+              .attr("y", -35)
+              .attr("height", 5);
+
+            return g;
+          },
+          update => update,
+          exit => exit.remove()
+        )
+        .attr("class", d =>
+          `decoration${d.obstacle ? " obstacle" : ""}${d.obstacle && d.hp < d.maxHp ? " damaged" : ""}`
+        )
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      decor
+        .select(".decor-sprite")
+        .attr("href", d => d.asset)
+        .attr("x", d => -d.size / 2)
+        .attr("y", d => -d.size / 2)
+        .attr("width", d => d.size)
+        .attr("height", d => d.size);
+
+      decor
+        .select(".obstacle-hp-fill")
+        .attr("width", d =>
+          d.obstacle ? 44 * Math.max(0, d.hp) / Math.max(1, d.maxHp) : 0
+        );
+    }
+
+    function spawnExplosion(x, y) {
+      if (!explosionLayer) {
+        explosionLayer = rootLayer.append("g").attr("class", "explosions");
+      }
+
+      // Keep world-position translation on an outer group. The inner group
+      // owns the CSS scale/rotation animation, so animation transforms cannot
+      // override the obstacle's x/y position.
+      const anchor = explosionLayer
+        .append("g")
+        .attr("transform", `translate(${x},${y})`);
+
+      const g = anchor
+        .append("g")
+        .attr("class", "explosion");
+
+      g.append("circle")
+        .attr("class", "blast")
+        .attr("r", 20);
+
+      g.append("circle")
+        .attr("class", "ring")
+        .attr("r", 31);
+
+      g.append("path")
+        .attr("d", "M -30 0 L 30 0 M 0 -30 L 0 30 M -21 -21 L 21 21 M -21 21 L 21 -21")
+        .attr("stroke", "#ffe79c")
+        .attr("stroke-width", 5);
+
+      setTimeout(() => anchor.remove(), 520);
+    }
+
+    function damageObstacle(item, amount) {
+      if (!item?.obstacle || item.destroyed) return;
+
+      item.hp = Math.max(0, item.hp - amount);
+
+      if (item.hp <= 0) {
+        item.destroyed = true;
+        saveObstacleState(item);
+        spawnExplosion(item.x, item.y);
+        renderDecorations();
+      } else {
+        saveObstacleState(item);
+        renderDecorations();
+      }
+    }
+
+    function monsterSpecsForRoom(room) {
+      if (room.isRoot || room.tag === "img") return [];
+
+      const roomSeed = stableHash(`${room.lootSeed}|monsters`);
+
+      // "Somewhat high" encounter rate: 72% of eligible rooms.
+      if ((roomSeed % 100) >= 72) return [];
+
+      const count = 1 + (((roomSeed >>> 8) % 100) < 16 ? 1 : 0);
+      const offsets = [
+        [-68, -46],
+        [68, 42]
+      ];
+
+      return Array.from({ length: count }, (_, index) => {
+        const seed = stableHash(`${roomSeed}|${index}`);
+        const fast = ((seed >>> 7) % 100) < 32;
+
+        return {
+          id: `${room.id}::monster-${index}`,
+          seed,
+          spawnRoomId: room.id,
+          roomId: room.id,
+          x: room.x + offsets[index % offsets.length][0],
+          y: room.y + offsets[index % offsets.length][1],
+          maxHp: 1 + ((seed >>> 11) % 5),
+          speed: fast ? 105 : 58,
+          fast,
+          attackDamage: 1 + ((seed >>> 19) % 2),
+          attackCooldownMs: 1150 + ((seed >>> 15) % 750),
+          dropsLoot: ((seed >>> 23) % 100) < 18,
+          lastAttackAt: -Infinity,
+          active: false,
+          dead: false,
+          hp: 1
+        };
+      });
+    }
+
+    function monsterStateMapForPage(pageUrl) {
+      if (!monsterStatesByPage.has(pageUrl)) {
+        monsterStatesByPage.set(pageUrl, new Map());
+      }
+      return monsterStatesByPage.get(pageUrl);
+    }
+
+    function saveMonsterState(monster) {
+      if (!currentPageUrl) return;
+
+      const states = monsterStateMapForPage(currentPageUrl);
+      states.set(monster.id, {
+        hp: monster.hp,
+        dead: monster.dead,
+        active: monster.active,
+        droppedLoot: monster.droppedLoot || false,
+        dropId: monster.dropId || null,
+        dropX: monster.dropX ?? null,
+        dropY: monster.dropY ?? null,
+        dropKind: monster.dropKind ?? null
+      });
+    }
+
+    function buildMonsters(layout, pageUrl) {
+      const savedStates = monsterStateMapForPage(pageUrl);
+      const monsters = [];
+
+      for (const room of layout.nodes) {
+        for (const spec of monsterSpecsForRoom(room)) {
+          const saved = savedStates.get(spec.id);
+          const monster = {
+            ...spec,
+            hp: saved?.hp ?? spec.maxHp,
+            dead: saved?.dead ?? false,
+            active: saved?.active ?? visitedRooms.has(room.id),
+            droppedLoot: saved?.droppedLoot ?? false,
+            dropId: saved?.dropId ?? null,
+            dropX: saved?.dropX ?? null,
+            dropY: saved?.dropY ?? null,
+            dropKind: saved?.dropKind ?? null
+          };
+
+          monsters.push(monster);
+
+          if (monster.dead && monster.droppedLoot && monster.dropId) {
+            if (!collectedLoot.has(monster.dropId)) {
+              currentLoot.push({
+                id: monster.dropId,
+                roomId: monster.roomId,
+                x: monster.dropX,
+                y: monster.dropY,
+                kind: monster.dropKind || lootKindForSeed(monster.seed)
+              });
+            }
+          }
+        }
+      }
+
+      return monsters;
+    }
+
+    function activateMonstersInRoom(roomId) {
+      let changed = false;
+
+      for (const monster of currentMonsters) {
+        if (!monster.dead && monster.spawnRoomId === roomId && !monster.active) {
+          monster.active = true;
+          saveMonsterState(monster);
+          changed = true;
+        }
+      }
+
+      if (changed) renderMonsters();
+    }
+
+    function revealedRoomPath(fromRoomId, toRoomId) {
+      if (!currentLayout || fromRoomId == null || toRoomId == null) return null;
+      if (fromRoomId === toRoomId) return [fromRoomId];
+
+      const adjacency = new Map();
+
+      for (const room of currentLayout.nodes) {
+        if (visitedRooms.has(room.id)) adjacency.set(room.id, []);
+      }
+
+      for (const link of currentLayout.links) {
+        const a = link.source.id;
+        const b = link.target.id;
+
+        if (visitedRooms.has(a) && visitedRooms.has(b)) {
+          adjacency.get(a)?.push(b);
+          adjacency.get(b)?.push(a);
+        }
+      }
+
+      if (!adjacency.has(fromRoomId) || !adjacency.has(toRoomId)) return null;
+
+      const queue = [fromRoomId];
+      const previous = new Map([[fromRoomId, null]]);
+
+      while (queue.length) {
+        const current = queue.shift();
+
+        for (const next of adjacency.get(current) || []) {
+          if (previous.has(next)) continue;
+          previous.set(next, current);
+
+          if (next === toRoomId) {
+            const path = [toRoomId];
+            let cursor = current;
+
+            while (cursor !== null) {
+              path.push(cursor);
+              cursor = previous.get(cursor);
+            }
+
+            return path.reverse();
+          }
+
+          queue.push(next);
+        }
+      }
+
+      return null;
+    }
+
+    function renderMonsters() {
+      if (!monsterLayer) {
+        monsterLayer = rootLayer.append("g").attr("class", "monsters");
+      }
+
+      const visibleMonsters = currentMonsters.filter(monster =>
+        monster.active && (!monster.dead || monster.deathAnimating)
+      );
+
+      const monsters = monsterLayer
+        .selectAll("g.monster")
+        .data(visibleMonsters, d => d.id)
+        .join(
+          enter => {
+            const g = enter
+              .append("g")
+              .attr("class", d => `monster${d.fast ? " fast" : ""}`);
+
+            g.append("image")
+              .attr("class", "monster-sprite")
+              .attr("href", d => monsterAsset(d))
+              .attr("x", -31)
+              .attr("y", -31)
+              .attr("width", 62)
+              .attr("height", 62);
+
+            g.append("rect")
+              .attr("class", "hp-bg")
+              .attr("x", -20)
+              .attr("y", -31)
+              .attr("width", 40)
+              .attr("height", 5);
+
+            g.append("rect")
+              .attr("class", "hp-fill")
+              .attr("x", -20)
+              .attr("y", -31)
+              .attr("height", 5);
+
+            g.append("title")
+              .text(d => `${d.fast ? "Fast" : "Slow"} monster · ${d.maxHp} HP`);
+
+            return g;
+          },
+          update => update,
+          exit => exit.remove()
+        )
+        .attr("class", d =>
+          "monster" +
+          (d.fast ? " fast" : "") +
+          (d.deathAnimating ? " dying" : "") +
+          (d.moveDir === "left" ? " moving-left" : "") +
+          (d.moveDir === "right" ? " moving-right" : "")
+        )
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      monsters
+        .select(".hp-fill")
+        .attr("width", d => 40 * Math.max(0, d.hp) / d.maxHp);
+    }
+
+    function updateMonsterPositions() {
+      if (!monsterLayer) return;
+
+      monsterLayer
+        .selectAll("g.monster")
+        .attr("class", d =>
+          "monster" +
+          (d.fast ? " fast" : "") +
+          (d.deathAnimating ? " dying" : "") +
+          (d.moveDir === "left" ? " moving-left" : "") +
+          (d.moveDir === "right" ? " moving-right" : "")
+        )
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      monsterLayer
+        .selectAll(".hp-fill")
+        .attr("width", d => 40 * Math.max(0, d.hp) / d.maxHp);
+    }
+
+    function applyPlayerDamage(amount) {
+      if (!playerAlive) return;
+
+      playerHp = Math.max(0, playerHp - amount);
+      hpCountEl.textContent = String(playerHp);
+
+      if (playerLayer) {
+        playerLayer.classed("hit", true);
+        setTimeout(() => playerLayer?.classed("hit", false), 120);
+      }
+
+      updateHealthUi();
+
+      if (playerHp <= 0) {
+        playerAlive = false;
+        const hud = document.querySelector("#hud");
+        hud?.classList.add("game-over");
+        setStatus("Operative signal lost.", true);
+        showDeathModal();
+      }
+    }
+
+    function monsterDrop(monster) {
+      if (!monster.dropsLoot || monster.droppedLoot) return;
+
+      const dropId = `${currentPageUrl}::${monster.id}::monster-drop`;
+      monster.droppedLoot = true;
+      monster.dropId = dropId;
+      monster.dropX = monster.x;
+      monster.dropY = monster.y;
+      monster.dropKind = lootKindForSeed(monster.seed);
+
+      if (!collectedLoot.has(dropId)) {
+        currentLoot.push({
+          id: dropId,
+          roomId: monster.roomId,
+          x: monster.x,
+          y: monster.y,
+          kind: monster.dropKind
+        });
+      }
+    }
+
+    function damageMonster(monster, amount) {
+      if (monster.dead) return;
+
+      monster.hp = Math.max(0, monster.hp - amount);
+
+      if (monster.hp <= 0) {
+        monster.dead = true;
+        monster.deathAnimating = true;
+        runStats.kills += 1;
+
+        if (monster.fast) {
+          runStats.fastKills += 1;
+        } else {
+          runStats.slowKills += 1;
+        }
+
+        if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
+        updateHudPanels();
+
+        monsterDrop(monster);
+        saveMonsterState(monster);
+        renderMonsters();
+        renderInteractiveObjects();
+
+        setTimeout(() => {
+          monster.deathAnimating = false;
+          renderMonsters();
+        }, 460);
+      } else {
+        saveMonsterState(monster);
+        updateMonsterPositions();
+      }
+    }
+
+    function renderBullets() {
+      if (!bulletLayer) {
+        bulletLayer = rootLayer.append("g").attr("class", "bullets");
+      }
+
+      bulletLayer
+        .selectAll("circle.bullet")
+        .data(bullets, d => d.id)
+        .join(
+          enter => enter
+            .append("circle")
+            .attr("class", "bullet")
+            .attr("r", BULLET_RADIUS),
+          update => update,
+          exit => exit.remove()
+        )
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y);
+    }
+
+    function shootBullet() {
+      if (!playerAlive || !minimapModal.hidden) return;
+
+      const now = performance.now();
+      if (now - lastPlayerShotAt < PLAYER_FIRE_COOLDOWN_MS) return;
+      lastPlayerShotAt = now;
+      runStats.shotsFired += 1;
+      updateHudPanels();
+      updatePlayerFacingAsset();
+      setPlayerAnimation("shoot");
+      settlePlayerAnimationSoon();
+
+      const muzzleDistance = PLAYER_RADIUS + 12;
+      const x = player.x + playerFacing.x * muzzleDistance;
+      const y = player.y + playerFacing.y * muzzleDistance;
+
+      bullets.push({
+        id: `${now}-${Math.random()}`,
+        x,
+        y,
+        vx: playerFacing.x * BULLET_SPEED,
+        vy: playerFacing.y * BULLET_SPEED,
+        traveled: 0
+      });
+
+      renderBullets();
+    }
+
+    function updateBullets(dt) {
+      if (!bullets.length) return;
+
+      const survivors = [];
+
+      for (const bullet of bullets) {
+        const stepX = bullet.vx * dt;
+        const stepY = bullet.vy * dt;
+        const stepDistance = Math.hypot(stepX, stepY);
+
+        // Sub-step fast bullets so they do not tunnel through monsters/walls.
+        const segments = Math.max(1, Math.ceil(stepDistance / 8));
+        const dx = stepX / segments;
+        const dy = stepY / segments;
+        let alive = true;
+
+        for (let i = 0; i < segments && alive; i++) {
+          bullet.x += dx;
+          bullet.y += dy;
+          bullet.traveled += Math.hypot(dx, dy);
+
+          if (
+            bullet.traveled >= BULLET_MAX_DISTANCE ||
+            !isGeometryWalkable(bullet.x, bullet.y, BULLET_RADIUS)
+          ) {
+            alive = false;
+            break;
+          }
+
+          for (const monster of currentMonsters) {
+            if (!monster.active || monster.dead) continue;
+
+            const hitDistance = Math.hypot(
+              bullet.x - monster.x,
+              bullet.y - monster.y
+            );
+
+            if (hitDistance <= MONSTER_RADIUS + BULLET_RADIUS) {
+              damageMonster(monster, 1);
+              alive = false;
+              break;
+            }
+          }
+
+          if (!alive) break;
+
+          for (const item of currentDecorations) {
+            if (!item.obstacle || item.destroyed) continue;
+
+            const hitDistance = Math.hypot(
+              bullet.x - item.x,
+              bullet.y - item.y
+            );
+
+            if (hitDistance <= item.radius + BULLET_RADIUS) {
+              damageObstacle(item, 1);
+              alive = false;
+              break;
+            }
+          }
+        }
+
+        if (alive) survivors.push(bullet);
+      }
+
+      bullets = survivors;
+      renderBullets();
+    }
+
+
+    function monsterTick(timestamp) {
+      monsterAnimationFrame = requestAnimationFrame(monsterTick);
+
+      if (!playerAlive || !minimapModal.hidden || !currentLayout) {
+        lastMonsterTick = timestamp;
+        return;
+      }
+
+      if (lastMonsterTick == null) {
+        lastMonsterTick = timestamp;
+        return;
+      }
+
+      const dt = Math.min(0.05, Math.max(0, (timestamp - lastMonsterTick) / 1000));
+      lastMonsterTick = timestamp;
+
+      updateBullets(dt);
+
+      const roomsById = new Map(currentLayout.nodes.map(room => [room.id, room]));
+
+      for (const monster of currentMonsters) {
+        if (!monster.active || monster.dead) continue;
+
+        const containingRoom = roomContainingPoint(monster.x, monster.y);
+        if (containingRoom && visitedRooms.has(containingRoom.id)) {
+          monster.roomId = containingRoom.id;
+        }
+
+        const path = revealedRoomPath(monster.roomId, currentRoomId);
+        if (!path) continue;
+
+        let targetX = player.x;
+        let targetY = player.y;
+
+        if (monster.roomId !== currentRoomId && path.length >= 2) {
+          const nextRoom = roomsById.get(path[1]);
+          if (!nextRoom) continue;
+          targetX = nextRoom.x;
+          targetY = nextRoom.y;
+        }
+
+        const dx = targetX - monster.x;
+        const dy = targetY - monster.y;
+        const distance = Math.hypot(dx, dy);
+
+        if (distance > 0.001) {
+          const step = Math.min(distance, monster.speed * dt);
+          const nextX = monster.x + dx / distance * step;
+          const nextY = monster.y + dy / distance * step;
+
+          monster.moveDir =
+            Math.abs(dx) > Math.abs(dy)
+              ? (dx < 0 ? "left" : "right")
+              : null;
+
+          if (isWalkable(nextX, nextY, MONSTER_RADIUS)) {
+            monster.x = nextX;
+            monster.y = nextY;
+          }
+        } else {
+          monster.moveDir = null;
+        }
+
+        const playerDistance = Math.hypot(
+          player.x - monster.x,
+          player.y - monster.y
+        );
+
+        if (
+          playerDistance <= MONSTER_ATTACK_RANGE &&
+          timestamp - monster.lastAttackAt >= monster.attackCooldownMs
+        ) {
+          monster.lastAttackAt = timestamp;
+          applyPlayerDamage(monster.attackDamage);
+        }
+      }
+
+      updateMonsterPositions();
+    }
+
+    function startMonsterLoop() {
+      if (monsterAnimationFrame !== null) {
+        cancelAnimationFrame(monsterAnimationFrame);
+      }
+
+      lastMonsterTick = null;
+      monsterAnimationFrame = requestAnimationFrame(monsterTick);
+    }
+
+    function pointInRoom(x, y, room, padding = PLAYER_RADIUS) {
+      return (
+        x >= room.x - room.width / 2 + padding &&
+        x <= room.x + room.width / 2 - padding &&
+        y >= room.y - room.height / 2 + padding &&
+        y <= room.y + room.height / 2 - padding
+      );
+    }
+
+    function pointInCorridor(x, y, link, radius = PLAYER_RADIUS) {
+      const p = corridorEndpoints(link);
+
+      // Keep enough clearance for the player's whole body, but deliberately
+      // overlap the room bounds a little so there is no collision seam at
+      // the threshold between a room and its doorway.
+      const half = Math.max(
+        radius + 4,
+        CORRIDOR_HALF_WIDTH - radius * 0.15
+      );
+      const overlap = radius + 6;
+
+      if (Math.abs(p.y1 - p.y2) < 0.001) {
+        return (
+          x >= Math.min(p.x1, p.x2) - overlap &&
+          x <= Math.max(p.x1, p.x2) + overlap &&
+          Math.abs(y - p.y1) <= half
+        );
+      }
+
+      return (
+        y >= Math.min(p.y1, p.y2) - overlap &&
+        y <= Math.max(p.y1, p.y2) + overlap &&
+        Math.abs(x - p.x1) <= half
+      );
+    }
+
+    function pointBlockedByDecoration(x, y, radius = PLAYER_RADIUS) {
+      for (const item of currentDecorations) {
+        if (!item.obstacle || item.destroyed) continue;
+
+        const distance = Math.hypot(x - item.x, y - item.y);
+        if (distance < radius + item.radius) return true;
+      }
+
+      return false;
+    }
+
+    function isGeometryWalkable(x, y, radius = PLAYER_RADIUS) {
+      if (!currentLayout) return false;
+
+      for (const room of currentLayout.nodes) {
+        if (pointInRoom(x, y, room, radius)) return true;
+      }
+
+      for (const link of currentLayout.links) {
+        if (pointInCorridor(x, y, link, radius)) return true;
+      }
+
+      return false;
+    }
+
+    function isWalkable(x, y, radius = PLAYER_RADIUS) {
+      return (
+        isGeometryWalkable(x, y, radius) &&
+        !pointBlockedByDecoration(x, y, radius)
+      );
+    }
+
+    function lootCountForRoom(room) {
+      const seed = room.lootSeed >>> 0;
+
+      if (room.tag === "img") {
+        // Image rooms are richer: deterministically 2–4 items.
+        return 2 + (seed % 3);
+      }
+
+      // Roughly 10% of other rooms contain one item.
+      return (seed % 10) === 0 ? 1 : 0;
+    }
+
+    function lootPositions(room, count) {
+      if (!count) return [];
+
+      // Keep loot away from the centered staircase cluster and door edges.
+      const offsets = [
+        [-160, -100],
+        [160, -100],
+        [-160, 100],
+        [160, 100],
+        [0, 135]
+      ];
+
+      return Array.from({ length: count }, (_, i) => ({
+        x: room.x + offsets[i % offsets.length][0],
+        y: room.y + offsets[i % offsets.length][1]
+      }));
+    }
+
+    function staircasePositions(room, count, yOffset = 0) {
+      const capped = Math.min(10, Math.max(0, count));
+      if (!capped) return [];
+
+      // Center up to 10 staircases in a compact 5x2 formation.
+      // This keeps the room edges and all four doorways unobstructed.
+      const columns = Math.min(5, capped);
+      const rows = Math.ceil(capped / columns);
+      const xSpacing = 64;
+      const ySpacing = 62;
+      const positions = [];
+
+      for (let i = 0; i < capped; i++) {
+        const row = Math.floor(i / columns);
+        const col = i % columns;
+        const itemsInRow = Math.min(columns, capped - row * columns);
+        const rowWidth = (itemsInRow - 1) * xSpacing;
+
+        positions.push({
+          x: room.x - rowWidth / 2 + col * xSpacing,
+          y:
+            room.y -
+            ((rows - 1) * ySpacing) / 2 +
+            row * ySpacing +
+            yOffset
+        });
+      }
+
+      return positions;
+    }
+
+    function drawStaircase(layer, stair) {
+      const g = layer
+        .append("g")
+        .attr("class", `stairs ${stair.type}${stair.enabled === false ? " inactive" : ""}`)
+        .attr("transform", `translate(${stair.x},${stair.y})`);
+
+      g.append("circle")
+        .attr("class", "portal-ring")
+        .attr("r", 27);
+
+      g.append("circle")
+        .attr("class", "portal-core")
+        .attr("r", 20);
+
+      for (let y = -11; y <= 11; y += 7) {
+        g.append("line")
+          .attr("class", "step-line")
+          .attr("x1", -12)
+          .attr("x2", 12)
+          .attr("y1", y)
+          .attr("y2", y);
+      }
+
+      g.append("text")
+        .attr("class", "arrow")
+        .attr("y", stair.type === "up" ? -39 : 39)
+        .text(stair.type === "up" ? "▲" : "▼");
+
+      g.append("title").text(
+        stair.type === "up"
+          ? (stair.enabled === false ? "Entrance portal" : `Up to ${stair.url}`)
+          : `Down to ${stair.url}`
+      );
+    }
+
+    function buildInteractiveObjects(layout, pageUrl) {
+      const stairs = [];
+      const loot = [];
+      const previousUrl = navigationHistory[navigationHistory.length - 1] || null;
+
+      for (const room of layout.nodes) {
+        const allHrefs = room.hrefs || [];
+
+        // A room may contain many inherited/coalesced links. Show at most
+        // 10 staircases total. The root always reserves one slot for its
+        // up/entrance staircase, leaving up to 9 downward links there.
+        const maxDownStairs = room.isRoot ? 9 : 10;
+        const hrefs = allHrefs.slice(0, maxDownStairs);
+
+        const totalStairs = hrefs.length + (room.isRoot ? 1 : 0);
+        const centeredPositions = staircasePositions(room, totalStairs);
+        let positionIndex = 0;
+
+        if (room.isRoot) {
+          const pos = centeredPositions[positionIndex++];
+          stairs.push({
+            type: "up",
+            roomId: room.id,
+            url: previousUrl,
+            enabled: Boolean(previousUrl),
+            x: pos.x,
+            y: pos.y
+          });
+        }
+
+        hrefs.forEach((url) => {
+          const pos = centeredPositions[positionIndex++];
+          stairs.push({
+            type: "down",
+            roomId: room.id,
+            url,
+            enabled: true,
+            x: pos.x,
+            y: pos.y
+          });
+        });
+
+        const lootCount = lootCountForRoom(room);
+        const lootSpots = lootPositions(room, lootCount);
+
+        for (let index = 0; index < lootCount; index++) {
+          const lootId = `${pageUrl}::${room.id}::loot-${index}`;
+
+          if (!collectedLoot.has(lootId)) {
+            const itemSeed = stableHash(`${room.lootSeed}|loot|${index}`);
+
+            loot.push({
+              id: lootId,
+              roomId: room.id,
+              x: lootSpots[index].x,
+              y: lootSpots[index].y,
+              kind: lootKindForSeed(itemSeed)
+            });
+          }
+        }
+      }
+
+      return { stairs, loot };
+    }
+
+    function renderInteractiveObjects() {
+      rootLayer.select("g.objects").remove();
+      playerLayer?.remove();
+
+      const objectLayer = rootLayer
+        .append("g")
+        .attr("class", "objects");
+
+      for (const stair of currentStairs) {
+        if (visitedRooms.has(stair.roomId)) {
+          drawStaircase(objectLayer, stair);
+        }
+      }
+
+      const lootLayer = objectLayer
+        .append("g")
+        .selectAll("g")
+        .data(currentLoot.filter(item => visitedRooms.has(item.roomId)))
+        .join("g")
+        .attr("class", "loot")
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      lootLayer
+        .append("image")
+        .attr("class", "loot-sprite")
+        .attr("href", d => lootAsset(d.kind))
+        .attr("x", -21)
+        .attr("y", -21)
+        .attr("width", 42)
+        .attr("height", 42);
+
+      lootLayer
+        .append("title")
+        .text(d => `Recovered ${d.kind || "alien artifact"}`);
+
+      playerLayer = rootLayer
+        .append("g")
+        .attr("class", "player");
+
+      playerLayer
+        .append("image")
+        .attr("class", "avatar")
+        .attr("href", playerAssetForDirection())
+        .attr("x", -37.5)
+        .attr("y", -50)
+        .attr("width", 75)
+        .attr("height", 100)
+        .attr("preserveAspectRatio", "xMidYMid meet");
+
+      playerLayer
+        .append("rect")
+        .attr("class", "player-hp-bg")
+        .attr("x", -32)
+        .attr("y", -47)
+        .attr("width", 64)
+        .attr("height", 7);
+
+      playerLayer
+        .append("rect")
+        .attr("class", "player-hp-fill")
+        .attr("x", -31)
+        .attr("y", -46)
+        .attr("height", 5);
+
+      updatePlayerVisual();
+      updateHealthUi();
+    }
+
+    function updatePlayerVisual() {
+      if (playerLayer) {
+        playerLayer.attr("transform", `translate(${player.x},${player.y})`);
+      }
+
+      if (!gameUi.hidden) {
+        updateHudPanels();
+      }
+    }
+
+    function distanceSquared(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return dx * dx + dy * dy;
+    }
+
+    function checkLoot() {
+      let changed = false;
+
+      currentLoot = currentLoot.filter(item => {
+        if (distanceSquared(player, item) <= LOOT_RADIUS * LOOT_RADIUS) {
+          collectedLoot.add(item.id);
+          lootScore += 1;
+          if (lootCountEl) lootCountEl.textContent = String(lootScore);
+          updateHudPanels();
+
+          if (item.kind === "medkit" && playerAlive) {
+            const restored = playerHp < PLAYER_MAX_HP ? 1 : 0;
+
+            if (restored > 0) {
+              playerHp += restored;
+              updateHealthUi();
+              setStatus(`Health pack restored 1 HP · ${currentPageUrl}`);
+            }
+          }
+
+          changed = true;
+          return false;
+        }
+        return true;
+      });
+
+      if (changed) {
+        renderInteractiveObjects();
+      }
+    }
+
+    function checkStairs() {
+      for (const stair of currentStairs) {
+        if (stair.enabled === false) continue;
+
+        if (distanceSquared(player, stair) <= STAIR_RADIUS * STAIR_RADIUS) {
+          if (stair.type === "up") {
+            goBack();
+          } else {
+            navigateTo(stair.url, stair.roomId);
+          }
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    function playerFramesFor(direction = playerDirectionName(), kind = "walk") {
+      return PLAYER_FRAMES[direction]?.[kind] || PLAYER_FRAMES.right.walk;
+    }
+
+    function playerAssetForDirection(direction = playerDirectionName()) {
+      return playerFramesFor(direction, "walk")[0];
+    }
+
+    function setPlayerSpriteAsset(asset) {
+      if (playerLayer) {
+        playerLayer.select(".avatar").attr("href", asset);
+      }
+
+      if (playerHudPortraitEl) {
+        playerHudPortraitEl.src = asset;
+      }
+    }
+
+    function updatePlayerFacingAsset() {
+      setPlayerSpriteAsset(playerAssetForDirection());
+    }
+
+    function advancePlayerWalkFrame() {
+      const frames = playerFramesFor(playerDirectionName(), "walk");
+      playerWalkFrameIndex = (playerWalkFrameIndex + 1) % frames.length;
+      setPlayerSpriteAsset(frames[playerWalkFrameIndex]);
+    }
+
+    function playPlayerShootFrames() {
+      const token = ++playerSpriteAnimationToken;
+      const direction = playerDirectionName();
+      const frames = playerFramesFor(direction, "shoot");
+
+      frames.forEach((asset, index) => {
+        setTimeout(() => {
+          if (token !== playerSpriteAnimationToken) return;
+          setPlayerSpriteAsset(asset);
+        }, index * 55);
+      });
+
+      setTimeout(() => {
+        if (token !== playerSpriteAnimationToken) return;
+        setPlayerSpriteAsset(playerAssetForDirection(direction));
+      }, frames.length * 55 + 10);
+    }
+
+    function playerDirectionName() {
+      if (Math.abs(playerFacing.x) > Math.abs(playerFacing.y)) {
+        return playerFacing.x < 0 ? "left" : "right";
+      }
+
+      return playerFacing.y < 0 ? "up" : "down";
+    }
+
+    function setPlayerAnimation(kind) {
+      if (!playerLayer) return;
+
+      playerLayer
+        .classed("moving-up", false)
+        .classed("moving-down", false)
+        .classed("moving-left", false)
+        .classed("moving-right", false)
+        .classed("shooting-up", false)
+        .classed("shooting-down", false)
+        .classed("shooting-left", false)
+        .classed("shooting-right", false);
+
+      const direction = playerDirectionName();
+
+      if (kind === "move") {
+        playerLayer.classed(`moving-${direction}`, true);
+        advancePlayerWalkFrame();
+      } else if (kind === "shoot") {
+        playerLayer.classed(`shooting-${direction}`, true);
+        playPlayerShootFrames();
+      }
+    }
+
+    function settlePlayerAnimationSoon() {
+      clearTimeout(window.__playerSettleTimer);
+      window.__playerSettleTimer = setTimeout(() => {
+        playerLayer
+          ?.classed("moving-up", false)
+          .classed("moving-down", false)
+          .classed("moving-left", false)
+          .classed("moving-right", false)
+          .classed("shooting-up", false)
+          .classed("shooting-down", false)
+          .classed("shooting-left", false)
+          .classed("shooting-right", false);
+      }, 180);
+    }
+
+    function movePlayer(dx, dy) {
+      if (!playerAlive) return;
+
+      const magnitude = Math.hypot(dx, dy);
+      if (magnitude > 0) {
+        playerFacing = {
+          x: dx / magnitude,
+          y: dy / magnitude
+        };
+        updatePlayerFacingAsset();
+      }
+
+      const next = {
+        x: player.x + dx,
+        y: player.y + dy
+      };
+
+      if (!isWalkable(next.x, next.y)) return;
+
+      setPlayerAnimation("move");
+      settlePlayerAnimationSoon();
+      lastPlayerMoveAt = performance.now();
+
+      player = next;
+      updatePlayerVisual();
+      revealRoomsFromCorridor(player.x, player.y);
+      updateCurrentRoom();
+      centerCameraOnPlayer(true);
+      checkLoot();
+      checkStairs();
+    }
+
+    window.addEventListener("keydown", event => {
+      const key = event.key.toLowerCase();
+      if (key === "escape" && !minimapModal.hidden) {
+        event.preventDefault();
+        closeMinimap();
+        return;
+      }
+
+      if (!minimapModal.hidden) return;
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (!event.repeat) shootBullet();
+        return;
+      }
+
+      const moves = {
+        ArrowUp: [0, -PLAYER_STEP],
+        ArrowDown: [0, PLAYER_STEP],
+        ArrowLeft: [-PLAYER_STEP, 0],
+        ArrowRight: [PLAYER_STEP, 0]
+      };
+
+      const move = moves[event.key];
+      if (!move) return;
+
+      event.preventDefault();
+      movePlayer(move[0], move[1]);
+    }, { passive: false });
+
+    function renderGraph(graph, pageUrl, { spawnRoomId = null } = {}) {
+      rootLayer.selectAll("*").remove();
+      hpCountEl.textContent = String(playerHp);
+      if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
+      updateHealthUi();
+      bullets = [];
+      bulletLayer = null;
+      decorationLayer = null;
+      explosionLayer = null;
+      hideLinkMenu();
+      closeMinimap();
+
+      const { width, height } = svg.node().getBoundingClientRect();
+      const layout = layoutOrthogonal(graph, width, height);
+      currentLayout = layout;
+
+      const savedDiscovery = discoveredRoomsByPage.get(pageUrl);
+      visitedRooms = savedDiscovery
+        ? new Set([...savedDiscovery].filter(id => layout.nodes.some(node => node.id === id)))
+        : new Set();
+
+      currentRoomId = null;
+
+      svg.call(zoomBehavior.transform, d3.zoomIdentity);
+
+      const corridorGroup = rootLayer.append("g");
+
+      corridorGroup
+        .selectAll("line.corridor")
+        .data(layout.links)
+        .join("line")
+        .attr("class", "corridor")
+        .each(function(link) {
+          const p = corridorEndpoints(link);
+          d3.select(this)
+            .attr("x1", p.x1)
+            .attr("y1", p.y1)
+            .attr("x2", p.x2)
+            .attr("y2", p.y2);
+        });
+
+      corridorGroup
+        .selectAll("line.corridor-light")
+        .data(layout.links)
+        .join("line")
+        .attr("class", "corridor-light")
+        .style("opacity", d =>
+          visitedRooms.has(d.source.id) || visitedRooms.has(d.target.id)
+            ? 0.45
+            : 0
+        )
+        .each(function(link) {
+          const p = corridorEndpoints(link);
+          d3.select(this)
+            .attr("x1", p.x1)
+            .attr("y1", p.y1)
+            .attr("x2", p.x2)
+            .attr("y2", p.y2);
+        });
+
+      const room = rootLayer
+        .append("g")
+        .selectAll("g")
+        .data(layout.nodes)
+        .join("g")
+        .attr("class", d =>
+          "room" +
+          (d.isRoot ? " root" : "") +
+          (d.isHidden ? " hidden" : "") +
+          " unvisited"
+        )
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+
+      room
+        .append("rect")
+        .attr("x", d => -d.width / 2)
+        .attr("y", d => -d.height / 2)
+        .attr("width", d => d.width)
+        .attr("height", d => d.height);
+
+      room
+        .append("rect")
+        .attr("class", "room-shell")
+        .attr("x", d => -d.width / 2 + 14)
+        .attr("y", d => -d.height / 2 + 14)
+        .attr("width", d => d.width - 28)
+        .attr("height", d => d.height - 28)
+        .attr("rx", 6)
+        .attr("ry", 6);
+
+      room.each(function(d) {
+        const g = d3.select(this);
+        const points = [
+          [-d.width / 2 + 18, -d.height / 2 + 18],
+          [ d.width / 2 - 18, -d.height / 2 + 18],
+          [-d.width / 2 + 18,  d.height / 2 - 18],
+          [ d.width / 2 - 18,  d.height / 2 - 18]
+        ];
+
+        g.selectAll("circle.room-corner")
+          .data(points)
+          .join("circle")
+          .attr("class", "room-corner")
+          .attr("cx", p => p[0])
+          .attr("cy", p => p[1])
+          .attr("r", 4);
+      });
+
+      room
+        .append("title")
+        .text(d => d.title);
+
+      const objects = buildInteractiveObjects(layout, pageUrl);
+      currentStairs = objects.stairs;
+      currentLoot = objects.loot;
+      currentDecorations = buildDecorations(layout, pageUrl);
+
+      currentMonsters = buildMonsters(layout, pageUrl);
+
+      const root =
+        layout.nodes.find(node => node.isRoot) ||
+        layout.nodes.find(node => node.parentId === null);
+
+      const spawnRoom =
+        (spawnRoomId !== null
+          ? layout.nodes.find(node => node.id === spawnRoomId)
+          : null) ||
+        root;
+
+      if (spawnRoom) {
+        player = {
+          x: spawnRoom.x,
+          y: spawnRoom.y + 60
+        };
+
+        if (!isWalkable(player.x, player.y)) {
+          player = { x: spawnRoom.x, y: spawnRoom.y };
+        }
+
+        currentRoomId = spawnRoom.id;
+        visitedRooms.add(spawnRoom.id);
+
+        if (root) {
+          visitedRooms.add(root.id);
+        }
+
+        discoveredRoomsByPage.set(pageUrl, new Set(visitedRooms));
+      }
+
+      updateFogOfWar();
+
+      decorationLayer = rootLayer.append("g").attr("class", "decorations");
+      explosionLayer = rootLayer.append("g").attr("class", "explosions");
+      renderDecorations();
+
+      monsterLayer = rootLayer.append("g").attr("class", "monsters");
+      bulletLayer = rootLayer.append("g").attr("class", "bullets");
+
+      for (const roomId of visitedRooms) {
+        activateMonstersInRoom(roomId);
+      }
+
+      renderMonsters();
+      renderInteractiveObjects();
+      updatePlayerFacingAsset();
+      revealRoomsFromCorridor(player.x, player.y);
+      centerCameraOnPlayer(false);
+      updateHudPanels();
+      startMonsterLoop();
+
+      setStatus(
+        `Map: ${layout.nodes.length} visible rooms · ${layout.links.length} corridors` +
+        ` · ${currentStairs.filter(d => d.type === "down").length} down stairs` +
+        ` · ${currentLoot.length} loot` +
+        ` · ${currentMonsters.filter(d => d.active && !d.dead).length} active monsters` +
+        (layout.hiddenCount ? ` · ${layout.hiddenCount} hidden to avoid overlap` : "") +
+        (graph.coalescedCount ? ` · coalesced ${graph.coalescedCount} of ${graph.originalCount}` : "") +
+        ` · ${pageUrl}` +
+        (graph.truncated ? ` · source capped at ${MAX_NODES} elements` : "")
+      );
+    }
+
+    async function loadPage(
+      rawUrl,
+      {
+        pushCurrent = false,
+        popBack = false,
+        returnRoomId = null,
+        spawnRoomId = null
+      } = {}
+    ) {
+      const requestId = ++currentRequest;
+
+      let url;
+      try {
+        url = normalizeUrl(rawUrl);
+      } catch (_) {
+        setStatus("That does not look like a valid URL.", true);
+        return;
+      }
+
+      urlInput.value = url;
+      setStatus("Fetching " + url + " …");
+
+      try {
+        const html = await fetchHtml(url);
+        if (requestId !== currentRequest) return;
+
+        setStatus("Parsing HTML …");
+        const graph = domToGraph(html, url);
+
+        if (pushCurrent && currentPageUrl && currentPageUrl !== url) {
+          navigationHistory.push(currentPageUrl);
+          navigationReturnRooms.push(returnRoomId ?? currentRoomId);
+        }
+
+        if (
+          popBack &&
+          navigationHistory[navigationHistory.length - 1] === url
+        ) {
+          navigationHistory.pop();
+          navigationReturnRooms.pop();
+        }
+
+        currentPageUrl = url;
+        renderGraph(graph, url, { spawnRoomId });
+      } catch (err) {
+        if (requestId !== currentRequest) return;
+        setStatus(
+          `Could not load ${url}: ${err.message}. ` +
+          "The remote site may reject automated requests or the server may have blocked the target URL.",
+          true
+        );
+      }
+    }
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      loadPage(urlInput.value, { pushCurrent: true });
+    });
+
+    welcomeForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      gameUi.hidden = false;
+      welcomeScreen.hidden = true;
+      runStartedAt = performance.now();
+
+      urlInput.value = welcomeUrlInput.value;
+      loadPage(welcomeUrlInput.value);
+      updateHudPanels();
+    });
+
+    setInterval(() => {
+      if (!gameUi.hidden && playerAlive) {
+        updateHudPanels();
+      }
+    }, 1000);
+  </script>
+</body>
+</html>

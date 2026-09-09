@@ -1,0 +1,12 @@
+{
+  "name": "html-dungeon-mapper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Map remote HTML DOM trees into a D3 dungeon graph.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

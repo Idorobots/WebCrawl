@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140">
+  <defs>
+    <linearGradient id="armor" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f1f5f7"/>
+      <stop offset=".55" stop-color="#aebbc4"/>
+      <stop offset="1" stop-color="#697681"/>
+    </linearGradient>
+    <linearGradient id="pack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#334654"/>
+      <stop offset="1" stop-color="#111820"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <ellipse cx="60" cy="126" rx="27" ry="8" fill="#000" opacity=".28"/>
+
+  <!-- legs / boots seen from behind -->
+  <path d="M42 87 L54 87 L51 116 L38 124 L32 117 L39 104 Z" fill="url(#armor)" stroke="#17212a" stroke-width="3"/>
+  <path d="M66 87 L78 87 L81 104 L88 117 L82 124 L69 116 Z" fill="url(#armor)" stroke="#17212a" stroke-width="3"/>
+  <path d="M31 115 L43 117 L41 130 L28 129 Z" fill="#1a252e" stroke="#080d12" stroke-width="3"/>
+  <path d="M77 117 L89 115 L92 129 L79 130 Z" fill="#1a252e" stroke="#080d12" stroke-width="3"/>
+
+  <!-- back torso -->
+  <path d="M36 55 Q60 43 84 55 L79 92 Q60 103 41 92 Z" fill="url(#armor)" stroke="#15202a" stroke-width="4"/>
+  <rect x="45" y="61" width="30" height="29" rx="7" fill="url(#pack)" stroke="#0a1117" stroke-width="3"/>
+  <rect x="50" y="66" width="20" height="9" rx="3" fill="#182731"/>
+  <rect x="52" y="68" width="16" height="5" rx="2" fill="#36d7ff" filter="url(#glow)"/>
+  <circle cx="51" cy="82" r="4" fill="#e69b31"/>
+  <circle cx="69" cy="82" r="4" fill="#67e6ff"/>
+
+  <!-- shoulders / arms -->
+  <path d="M37 58 Q24 60 20 74 L25 82 L40 72 Z" fill="url(#armor)" stroke="#15202a" stroke-width="3"/>
+  <path d="M83 58 Q96 60 100 74 L95 82 L80 72 Z" fill="url(#armor)" stroke="#15202a" stroke-width="3"/>
+  <path d="M25 80 L38 74 L45 88 L33 95 Z" fill="#7b8790" stroke="#17212a" stroke-width="3"/>
+  <path d="M95 80 L82 74 L75 88 L87 95 Z" fill="#7b8790" stroke="#17212a" stroke-width="3"/>
+
+  <!-- helmet BACK -->
+  <circle cx="60" cy="42" r="25" fill="url(#armor)" stroke="#111b23" stroke-width="4"/>
+  <path d="M43 28 Q60 18 77 28 L80 48 Q60 59 40 48 Z" fill="#34434e" stroke="#121a21" stroke-width="3"/>
+  <path d="M48 31 Q60 25 72 31" fill="none" stroke="#dce7ec" stroke-width="3" opacity=".7"/>
+  <rect x="49" y="44" width="22" height="6" rx="3" fill="#182731"/>
+  <rect x="53" y="45" width="14" height="4" rx="2" fill="#39d9ff" filter="url(#glow)"/>
+  <circle cx="34" cy="43" r="5" fill="#2c3945" stroke="#0a1015" stroke-width="2"/>
+  <circle cx="86" cy="43" r="5" fill="#2c3945" stroke="#0a1015" stroke-width="2"/>
+
+  <!-- weapon aimed UP over shoulder -->
+  <rect x="77" y="16" width="7" height="48" rx="3" fill="#1b242c" stroke="#070b0f" stroke-width="2"/>
+  <rect x="74" y="22" width="13" height="14" rx="3" fill="#59656f" stroke="#111820" stroke-width="2"/>
+  <rect x="78" y="5" width="5" height="14" rx="2" fill="#c98924" stroke="#402607" stroke-width="2"/>
+  <circle cx="80.5" cy="5" r="3.5" fill="#ffd271" filter="url(#glow)"/>
+</svg>

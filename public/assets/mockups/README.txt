@@ -1,0 +1,10 @@
+Generated visual references bundled with WebCrawl.
+
+webcrawl_mockup_01.png
+webcrawl_mockup_02.png
+webcrawl_mockup_03.png
+webcrawl_mockup_04.png
+webcrawl_mockup_05.png
+webcrawl_mockup_06.png
+webcrawl_mockup_07.png
+player_direction_reference.png
