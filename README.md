@@ -53,13 +53,17 @@ npm run build
 
 Run all three with `npm run check`.
 
-The browser smoke test uses Playwright to drive the project-local Electron runtime:
+The browser smoke test uses Playwright to drive the system Chromium installation:
 
 ```bash
 npm run test:e2e
 ```
 
-Electron still requires Chromium's native system libraries. The devcontainer installs them automatically. On other Linux environments, install them with administrator privileges using `npx playwright install-deps chromium`; this installs system libraries but does not download Playwright's separate browser.
+The devcontainer installs Chromium at `/usr/bin/chromium`. Set `CHROMIUM_PATH` when Chromium is installed elsewhere:
+
+```bash
+CHROMIUM_PATH=/path/to/chromium npm run test:e2e
+```
 
 ## Controls
 

@@ -1,7 +1,8 @@
 FROM ubuntu:26.04
 
 # Install common utilities
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository -y ppa:xtradeb/apps
+RUN apt-get install -y \
     software-properties-common \
     python-is-python3 \
     python3 \
