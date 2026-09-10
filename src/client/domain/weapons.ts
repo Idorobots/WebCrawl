@@ -5,6 +5,7 @@ import type {
   WeaponProjectile,
   WeaponSpec,
 } from "../types";
+import { WORLD_SCALE } from "../config";
 import { stableHash } from "./hash";
 
 interface WeaponBase {
@@ -19,6 +20,7 @@ interface WeaponBase {
 }
 
 export type WeaponSource = "room" | "hidden" | "boss";
+const world = (value: number): number => Math.round(value * WORLD_SCALE);
 
 const EXTRA_WEAPONS: readonly WeaponBase[] = [
   { kind: "byte-repeater", label: "BYTE REPEATER", fireCooldownMs: 92, projectileSpeed: 650, projectileRange: 760, projectileRadius: 3, damage: 0.25, maxAmmo: 500 },
@@ -42,9 +44,9 @@ export const DEFAULT_WEAPON: WeaponSpec = {
   kind: "pulse-rifle",
   name: "PULSE RIFLE",
   fireCooldownMs: 220,
-  projectileSpeed: 520,
-  projectileRange: 900,
-  projectileRadius: 5,
+  projectileSpeed: world(520),
+  projectileRange: world(900),
+  projectileRadius: world(5),
   damage: 1,
   maxAmmo: null,
   ammoPerLoot: 0,
@@ -85,9 +87,9 @@ export function weaponForRoom(
     kind: base.kind,
     name: `${prefix} ${base.label}`,
     fireCooldownMs: scaled(base.fireCooldownMs, cooldownPercent),
-    projectileSpeed: scaled(base.projectileSpeed, speedPercent),
-    projectileRange: scaled(base.projectileRange, rangePercent),
-    projectileRadius: base.projectileRadius,
+    projectileSpeed: world(scaled(base.projectileSpeed, speedPercent)),
+    projectileRange: world(scaled(base.projectileRange, rangePercent)),
+    projectileRadius: world(base.projectileRadius),
     damage: base.damage,
     maxAmmo,
     ammoPerLoot: Math.max(1, Math.ceil(maxAmmo * 0.25)),
@@ -112,7 +114,7 @@ export function projectilesForWeapon(
     "pulse-rifle": [{ angle: 0 }],
     "byte-repeater": [{ angle: 0 }],
     "scatter-array": [-0.33, -0.22, -0.11, 0, 0.11, 0.22, 0.33].map(angle => ({ angle })),
-    "fork-driver": [{ angle: 0, lateral: -10 }, { angle: 0, lateral: 10 }],
+    "fork-driver": [{ angle: 0, lateral: -world(10) }, { angle: 0, lateral: world(10) }],
     trident: [{ angle: -0.16 }, { angle: 0 }, { angle: 0.16 }],
     "needle-rail": [{ angle: 0 }],
     "packet-lobber": [{ angle: 0 }],

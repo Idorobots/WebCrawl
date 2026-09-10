@@ -1,5 +1,16 @@
 import Phaser from "phaser";
-import { ASSETS, BULLET_RADIUS, CAMERA_SCALE, PLAYER_FRAMES } from "../config";
+import {
+  ASSETS,
+  BULLET_RADIUS,
+  CAMERA_SCALE,
+  EXPLOSION_FRAMES,
+  MONSTER_ASSETS,
+  PLAYER_FRAMES,
+  PLAYER_IDLE_ASSETS,
+  PLAYER_SPRITE_SIZE,
+  WEAPON_ASSETS,
+  WORLD_SCALE,
+} from "../config";
 import { WEAPON_COLORS } from "../domain/weapons";
 import type {
   Bullet,
@@ -14,12 +25,14 @@ import type {
 } from "../types";
 
 const textureKey = (asset: string): string => `asset:${asset}`;
+const world = (value: number): number => Math.round(value * WORLD_SCALE);
 
 export class PhaserRenderer {
   private game: Phaser.Game | null = null;
   private scene: Phaser.Scene | null = null;
   private layout: DungeonLayout | null = null;
   private visited = new Set<number>();
+  private background: Phaser.GameObjects.TileSprite | null = null;
   private staticGraphics: Phaser.GameObjects.Graphics | null = null;
   private bulletsGraphics: Phaser.GameObjects.Graphics | null = null;
   private decorations: Phaser.GameObjects.Container[] = [];
@@ -38,7 +51,7 @@ export class PhaserRenderer {
   private currentMonsters: Monster[] = [];
   private currentBullets: Bullet[] = [];
   private currentLootAssets: Partial<Record<LootKind, string>> = {};
-  private currentMonsterAssetFor: (monster: Monster) => string = () => ASSETS.monsterScout;
+  private currentMonsterAssetFor: (monster: Monster) => string = () => MONSTER_ASSETS.scout.down;
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -53,7 +66,11 @@ export class PhaserRenderer {
       preload(): void {
         const assets = new Set<string>([
           ...Object.values(ASSETS),
+          ...Object.values(PLAYER_IDLE_ASSETS),
           ...Object.values(PLAYER_FRAMES).flatMap(actions => Object.values(actions).flat()),
+          ...Object.values(MONSTER_ASSETS).flatMap(views => Object.values(views)),
+          ...Object.values(WEAPON_ASSETS),
+          ...EXPLOSION_FRAMES,
         ]);
         for (const asset of assets) this.load.image(textureKey(asset), asset);
       }
@@ -66,8 +83,8 @@ export class PhaserRenderer {
     this.game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: this.host,
-      backgroundColor: "#071018",
-      render: { antialias: true, pixelArt: false },
+      transparent: true,
+      render: { antialias: false, pixelArt: true, roundPixels: true },
       scale: {
         mode: Phaser.Scale.RESIZE,
         width: Math.max(1, this.host.clientWidth),
@@ -91,6 +108,8 @@ export class PhaserRenderer {
 
   clear(): void {
     this.layout = null;
+    this.background?.destroy();
+    this.background = null;
     this.staticGraphics?.clear();
     this.bulletsGraphics?.clear();
     this.destroyAll(this.decorations);
@@ -140,14 +159,47 @@ export class PhaserRenderer {
   private drawWorld(): void {
     const scene = this.scene;
     if (!scene || !this.layout) return;
+    this.background?.destroy();
     this.staticGraphics?.destroy();
+    const worldBounds = this.layout.nodes.reduce((bounds, room) => ({
+      left: Math.min(bounds.left, room.x - room.width / 2),
+      right: Math.max(bounds.right, room.x + room.width / 2),
+      top: Math.min(bounds.top, room.y - room.height / 2),
+      bottom: Math.max(bounds.bottom, room.y + room.height / 2),
+    }), {
+      left: Infinity,
+      right: -Infinity,
+      top: Infinity,
+      bottom: -Infinity,
+    });
+    for (const link of this.layout.links) {
+      for (const point of link.points) {
+        worldBounds.left = Math.min(worldBounds.left, point.x - link.width / 2);
+        worldBounds.right = Math.max(worldBounds.right, point.x + link.width / 2);
+        worldBounds.top = Math.min(worldBounds.top, point.y - link.width / 2);
+        worldBounds.bottom = Math.max(worldBounds.bottom, point.y + link.width / 2);
+      }
+    }
+    const pad = world(384);
+    const backgroundWidth = Math.max(world(1024), worldBounds.right - worldBounds.left + pad * 2);
+    const backgroundHeight = Math.max(world(1024), worldBounds.bottom - worldBounds.top + pad * 2);
+    this.background = scene.add.tileSprite(
+      worldBounds.left - pad,
+      worldBounds.top - pad,
+      backgroundWidth,
+      backgroundHeight,
+      textureKey(ASSETS.backgroundTechTile),
+    )
+      .setOrigin(0)
+      .setScrollFactor(1)
+      .setDepth(-10);
     const graphics = scene.add.graphics().setDepth(0);
     this.staticGraphics = graphics;
 
     for (const link of this.layout.links) {
       const visible = this.visited.has(link.source.id) || this.visited.has(link.target.id);
       const points = link.points.map(point => new Phaser.Math.Vector2(point.x, point.y));
-      graphics.lineStyle(link.width + 18, visible ? 0x172a37 : 0x0b141d, visible ? 1 : 0.42);
+      graphics.lineStyle(link.width + world(18), visible ? 0x172a37 : 0x0b141d, visible ? 1 : 0.42);
       graphics.strokePoints(points, false, false);
       graphics.lineStyle(2, 0x3b6d82, visible ? 0.62 : 0.08);
       graphics.strokePoints(points, false, false);
@@ -165,8 +217,8 @@ export class PhaserRenderer {
       this.drawRoom(graphics, room, true);
       if (visible) {
         graphics.lineStyle(1, 0x253747, 0.65);
-        for (let x = room.x - room.width / 2 + 34; x < room.x + room.width / 2; x += 34) {
-          graphics.lineBetween(x, room.y - room.height / 2 + 16, x, room.y + room.height / 2 - 16);
+        for (let x = room.x - room.width / 2 + world(34); x < room.x + room.width / 2; x += world(34)) {
+          graphics.lineBetween(x, room.y - room.height / 2 + world(16), x, room.y + room.height / 2 - world(16));
         }
       }
     }
@@ -207,16 +259,26 @@ export class PhaserRenderer {
     if (!scene) return;
     for (const item of items) {
       if (!visited.has(item.roomId) || item.destroyed) continue;
-      const sprite = scene.add.image(0, 0, textureKey(item.asset)).setDisplaySize(item.size, item.size);
+      const sprite = scene.add.image(0, 0, textureKey(item.asset));
+      sprite.setDisplaySize(item.size * sprite.width / sprite.height, item.size).setOrigin(0.5);
       const container = scene.add.container(item.x, item.y, [sprite]).setDepth(20);
       if (item.spawner) {
         sprite.setTint(0xe77cff);
-        const field = scene.add.circle(0, 0, item.radius + 8, 0x7d2c91, 0.22).setStrokeStyle(2, 0xf09cff, 0.85);
+        const field = scene.add.circle(0, 0, item.radius + world(8), 0x7d2c91, 0.22)
+          .setStrokeStyle(world(2), 0xf09cff, 0.85);
         container.addAt(field, 0);
       }
       if (item.obstacle) {
-        const bg = scene.add.rectangle(-22, -35, 44, 5, 0x071018).setOrigin(0, 0.5);
-        const hp = scene.add.rectangle(-22, -35, 44 * Math.max(0, item.hp) / Math.max(1, item.maxHp), 5, 0x62e6c8).setOrigin(0, 0.5);
+        const barWidth = Math.max(world(44), item.size * 0.62);
+        const barY = -item.size / 2 - world(8);
+        const bg = scene.add.rectangle(-barWidth / 2, barY, barWidth, world(5), 0x071018).setOrigin(0, 0.5);
+        const hp = scene.add.rectangle(
+          -barWidth / 2,
+          barY,
+          barWidth * Math.max(0, item.hp) / Math.max(1, item.maxHp),
+          world(5),
+          0x62e6c8,
+        ).setOrigin(0, 0.5);
         container.add([bg, hp]);
       }
       this.decorations.push(container);
@@ -266,28 +328,27 @@ export class PhaserRenderer {
     if (!scene) return;
     for (const stair of stairs) {
       if (!visited.has(stair.roomId)) continue;
-      const ring = scene.add.circle(0, 0, 27, stair.type === "up" ? 0x183a48 : 0x2b2145, stair.enabled ? 0.95 : 0.35)
-        .setStrokeStyle(3, stair.type === "up" ? 0x62e6c8 : 0xc07cff);
-      const marker = scene.add.text(0, stair.type === "up" ? -3 : 3, stair.type === "up" ? "▲" : "▼", {
-        color: stair.type === "up" ? "#62e6c8" : "#d9a3ff", fontSize: "20px", fontStyle: "bold",
+      const ring = scene.add.circle(0, 0, world(27), stair.type === "up" ? 0x183a48 : 0x2b2145, stair.enabled ? 0.95 : 0.35)
+        .setStrokeStyle(world(3), stair.type === "up" ? 0x62e6c8 : 0xc07cff);
+      const marker = scene.add.text(0, stair.type === "up" ? -world(3) : world(3), stair.type === "up" ? "▲" : "▼", {
+        color: stair.type === "up" ? "#62e6c8" : "#d9a3ff", fontSize: `${world(20)}px`, fontStyle: "bold",
       }).setOrigin(0.5);
       this.objects.push(scene.add.container(stair.x, stair.y, [ring, marker]).setDepth(15));
     }
     for (const item of loot) {
       if (!visited.has(item.roomId)) continue;
       if (item.kind === "weapon" && item.weapon) {
-        const color = WEAPON_COLORS[item.weapon.kind];
-        const field = scene.add.circle(0, 0, 25, color, 0.2).setStrokeStyle(3, color, 0.95);
-        const core = scene.add.rectangle(0, 0, 24, 10, color, 1).setRotation(-0.25);
-        const marker = scene.add.text(0, 0, "W", {
-          color: "#071018", fontSize: "11px", fontStyle: "bold",
-        }).setOrigin(0.5);
-        this.objects.push(scene.add.container(item.x, item.y, [field, core, marker]).setDepth(25));
+        const sprite = scene.add.image(0, 0, textureKey(WEAPON_ASSETS[item.weapon.kind]))
+          .setDisplaySize(world(68), world(68));
+        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(25));
         continue;
       }
       const asset = lootAssets[item.kind];
       if (!asset) continue;
-      const sprite = scene.add.image(0, 0, textureKey(asset)).setDisplaySize(42, 42);
+      const size = item.kind === "core" || item.kind === "crystal" || item.kind === "medkit"
+        ? Math.round(world(50) * 1.25)
+        : world(50);
+      const sprite = scene.add.image(0, 0, textureKey(asset)).setDisplaySize(size, size);
       this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(25));
     }
   }
@@ -323,28 +384,26 @@ export class PhaserRenderer {
       let container = this.monsters.get(item.id);
       if (!container) {
         const assetKey = textureKey(assetFor(item));
-        const frame = scene.textures.getFrame(assetKey);
-        const cropTop = Math.ceil(frame.height * 0.14);
         const sprite = scene.add.image(0, 0, assetKey)
-          .setCrop(0, cropTop, frame.width, frame.height - cropTop)
           .setDisplaySize(item.size, item.size)
+          .setOrigin(0.5)
           .setName("sprite");
-        const barWidth = item.bossKind ? 110 : 40;
-        const barY = -item.size / 2 - 9;
+        const barWidth = item.bossKind ? item.size * 0.68 : item.size * 0.6;
+        const barY = -item.size / 2 - world(10);
         const children: Phaser.GameObjects.GameObject[] = [];
         if (item.bossKind) {
           const bossColors = { "packet-storm": 0xd975ff, "fork-bomb": 0x55e3cf, "heap-titan": 0xff8b4d };
           const color = bossColors[item.bossKind];
-          sprite.setTint(color);
-          children.push(scene.add.circle(0, 0, item.radius + 11, color, 0.16).setStrokeStyle(3, color, 0.8));
+          children.push(scene.add.circle(0, 0, item.radius + world(11), color, 0.16)
+            .setStrokeStyle(world(3), color, 0.8));
         }
         children.push(sprite);
-        children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, item.bossKind ? 9 : 5, 0x071018).setOrigin(0, 0.5));
-        children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, item.bossKind ? 7 : 5, item.bossKind ? 0xf09cff : item.kind === "sentry" ? 0xc07cff : 0xff6b6b).setOrigin(0, 0.5).setName("hp"));
+        children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, item.bossKind ? world(9) : world(5), 0x071018).setOrigin(0, 0.5));
+        children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, item.bossKind ? world(7) : world(5), item.bossKind ? 0xf09cff : item.kind === "sentry" ? 0xc07cff : 0xff6b6b).setOrigin(0, 0.5).setName("hp"));
         if (item.bossKind) {
           const labels = { "packet-storm": "PACKET STORM", "fork-bomb": "FORK BOMB", "heap-titan": "HEAP TITAN" };
           children.push(scene.add.text(0, barY - 13, labels[item.bossKind], {
-            color: "#f7ddff", fontSize: "11px", fontStyle: "bold",
+            color: "#f7ddff", fontSize: `${world(11)}px`, fontStyle: "bold",
           }).setOrigin(0.5));
         }
         container = scene.add.container(item.x, item.y, children).setDepth(30);
@@ -352,8 +411,11 @@ export class PhaserRenderer {
         this.monsters.set(item.id, container);
       }
       container.setPosition(item.x, item.y).setAlpha(item.deathAnimating ? 0.35 : 1);
+      const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
+      const assetKey = textureKey(assetFor(item));
+      if (scene.textures.exists(assetKey) && sprite.texture.key !== assetKey) sprite.setTexture(assetKey);
       const hp = container.getByName("hp") as Phaser.GameObjects.Rectangle;
-      hp.width = Number(container.getData("hpWidth") ?? 40) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
+      hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
     }
   }
 
@@ -362,8 +424,11 @@ export class PhaserRenderer {
       const container = this.monsters.get(item.id);
       if (!container) continue;
       container.setPosition(item.x, item.y);
+      const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
+      const assetKey = textureKey(this.currentMonsterAssetFor(item));
+      if (this.scene?.textures.exists(assetKey) && sprite.texture.key !== assetKey) sprite.setTexture(assetKey);
       const hp = container.getByName("hp") as Phaser.GameObjects.Rectangle;
-      hp.width = Number(container.getData("hpWidth") ?? 40) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
+      hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
     }
   }
 
@@ -399,13 +464,17 @@ export class PhaserRenderer {
     const scene = this.scene;
     if (!scene) return;
     if (!this.player) {
-      this.playerSprite = scene.add.image(0, 0, textureKey(asset)).setDisplaySize(75, 100);
-      const bg = scene.add.rectangle(-32, -49, 64, 7, 0x071018).setOrigin(0, 0.5);
-      this.playerHpFill = scene.add.rectangle(-31, -49, 62, 5, 0x62e6c8).setOrigin(0, 0.5);
+      this.playerSprite = scene.add.image(0, 0, textureKey(asset))
+        .setDisplaySize(PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE)
+        .setOrigin(0.5);
+      const barWidth = world(68);
+      const barY = -PLAYER_SPRITE_SIZE / 2 - world(10);
+      const bg = scene.add.rectangle(-barWidth / 2 - 1, barY, barWidth + 2, world(7), 0x071018).setOrigin(0, 0.5);
+      this.playerHpFill = scene.add.rectangle(-barWidth / 2, barY, barWidth, world(5), 0x62e6c8).setOrigin(0, 0.5);
       this.player = scene.add.container(position.x, position.y, [this.playerSprite, bg, this.playerHpFill]).setDepth(50);
     }
     this.player.setPosition(position.x, position.y);
-    this.playerHpFill!.width = 62 * Math.max(0, hp) / Math.max(1, maxHp);
+    this.playerHpFill!.width = world(68) * Math.max(0, hp) / Math.max(1, maxHp);
     if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
   }
 
@@ -423,10 +492,21 @@ export class PhaserRenderer {
   spawnExplosion(x: number, y: number): void {
     const scene = this.scene;
     if (!scene) return;
-    const blast = scene.add.circle(x, y, 12, 0xffd166, 0.9).setStrokeStyle(4, 0xff7755).setDepth(45);
-    scene.tweens.add({
-      targets: blast, scale: 3, alpha: 0, duration: 480,
-      onComplete: () => blast.destroy(),
+    const blast = scene.add.image(x, y, textureKey(EXPLOSION_FRAMES[0]!))
+      .setDisplaySize(world(118), world(118))
+      .setDepth(45);
+    let frameIndex = 0;
+    scene.time.addEvent({
+      delay: 1_000 / 12,
+      repeat: EXPLOSION_FRAMES.length - 1,
+      callback: () => {
+        if (frameIndex >= EXPLOSION_FRAMES.length - 1) {
+          blast.destroy();
+          return;
+        }
+        frameIndex += 1;
+        blast.setTexture(textureKey(EXPLOSION_FRAMES[frameIndex]!));
+      },
     });
   }
 

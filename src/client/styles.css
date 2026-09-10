@@ -1029,8 +1029,7 @@ body {
   left: 0;
   right: 332px;
   bottom: 102px;
-  background:
-    radial-gradient(circle at center, #07131d, #020508 72%);
+  background: radial-gradient(circle at center, rgba(7,19,29,.2), rgba(2,5,8,.72) 72%);
   overflow: hidden;
   cursor: crosshair;
 }
@@ -1096,15 +1095,6 @@ body {
 }
 
 .stat-row strong { color: #e3f4fc; }
-
-.stats-flavour {
-  margin-top: auto;
-  padding: 14px 4px 4px;
-  color: #5f8fac;
-  font-size: 10px;
-  line-height: 1.55;
-  letter-spacing: .12em;
-}
 
 #bottomHud {
   position: fixed;
@@ -1207,6 +1197,33 @@ body {
   color: #a9c3d5;
   letter-spacing: .06em;
   font-size: 12px;
+}
+
+.welcome-card,
+.hud-panel,
+#bottomHud > section,
+#minimapPanel,
+#deathPanel {
+  border: 8px solid transparent;
+  border-image: url("/assets_new/ui/panel_plain/source.png") 52 fill / 8px stretch;
+}
+
+button {
+  border: 6px 14px solid transparent;
+  border-image: url("/assets_new/ui/button_plain/source.png") 30 72 fill / 6px 14px stretch;
+  border-radius: 0;
+}
+
+.hud-panel-title {
+  min-height: 38px;
+  border-bottom: 0;
+  background: url("/assets_new/ui/decorations/header.png") right center / 142px auto no-repeat;
+}
+
+.big-health-track {
+  height: 18px;
+  border: 4px 10px solid transparent;
+  border-image: url("/assets_new/ui/health_bar_plain/source.png") 20 60 fill / 4px 10px stretch;
 }
 
 /* Keep the M-key tactical map as a larger overlay. */

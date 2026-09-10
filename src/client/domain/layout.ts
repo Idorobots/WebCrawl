@@ -1,4 +1,9 @@
-import { CORRIDOR_HALF_WIDTH, MAX_CORRIDOR_LENGTH, ROOM_COLLISION_MARGIN } from "../config";
+import {
+  CORRIDOR_HALF_WIDTH,
+  MAX_CORRIDOR_LENGTH,
+  ROOM_COLLISION_MARGIN,
+  WORLD_SCALE,
+} from "../config";
 import type {
   Direction,
   DungeonGraph,
@@ -18,6 +23,7 @@ interface Bounds {
 
 const SHAPES: RoomShape[] = ["rectangle", "wide", "tall", "capsule", "octagon"];
 const CARDINALS: Direction[] = ["N", "E", "S", "W"];
+const world = (value: number): number => Math.round(value * WORLD_SCALE);
 
 export function roomBounds(node: GraphNode, x = node.x, y = node.y, margin = 0): Bounds {
   return {
@@ -34,39 +40,39 @@ function boundsOverlap(left: Bounds, right: Bounds): boolean {
 
 function configureRoom(node: GraphNode, childCount: number): void {
   const shape = SHAPES[node.lootSeed % SHAPES.length] ?? "rectangle";
-  const exitBonus = Math.max(0, childCount - 3) * 46;
+  const exitBonus = Math.max(0, childCount - 3) * world(46);
   node.shape = shape;
   node.childCount = childCount;
   if (node.tag === "script") {
     node.shape = "octagon";
-    node.width = 900 + exitBonus;
-    node.height = 650;
+    node.width = world(900) + exitBonus;
+    node.height = world(650);
     return;
   }
   switch (shape) {
     case "wide":
-      node.width = 720 + exitBonus;
-      node.height = 360;
+      node.width = world(720) + exitBonus;
+      node.height = world(360);
       break;
     case "tall":
-      node.width = 460;
-      node.height = 560 + exitBonus;
+      node.width = world(460);
+      node.height = world(560) + exitBonus;
       break;
     case "capsule":
-      node.width = 640 + exitBonus;
-      node.height = 380;
+      node.width = world(640) + exitBonus;
+      node.height = world(380);
       break;
     case "octagon":
-      node.width = 580 + exitBonus;
-      node.height = 460;
+      node.width = world(580) + exitBonus;
+      node.height = world(460);
       break;
     default:
-      node.width = 580 + exitBonus;
-      node.height = 400;
+      node.width = world(580) + exitBonus;
+      node.height = world(400);
   }
   if (node.isRoot) {
-    node.width = Math.max(node.width, 700);
-    node.height = Math.max(node.height, 480);
+    node.width = Math.max(node.width, world(700));
+    node.height = Math.max(node.height, world(480));
   }
 }
 
@@ -84,8 +90,8 @@ function placementCandidates(parent: GraphNode, node: GraphNode): Point[] {
   const rotation = node.lootSeed % CARDINALS.length;
   const order = CARDINALS.map((_, index) => CARDINALS[(index + rotation) % CARDINALS.length]!);
   for (let ring = 0; ring < 18; ring += 1) {
-    const lateral = [0, -1, 1, -2, 2, -3, 3][ring % 7]! * 170;
-    const reach = 160 + Math.floor(ring / 7) * 250;
+    const lateral = [0, -1, 1, -2, 2, -3, 3][ring % 7]! * world(170);
+    const reach = world(160) + Math.floor(ring / 7) * world(250);
     for (const direction of order) {
       const horizontal = direction === "E" || direction === "W";
       const distance = horizontal
@@ -101,8 +107,8 @@ function placementCandidates(parent: GraphNode, node: GraphNode): Point[] {
 }
 
 function pointOnSide(room: GraphNode, side: Direction, slot: number): Point {
-  const extent = (side === "N" || side === "S" ? room.width : room.height) / 2 - 75;
-  const step = Math.min(88, Math.max(0, extent / 2));
+  const extent = (side === "N" || side === "S" ? room.width : room.height) / 2 - world(75);
+  const step = Math.min(world(88), Math.max(0, extent / 2));
   const sequence = slot === 0 ? 0 : Math.ceil(slot / 2) * (slot % 2 ? -1 : 1);
   const offset = Math.max(-extent, Math.min(extent, sequence * step));
   const halfWidth = room.width / 2;
@@ -155,7 +161,7 @@ function corridorIntersectsBounds(points: readonly Point[], bounds: Bounds): boo
   return false;
 }
 
-export function corridorIntersectsRoom(link: LayoutLink, room: GraphNode, margin = 20): boolean {
+export function corridorIntersectsRoom(link: LayoutLink, room: GraphNode, margin = 32): boolean {
   return corridorIntersectsBounds(link.points, roomBounds(room, room.x, room.y, margin));
 }
 
@@ -170,7 +176,7 @@ export function corridorLength(points: readonly Point[]): number {
 function routeIsClear(points: readonly Point[], rooms: readonly GraphNode[], sourceId: number, targetId: number): boolean {
   return rooms.every(room =>
     room.id === sourceId || room.id === targetId ||
-    !corridorIntersectsBounds(points, roomBounds(room, room.x, room.y, 20))
+    !corridorIntersectsBounds(points, roomBounds(room, room.x, room.y, world(20)))
   );
 }
 
@@ -234,9 +240,9 @@ export function layoutOrthogonal(graph: DungeonGraph, width: number, height: num
     for (const child of childrenByParent.get(node.id) ?? []) collectSubtreeHrefs(child, target);
   };
   const roomPlacementIsClear = (node: GraphNode, point: Point): boolean => {
-    const candidate = roomBounds(node, point.x, point.y, ROOM_COLLISION_MARGIN + 70);
-    if (placed.some(other => boundsOverlap(candidate, roomBounds(other, other.x, other.y, ROOM_COLLISION_MARGIN + 70)))) return false;
-    return links.every(link => !corridorIntersectsBounds(link.points, roomBounds(node, point.x, point.y, 20)));
+    const candidate = roomBounds(node, point.x, point.y, ROOM_COLLISION_MARGIN + world(70));
+    if (placed.some(other => boundsOverlap(candidate, roomBounds(other, other.x, other.y, ROOM_COLLISION_MARGIN + world(70))))) return false;
+    return links.every(link => !corridorIntersectsBounds(link.points, roomBounds(node, point.x, point.y, world(20))));
   };
 
   const tryPlace = (node: GraphNode, parent: GraphNode): LayoutLink | null => {

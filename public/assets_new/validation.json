@@ -1,0 +1,2217 @@
+{
+  "png_count": 220,
+  "walk_frames": 32,
+  "weapon_pickups": 10,
+  "sentry_and_boss_views": 32,
+  "explosion_frames": 6,
+  "draft_rear_views": [
+    "enemies/boss_arc/boss_arc_back.png",
+    "enemies/boss_fortress/boss_fortress_back.png",
+    "enemies/boss_laser/boss_laser_back.png",
+    "enemies/boss_missile/boss_missile_back.png",
+    "enemies/boss_siege/boss_siege_back.png",
+    "enemies/sentry_twin/sentry_twin_back.png"
+  ],
+  "checks": [
+    {
+      "file": "player/walk/N/walk_N_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/N/walk_N_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/N/walk_N_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/N/walk_N_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/NE/walk_NE_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/NE/walk_NE_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/NE/walk_NE_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/NE/walk_NE_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/E/walk_E_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/E/walk_E_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/E/walk_E_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/E/walk_E_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/SE/walk_SE_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/SE/walk_SE_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/SE/walk_SE_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/SE/walk_SE_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/S/walk_S_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/S/walk_S_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/S/walk_S_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/S/walk_S_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/SW/walk_SW_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/SW/walk_SW_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/SW/walk_SW_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/SW/walk_SW_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/W/walk_W_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/W/walk_W_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/W/walk_W_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/W/walk_W_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/NW/walk_NW_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/NW/walk_NW_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/NW/walk_NW_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/walk/NW/walk_NW_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/terminal_front.png",
+      "size": [
+        160,
+        240
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/crate_front.png",
+      "size": [
+        225,
+        240
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/plant_small_teal.png",
+      "size": [
+        118,
+        136
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/plant_small_amber.png",
+      "size": [
+        111,
+        136
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/plant_large_violet.png",
+      "size": [
+        260,
+        316
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/plant_large_green.png",
+      "size": [
+        259,
+        316
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/top_left.png",
+      "size": [
+        220,
+        45
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/top.png",
+      "size": [
+        55,
+        45
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/top_right.png",
+      "size": [
+        45,
+        45
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/left.png",
+      "size": [
+        220,
+        239
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/center.png",
+      "size": [
+        55,
+        239
+      ],
+      "alpha_min": 0,
+      "alpha_max": 0,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/right.png",
+      "size": [
+        45,
+        239
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/bottom_left.png",
+      "size": [
+        220,
+        40
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/bottom.png",
+      "size": [
+        55,
+        40
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/bottom_right.png",
+      "size": [
+        45,
+        40
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/source.png",
+      "size": [
+        320,
+        324
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/example_1.png",
+      "size": [
+        480,
+        260
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel/example_2.png",
+      "size": [
+        700,
+        360
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/top_left.png",
+      "size": [
+        52,
+        18
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/top.png",
+      "size": [
+        408,
+        18
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/top_right.png",
+      "size": [
+        52,
+        18
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/left.png",
+      "size": [
+        52,
+        24
+      ],
+      "alpha_min": 247,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/center.png",
+      "size": [
+        408,
+        24
+      ],
+      "alpha_min": 252,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/right.png",
+      "size": [
+        52,
+        24
+      ],
+      "alpha_min": 250,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/bottom_left.png",
+      "size": [
+        52,
+        18
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/bottom.png",
+      "size": [
+        408,
+        18
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/bottom_right.png",
+      "size": [
+        52,
+        18
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/source.png",
+      "size": [
+        512,
+        60
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/example_1.png",
+      "size": [
+        360,
+        110
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar/example_2.png",
+      "size": [
+        700,
+        140
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/top_left.png",
+      "size": [
+        68,
+        28
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/top.png",
+      "size": [
+        376,
+        28
+      ],
+      "alpha_min": 217,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/top_right.png",
+      "size": [
+        68,
+        28
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/left.png",
+      "size": [
+        68,
+        50
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/center.png",
+      "size": [
+        376,
+        50
+      ],
+      "alpha_min": 251,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/right.png",
+      "size": [
+        68,
+        50
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/bottom_left.png",
+      "size": [
+        68,
+        28
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/bottom.png",
+      "size": [
+        376,
+        28
+      ],
+      "alpha_min": 248,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/bottom_right.png",
+      "size": [
+        68,
+        28
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/source.png",
+      "size": [
+        512,
+        106
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/example_1.png",
+      "size": [
+        360,
+        110
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button/example_2.png",
+      "size": [
+        700,
+        140
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/top_left.png",
+      "size": [
+        52,
+        52
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/top.png",
+      "size": [
+        216,
+        52
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/top_right.png",
+      "size": [
+        52,
+        52
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/left.png",
+      "size": [
+        52,
+        211
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/center.png",
+      "size": [
+        216,
+        211
+      ],
+      "alpha_min": 0,
+      "alpha_max": 0,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/right.png",
+      "size": [
+        52,
+        211
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/bottom_left.png",
+      "size": [
+        52,
+        52
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/bottom.png",
+      "size": [
+        216,
+        52
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/bottom_right.png",
+      "size": [
+        52,
+        52
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/source.png",
+      "size": [
+        320,
+        315
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/example_1.png",
+      "size": [
+        480,
+        260
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/panel_plain/example_2.png",
+      "size": [
+        700,
+        360
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/top_left.png",
+      "size": [
+        60,
+        20
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/top.png",
+      "size": [
+        392,
+        20
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/top_right.png",
+      "size": [
+        60,
+        20
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/left.png",
+      "size": [
+        60,
+        30
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/center.png",
+      "size": [
+        392,
+        30
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/right.png",
+      "size": [
+        60,
+        30
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/bottom_left.png",
+      "size": [
+        60,
+        20
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/bottom.png",
+      "size": [
+        392,
+        20
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/bottom_right.png",
+      "size": [
+        60,
+        20
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/source.png",
+      "size": [
+        512,
+        70
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/example_1.png",
+      "size": [
+        360,
+        110
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/health_bar_plain/example_2.png",
+      "size": [
+        700,
+        140
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/top_left.png",
+      "size": [
+        72,
+        30
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/top.png",
+      "size": [
+        368,
+        30
+      ],
+      "alpha_min": 245,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/top_right.png",
+      "size": [
+        72,
+        30
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/left.png",
+      "size": [
+        72,
+        38
+      ],
+      "alpha_min": 44,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/center.png",
+      "size": [
+        368,
+        38
+      ],
+      "alpha_min": 250,
+      "alpha_max": 253,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/right.png",
+      "size": [
+        72,
+        38
+      ],
+      "alpha_min": 49,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/bottom_left.png",
+      "size": [
+        72,
+        30
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/bottom.png",
+      "size": [
+        368,
+        30
+      ],
+      "alpha_min": 250,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/bottom_right.png",
+      "size": [
+        72,
+        30
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/source.png",
+      "size": [
+        512,
+        98
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/example_1.png",
+      "size": [
+        360,
+        110
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/button_plain/example_2.png",
+      "size": [
+        700,
+        140
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/decorations/header.png",
+      "size": [
+        160,
+        43
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/barrel_red.png",
+      "size": [
+        192,
+        192
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/barrel_coolant.png",
+      "size": [
+        192,
+        192
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/barrel_hazard.png",
+      "size": [
+        192,
+        192
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/ammo_ballistic.png",
+      "size": [
+        192,
+        192
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/ammo_energy.png",
+      "size": [
+        192,
+        192
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_assault_rifle.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_shotgun.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_smg.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_sniper.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_pistol.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_plasma.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_laser.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_rocket.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_flamer.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/weapons/weapon_arc.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_ballistic/sentry_ballistic_front.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_twin/sentry_twin_front.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_energy/sentry_energy_front.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_siege/boss_siege_front.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_missile/boss_missile_front.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_laser/boss_laser_front.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_arc/boss_arc_front.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_fortress/boss_fortress_front.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/scout/scout_left.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/scout/scout_right.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/heavy/heavy_left.png",
+      "size": [
+        320,
+        320
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/heavy/heavy_right.png",
+      "size": [
+        320,
+        320
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/background_tech_tile.png",
+      "size": [
+        1024,
+        1024
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/floor_plain.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/floor_grate.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/walls/horizontal.png",
+      "size": [
+        128,
+        32
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/walls/vertical.png",
+      "size": [
+        32,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/art_variants/wall_horizontal.png",
+      "size": [
+        512,
+        94
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/art_variants/wall_vertical.png",
+      "size": [
+        85,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/art_variants/wall_corner.png",
+      "size": [
+        512,
+        495
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/art_variants/door_horizontal.png",
+      "size": [
+        512,
+        125
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/art_variants/door_vertical.png",
+      "size": [
+        175,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/art_variants/corridor_straight.png",
+      "size": [
+        388,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/art_variants/corridor_corner.png",
+      "size": [
+        483,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/art_variants/corridor_junction.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_N.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_E.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_NE.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_S.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_NS.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_ES.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_NES.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_W.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_NW.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_EW.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_NEW.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_SW.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_NSW.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_ESW.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/tiles/corridor_NESW.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 255,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/walls/corner_NW.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/walls/corner_SW.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/walls/corner_SE.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/walls/corner_NE.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/doors/closed_horizontal.png",
+      "size": [
+        128,
+        32
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/doors/open_horizontal.png",
+      "size": [
+        128,
+        32
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/doors/closed_vertical.png",
+      "size": [
+        32,
+        128
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "environment/doors/open_vertical.png",
+      "size": [
+        32,
+        128
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "effects/explosion/explosion_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "effects/explosion/explosion_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "effects/explosion/explosion_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "effects/explosion/explosion_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "effects/explosion/explosion_05.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "effects/explosion/explosion_06.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "player/idle/player_right.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "player/idle/player_front.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "player/idle/player_back.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "player/idle/player_left.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/scout/scout_front.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/scout/scout_back.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/heavy/heavy_front.png",
+      "size": [
+        320,
+        320
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/heavy/heavy_back.png",
+      "size": [
+        320,
+        320
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/medkit.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/gold.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 0,
+      "alpha_max": 254,
+      "status": "exported"
+    },
+    {
+      "file": "pickups/crystal.png",
+      "size": [
+        128,
+        128
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "props/plant_magenta.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/additional/frame.png",
+      "size": [
+        480,
+        341
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/additional/dialogue.png",
+      "size": [
+        480,
+        117
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "ui/additional/tooltip.png",
+      "size": [
+        313,
+        480
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_ballistic/sentry_ballistic_back.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_ballistic/sentry_ballistic_left.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_ballistic/sentry_ballistic_right.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_twin/sentry_twin_back.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "needs_art_revision"
+    },
+    {
+      "file": "enemies/sentry_twin/sentry_twin_left.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_twin/sentry_twin_right.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_energy/sentry_energy_back.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_energy/sentry_energy_left.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/sentry_energy/sentry_energy_right.png",
+      "size": [
+        256,
+        256
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_siege/boss_siege_back.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "needs_art_revision"
+    },
+    {
+      "file": "enemies/boss_siege/boss_siege_left.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_siege/boss_siege_right.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_missile/boss_missile_back.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "needs_art_revision"
+    },
+    {
+      "file": "enemies/boss_missile/boss_missile_left.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_missile/boss_missile_right.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_laser/boss_laser_back.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "needs_art_revision"
+    },
+    {
+      "file": "enemies/boss_laser/boss_laser_left.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_laser/boss_laser_right.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_arc/boss_arc_back.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "needs_art_revision"
+    },
+    {
+      "file": "enemies/boss_arc/boss_arc_left.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_arc/boss_arc_right.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_fortress/boss_fortress_back.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "needs_art_revision"
+    },
+    {
+      "file": "enemies/boss_fortress/boss_fortress_left.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/boss_fortress/boss_fortress_right.png",
+      "size": [
+        512,
+        512
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    },
+    {
+      "file": "enemies/scout/scout_right_full_resolution.png",
+      "size": [
+        1295,
+        1215
+      ],
+      "alpha_min": 0,
+      "alpha_max": 255,
+      "status": "exported"
+    }
+  ]
+}

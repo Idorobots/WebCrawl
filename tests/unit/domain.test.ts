@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { CORRIDOR_HALF_WIDTH, MAX_CORRIDOR_LENGTH, MONSTER_RADIUS, ROOM_HEIGHT, ROOM_WIDTH } from "../../src/client/config";
+import {
+  CORRIDOR_HALF_WIDTH,
+  MAX_CORRIDOR_LENGTH,
+  MONSTER_RADIUS,
+  ROOM_HEIGHT,
+  ROOM_WIDTH,
+  WORLD_SCALE,
+} from "../../src/client/config";
 import { distanceSquared, pointInCorridor, pointInRoom } from "../../src/client/domain/geometry";
 import {
   bossKindForRoom,
@@ -129,7 +136,9 @@ describe("layout and geometry", () => {
           const inFloor = layout.nodes.some(room => pointInRoom(point.x, point.y, room, MONSTER_RADIUS)) ||
             layout.links.some(candidate => pointInCorridor(point.x, point.y, candidate, MONSTER_RADIUS));
           const blocked = decorations.some(item =>
-            item.obstacle && !item.destroyed && Math.hypot(point.x - item.x, point.y - item.y) < item.radius + MONSTER_RADIUS
+            item.obstacle &&
+            !item.destroyed &&
+            Math.hypot(point.x - item.x, point.y - item.y) < (item.footprint ?? item.radius) + MONSTER_RADIUS
           );
           return inFloor && !blocked;
         },
@@ -158,7 +167,7 @@ describe("layout and geometry", () => {
     expect(decorations).toEqual(decorationSpecsForCorridor(link));
     expect(decorations.some(item => item.obstacle)).toBe(true);
     expect(decorations.filter(item => item.obstacle).every(item =>
-      item.radius + MONSTER_RADIUS < link.width / 2
+      (item.footprint ?? item.radius) + MONSTER_RADIUS < link.width / 2
     )).toBe(true);
     expect(monsters).toEqual(monsterSpecsForCorridor(link, 3));
     expect(monsters).toEqual([]);
@@ -298,7 +307,11 @@ describe("deterministic room contents", () => {
       truncated: false,
     }, 1_200, 800);
     const arena = bossLayout.nodes.find(room => room.tag === "script")!;
-    expect(arena).toMatchObject({ shape: "octagon", width: 900, height: 650 });
+    expect(arena).toMatchObject({
+      shape: "octagon",
+      width: Math.round(900 * WORLD_SCALE),
+      height: Math.round(650 * WORLD_SCALE),
+    });
 
     const floorOne = monsterSpecsForRoom(arena, 1);
     const floorEight = monsterSpecsForRoom(arena, 8);

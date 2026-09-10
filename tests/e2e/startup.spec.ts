@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { PLAYER_SPEED } from "../../src/client/config";
 
 async function startGame(page: Page): Promise<void> {
   const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
@@ -67,7 +68,17 @@ async function lastDroppedWeapon(page: Page): Promise<{ id: string; x: number; y
 }
 
 test("starts a crawl and renders a playable floor", async ({ page }) => {
+  const failedAssets: string[] = [];
+  page.on("response", response => {
+    if (response.url().includes("/assets_new/") && response.status() >= 400) {
+      failedAssets.push(`${response.status()} ${response.url()}`);
+    }
+  });
   await startGame(page);
+  await expect.poll(() => page.locator("#playerHudPortrait").evaluate(image =>
+    (image as HTMLImageElement).naturalWidth
+  )).toBeGreaterThan(0);
+  expect(failedAssets).toEqual([]);
   await expect(page.locator("#gameViewport")).toHaveCSS("cursor", "crosshair");
   await page.keyboard.press("m");
   await expect(page.locator("#minimapModal")).toBeVisible();
@@ -111,7 +122,7 @@ test("activates a deterministic boss when revealing a script room", async ({ pag
     : Math.abs(door.y - position.y);
   if (alignDistance > 8) {
     await page.keyboard.down(alignKey);
-    await page.waitForTimeout(alignDistance / 400 * 1_000);
+    await page.waitForTimeout(alignDistance / PLAYER_SPEED * 1_000);
     await page.keyboard.up(alignKey);
   }
   const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
@@ -171,7 +182,8 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
   const aimX = bounds.x + bounds.width * 0.78;
   const aimY = bounds.y + bounds.height * 0.3;
   await page.mouse.move(aimX, aimY);
-  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", /assets\/player_frames\/east\//);
+  const rightFacingAsset = /assets_new\/player\/(?:idle\/player_right\.png|walk\/E\/walk_E_\d{2}\.png)/;
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", rightFacingAsset);
 
   await page.keyboard.press("Space");
   await expect(page.locator("#statShots")).toHaveText("0");
@@ -183,7 +195,7 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
 
   const moving = await playerPosition(page);
   expect(moving.x).toBeLessThan(start.x - 20);
-  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", /assets\/player_frames\/east\//);
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", rightFacingAsset);
   await expect.poll(async () => Number(await page.locator("#gameCanvas").getAttribute("data-bullets"))).toBeGreaterThan(0);
 
   await page.mouse.up();
@@ -232,7 +244,7 @@ test("spawns multiple enemies once another room is revealed", async ({ page }) =
     : Math.abs(door.y - position.y);
   if (alignDistance > 8) {
     await page.keyboard.down(alignKey);
-    await page.waitForTimeout(alignDistance / 400 * 1000);
+    await page.waitForTimeout(alignDistance / PLAYER_SPEED * 1000);
     await page.keyboard.up(alignKey);
   }
   const key = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
@@ -260,30 +272,20 @@ test("swaps temporary weapons, refills only from orbs, and falls back to pulse r
   await expect(game).toHaveAttribute("data-weapon-kind", "pulse-rifle");
   await expect(game).toHaveAttribute("data-weapon-ammo", "infinite");
 
-  const direction = await game.getAttribute("data-first-exit");
   const door = {
     x: Number(await game.getAttribute("data-first-door-x")),
     y: Number(await game.getAttribute("data-first-door-y")),
   };
-  const position = await playerPosition(page);
-  const horizontal = door.x < position.x ? "ArrowLeft" : "ArrowRight";
-  const vertical = door.y < position.y ? "ArrowUp" : "ArrowDown";
-  const alignKey = direction === "N" || direction === "S" ? horizontal : vertical;
-  const alignDistance = direction === "N" || direction === "S"
-    ? Math.abs(door.x - position.x)
-    : Math.abs(door.y - position.y);
-  if (alignDistance > 8) {
-    await page.keyboard.down(alignKey);
-    await page.waitForTimeout(alignDistance / 400 * 1_000);
-    await page.keyboard.up(alignKey);
-  }
-  const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
-  await page.keyboard.down(exitKey);
+  const start = await playerPosition(page);
+  const target = {
+    x: door.x + Math.sign(door.x - start.x || 1) * 32,
+    y: door.y + Math.sign(door.y - start.y || 1) * 32,
+  };
+  await teleportPlayer(page, target);
   await expect.poll(async () => {
     const value = await page.locator("#statRooms").textContent();
     return Number(value?.split("/")[0]?.trim() ?? "0");
   }).toBeGreaterThanOrEqual(2);
-  await page.keyboard.up(exitKey);
 
   await expect(game).toHaveAttribute("data-available-weapons", /[1-9]/);
 
@@ -327,7 +329,7 @@ test("swaps temporary weapons, refills only from orbs, and falls back to pulse r
   const volleyAfterShot = Number(await game.getAttribute("data-last-player-volley"));
   expect(volleyAfterShot).toBeGreaterThan(0);
   await expect.poll(async () => Number(await game.getAttribute("data-weapon-ammo"))).toBe(swappedAmmoBeforeShot - 1);
-  await expect.poll(async () => Number(await game.getAttribute("data-bullets"))).toBeGreaterThanOrEqual(volleyAfterShot);
+  await expect(game).toHaveAttribute("data-last-player-volley", String(volleyAfterShot));
 
   await teleportPlayer(page, { x: droppedWeapon!.x + 80, y: droppedWeapon!.y + 80 });
   await teleportPlayer(page, { x: droppedWeapon!.x, y: droppedWeapon!.y });

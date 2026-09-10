@@ -14,8 +14,10 @@ const servers: ReturnType<typeof createWebCrawlServer>[] = [];
 beforeEach(async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), "webcrawl-test-"));
   await fs.mkdir(path.join(directory, "assets"));
+  await fs.mkdir(path.join(directory, "assets_new"));
   await fs.writeFile(path.join(directory, "index.html"), "<!doctype html><title>WebCrawl</title>");
   await fs.writeFile(path.join(directory, "assets", "app.js"), "export {};\n");
+  await fs.writeFile(path.join(directory, "assets_new", "sprite.png"), Buffer.from([137, 80, 78, 71]));
 });
 
 afterEach(async () => {
@@ -49,6 +51,9 @@ describe("WebCrawl server", () => {
     expect(index.headers.get("content-type")).toBe("text/html; charset=utf-8");
     const script = await fetch(`${baseUrl}/assets/app.js`);
     expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    const sprite = await fetch(`${baseUrl}/assets_new/sprite.png`);
+    expect(sprite.status).toBe(200);
+    expect(sprite.headers.get("content-type")).toBe("image/png");
   });
 
   it("returns the remote HTML through the API", async () => {

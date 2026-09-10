@@ -52,7 +52,10 @@ export function createRequestHandler(
       void handleFetch(url, response, config, dependencies);
     } else if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       serveIndex(response, config.clientDirectory);
-    } else if (request.method === "GET" && url.pathname.startsWith("/assets/")) {
+    } else if (
+      request.method === "GET" &&
+      (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/assets_new/"))
+    ) {
       serveAsset(url.pathname, response, config.clientDirectory);
     } else {
       sendJson(response, 404, { error: "Not found." });

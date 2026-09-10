@@ -1,5 +1,13 @@
 export type Direction = "N" | "E" | "S" | "W";
-export type PlayerDirection = "up" | "down" | "left" | "right";
+export type PlayerDirection =
+  | "up"
+  | "upRight"
+  | "right"
+  | "downRight"
+  | "down"
+  | "downLeft"
+  | "left"
+  | "upLeft";
 export type PlayerAnimation = "walk" | "shoot";
 export type LootKind = "credit" | "crystal" | "core" | "medkit" | "weapon";
 export type BossKind = "packet-storm" | "fork-bomb" | "heap-titan";
@@ -118,6 +126,7 @@ export interface Decoration extends Point {
   obstacle: boolean;
   radius: number;
   size: number;
+  footprint?: number;
   maxHp: number;
   hp: number;
   destroyed: boolean;
@@ -158,7 +167,7 @@ export interface Monster extends Point {
   active: boolean;
   dead: boolean;
   deathAnimating?: boolean;
-  moveDir?: "left" | "right" | null;
+  moveDir?: "up" | "down" | "left" | "right" | null;
   path?: Point[];
   pathIndex?: number;
   pathTargetRoomId?: number | null;

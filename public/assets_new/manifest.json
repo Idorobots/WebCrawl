@@ -1,0 +1,2275 @@
+{
+  "format": "RGBA PNG",
+  "walk": {
+    "directions": [
+      "N",
+      "NE",
+      "E",
+      "SE",
+      "S",
+      "SW",
+      "W",
+      "NW"
+    ],
+    "frame_order": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "suggested_fps": 8,
+    "canvas": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      240
+    ]
+  },
+  "ui": {
+    "panel": {
+      "borders": {
+        "left": 220,
+        "right": 45,
+        "top": 45,
+        "bottom": 40
+      },
+      "minimum_size": [
+        266,
+        86
+      ],
+      "behavior": "corners fixed, edges stretch along length, center stretches in both axes"
+    },
+    "health_bar": {
+      "borders": {
+        "left": 52,
+        "right": 52,
+        "top": 18,
+        "bottom": 18
+      },
+      "minimum_size": [
+        105,
+        37
+      ],
+      "behavior": "corners fixed, edges stretch along length, center stretches in both axes"
+    },
+    "button": {
+      "borders": {
+        "left": 68,
+        "right": 68,
+        "top": 28,
+        "bottom": 28
+      },
+      "minimum_size": [
+        137,
+        57
+      ],
+      "behavior": "corners fixed, edges stretch along length, center stretches in both axes"
+    },
+    "panel_plain": {
+      "borders": {
+        "left": 52,
+        "right": 52,
+        "top": 52,
+        "bottom": 52
+      },
+      "minimum_size": [
+        105,
+        105
+      ],
+      "behavior": "corners fixed, edges stretch along length, center stretches in both axes"
+    },
+    "health_bar_plain": {
+      "borders": {
+        "left": 60,
+        "right": 60,
+        "top": 20,
+        "bottom": 20
+      },
+      "minimum_size": [
+        121,
+        41
+      ],
+      "behavior": "corners fixed, edges stretch along length, center stretches in both axes"
+    },
+    "button_plain": {
+      "borders": {
+        "left": 72,
+        "right": 72,
+        "top": 30,
+        "bottom": 30
+      },
+      "minimum_size": [
+        145,
+        61
+      ],
+      "behavior": "corners fixed, edges stretch along length, center stretches in both axes"
+    }
+  },
+  "assets": {
+    "player/walk/N/walk_N_01.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 54798
+    },
+    "player/walk/N/walk_N_02.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 54498
+    },
+    "player/walk/N/walk_N_03.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 53582
+    },
+    "player/walk/N/walk_N_04.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 54756
+    },
+    "player/walk/NE/walk_NE_01.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 50036
+    },
+    "player/walk/NE/walk_NE_02.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 50688
+    },
+    "player/walk/NE/walk_NE_03.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 49427
+    },
+    "player/walk/NE/walk_NE_04.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 50385
+    },
+    "player/walk/E/walk_E_01.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 45746
+    },
+    "player/walk/E/walk_E_02.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 47262
+    },
+    "player/walk/E/walk_E_03.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 46876
+    },
+    "player/walk/E/walk_E_04.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 46394
+    },
+    "player/walk/SE/walk_SE_01.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 49098
+    },
+    "player/walk/SE/walk_SE_02.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 48535
+    },
+    "player/walk/SE/walk_SE_03.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 48596
+    },
+    "player/walk/SE/walk_SE_04.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 49113
+    },
+    "player/walk/S/walk_S_01.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 51048
+    },
+    "player/walk/S/walk_S_02.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 50489
+    },
+    "player/walk/S/walk_S_03.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 50780
+    },
+    "player/walk/S/walk_S_04.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 50466
+    },
+    "player/walk/SW/walk_SW_01.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 48376
+    },
+    "player/walk/SW/walk_SW_02.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 49597
+    },
+    "player/walk/SW/walk_SW_03.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 47727
+    },
+    "player/walk/SW/walk_SW_04.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 49322
+    },
+    "player/walk/W/walk_W_01.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 47095
+    },
+    "player/walk/W/walk_W_02.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 48038
+    },
+    "player/walk/W/walk_W_03.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 46010
+    },
+    "player/walk/W/walk_W_04.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 48379
+    },
+    "player/walk/NW/walk_NW_01.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 50956
+    },
+    "player/walk/NW/walk_NW_02.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 48914
+    },
+    "player/walk/NW/walk_NW_03.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 50360
+    },
+    "player/walk/NW/walk_NW_04.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 50426
+    },
+    "props/terminal_front.png": {
+      "size": [
+        160,
+        240
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 9482
+    },
+    "props/crate_front.png": {
+      "size": [
+        225,
+        240
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 10598
+    },
+    "props/plant_small_teal.png": {
+      "size": [
+        118,
+        136
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 7400
+    },
+    "props/plant_small_amber.png": {
+      "size": [
+        111,
+        136
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 7369
+    },
+    "props/plant_large_violet.png": {
+      "size": [
+        260,
+        316
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 36497
+    },
+    "props/plant_large_green.png": {
+      "size": [
+        259,
+        316
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 37808
+    },
+    "ui/panel/top_left.png": {
+      "size": [
+        220,
+        45
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 2002
+    },
+    "ui/panel/top.png": {
+      "size": [
+        55,
+        45
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 785
+    },
+    "ui/panel/top_right.png": {
+      "size": [
+        45,
+        45
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 825
+    },
+    "ui/panel/left.png": {
+      "size": [
+        220,
+        239
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 46236
+    },
+    "ui/panel/center.png": {
+      "size": [
+        55,
+        239
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 13145
+    },
+    "ui/panel/right.png": {
+      "size": [
+        45,
+        239
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 4024
+    },
+    "ui/panel/bottom_left.png": {
+      "size": [
+        220,
+        40
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 2555
+    },
+    "ui/panel/bottom.png": {
+      "size": [
+        55,
+        40
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 562
+    },
+    "ui/panel/bottom_right.png": {
+      "size": [
+        45,
+        40
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 534
+    },
+    "ui/panel/source.png": {
+      "size": [
+        320,
+        324
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 70668
+    },
+    "ui/panel/example_1.png": {
+      "size": [
+        480,
+        260
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 85610
+    },
+    "ui/panel/example_2.png": {
+      "size": [
+        700,
+        360
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 194025
+    },
+    "ui/health_bar/top_left.png": {
+      "size": [
+        52,
+        18
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 164
+    },
+    "ui/health_bar/top.png": {
+      "size": [
+        408,
+        18
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 2854
+    },
+    "ui/health_bar/top_right.png": {
+      "size": [
+        52,
+        18
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 164
+    },
+    "ui/health_bar/left.png": {
+      "size": [
+        52,
+        24
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/health_bar/center.png": {
+      "size": [
+        408,
+        24
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/health_bar/right.png": {
+      "size": [
+        52,
+        24
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/health_bar/bottom_left.png": {
+      "size": [
+        52,
+        18
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 159
+    },
+    "ui/health_bar/bottom.png": {
+      "size": [
+        408,
+        18
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 2854
+    },
+    "ui/health_bar/bottom_right.png": {
+      "size": [
+        52,
+        18
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 162
+    },
+    "ui/health_bar/source.png": {
+      "size": [
+        512,
+        60
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 6357
+    },
+    "ui/health_bar/example_1.png": {
+      "size": [
+        360,
+        110
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 4229
+    },
+    "ui/health_bar/example_2.png": {
+      "size": [
+        700,
+        140
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 8989
+    },
+    "ui/button/top_left.png": {
+      "size": [
+        68,
+        28
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 296
+    },
+    "ui/button/top.png": {
+      "size": [
+        376,
+        28
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/button/top_right.png": {
+      "size": [
+        68,
+        28
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 300
+    },
+    "ui/button/left.png": {
+      "size": [
+        68,
+        50
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 3
+    },
+    "ui/button/center.png": {
+      "size": [
+        376,
+        50
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/button/right.png": {
+      "size": [
+        68,
+        50
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 3
+    },
+    "ui/button/bottom_left.png": {
+      "size": [
+        68,
+        28
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 310
+    },
+    "ui/button/bottom.png": {
+      "size": [
+        376,
+        28
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/button/bottom_right.png": {
+      "size": [
+        68,
+        28
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 313
+    },
+    "ui/button/source.png": {
+      "size": [
+        512,
+        106
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 1225
+    },
+    "ui/button/example_1.png": {
+      "size": [
+        360,
+        110
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 1225
+    },
+    "ui/button/example_2.png": {
+      "size": [
+        700,
+        140
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 1231
+    },
+    "ui/panel_plain/top_left.png": {
+      "size": [
+        52,
+        52
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 705
+    },
+    "ui/panel_plain/top.png": {
+      "size": [
+        216,
+        52
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 4829
+    },
+    "ui/panel_plain/top_right.png": {
+      "size": [
+        52,
+        52
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 706
+    },
+    "ui/panel_plain/left.png": {
+      "size": [
+        52,
+        211
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 5486
+    },
+    "ui/panel_plain/center.png": {
+      "size": [
+        216,
+        211
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 45576
+    },
+    "ui/panel_plain/right.png": {
+      "size": [
+        52,
+        211
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 5486
+    },
+    "ui/panel_plain/bottom_left.png": {
+      "size": [
+        52,
+        52
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 724
+    },
+    "ui/panel_plain/bottom.png": {
+      "size": [
+        216,
+        52
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 5063
+    },
+    "ui/panel_plain/bottom_right.png": {
+      "size": [
+        52,
+        52
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 719
+    },
+    "ui/panel_plain/source.png": {
+      "size": [
+        320,
+        315
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 69294
+    },
+    "ui/panel_plain/example_1.png": {
+      "size": [
+        480,
+        260
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 86840
+    },
+    "ui/panel_plain/example_2.png": {
+      "size": [
+        700,
+        360
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 196038
+    },
+    "ui/health_bar_plain/top_left.png": {
+      "size": [
+        60,
+        20
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 238
+    },
+    "ui/health_bar_plain/top.png": {
+      "size": [
+        392,
+        20
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 2929
+    },
+    "ui/health_bar_plain/top_right.png": {
+      "size": [
+        60,
+        20
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 223
+    },
+    "ui/health_bar_plain/left.png": {
+      "size": [
+        60,
+        30
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/health_bar_plain/center.png": {
+      "size": [
+        392,
+        30
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/health_bar_plain/right.png": {
+      "size": [
+        60,
+        30
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/health_bar_plain/bottom_left.png": {
+      "size": [
+        60,
+        20
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 228
+    },
+    "ui/health_bar_plain/bottom.png": {
+      "size": [
+        392,
+        20
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 2744
+    },
+    "ui/health_bar_plain/bottom_right.png": {
+      "size": [
+        60,
+        20
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 221
+    },
+    "ui/health_bar_plain/source.png": {
+      "size": [
+        512,
+        70
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 6583
+    },
+    "ui/health_bar_plain/example_1.png": {
+      "size": [
+        360,
+        110
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 4379
+    },
+    "ui/health_bar_plain/example_2.png": {
+      "size": [
+        700,
+        140
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 9304
+    },
+    "ui/button_plain/top_left.png": {
+      "size": [
+        72,
+        30
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 263
+    },
+    "ui/button_plain/top.png": {
+      "size": [
+        368,
+        30
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/button_plain/top_right.png": {
+      "size": [
+        72,
+        30
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 263
+    },
+    "ui/button_plain/left.png": {
+      "size": [
+        72,
+        38
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/button_plain/center.png": {
+      "size": [
+        368,
+        38
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/button_plain/right.png": {
+      "size": [
+        72,
+        38
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/button_plain/bottom_left.png": {
+      "size": [
+        72,
+        30
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 260
+    },
+    "ui/button_plain/bottom.png": {
+      "size": [
+        368,
+        30
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "ui/button_plain/bottom_right.png": {
+      "size": [
+        72,
+        30
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 260
+    },
+    "ui/button_plain/source.png": {
+      "size": [
+        512,
+        98
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 1046
+    },
+    "ui/button_plain/example_1.png": {
+      "size": [
+        360,
+        110
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 1046
+    },
+    "ui/button_plain/example_2.png": {
+      "size": [
+        700,
+        140
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 1046
+    },
+    "ui/decorations/header.png": {
+      "size": [
+        160,
+        43
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 902
+    },
+    "props/barrel_red.png": {
+      "size": [
+        192,
+        192
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        96,
+        176
+      ],
+      "transparent_pixels": 23174
+    },
+    "props/barrel_coolant.png": {
+      "size": [
+        192,
+        192
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        96,
+        176
+      ],
+      "transparent_pixels": 23739
+    },
+    "props/barrel_hazard.png": {
+      "size": [
+        192,
+        192
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        96,
+        176
+      ],
+      "transparent_pixels": 23532
+    },
+    "props/ammo_ballistic.png": {
+      "size": [
+        192,
+        192
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        96,
+        176
+      ],
+      "transparent_pixels": 20573
+    },
+    "props/ammo_energy.png": {
+      "size": [
+        192,
+        192
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        96,
+        176
+      ],
+      "transparent_pixels": 21995
+    },
+    "pickups/weapons/weapon_assault_rifle.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 47574
+    },
+    "pickups/weapons/weapon_shotgun.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 42238
+    },
+    "pickups/weapons/weapon_smg.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 41811
+    },
+    "pickups/weapons/weapon_sniper.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 57446
+    },
+    "pickups/weapons/weapon_pistol.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 30538
+    },
+    "pickups/weapons/weapon_plasma.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 43047
+    },
+    "pickups/weapons/weapon_laser.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 46282
+    },
+    "pickups/weapons/weapon_rocket.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 49846
+    },
+    "pickups/weapons/weapon_flamer.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 41455
+    },
+    "pickups/weapons/weapon_arc.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 43290
+    },
+    "enemies/sentry_ballistic/sentry_ballistic_front.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 28570
+    },
+    "enemies/sentry_twin/sentry_twin_front.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 37566
+    },
+    "enemies/sentry_energy/sentry_energy_front.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 36813
+    },
+    "enemies/boss_siege/boss_siege_front.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 170519
+    },
+    "enemies/boss_missile/boss_missile_front.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 145997
+    },
+    "enemies/boss_laser/boss_laser_front.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 165873
+    },
+    "enemies/boss_arc/boss_arc_front.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 162298
+    },
+    "enemies/boss_fortress/boss_fortress_front.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 158290
+    },
+    "enemies/scout/scout_left.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 47460
+    },
+    "enemies/scout/scout_right.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 44843
+    },
+    "enemies/heavy/heavy_left.png": {
+      "size": [
+        320,
+        320
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        160,
+        304
+      ],
+      "transparent_pixels": 71268
+    },
+    "enemies/heavy/heavy_right.png": {
+      "size": [
+        320,
+        320
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        160,
+        304
+      ],
+      "transparent_pixels": 68962
+    },
+    "environment/background_tech_tile.png": {
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGBA",
+      "tileable": true,
+      "repeat": "both axes",
+      "transparent_pixels": 0
+    },
+    "environment/tiles/floor_plain.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "tileable": true,
+      "transparent_pixels": 0
+    },
+    "environment/tiles/floor_grate.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "environment/walls/horizontal.png": {
+      "size": [
+        128,
+        32
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "environment/walls/vertical.png": {
+      "size": [
+        32,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 0
+    },
+    "environment/art_variants/wall_horizontal.png": {
+      "size": [
+        512,
+        94
+      ],
+      "mode": "RGBA",
+      "usage": "decorative assembled variant; use tiles directory for grid connections",
+      "transparent_pixels": 900
+    },
+    "environment/art_variants/wall_vertical.png": {
+      "size": [
+        85,
+        512
+      ],
+      "mode": "RGBA",
+      "usage": "decorative assembled variant; use tiles directory for grid connections",
+      "transparent_pixels": 1067
+    },
+    "environment/art_variants/wall_corner.png": {
+      "size": [
+        512,
+        495
+      ],
+      "mode": "RGBA",
+      "usage": "decorative assembled variant; use tiles directory for grid connections",
+      "transparent_pixels": 170467
+    },
+    "environment/art_variants/door_horizontal.png": {
+      "size": [
+        512,
+        125
+      ],
+      "mode": "RGBA",
+      "usage": "decorative assembled variant; use tiles directory for grid connections",
+      "transparent_pixels": 7772
+    },
+    "environment/art_variants/door_vertical.png": {
+      "size": [
+        175,
+        512
+      ],
+      "mode": "RGBA",
+      "usage": "decorative assembled variant; use tiles directory for grid connections",
+      "transparent_pixels": 7940
+    },
+    "environment/art_variants/corridor_straight.png": {
+      "size": [
+        388,
+        512
+      ],
+      "mode": "RGBA",
+      "usage": "decorative assembled variant; use tiles directory for grid connections",
+      "transparent_pixels": 9005
+    },
+    "environment/art_variants/corridor_corner.png": {
+      "size": [
+        483,
+        512
+      ],
+      "mode": "RGBA",
+      "usage": "decorative assembled variant; use tiles directory for grid connections",
+      "transparent_pixels": 70116
+    },
+    "environment/art_variants/corridor_junction.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "usage": "decorative assembled variant; use tiles directory for grid connections",
+      "transparent_pixels": 62305
+    },
+    "environment/tiles/corridor_N.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "N"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_E.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "E"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_NE.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "N",
+        "E"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_S.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "S"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_NS.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "N",
+        "S"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_ES.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "E",
+        "S"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_NES.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "N",
+        "E",
+        "S"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_W.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "W"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_NW.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "N",
+        "W"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_EW.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "E",
+        "W"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_NEW.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "N",
+        "E",
+        "W"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_SW.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "S",
+        "W"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_NSW.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "N",
+        "S",
+        "W"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_ESW.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "E",
+        "S",
+        "W"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/tiles/corridor_NESW.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "exits": [
+        "N",
+        "E",
+        "S",
+        "W"
+      ],
+      "walkable_opening": [
+        32,
+        96
+      ],
+      "transparent_pixels": 0
+    },
+    "environment/walls/corner_NW.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 9216
+    },
+    "environment/walls/corner_SW.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 9216
+    },
+    "environment/walls/corner_SE.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 9216
+    },
+    "environment/walls/corner_NE.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 9216
+    },
+    "environment/doors/closed_horizontal.png": {
+      "size": [
+        128,
+        32
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 520
+    },
+    "environment/doors/open_horizontal.png": {
+      "size": [
+        128,
+        32
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 2358
+    },
+    "environment/doors/closed_vertical.png": {
+      "size": [
+        32,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 380
+    },
+    "environment/doors/open_vertical.png": {
+      "size": [
+        32,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 2302
+    },
+    "effects/explosion/explosion_01.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        128
+      ],
+      "transparent_pixels": 61392
+    },
+    "effects/explosion/explosion_02.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        128
+      ],
+      "transparent_pixels": 50781
+    },
+    "effects/explosion/explosion_03.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        128
+      ],
+      "transparent_pixels": 38100
+    },
+    "effects/explosion/explosion_04.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        128
+      ],
+      "transparent_pixels": 40454
+    },
+    "effects/explosion/explosion_05.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        128
+      ],
+      "transparent_pixels": 44230
+    },
+    "effects/explosion/explosion_06.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        128
+      ],
+      "transparent_pixels": 65098
+    },
+    "player/idle/player_right.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 44582
+    },
+    "player/idle/player_front.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 46249
+    },
+    "player/idle/player_back.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 46491
+    },
+    "player/idle/player_left.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 44538
+    },
+    "enemies/scout/scout_front.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 42078
+    },
+    "enemies/scout/scout_back.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 42460
+    },
+    "enemies/heavy/heavy_front.png": {
+      "size": [
+        320,
+        320
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 67261
+    },
+    "enemies/heavy/heavy_back.png": {
+      "size": [
+        320,
+        320
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 66970
+    },
+    "pickups/medkit.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 8113
+    },
+    "pickups/gold.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 10857
+    },
+    "pickups/crystal.png": {
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 12731
+    },
+    "props/plant_magenta.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 39325
+    },
+    "ui/additional/frame.png": {
+      "size": [
+        480,
+        341
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 123302
+    },
+    "ui/additional/dialogue.png": {
+      "size": [
+        480,
+        117
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 33931
+    },
+    "ui/additional/tooltip.png": {
+      "size": [
+        313,
+        480
+      ],
+      "mode": "RGBA",
+      "transparent_pixels": 103186
+    },
+    "enemies/sentry_ballistic/sentry_ballistic_back.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 28151
+    },
+    "enemies/sentry_ballistic/sentry_ballistic_left.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 42656
+    },
+    "enemies/sentry_ballistic/sentry_ballistic_right.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 43680
+    },
+    "enemies/sentry_twin/sentry_twin_back.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 37833,
+      "status": "needs_art_revision",
+      "issue": "Rear weapon/sensor geometry remains ambiguous; generation limit blocked correction."
+    },
+    "enemies/sentry_twin/sentry_twin_left.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 36021
+    },
+    "enemies/sentry_twin/sentry_twin_right.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 33136
+    },
+    "enemies/sentry_energy/sentry_energy_back.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 36573
+    },
+    "enemies/sentry_energy/sentry_energy_left.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 37055
+    },
+    "enemies/sentry_energy/sentry_energy_right.png": {
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        128,
+        240
+      ],
+      "transparent_pixels": 39234
+    },
+    "enemies/boss_siege/boss_siege_back.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 172352,
+      "status": "needs_art_revision",
+      "issue": "Rear weapon/sensor geometry remains ambiguous; generation limit blocked correction."
+    },
+    "enemies/boss_siege/boss_siege_left.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 176299
+    },
+    "enemies/boss_siege/boss_siege_right.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 175297
+    },
+    "enemies/boss_missile/boss_missile_back.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 144482,
+      "status": "needs_art_revision",
+      "issue": "Rear weapon/sensor geometry remains ambiguous; generation limit blocked correction."
+    },
+    "enemies/boss_missile/boss_missile_left.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 144117
+    },
+    "enemies/boss_missile/boss_missile_right.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 148830
+    },
+    "enemies/boss_laser/boss_laser_back.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 167401,
+      "status": "needs_art_revision",
+      "issue": "Rear weapon/sensor geometry remains ambiguous; generation limit blocked correction."
+    },
+    "enemies/boss_laser/boss_laser_left.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 175667
+    },
+    "enemies/boss_laser/boss_laser_right.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 173614
+    },
+    "enemies/boss_arc/boss_arc_back.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 157351,
+      "status": "needs_art_revision",
+      "issue": "Rear weapon/sensor geometry remains ambiguous; generation limit blocked correction."
+    },
+    "enemies/boss_arc/boss_arc_left.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 178111
+    },
+    "enemies/boss_arc/boss_arc_right.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 169436
+    },
+    "enemies/boss_fortress/boss_fortress_back.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 161484,
+      "status": "needs_art_revision",
+      "issue": "Rear weapon/sensor geometry remains ambiguous; generation limit blocked correction."
+    },
+    "enemies/boss_fortress/boss_fortress_left.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 173251
+    },
+    "enemies/boss_fortress/boss_fortress_right.png": {
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "anchor": [
+        256,
+        496
+      ],
+      "transparent_pixels": 175352
+    },
+    "enemies/scout/scout_right_full_resolution.png": {
+      "size": [
+        1295,
+        1215
+      ],
+      "mode": "RGBA",
+      "note": "Latest individually requested background removal, full resolution",
+      "transparent_pixels": 1125165
+    }
+  },
+  "explosion": {
+    "canvas": [
+      256,
+      256
+    ],
+    "anchor": [
+      128,
+      128
+    ],
+    "frame_order": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "suggested_fps": 12,
+    "loop": false
+  },
+  "environment": {
+    "grid_size": 128,
+    "corridor_opening": [
+      32,
+      96
+    ],
+    "wall_thickness": 32,
+    "background_tile_size": 1024
+  }
+}
