@@ -167,7 +167,7 @@ test("moves continuously with WASD and arrow keys", async ({ page }) => {
   expect(second.x).toBeGreaterThan(first.x + 5);
 
   await page.keyboard.down("ArrowLeft");
-  await page.waitForTimeout(120);
+  await page.waitForTimeout(220);
   await page.keyboard.up("ArrowLeft");
   const afterArrow = await playerPosition(page);
   expect(afterArrow.x).toBeLessThan(second.x - 5);

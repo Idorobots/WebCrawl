@@ -26,6 +26,9 @@ import type {
 
 const textureKey = (asset: string): string => `asset:${asset}`;
 const world = (value: number): number => Math.round(value * WORLD_SCALE);
+const TILE_SIZE = 128;
+const WALL_THICKNESS = 32;
+const HIDDEN_WORLD_ALPHA = 0.24;
 
 export class PhaserRenderer {
   private game: Phaser.Game | null = null;
@@ -33,7 +36,9 @@ export class PhaserRenderer {
   private layout: DungeonLayout | null = null;
   private visited = new Set<number>();
   private background: Phaser.GameObjects.TileSprite | null = null;
-  private staticGraphics: Phaser.GameObjects.Graphics | null = null;
+  private staticObjects: Phaser.GameObjects.GameObject[] = [];
+  private roomLayers = new Map<number, Phaser.GameObjects.Container>();
+  private corridorLayers = new Map<string, Phaser.GameObjects.Container>();
   private bulletsGraphics: Phaser.GameObjects.Graphics | null = null;
   private decorations: Phaser.GameObjects.Container[] = [];
   private objects: Phaser.GameObjects.Container[] = [];
@@ -110,7 +115,7 @@ export class PhaserRenderer {
     this.layout = null;
     this.background?.destroy();
     this.background = null;
-    this.staticGraphics?.clear();
+    this.destroyStaticObjects();
     this.bulletsGraphics?.clear();
     this.destroyAll(this.decorations);
     this.destroyAll(this.objects);
@@ -153,14 +158,15 @@ export class PhaserRenderer {
 
   setFog(visited: ReadonlySet<number>): void {
     this.visited = new Set(visited);
-    this.drawWorld();
+    this.updateWorldVisibility();
   }
 
   private drawWorld(): void {
     const scene = this.scene;
     if (!scene || !this.layout) return;
     this.background?.destroy();
-    this.staticGraphics?.destroy();
+    this.background = null;
+    this.destroyStaticObjects();
     const worldBounds = this.layout.nodes.reduce((bounds, room) => ({
       left: Math.min(bounds.left, room.x - room.width / 2),
       right: Math.max(bounds.right, room.x + room.width / 2),
@@ -193,35 +199,210 @@ export class PhaserRenderer {
       .setOrigin(0)
       .setScrollFactor(1)
       .setDepth(-10);
-    const graphics = scene.add.graphics().setDepth(0);
-    this.staticGraphics = graphics;
 
     for (const link of this.layout.links) {
       const visible = this.visited.has(link.source.id) || this.visited.has(link.target.id);
-      const points = link.points.map(point => new Phaser.Math.Vector2(point.x, point.y));
-      graphics.lineStyle(link.width + world(18), visible ? 0x172a37 : 0x0b141d, visible ? 1 : 0.42);
-      graphics.strokePoints(points, false, false);
-      graphics.lineStyle(2, 0x3b6d82, visible ? 0.62 : 0.08);
-      graphics.strokePoints(points, false, false);
+      this.renderCorridor(link, visible ? 1 : HIDDEN_WORLD_ALPHA);
     }
 
     for (const room of this.layout.nodes) {
       const visible = this.visited.has(room.id);
-      const fill = room.tag === "script" ? 0x29142f : room.isRoot ? 0x162e3a : 0x121c27;
-      graphics.fillStyle(visible ? fill : 0x080d13, visible ? 1 : 0.6);
-      graphics.lineStyle(
-        room.isRoot ? 5 : room.tag === "script" ? 5 : 3,
-        room.tag === "script" ? 0xe77cff : room.isRoot ? 0x55d6be : 0x315267,
-        visible ? 0.95 : 0.16,
-      );
-      this.drawRoom(graphics, room, true);
-      if (visible) {
-        graphics.lineStyle(1, 0x253747, 0.65);
-        for (let x = room.x - room.width / 2 + world(34); x < room.x + room.width / 2; x += world(34)) {
-          graphics.lineBetween(x, room.y - room.height / 2 + world(16), x, room.y + room.height / 2 - world(16));
-        }
-      }
+      this.renderRoom(room, visible ? 1 : HIDDEN_WORLD_ALPHA);
     }
+  }
+
+  private updateWorldVisibility(): void {
+    const layout = this.layout;
+    if (!layout) return;
+    for (const room of layout.nodes) {
+      this.roomLayers.get(room.id)?.setAlpha(this.visited.has(room.id) ? 1 : HIDDEN_WORLD_ALPHA);
+    }
+    for (const link of layout.links) {
+      const visible = this.visited.has(link.source.id) || this.visited.has(link.target.id);
+      this.corridorLayers.get(link.id)?.setAlpha(visible ? 1 : HIDDEN_WORLD_ALPHA);
+    }
+  }
+
+  private renderRoom(room: GraphNode, alpha: number): void {
+    const scene = this.scene;
+    if (!scene) return;
+    const left = room.x - room.width / 2;
+    const top = room.y - room.height / 2;
+    const container = this.rememberStatic(scene.add.container(0, 0).setDepth(-2).setAlpha(alpha));
+    this.roomLayers.set(room.id, container);
+    const floor = scene.add.tileSprite(left, top, room.width, room.height, textureKey(ASSETS.floorPlain)).setOrigin(0);
+    const maskGraphics = this.rememberStatic(scene.add.graphics().setVisible(false));
+    maskGraphics.fillStyle(0xffffff, 1);
+    this.drawRoom(maskGraphics, room, false);
+    floor.setMask(maskGraphics.createGeometryMask());
+    container.add(floor);
+    if (room.shape === "capsule" || room.shape === "octagon") this.addShapedWallFrame(container, room);
+    else this.addWallFrame(container, left, top, room.width, room.height);
+    for (const link of this.layout?.links ?? []) {
+      if (link.source.id === room.id) container.add(this.createDoor(link.points[0]!, link.direction));
+      if (link.target.id === room.id) container.add(this.createDoor(link.points[link.points.length - 1]!, this.opposite(link.direction)));
+    }
+  }
+
+  private renderCorridor(link: DungeonLayout["links"][number], alpha: number): void {
+    const scene = this.scene;
+    if (!scene) return;
+    const container = this.rememberStatic(scene.add.container(0, 0).setDepth(-4).setAlpha(alpha));
+    this.corridorLayers.set(link.id, container);
+    for (let index = 1; index < link.points.length; index += 1) {
+      const start = link.points[index - 1]!;
+      const end = link.points[index]!;
+      container.add(this.createCorridorSegment(start, end, link.width));
+    }
+    for (let index = 1; index < link.points.length - 1; index += 1) {
+      container.add(this.createCorridorJunction(link.points[index]!, link.width));
+    }
+  }
+
+  private createCorridorSegment(start: Point, end: Point, width: number): Phaser.GameObjects.Container {
+    const scene = this.scene!;
+    const container = scene.add.container(0, 0);
+    if (Math.abs(start.x - end.x) >= Math.abs(start.y - end.y)) {
+      const left = Math.min(start.x, end.x);
+      const length = Math.abs(end.x - start.x);
+      const top = start.y - width / 2;
+      container.add(scene.add.tileSprite(left, top, length, width, textureKey(ASSETS.floorGrate)).setOrigin(0));
+      container.add(scene.add.tileSprite(left, top, length, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0));
+      container.add(scene.add.tileSprite(left, top + width - WALL_THICKNESS, length, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0));
+      return container;
+    }
+    const top = Math.min(start.y, end.y);
+    const length = Math.abs(end.y - start.y);
+    const left = start.x - width / 2;
+    container.add(scene.add.tileSprite(left, top, width, length, textureKey(ASSETS.floorGrate)).setOrigin(0));
+    container.add(scene.add.tileSprite(left, top, WALL_THICKNESS, length, textureKey(ASSETS.wallVertical)).setOrigin(0));
+    container.add(scene.add.tileSprite(left + width - WALL_THICKNESS, top, WALL_THICKNESS, length, textureKey(ASSETS.wallVertical)).setOrigin(0));
+    return container;
+  }
+
+  private createCorridorJunction(point: Point, width: number): Phaser.GameObjects.Container {
+    const scene = this.scene!;
+    const left = point.x - width / 2;
+    const top = point.y - width / 2;
+    const container = scene.add.container(0, 0);
+    container.add(scene.add.tileSprite(left, top, width, width, textureKey(ASSETS.floorGrate)).setOrigin(0));
+    this.addWallFrame(container, left, top, width, width);
+    return container;
+  }
+
+  private addWallFrame(container: Phaser.GameObjects.Container, left: number, top: number, width: number, height: number): void {
+    const scene = this.scene!;
+    const innerWidth = Math.max(0, width - TILE_SIZE * 2);
+    const innerHeight = Math.max(0, height - TILE_SIZE * 2);
+    if (innerWidth > 0) {
+      container.add(scene.add.tileSprite(left + TILE_SIZE, top, innerWidth, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0));
+      container.add(scene.add.tileSprite(left + TILE_SIZE, top + height - WALL_THICKNESS, innerWidth, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0));
+    }
+    if (innerHeight > 0) {
+      container.add(scene.add.tileSprite(left, top + TILE_SIZE, WALL_THICKNESS, innerHeight, textureKey(ASSETS.wallVertical)).setOrigin(0));
+      container.add(scene.add.tileSprite(left + width - WALL_THICKNESS, top + TILE_SIZE, WALL_THICKNESS, innerHeight, textureKey(ASSETS.wallVertical)).setOrigin(0));
+    }
+    container.add(scene.add.image(left, top, textureKey(ASSETS.wallCornerNW)).setOrigin(0));
+    container.add(scene.add.image(left + width - TILE_SIZE, top, textureKey(ASSETS.wallCornerNE)).setOrigin(0));
+    container.add(scene.add.image(left, top + height - TILE_SIZE, textureKey(ASSETS.wallCornerSW)).setOrigin(0));
+    container.add(scene.add.image(left + width - TILE_SIZE, top + height - TILE_SIZE, textureKey(ASSETS.wallCornerSE)).setOrigin(0));
+  }
+
+  private addShapedWallFrame(container: Phaser.GameObjects.Container, room: GraphNode): void {
+    const points = this.roomBoundaryPoints(room);
+    for (let index = 0; index < points.length; index += 1) {
+      this.addWallSegment(container, points[index]!, points[(index + 1) % points.length]!);
+    }
+  }
+
+  private roomBoundaryPoints(room: GraphNode): Point[] {
+    const left = room.x - room.width / 2;
+    const right = room.x + room.width / 2;
+    const top = room.y - room.height / 2;
+    const bottom = room.y + room.height / 2;
+    if (room.shape === "octagon") {
+      const cut = Math.min(room.width, room.height) * 0.18;
+      return [
+        { x: left + cut, y: top }, { x: right - cut, y: top },
+        { x: right, y: top + cut }, { x: right, y: bottom - cut },
+        { x: right - cut, y: bottom }, { x: left + cut, y: bottom },
+        { x: left, y: bottom - cut }, { x: left, y: top + cut },
+      ];
+    }
+
+    const radius = Math.min(room.width, room.height) / 2;
+    const steps = 8;
+    const points: Point[] = [];
+    if (room.width >= room.height) {
+      const rightCenter = { x: right - radius, y: room.y };
+      const leftCenter = { x: left + radius, y: room.y };
+      for (let index = 0; index <= steps; index += 1) {
+        const angle = -Math.PI / 2 + Math.PI * index / steps;
+        points.push({ x: rightCenter.x + Math.cos(angle) * radius, y: rightCenter.y + Math.sin(angle) * radius });
+      }
+      for (let index = 0; index <= steps; index += 1) {
+        const angle = Math.PI / 2 + Math.PI * index / steps;
+        points.push({ x: leftCenter.x + Math.cos(angle) * radius, y: leftCenter.y + Math.sin(angle) * radius });
+      }
+      return points;
+    }
+
+    const topCenter = { x: room.x, y: top + radius };
+    const bottomCenter = { x: room.x, y: bottom - radius };
+    for (let index = 0; index <= steps; index += 1) {
+      const angle = Math.PI + Math.PI * index / steps;
+      points.push({ x: topCenter.x + Math.cos(angle) * radius, y: topCenter.y + Math.sin(angle) * radius });
+    }
+    for (let index = 0; index <= steps; index += 1) {
+      const angle = Math.PI * index / steps;
+      points.push({ x: bottomCenter.x + Math.cos(angle) * radius, y: bottomCenter.y + Math.sin(angle) * radius });
+    }
+    return points;
+  }
+
+  private addWallSegment(container: Phaser.GameObjects.Container, start: Point, end: Point): void {
+    const scene = this.scene!;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.hypot(dx, dy);
+    const x = (start.x + end.x) / 2;
+    const y = (start.y + end.y) / 2;
+    if (Math.abs(dx) < 0.5) {
+      container.add(scene.add.tileSprite(x, y, WALL_THICKNESS, length, textureKey(ASSETS.wallVertical)).setOrigin(0.5));
+      return;
+    }
+    const wall = scene.add.tileSprite(x, y, length, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0.5);
+    wall.setRotation(Math.atan2(dy, dx));
+    container.add(wall);
+  }
+
+  private createDoor(position: Point, side: "N" | "E" | "S" | "W"): Phaser.GameObjects.Container {
+    const scene = this.scene!;
+    const container = scene.add.container(0, 0);
+    if (side === "N" || side === "S") {
+      container.add(scene.add.tileSprite(position.x, position.y, TILE_SIZE, WALL_THICKNESS, textureKey(ASSETS.floorPlain)).setOrigin(0.5));
+      container.add(scene.add.image(position.x, position.y, textureKey(ASSETS.doorOpenHorizontal)).setOrigin(0.5));
+      return container;
+    }
+    container.add(scene.add.tileSprite(position.x, position.y, WALL_THICKNESS, TILE_SIZE, textureKey(ASSETS.floorPlain)).setOrigin(0.5));
+    container.add(scene.add.image(position.x, position.y, textureKey(ASSETS.doorOpenVertical)).setOrigin(0.5));
+    return container;
+  }
+
+  private opposite(direction: "N" | "E" | "S" | "W"): "N" | "E" | "S" | "W" {
+    return ({ N: "S", E: "W", S: "N", W: "E" } as const)[direction];
+  }
+
+  private rememberStatic<T extends Phaser.GameObjects.GameObject>(object: T): T {
+    this.staticObjects.push(object);
+    return object;
+  }
+
+  private destroyStaticObjects(): void {
+    for (const object of this.staticObjects) object.destroy();
+    this.staticObjects.length = 0;
+    this.roomLayers.clear();
+    this.corridorLayers.clear();
   }
 
   private drawRoom(graphics: Phaser.GameObjects.Graphics, room: GraphNode, stroke: boolean): void {
