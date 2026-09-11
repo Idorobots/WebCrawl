@@ -12,26 +12,9 @@ export const MAX_ROOMS_AFTER_COALESCE = 100;
 export const MAX_CHILDREN_PER_ROOM = 10;
 
 export const WORLD_SCALE = 1.4;
-export const ROOM_WIDTH = 960;
-export const ROOM_HEIGHT = 640;
-export const ROOM_X_SPACING = 1_002;
-export const ROOM_Y_SPACING = 682;
-export const ROOM_COLLISION_MARGIN = 6;
-
-export const PLAYER_RADIUS = 50;
-export const PLAYER_SPRITE_SIZE = 190;
-export const PLAYER_MUZZLE_DISTANCE = 30;
-export const PLAYER_SPEED = 640;
-export const PLAYER_MAX_HP = 10;
-export const PLAYER_FIRE_COOLDOWN_MS = 220;
-export const BULLET_SPEED = 832;
-export const BULLET_RADIUS = 8;
-export const BULLET_MAX_DISTANCE = 1_440;
-export const MONSTER_RADIUS = 96;
-export const CORRIDOR_HALF_WIDTH = 160;
-export const MAX_CORRIDOR_LENGTH = 1_152;
-export const STAIR_RADIUS = 56;
-export const LOOT_RADIUS = 46;
+export const world = (value: number): number => Math.round(value * WORLD_SCALE);
+export const ROOM_WIDTH = world(600);
+export const ROOM_HEIGHT = world(400);
 export const CAMERA_SCALE = 0.92;
 export const HIGH_SCORE_KEY = "alien-web-crawler-high-scores-v1";
 

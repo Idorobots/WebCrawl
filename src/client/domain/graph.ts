@@ -8,8 +8,9 @@ import {
 import type { DungeonGraph, GraphNode } from "../types";
 import { stableHash } from "./hash";
 
-function nodeLootSeed(element: Element, text: string): number {
+function nodeLootSeed(element: Element, text: string, structuralPath: string): number {
   return stableHash([
+    structuralPath,
     element.tagName.toLowerCase(),
     element.id || "",
     typeof element.className === "string" ? element.className : "",
@@ -65,7 +66,12 @@ export function domToGraph(html: string, pageUrl: string): DungeonGraph {
   let nextId = 0;
   let truncated = false;
 
-  const makeNode = (element: Element, parent: GraphNode | null, depth: number): GraphNode => {
+  const makeNode = (
+    element: Element,
+    parent: GraphNode | null,
+    depth: number,
+    structuralPath: string,
+  ): GraphNode => {
     const tag = element.tagName.toLowerCase();
     const text = (element.textContent || "").replace(/\s+/g, " ").trim();
     const hrefs = collectLinks(element, pageUrl);
@@ -80,7 +86,7 @@ export function domToGraph(html: string, pageUrl: string): DungeonGraph {
       title: makeTitle(element, text, hrefs[0] ?? null),
       width: ROOM_WIDTH,
       height: ROOM_HEIGHT,
-      lootSeed: nodeLootSeed(element, text),
+      lootSeed: nodeLootSeed(element, text, structuralPath),
       isRoot: parent === null,
       isHidden: /(?:^|;)\s*display\s*:\s*none\s*(?:!important)?\s*(?:;|$)/i.test(
         element.getAttribute("style") || "",
@@ -94,10 +100,10 @@ export function domToGraph(html: string, pageUrl: string): DungeonGraph {
     };
   };
 
-  const rootNode = makeNode(body, null, 0);
+  const rootNode = makeNode(body, null, 0, "body");
   nodes.push(rootNode);
-  const queue: Array<{ element: Element; node: GraphNode; depth: number }> = [
-    { element: body, node: rootNode, depth: 0 },
+  const queue: Array<{ element: Element; node: GraphNode; depth: number; structuralPath: string }> = [
+    { element: body, node: rootNode, depth: 0, structuralPath: "body" },
   ];
 
   while (queue.length && nodes.length < MAX_NODES) {
@@ -105,14 +111,15 @@ export function domToGraph(html: string, pageUrl: string): DungeonGraph {
     if (!current) break;
     const children = Array.from(current.element.children).slice(0, MAX_CHILDREN_PER_ROOM);
 
-    for (const childElement of children) {
+    for (const [childIndex, childElement] of children.entries()) {
       if (nodes.length >= MAX_NODES) {
         truncated = true;
         break;
       }
-      const childNode = makeNode(childElement, current.node, current.depth + 1);
+      const childPath = `${current.structuralPath}/${childElement.tagName.toLowerCase()}[${childIndex}]`;
+      const childNode = makeNode(childElement, current.node, current.depth + 1, childPath);
       nodes.push(childNode);
-      queue.push({ element: childElement, node: childNode, depth: current.depth + 1 });
+      queue.push({ element: childElement, node: childNode, depth: current.depth + 1, structuralPath: childPath });
     }
   }
 

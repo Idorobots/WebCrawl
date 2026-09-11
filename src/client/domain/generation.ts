@@ -1,4 +1,4 @@
-import { ASSETS, MONSTER_RADIUS, WORLD_SCALE } from "../config";
+import { world } from "../config";
 import type {
   Decoration,
   BossKind,
@@ -8,25 +8,26 @@ import type {
   LootItem,
   LootKind,
   Monster,
-  MonsterKind,
   MonsterState,
   ObstacleState,
   Point,
   Stair,
 } from "../types";
 import { stableHash } from "./hash";
+import { pointInCorridor, pointInRoomFloor } from "./geometry";
+import {
+  BOSS_DEFINITIONS,
+  DECORATION_DEFINITIONS,
+  MAX_REGULAR_MONSTER_RADIUS,
+  MONSTER_SPAWN_PROFILES,
+  OBSTACLE_DEFINITIONS,
+  PLAYER_SPEC,
+  PORTAL_DEFINITION,
+  REGULAR_MONSTER_DEFINITIONS,
+  SCENERY_DEFINITIONS,
+  WORLD_GEOMETRY,
+} from "./specs";
 import { weaponForRoom, type WeaponSource } from "./weapons";
-
-const world = (value: number): number => Math.round(value * WORLD_SCALE);
-const obstacleScale = (value: number): number => Math.round(world(value) * 0.37125);
-const DECOR_OBSTACLE_SIZE = obstacleScale(250);
-const DECOR_PROP_SIZE = world(76);
-
-function regularMonsterDimensions(sentry: boolean, fast: boolean): { radius: number; size: number } {
-  if (sentry) return { radius: 80, size: 224 };
-  if (fast) return { radius: 64, size: 192 };
-  return { radius: 88, size: 256 };
-}
 
 export function lootKindForSeed(seed: number): LootKind {
   const kinds: LootKind[] = ["credit", "crystal", "core", "medkit"];
@@ -68,11 +69,15 @@ export function weaponLootForRoom(room: GraphNode, pageUrl: string): LootItem | 
   const source: WeaponSource = room.isHidden ? "hidden" : "room";
   const chance = room.isHidden ? 100 : room.tag === "img" ? 25 : 10;
   if (stableHash(`${room.lootSeed}|weapon-drop`) % 100 >= chance) return null;
+  const maxYOffset = Math.max(
+    0,
+    room.height / 2 - WORLD_GEOMETRY.wallThickness - PLAYER_SPEC.radius - world(10),
+  );
   return {
     id: `${pageUrl}::${room.id}::weapon`,
     roomId: room.id,
     x: room.x,
-    y: room.y - Math.min(world(135), room.height * 0.3),
+    y: room.y - Math.min(world(135), maxYOffset),
     kind: "weapon",
     weapon: weaponForRoom(room, source),
     weaponPlacement: "pedestal",
@@ -83,16 +88,11 @@ export function weaponPedestalForRoom(room: GraphNode, pageUrl: string): Decorat
   const weapon = weaponLootForRoom(room, pageUrl);
   if (!weapon) return null;
   return {
+    ...DECORATION_DEFINITIONS.pedestal,
     id: `${weapon.id}::pedestal`,
     roomId: room.id,
     x: weapon.x,
     y: weapon.y,
-    kind: "weapon-pedestal",
-    asset: ASSETS.pedestal,
-    obstacle: false,
-    radius: 0,
-    footprint: 0,
-    size: world(108),
     maxHp: 0,
     hp: 0,
     destroyed: false,
@@ -114,39 +114,13 @@ export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[]
   const seed = stableHash(`${room.lootSeed}|decor`);
   const difficulty = floorDifficulty(floor);
   const count = 5 + (seed % 3) + Math.min(4, Math.floor(difficulty / 2));
-  const edgeX = Math.max(world(100), room.width / 2 - world(70));
-  const edgeY = Math.max(world(90), room.height / 2 - world(70));
+  const edgeClearance = WORLD_GEOMETRY.wallThickness + PLAYER_SPEC.radius + world(20);
+  const edgeX = Math.max(world(70), room.width / 2 - edgeClearance);
+  const edgeY = Math.max(world(65), room.height / 2 - edgeClearance);
   const slots: Array<[number, number]> = [
     [-edgeX, -edgeY], [edgeX, -edgeY], [-edgeX, edgeY], [edgeX, edgeY], [-edgeX / 2, -edgeY],
     [edgeX / 2, -edgeY], [-edgeX / 2, edgeY], [edgeX / 2, edgeY], [-edgeX, -edgeY / 2], [edgeX, -edgeY / 2],
     [-edgeX, edgeY / 2], [edgeX, edgeY / 2],
-  ];
-  const obstacleTypes = [
-    { kind: "plant", asset: ASSETS.decorPlant, obstacle: true, radius: obstacleScale(52), footprint: obstacleScale(26), size: DECOR_OBSTACLE_SIZE },
-    { kind: "plant", asset: ASSETS.decorPlantGreen, obstacle: true, radius: obstacleScale(52), footprint: obstacleScale(26), size: DECOR_OBSTACLE_SIZE },
-    { kind: "plant", asset: ASSETS.decorPlantMagenta, obstacle: true, radius: obstacleScale(48), footprint: obstacleScale(24), size: DECOR_OBSTACLE_SIZE },
-    { kind: "plant", asset: ASSETS.decorPlantTeal, obstacle: true, radius: obstacleScale(40), footprint: obstacleScale(20), size: DECOR_OBSTACLE_SIZE },
-    { kind: "plant", asset: ASSETS.decorPlantAmber, obstacle: true, radius: obstacleScale(40), footprint: obstacleScale(20), size: DECOR_OBSTACLE_SIZE },
-    { kind: "barrel", asset: ASSETS.decorBarrel, obstacle: true, radius: obstacleScale(44), footprint: obstacleScale(22), size: DECOR_OBSTACLE_SIZE },
-    { kind: "barrel", asset: ASSETS.decorBarrelCoolant, obstacle: true, radius: obstacleScale(44), footprint: obstacleScale(22), size: DECOR_OBSTACLE_SIZE },
-    { kind: "barrel", asset: ASSETS.decorBarrelHazard, obstacle: true, radius: obstacleScale(44), footprint: obstacleScale(22), size: DECOR_OBSTACLE_SIZE },
-    { kind: "crate", asset: ASSETS.decorCrateCargo, obstacle: true, radius: obstacleScale(30), footprint: obstacleScale(15), size: DECOR_OBSTACLE_SIZE * 0.75 },
-    { kind: "crate", asset: ASSETS.decorCrateArmored, obstacle: true, radius: obstacleScale(30), footprint: obstacleScale(15), size: DECOR_OBSTACLE_SIZE * 0.75 },
-    { kind: "crate", asset: ASSETS.decorCrateAmmo, obstacle: true, radius: obstacleScale(30), footprint: obstacleScale(15), size: DECOR_OBSTACLE_SIZE * 0.75},
-    { kind: "crate", asset: ASSETS.decorCrateMedical, obstacle: true, radius: obstacleScale(30), footprint: obstacleScale(15), size: DECOR_OBSTACLE_SIZE * 0.75 },
-    { kind: "terminal", asset: ASSETS.decorTerminal, obstacle: true, radius: obstacleScale(42), footprint: obstacleScale(21), size: DECOR_OBSTACLE_SIZE },
-  ];
-  const sceneryAssets = [
-    ASSETS.decorDebris,
-    ASSETS.decorPlant,
-    ASSETS.decorPlantGreen,
-    ASSETS.decorPlantMagenta,
-    ASSETS.decorPlantTeal,
-    ASSETS.decorPlantAmber,
-    //ASSETS.decorSceneryCrateCargo,
-    //ASSETS.decorSceneryCrateAmmo,
-    //ASSETS.decorSceneryCrateArmored,
-    //ASSETS.decorSceneryCrateMedical,
   ];
   const slotSteps = [1, 5, 7, 11];
   const slotStep = slotSteps[(seed >>> 8) % slotSteps.length]!;
@@ -155,15 +129,8 @@ export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[]
     const itemSeed = stableHash(`${room.lootSeed}|decor|${index}`);
     const slot = slots[(seed + index * slotStep) % slots.length]!;
     const type = index >= 2 && itemSeed % 5 === 0
-      ? {
-        kind: "debris",
-        asset: sceneryAssets[(itemSeed >>> 5) % sceneryAssets.length]!,
-        obstacle: false,
-        radius: 0,
-        footprint: 0,
-        size: DECOR_PROP_SIZE,
-      }
-      : obstacleTypes[(itemSeed >>> 4) % obstacleTypes.length]!;
+      ? SCENERY_DEFINITIONS[(itemSeed >>> 5) % SCENERY_DEFINITIONS.length]!
+      : OBSTACLE_DEFINITIONS[(itemSeed >>> 4) % OBSTACLE_DEFINITIONS.length]!;
     const hp = type.obstacle ? 3 + ((itemSeed >>> 9) % 4) + Math.floor(difficulty / 3) : 0;
     return {
       id: `${room.id}::decor-${index}`,
@@ -196,16 +163,11 @@ export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[]
     const slot = spawnerSlots[index]!;
     const hp = 6 + difficulty + (itemSeed % 3);
     decorations.push({
+      ...DECORATION_DEFINITIONS.spawner,
       id: `${room.id}::spawner-${index}`,
       roomId: room.id,
       x: room.x + slot[0],
       y: room.y + slot[1],
-      kind: "monster-spawner",
-      asset: ASSETS.decorTerminal,
-      obstacle: true,
-      radius: obstacleScale(52),
-      footprint: obstacleScale(26),
-      size: DECOR_OBSTACLE_SIZE,
       maxHp: hp,
       hp,
       destroyed: false,
@@ -248,33 +210,31 @@ export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decorat
   const seed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|decor`);
   const difficulty = floorDifficulty(floor);
   const count = 2 + (seed % 2);
-  const assets = [
-    ASSETS.decorDebris,
-    ASSETS.decorPlant,
-    ASSETS.decorPlantGreen,
-    ASSETS.decorPlantMagenta,
-    ASSETS.decorPlantTeal,
-    ASSETS.decorPlantAmber,
-  ];
   return Array.from({ length: count }, (_, index) => {
     const itemSeed = stableHash(`${seed}|${index}`);
     const obstacle = index === 0;
+    const obstacleLateral = Math.max(
+      world(26),
+      link.width / 2 - WORLD_GEOMETRY.wallThickness - DECORATION_DEFINITIONS.crateCargo.footprint - world(8),
+    );
     const position = pointAlongCorridor(
       link,
       index === 0 ? 0.5 : index === 1 ? 0.28 : 0.72,
-      (index % 2 ? 1 : -1) * Math.min(world(26), link.width * 0.24),
+      (index % 2 ? 1 : -1) * (obstacle ? obstacleLateral : world(26)),
     );
     const hp = obstacle ? 3 + (itemSeed % 3) + Math.floor(difficulty / 3) : 0;
+    const definition = obstacle
+      ? DECORATION_DEFINITIONS.crateCargo
+      : SCENERY_DEFINITIONS[itemSeed % SCENERY_DEFINITIONS.length]!;
     return {
+      ...definition,
       id: `${link.id}::decor-${index}`,
       roomId: link.ownerRoomId,
       ...position,
       kind: obstacle ? "corridor-obstacle" : "corridor-prop",
-      asset: obstacle ? ASSETS.decorCrateCargo : assets[itemSeed % assets.length]!,
       obstacle,
-      radius: obstacle ? obstacleScale(92) : 0,
-      footprint: obstacle ? obstacleScale(25) : 0,
-      size: obstacle ? DECOR_OBSTACLE_SIZE * 0.75 : DECOR_PROP_SIZE,
+      radius: obstacle ? definition.radius : 0,
+      footprint: obstacle ? definition.footprint : 0,
       maxHp: hp,
       hp,
       destroyed: false,
@@ -301,7 +261,7 @@ function blocksDoorApproach(item: Decoration, room: GraphNode, door: Point): boo
     x: door.x + dx / distance * Math.min(world(140), distance),
     y: door.y + dy / distance * Math.min(world(140), distance),
   };
-  return pointToSegmentDistance(item, door, approach) < item.radius + MONSTER_RADIUS + world(20);
+  return pointToSegmentDistance(item, door, approach) < item.radius + MAX_REGULAR_MONSTER_RADIUS + world(20);
 }
 
 function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly Point[]): Decoration[] {
@@ -324,12 +284,8 @@ function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly
     }
     return {
       ...item,
+      ...DECORATION_DEFINITIONS.debris,
       kind: "doorway-debris",
-      asset: ASSETS.decorDebris,
-      obstacle: false,
-      radius: 0,
-      footprint: 0,
-      size: DECOR_PROP_SIZE,
       maxHp: 0,
       hp: 0,
       dropKind: null,
@@ -406,7 +362,7 @@ function monsterCountForRoom(room: GraphNode, floor: number): number {
   return min + (countSeed % (max - min + 1));
 }
 
-function monsterKindForSeed(seed: number, difficulty = 0): MonsterKind {
+function monsterKindForSeed(seed: number, difficulty = 0): "slow" | "fast" | "sentry" {
   if ((seed >>> 6) % 100 < Math.min(42, 20 + difficulty * 3)) return "sentry";
   return ((seed >>> 7) % 100) < 38 ? "fast" : "slow";
 }
@@ -424,20 +380,38 @@ export function bossSpecForRoom(
 ): Monster {
   const difficulty = floorDifficulty(floor);
   const seed = stableHash(`${room.lootSeed}|boss|${floor}`);
-  const common = {
+  const definition = BOSS_DEFINITIONS[bossKind];
+  const positionSeed = stableHash(`${room.lootSeed}|boss-position`);
+  const xOffset = ((positionSeed % 3) - 1) * world(38);
+  const yOffset = -room.height * 0.18 + (((positionSeed >>> 5) % 3) - 1) * world(14);
+  return {
     id: `${room.id}::boss`,
     seed,
     kind: bossKind,
+    visualKind: definition.visualKind,
     bossKind,
     spawnRoomId: room.id,
     roomId: room.id,
-    x: room.x,
-    y: room.y - world(24),
+    x: room.x + xOffset,
+    y: room.y + yOffset,
+    maxHp: definition.baseHp + difficulty * definition.hpPerDifficulty + (seed % definition.hpVariance),
+    speed: definition.speed + Math.min(definition.maxSpeedBonus, difficulty * definition.speedPerDifficulty),
     fast: false,
+    radius: definition.radius,
+    size: definition.size,
+    attackRange: definition.attackRange,
+    attackDamage: definition.attackDamage + Math.floor(difficulty / definition.attackDamageDifficultyDivisor),
+    attackCooldownMs: Math.max(
+      definition.minAttackCooldownMs,
+      definition.attackCooldownMs - difficulty * definition.cooldownReductionPerDifficulty,
+    ),
+    projectileSpeed: definition.projectileSpeed + difficulty * definition.projectileSpeedPerDifficulty,
+    projectileRange: definition.projectileRange,
     dropsLoot: true,
     lastAttackAt: -Infinity,
     active: false,
     dead: false,
+    moving: false,
     hp: 1,
     path: [] as Point[],
     pathIndex: 0,
@@ -448,103 +422,97 @@ export function bossSpecForRoom(
     attackSequence: 0,
     summonedCount: 0,
   };
-  if (bossKind === "packet-storm") {
-    return {
-      ...common,
-      maxHp: 42 + difficulty * 8 + (seed % 12),
-      speed: world(72 + Math.min(38, difficulty * 3)),
-      radius: world(64),
-      size: world(248),
-      attackRange: world(1_200),
-      attackDamage: 1 + Math.floor(difficulty / 4),
-      attackCooldownMs: Math.max(620, 1_150 - difficulty * 45),
-      projectileSpeed: world(190 + difficulty * 14),
-      projectileRange: world(1_100),
-    };
-  }
-  if (bossKind === "fork-bomb") {
-    return {
-      ...common,
-      maxHp: 54 + difficulty * 9 + (seed % 15),
-      speed: world(64 + Math.min(36, difficulty * 3)),
-      radius: world(70),
-      size: world(270),
-      attackRange: world(1_000),
-      attackDamage: 1 + Math.floor(difficulty / 4),
-      attackCooldownMs: Math.max(800, 1_650 - difficulty * 55),
-      projectileSpeed: world(235 + difficulty * 15),
-      projectileRange: world(1_000),
-    };
-  }
+}
+
+function regularMonsterSpec(
+  id: string,
+  seed: number,
+  roomId: number,
+  position: Point,
+  floor: number,
+  profileName: keyof typeof MONSTER_SPAWN_PROFILES,
+): Monster {
+  const difficulty = floorDifficulty(floor);
+  const kind = monsterKindForSeed(seed, difficulty);
+  const definition = REGULAR_MONSTER_DEFINITIONS[kind];
+  const profile = MONSTER_SPAWN_PROFILES[profileName];
+  const scaledPercent = (value: number, percent: number): number => Math.round(value * percent / 100);
+  const speed = definition.speed + Math.min(definition.maxSpeedBonus, difficulty * definition.speedPerDifficulty);
+  const attackRange = definition.attackRange + Math.min(
+    definition.maxAttackRangeBonus,
+    difficulty * definition.attackRangePerDifficulty,
+  );
+  const projectileSpeed = definition.projectileSpeed + Math.min(
+    definition.maxProjectileSpeedBonus,
+    difficulty * definition.projectileSpeedPerDifficulty,
+  );
+  const projectileRange = definition.projectileRange + Math.min(
+    definition.maxProjectileRangeBonus,
+    difficulty * definition.projectileRangePerDifficulty,
+  );
   return {
-    ...common,
-    maxHp: 92 + difficulty * 14 + (seed % 22),
-    speed: world(48 + Math.min(52, difficulty * 4)),
-    radius: world(78),
-    size: world(315),
-    attackRange: world(70),
-    attackDamage: 4 + Math.floor(difficulty / 2),
-    attackCooldownMs: Math.max(650, 1_250 - difficulty * 35),
-    projectileSpeed: world(155 + difficulty * 8),
-    projectileRange: world(230),
+    id,
+    seed,
+    kind,
+    visualKind: definition.visualKinds[seed % definition.visualKinds.length]!,
+    spawnRoomId: roomId,
+    roomId,
+    ...position,
+    maxHp: definition.baseHp + profile.hpBonus + (seed >>> 11) % definition.hpVariance + Math.min(6, Math.floor(difficulty / 2)),
+    hp: 1,
+    speed: scaledPercent(speed, profile.speedPercent),
+    fast: definition.fast,
+    radius: definition.radius,
+    size: definition.size,
+    attackRange: scaledPercent(attackRange, profile.rangePercent),
+    attackDamage: definition.attackDamage + (kind === "sentry" ? 0 : (seed >>> 19) % 2) + Math.min(3, Math.floor(difficulty / 3)),
+    attackCooldownMs: Math.max(
+      definition.minAttackCooldownMs,
+      scaledPercent(
+        definition.attackCooldownMs - difficulty * definition.cooldownReductionPerDifficulty + (seed >>> 15) % 140,
+        profile.cooldownPercent,
+      ),
+    ),
+    projectileSpeed,
+    projectileRange,
+    dropsLoot: profile.dropsLoot && ((seed >>> 23) % 100) < 18,
+    lastAttackAt: -Infinity,
+    active: false,
+    dead: false,
+    moving: false,
+    path: [],
+    pathIndex: 0,
+    pathTargetRoomId: null,
+    pathTargetX: position.x,
+    pathTargetY: position.y,
+    nextPathRefreshAt: 0,
   };
 }
 
 export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossKind): Monster[] {
   if (room.isRoot || room.tag === "img") return [];
   const roomSeed = stableHash(`${room.lootSeed}|monsters`);
-
-  const difficulty = floorDifficulty(floor);
   const count = monsterCountForRoom(room, floor);
-  const offsets: Array<[number, number]> = [
-    [-world(90), -world(55)], [world(90), world(55)], [world(80), -world(65)],
-    [-world(80), world(70)], [0, -world(92)],
-  ];
+  const offsets: Array<[number, number]> = room.tag === "script"
+    ? [
+      [-world(250), -world(20)], [world(250), -world(20)],
+      [-world(220), world(150)], [world(220), world(150)], [0, world(190)],
+    ]
+    : [
+      [-world(90), -world(55)], [world(90), world(55)], [world(80), -world(65)],
+      [-world(80), world(70)], [0, -world(92)],
+    ];
   const regularMonsters = Array.from({ length: count }, (_, index): Monster => {
     const seed = stableHash(`${roomSeed}|${floor}|${index}`);
-    const kind = monsterKindForSeed(seed, difficulty);
-    const fast = kind === "fast";
-    const sentry = kind === "sentry";
-    const dimensions = regularMonsterDimensions(sentry, fast);
     const offset = offsets[index % offsets.length]!;
-    const hpBase = sentry ? 2 : 1;
-    const hpBonus = Math.min(6, Math.floor(difficulty / 2));
-    const speed = sentry ? 0 : world((fast ? 150 : 80) + Math.min(95, difficulty * (fast ? 11 : 8)));
-    const attackDamage = (sentry ? 1 : 1 + ((seed >>> 19) % 2)) + Math.min(3, Math.floor(difficulty / 3));
-    const attackCooldownMs = Math.max(420, (sentry ? 1500 : 1150) - difficulty * (sentry ? 70 : 35) + ((seed >>> 15) % 140));
-    const projectileSpeed = sentry ? world(220 + Math.min(260, difficulty * 18)) : 0;
-    const projectileRange = sentry ? world(980 + Math.min(420, difficulty * 40)) : 0;
-    const attackRange = sentry ? world(820) : world(38 + Math.min(48, difficulty * 4));
-    return {
-      id: `${room.id}::monster-${index}`,
+    return regularMonsterSpec(
+      `${room.id}::monster-${index}`,
       seed,
-      kind,
-      spawnRoomId: room.id,
-      roomId: room.id,
-      x: room.x + offset[0],
-      y: room.y + offset[1],
-      maxHp: hpBase + ((seed >>> 11) % (sentry ? 5 : 6)) + hpBonus,
-      speed,
-      fast,
-      radius: dimensions.radius,
-      size: dimensions.size,
-      attackRange,
-      attackDamage,
-      attackCooldownMs,
-      projectileSpeed,
-      projectileRange,
-      dropsLoot: ((seed >>> 23) % 100) < 18,
-      lastAttackAt: -Infinity,
-      active: false,
-      dead: false,
-      hp: 1,
-      path: [],
-      pathIndex: 0,
-      pathTargetRoomId: null,
-      pathTargetX: room.x,
-      pathTargetY: room.y,
-      nextPathRefreshAt: 0,
-    };
+      room.id,
+      { x: room.x + offset[0], y: room.y + offset[1] },
+      floor,
+      "room",
+    );
   });
   return room.tag === "script"
     ? [bossSpecForRoom(room, floor, bossKind), ...regularMonsters]
@@ -555,129 +523,40 @@ export function monsterSpecsForCorridor(link: LayoutLink, floor = 1): Monster[] 
   if (link.source.isRoot) return [];
   const corridorSeed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|monsters`);
   const count = corridorSeed % 3;
-  const difficulty = floorDifficulty(floor);
   return Array.from({ length: count }, (_, index) => {
     const seed = stableHash(`${corridorSeed}|${floor}|${index}`);
-    const kind = monsterKindForSeed(seed, difficulty);
-    const fast = kind === "fast";
-    const sentry = kind === "sentry";
-    const dimensions = regularMonsterDimensions(sentry, fast);
     const position = pointAlongCorridor(link, (index + 1) / (count + 1), 0);
-    const hpBase = sentry ? 2 : 1;
-    const hpBonus = Math.min(6, Math.floor(difficulty / 2));
-    return {
-      id: `${link.id}::monster-${index}`,
-      seed,
-      kind,
-      spawnRoomId: link.ownerRoomId,
-      roomId: link.ownerRoomId,
-      ...position,
-      maxHp: hpBase + ((seed >>> 11) % (sentry ? 5 : 6)) + hpBonus,
-      hp: 1,
-      speed: sentry ? 0 : world((fast ? 150 : 80) + Math.min(95, difficulty * (fast ? 11 : 8))),
-      fast,
-      radius: dimensions.radius,
-      size: dimensions.size,
-      attackRange: sentry ? world(820) : world(38 + Math.min(48, difficulty * 4)),
-      attackDamage: 1 + Math.min(3, Math.floor(difficulty / 3)),
-      attackCooldownMs: Math.max(420, (sentry ? 1500 : 1150) - difficulty * (sentry ? 70 : 35) + ((seed >>> 15) % 140)),
-      projectileSpeed: sentry ? world(220 + Math.min(260, difficulty * 18)) : 0,
-      projectileRange: sentry ? world(980 + Math.min(420, difficulty * 40)) : 0,
-      dropsLoot: ((seed >>> 23) % 100) < 18,
-      lastAttackAt: -Infinity,
-      active: false,
-      dead: false,
-      path: [],
-      pathIndex: 0,
-      pathTargetRoomId: null,
-      pathTargetX: position.x,
-      pathTargetY: position.y,
-      nextPathRefreshAt: 0,
-    };
+    return regularMonsterSpec(`${link.id}::monster-${index}`, seed, link.ownerRoomId, position, floor, "room");
   });
 }
 
 export function monsterSpecForSpawner(spawner: Decoration, floor: number, index: number): Monster {
-  const difficulty = floorDifficulty(floor);
   const seed = stableHash(`${spawner.id}|reinforcement|${floor}|${index}`);
-  const kind = monsterKindForSeed(seed, difficulty);
-  const fast = kind === "fast";
-  const sentry = kind === "sentry";
-  const dimensions = regularMonsterDimensions(sentry, fast);
-  const offsets: Array<[number, number]> = [[world(64), 0], [-world(64), 0], [0, world(64)], [0, -world(64)]];
+  const offsets: Array<[number, number]> = [[world(90), 0], [-world(90), 0], [0, world(90)], [0, -world(90)]];
   const offset = offsets[index % offsets.length]!;
-  const hpBase = sentry ? 3 : 2;
-  return {
-    id: `${spawner.id}::reinforcement-${index}`,
+  return regularMonsterSpec(
+    `${spawner.id}::reinforcement-${index}`,
     seed,
-    kind,
-    spawnRoomId: spawner.roomId,
-    roomId: spawner.roomId,
-    x: spawner.x + offset[0],
-    y: spawner.y + offset[1],
-    maxHp: hpBase + ((seed >>> 11) % 5) + Math.min(7, Math.floor(difficulty / 2)),
-    hp: 1,
-    speed: sentry ? 0 : world((fast ? 165 : 92) + Math.min(110, difficulty * (fast ? 12 : 9))),
-    fast,
-    radius: dimensions.radius,
-    size: dimensions.size,
-    attackRange: sentry ? world(860) : world(42 + Math.min(52, difficulty * 4)),
-    attackDamage: 1 + Math.min(4, Math.floor(difficulty / 2)),
-    attackCooldownMs: Math.max(380, (sentry ? 1_350 : 1_000) - difficulty * 45 + ((seed >>> 15) % 120)),
-    projectileSpeed: sentry ? world(250 + Math.min(280, difficulty * 20)) : 0,
-    projectileRange: sentry ? world(1_020 + Math.min(460, difficulty * 45)) : 0,
-    dropsLoot: false,
-    lastAttackAt: -Infinity,
-    active: false,
-    dead: false,
-    path: [],
-    pathIndex: 0,
-    pathTargetRoomId: null,
-    pathTargetX: spawner.x,
-    pathTargetY: spawner.y,
-    nextPathRefreshAt: 0,
-  };
+    spawner.roomId,
+    { x: spawner.x + offset[0], y: spawner.y + offset[1] },
+    floor,
+    "spawner",
+  );
 }
 
 export function monsterSpecForBossSummon(boss: Monster, floor: number, index: number): Monster {
-  const difficulty = floorDifficulty(floor);
   const seed = stableHash(`${boss.id}|summon|${floor}|${index}`);
-  const kind = monsterKindForSeed(seed, difficulty);
-  const fast = kind === "fast";
-  const sentry = kind === "sentry";
-  const dimensions = regularMonsterDimensions(sentry, fast);
   const angle = index * 2.399963;
-  const distance = boss.radius + world(58);
-  return {
-    id: `${boss.id}::summon-${index}`,
+  const kind = monsterKindForSeed(seed, floorDifficulty(floor));
+  const distance = boss.radius + REGULAR_MONSTER_DEFINITIONS[kind].radius + world(30);
+  return regularMonsterSpec(
+    `${boss.id}::summon-${index}`,
     seed,
-    kind,
-    spawnRoomId: boss.spawnRoomId,
-    roomId: boss.spawnRoomId,
-    x: boss.x + Math.cos(angle) * distance,
-    y: boss.y + Math.sin(angle) * distance,
-    maxHp: 2 + (seed % 4) + Math.min(5, Math.floor(difficulty / 2)),
-    hp: 1,
-    speed: sentry ? 0 : world((fast ? 170 : 95) + Math.min(100, difficulty * 9)),
-    fast,
-    radius: dimensions.radius,
-    size: dimensions.size,
-    attackRange: sentry ? world(760) : world(40 + Math.min(42, difficulty * 3)),
-    attackDamage: 1 + Math.min(3, Math.floor(difficulty / 3)),
-    attackCooldownMs: Math.max(450, (sentry ? 1_400 : 1_050) - difficulty * 40),
-    projectileSpeed: sentry ? world(235 + difficulty * 16) : 0,
-    projectileRange: sentry ? world(900 + difficulty * 32) : 0,
-    dropsLoot: false,
-    lastAttackAt: -Infinity,
-    active: false,
-    dead: false,
-    path: [],
-    pathIndex: 0,
-    pathTargetRoomId: null,
-    pathTargetX: boss.x,
-    pathTargetY: boss.y,
-    nextPathRefreshAt: 0,
-  };
+    boss.spawnRoomId,
+    { x: boss.x + Math.cos(angle) * distance, y: boss.y + Math.sin(angle) * distance },
+    floor,
+    "summon",
+  );
 }
 
 export function buildMonsters(
@@ -687,13 +566,7 @@ export function buildMonsters(
   floor = 1,
   decorations: readonly Decoration[] = [],
 ): Monster[] {
-  const scriptRooms = layout.nodes.filter(room => room.tag === "script");
-  const rosterOffset = stableHash(`${layout.nodes.find(room => room.isRoot)?.lootSeed ?? 0}|boss-roster`) % BOSS_KINDS.length;
-  const bossKindsByRoom = new Map(scriptRooms.map((room, index) => [
-    room.id,
-    BOSS_KINDS[(rosterOffset + index) % BOSS_KINDS.length]!,
-  ]));
-  const roomSpecs = layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor, bossKindsByRoom.get(room.id)));
+  const roomSpecs = layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor));
   const bossSummons = roomSpecs
     .filter(monster => monster.bossKind === "fork-bomb")
     .flatMap(boss => Array.from(
@@ -711,13 +584,16 @@ export function buildMonsters(
       )),
     ...bossSummons,
   ];
-  return specs.map((spec) => {
+  return specs.flatMap((spec) => {
     const saved = savedStates.get(spec.id);
-    return {
+    const desired = { x: saved?.x ?? spec.x, y: saved?.y ?? spec.y };
+    const position = safeMonsterPosition(spec, desired, layout, decorations);
+    if (!position) return [];
+    const relocated = position.x !== desired.x || position.y !== desired.y;
+    return [{
       ...spec,
-      x: saved?.x ?? spec.x,
-      y: saved?.y ?? spec.y,
-      roomId: saved?.roomId ?? spec.roomId,
+      ...position,
+      roomId: relocated ? spec.spawnRoomId : saved?.roomId ?? spec.roomId,
       hp: saved?.hp ?? spec.maxHp,
       dead: saved?.dead ?? false,
       active: saved?.active ?? visitedRooms.has(spec.spawnRoomId),
@@ -728,8 +604,50 @@ export function buildMonsters(
       dropKind: saved?.dropKind ?? null,
       attackSequence: saved?.attackSequence ?? spec.attackSequence,
       summonedCount: saved?.summonedCount ?? spec.summonedCount,
-    };
+    }];
   });
+}
+
+export function monsterPositionIsClear(
+  position: Point,
+  radius: number,
+  layout: DungeonLayout,
+  decorations: readonly Decoration[],
+): boolean {
+  const onFloor = layout.nodes.some(room => pointInRoomFloor(position.x, position.y, room, radius)) ||
+    layout.links.some(link => pointInCorridor(position.x, position.y, link, radius));
+  if (!onFloor) return false;
+  return decorations.every(item =>
+    !item.obstacle ||
+    item.destroyed ||
+    Math.hypot(position.x - item.x, position.y - item.y) >= radius + (item.footprint ?? item.radius)
+  );
+}
+
+function safeMonsterPosition(
+  monster: Monster,
+  desired: Point,
+  layout: DungeonLayout,
+  decorations: readonly Decoration[],
+): Point | null {
+  const room = layout.nodes.find(candidate => candidate.id === monster.spawnRoomId);
+  const centers = [desired, ...(room ? [{ x: room.x, y: room.y }] : [])];
+  const candidates: Point[] = [];
+  const spacing = monster.radius + world(24);
+  const angleOffset = (monster.seed % 12) / 12 * Math.PI * 2;
+  for (const center of centers) {
+    candidates.push(center);
+    for (let ring = 1; ring <= 4; ring += 1) {
+      for (let index = 0; index < 12; index += 1) {
+        const angle = angleOffset + index / 12 * Math.PI * 2;
+        candidates.push({
+          x: center.x + Math.cos(angle) * spacing * ring,
+          y: center.y + Math.sin(angle) * spacing * ring,
+        });
+      }
+    }
+  }
+  return candidates.find(position => monsterPositionIsClear(position, monster.radius, layout, decorations)) ?? null;
 }
 
 export function lootCountForRoom(room: GraphNode): number {
@@ -752,9 +670,9 @@ export function lootPositions(room: GraphNode, count: number): Point[] {
 }
 
 export function staircasePositions(room: GraphNode, count: number, yOffset = 0): Point[] {
-  const capped = Math.min(10, Math.max(0, count));
+  const capped = Math.min(8, Math.max(0, count));
   if (!capped) return [];
-  const portalSize = world(150);
+  const portalSize = PORTAL_DEFINITION.size;
   const horizontalSpacing = world(135);
   const verticalSpacing = world(115);
   const fittingColumns = Math.max(1, Math.floor((room.width - portalSize) / horizontalSpacing) + 1);
@@ -781,8 +699,12 @@ export function buildInteractiveObjects(
   const loot: LootItem[] = [];
 
   for (const room of layout.nodes) {
-    const hrefs = room.hrefs.slice(0, room.isRoot ? 9 : 10);
-    const positions = staircasePositions(room, hrefs.length + (room.isRoot ? 1 : 0));
+    const hrefs = room.hrefs.slice(0, room.isRoot ? 7 : 8);
+    const positions = staircasePositions(
+      room,
+      hrefs.length + (room.isRoot ? 1 : 0),
+      room.tag === "script" ? room.height * 0.24 : 0,
+    );
     let positionIndex = 0;
     if (room.isRoot) {
       const position = positions[positionIndex++]!;

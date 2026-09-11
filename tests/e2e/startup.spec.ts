@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { PLAYER_SPEED } from "../../src/client/config";
+import { PLAYER_SPEC, PORTAL_DEFINITION } from "../../src/client/domain/specs";
+
+const PLAYER_SPEED = PLAYER_SPEC.speed;
 
 async function startGame(page: Page): Promise<void> {
   const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
@@ -47,6 +49,14 @@ async function setWeaponAmmo(page: Page, ammo: number): Promise<void> {
   }, ammo);
 }
 
+async function setPlayerInvulnerable(page: Page, enabled: boolean): Promise<void> {
+  await page.evaluate((nextEnabled) => {
+    (window as Window & {
+      __webcrawlTest?: { setPlayerInvulnerable: (value: boolean) => void };
+    }).__webcrawlTest?.setPlayerInvulnerable(nextEnabled);
+  }, enabled);
+}
+
 async function visibleLoot(page: Page): Promise<Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>> {
   return page.evaluate(() =>
     (window as Window & {
@@ -82,7 +92,43 @@ test("starts a crawl and renders a playable floor", async ({ page }) => {
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-portals", "1");
   await expect(page.locator("#gameViewport")).toHaveCSS("cursor", "crosshair");
   await expect(page.locator("#rightHud")).toBeVisible();
-  await expect(page.locator("#rightHud")).not.toContainText("MINIMAP");
+  await expect(page.locator("#rightHud")).toContainText("MINIMAP");
+  const minimap = page.locator("#sideMinimapCanvas");
+  await expect(minimap).toBeVisible();
+  await expect.poll(() => minimap.evaluate(canvas => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(1);
+  await page.keyboard.press("m");
+  await expect(page.locator('[role="dialog"][aria-label*="map" i]')).toHaveCount(0);
+  await expect(minimap).toBeVisible();
+});
+
+test("spawns on an enabled entry portal without immediately retriggering it", async ({ page }) => {
+  await startGame(page);
+  await page.locator("#urlInput").fill("https://example.com/next");
+  await page.getByRole("button", { name: "GO" }).click();
+  await expect(page.locator("#statFloor")).toHaveText("2");
+
+  const state = await page.evaluate(() => {
+    const testApi = (window as Window & {
+      __webcrawlTest?: {
+        stairs: () => Array<{ id: string; type: "up" | "down"; x: number; y: number }>;
+        portalContacts: () => string[];
+      };
+    }).__webcrawlTest;
+    return {
+      stairs: testApi?.stairs() ?? [],
+      contacts: testApi?.portalContacts() ?? [],
+    };
+  });
+  const entryPortal = state.stairs.find(stair => stair.type === "up");
+  if (!entryPortal) throw new Error("Expected an up portal on floor two");
+
+  expect(await playerPosition(page)).toEqual({
+    x: Math.round(entryPortal.x + PORTAL_DEFINITION.contactOffset.x),
+    y: Math.round(entryPortal.y + PORTAL_DEFINITION.contactOffset.y),
+  });
+  expect(state.contacts).toContain(entryPortal.id);
+  await page.waitForTimeout(500);
+  await expect(page.locator("#statFloor")).toHaveText("2");
 });
 
 test("keeps the Phaser viewport playable on mobile", async ({ page }) => {
@@ -94,7 +140,28 @@ test("keeps the Phaser viewport playable on mobile", async ({ page }) => {
   expect(bounds?.height).toBeGreaterThan(500);
 });
 
-test("activates a deterministic boss when revealing a script room", async ({ page }) => {
+test("keeps generated world coordinates independent of viewport size", async ({ page }) => {
+  await startGame(page);
+  const desktop = {
+    player: await playerPosition(page),
+    doorX: await page.locator("#gameCanvas").getAttribute("data-first-door-x"),
+    doorY: await page.locator("#gameCanvas").getAttribute("data-first-door-y"),
+  };
+
+  await page.setViewportSize({ width: 390, height: 720 });
+  await page.goto("/");
+  await page.locator("#welcomeUrlInput").fill("https://example.com/start");
+  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  await expect(page.locator("#gameCanvas canvas")).toBeVisible();
+
+  expect({
+    player: await playerPosition(page),
+    doorX: await page.locator("#gameCanvas").getAttribute("data-first-door-x"),
+    doorY: await page.locator("#gameCanvas").getAttribute("data-first-door-y"),
+  }).toEqual(desktop);
+});
+
+test("keeps an active boss sized consistently while it follows the player out", async ({ page }) => {
   await page.route("**/api/fetch?**", route => route.fulfill({
     status: 200,
     contentType: "text/html",
@@ -104,6 +171,7 @@ test("activates a deterministic boss when revealing a script room", async ({ pag
   await page.locator("#welcomeUrlInput").fill("https://example.com/boss");
   await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
   const game = page.locator("#gameCanvas");
+  await setPlayerInvulnerable(page, true);
   await expect(game).toHaveAttribute("data-active-bosses", "0");
 
   const direction = await game.getAttribute("data-first-exit");
@@ -133,21 +201,35 @@ test("activates a deterministic boss when revealing a script room", async ({ pag
 
   await expect(game).toHaveAttribute("data-active-bosses", "1");
   await expect(game).toHaveAttribute("data-active-boss-kind", /^(packet-storm|fork-bomb|heap-titan)$/);
+  await expect.poll(
+    async () => Number(await game.getAttribute("data-active-boss-display-width")),
+    { timeout: 15_000 },
+  ).toBeGreaterThan(0);
+  const initialBossSize = {
+    width: Number(await game.getAttribute("data-active-boss-display-width")),
+    height: Number(await game.getAttribute("data-active-boss-display-height")),
+  };
+  expect(initialBossSize.width).toBeGreaterThan(0);
+  expect(initialBossSize.height).toBe(initialBossSize.width);
   const initialBossPosition = {
     x: Number(await game.getAttribute("data-active-boss-x")),
     y: Number(await game.getAttribute("data-active-boss-y")),
   };
-  const retreatKey = { N: "ArrowDown", E: "ArrowLeft", S: "ArrowUp", W: "ArrowRight" }[direction ?? "N"] ?? "ArrowDown";
-  await page.keyboard.down(retreatKey);
-  try {
-    await expect.poll(async () => {
-      const x = Number(await game.getAttribute("data-active-boss-x"));
-      const y = Number(await game.getAttribute("data-active-boss-y"));
-      return Math.hypot(x - initialBossPosition.x, y - initialBossPosition.y);
-    }, { timeout: 8_000 }).toBeGreaterThan(12);
-  } finally {
-    await page.keyboard.up(retreatKey);
-  }
+  await teleportPlayer(page, position);
+  await expect(game).toHaveAttribute("data-current-room-tag", "body");
+  await expect.poll(async () => {
+    const x = Number(await game.getAttribute("data-active-boss-x"));
+    const y = Number(await game.getAttribute("data-active-boss-y"));
+    return Math.hypot(x - initialBossPosition.x, y - initialBossPosition.y);
+  }, { timeout: 10_000 }).toBeGreaterThan(12);
+  const finalBoss = {
+    x: Number(await game.getAttribute("data-active-boss-x")),
+    y: Number(await game.getAttribute("data-active-boss-y")),
+    width: Number(await game.getAttribute("data-active-boss-display-width")),
+    height: Number(await game.getAttribute("data-active-boss-display-height")),
+  };
+  expect(Math.abs(finalBoss.width - initialBossSize.width) / initialBossSize.width).toBeLessThan(0.12);
+  expect(Math.abs(finalBoss.height - initialBossSize.height) / initialBossSize.height).toBeLessThan(0.12);
 });
 
 test("moves continuously with WASD and arrow keys", async ({ page }) => {
@@ -268,6 +350,7 @@ test("swaps temporary weapons, refills only from orbs, and falls back to pulse r
   await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
 
   const game = page.locator("#gameCanvas");
+  await setPlayerInvulnerable(page, true);
   await expect(game).toHaveAttribute("data-weapon-kind", "pulse-rifle");
   await expect(game).toHaveAttribute("data-weapon-ammo", "infinite");
 
@@ -356,7 +439,6 @@ test("swaps temporary weapons, refills only from orbs, and falls back to pulse r
 
   await setWeaponAmmo(page, 1);
   await expect(game).toHaveAttribute("data-weapon-ammo", "1");
-  await page.waitForTimeout(1_100);
   await page.mouse.click(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.45);
   await expect.poll(async () => await game.getAttribute("data-weapon-kind")).toBe("pulse-rifle");
   await expect.poll(async () => await game.getAttribute("data-weapon-ammo")).toBe("infinite");

@@ -67,6 +67,14 @@
     </main>
 
     <aside id="rightHud">
+      <section class="hud-panel minimap-panel">
+        <div class="hud-panel-title">
+          <span>MINIMAP</span>
+          <span id="sideFloorLabel">FLOOR 1</span>
+        </div>
+        <canvas id="sideMinimapCanvas" aria-label="Discovered rooms minimap"></canvas>
+      </section>
+
       <section class="hud-panel stats-panel">
         <div class="hud-panel-title">LEVEL STATS</div>
         <div class="stat-row"><span>Rooms discovered</span><strong id="statRooms">0 / 100</strong></div>

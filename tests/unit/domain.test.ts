@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
-  CORRIDOR_HALF_WIDTH,
   EFFECT_FRAMES,
-  MAX_CORRIDOR_LENGTH,
   MONSTER_FRAMES,
-  MONSTER_RADIUS,
   ROOM_HEIGHT,
   ROOM_WIDTH,
   WORLD_SCALE,
+  world,
 } from "../../src/client/config";
-import { distanceSquared, pointInCorridor, pointInRoom } from "../../src/client/domain/geometry";
+import { applyObstacleDamage } from "../../src/client/domain/combat";
+import {
+  distanceSquared,
+  pointInCorridor,
+  pointInRoom,
+  pointInRoomFloor,
+  slideAlongObstacles,
+} from "../../src/client/domain/geometry";
 import {
   bossKindForRoom,
   bossLootDrops,
@@ -23,6 +28,7 @@ import {
   lootCountForRoom,
   monsterSpecsForCorridor,
   monsterSpecsForRoom,
+  monsterPositionIsClear,
   monsterSpecForBossSummon,
   monsterSpecForSpawner,
   staircasePositions,
@@ -35,6 +41,19 @@ import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, monsterEscapeStep, revealedRoomPath } from "../../src/client/domain/pathfinding";
 import { updatePortalContacts } from "../../src/client/domain/portals";
+import {
+  DECORATION_DEFINITIONS,
+  MAX_REGULAR_MONSTER_RADIUS,
+  MONSTER_VISUAL_DEFINITIONS,
+  monsterHealthBarY,
+  PLAYER_SPEC,
+  PORTAL_DEFINITION,
+  REGULAR_MONSTER_DEFINITIONS,
+  ROOM_DEFINITIONS,
+  WEAPON_VISUAL_DEFINITIONS,
+  WORLD_GEOMETRY,
+  monsterDisplaySize,
+} from "../../src/client/domain/specs";
 import { DEFAULT_WEAPON, projectilesForWeapon, replenishWeaponAmmo, weaponForRoom, weaponKinds } from "../../src/client/domain/weapons";
 import type { DungeonGraph, GraphNode, Stair } from "../../src/client/types";
 
@@ -82,6 +101,14 @@ describe("DOM graph generation", () => {
     expect(graph.nodes[4]?.hrefs).toEqual(["https://example.com/next"]);
   });
 
+  it("includes structural paths in deterministic room seeds", () => {
+    const html = "<body><main><div>same</div><div>same</div></main></body>";
+    const first = domToGraph(html, "https://example.com/one");
+    const second = domToGraph(html, "https://example.net/two");
+    expect(first.nodes.map(room => room.lootSeed)).toEqual(second.nodes.map(room => room.lootSeed));
+    expect(first.nodes[2]?.lootSeed).not.toBe(first.nodes[3]?.lootSeed);
+  });
+
   it("coalesces deepest leaves and promotes their links", () => {
     const nodes = [
       node(0, null, 0),
@@ -104,17 +131,38 @@ describe("layout and geometry", () => {
     coalescedCount: 0,
     truncated: false,
   };
-  const layout = layoutOrthogonal(graph, 800, 600);
+  const layout = layoutOrthogonal(graph);
+
+  it("scales world definitions from authored dimensions", () => {
+    expect(ROOM_DEFINITIONS.rectangle).toEqual({ width: world(580), height: world(400) });
+    expect(PLAYER_SPEC.radius).toBe(world(36));
+    expect(WORLD_GEOMETRY.tileSize).toBe(world(128));
+  });
+
+  it("aligns visual content with collision centers and normalizes monster animations", () => {
+    expect(PLAYER_SPEC.spriteOrigin).toEqual({ x: 0.5, y: 0.6875 });
+    expect(REGULAR_MONSTER_DEFINITIONS.fast.size).toBe(world(137 * 1.25));
+    expect(REGULAR_MONSTER_DEFINITIONS.slow.size).toBe(world(183 * 1.25));
+    expect(REGULAR_MONSTER_DEFINITIONS.sentry.size).toBe(world(160 * 1.25));
+    expect(monsterDisplaySize(200, "scout", "attack")).toBe(96);
+    expect(monsterDisplaySize(200, "scout", "walk")).toBe(200);
+    expect(MONSTER_VISUAL_DEFINITIONS.scout.origins.attack.y).toBeCloseTo(0.56);
+    expect(monsterHealthBarY(200, "scout")).toBeGreaterThan(-60);
+    expect(DECORATION_DEFINITIONS.crateCargo.origin).toEqual({ x: 0.5, y: 0.5 });
+    expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
+  });
 
   it("places every room deterministically with owned, routed corridors", () => {
-    const repeated = layoutOrthogonal(graph, 800, 600);
+    const originalGraph = structuredClone(graph);
+    const repeated = layoutOrthogonal(graph);
     expect(layout.nodes.map(({ id, x, y, shape }) => ({ id, x, y, shape }))).toEqual(
       repeated.nodes.map(({ id, x, y, shape }) => ({ id, x, y, shape })),
     );
     expect(layout.nodes).toHaveLength(graph.nodes.length);
     expect(layout.hiddenCount).toBe(0);
-    expect(layout.nodes[0]).toMatchObject({ x: 400, y: 300 });
-    expect(layout.links[0]).toMatchObject({ id: "0->1", ownerRoomId: 0, width: CORRIDOR_HALF_WIDTH * 2 });
+    expect(graph).toEqual(originalGraph);
+    expect(layout.nodes[0]).toMatchObject({ x: 0, y: 0 });
+    expect(layout.links[0]).toMatchObject({ id: "0->1", ownerRoomId: 0, width: WORLD_GEOMETRY.corridorHalfWidth * 2 });
     const endpoints = corridorEndpoints(layout.links[0]!);
     expect(endpoints).toEqual({
       x1: layout.links[0]!.points[0]!.x,
@@ -125,10 +173,28 @@ describe("layout and geometry", () => {
   });
 
   it("recognizes rooms, corridors, and point distances", () => {
-    expect(pointInRoom(400, 300, layout.nodes[0]!)).toBe(true);
+    expect(pointInRoom(0, 0, layout.nodes[0]!)).toBe(true);
     const [start, end] = layout.links[0]!.points;
     expect(pointInCorridor((start!.x + end!.x) / 2, (start!.y + end!.y) / 2, layout.links[0]!)).toBe(true);
     expect(distanceSquared({ x: 1, y: 2 }, { x: 4, y: 6 })).toBe(25);
+  });
+
+  it("keeps floor tiles walkable while preventing travel beyond wall boundaries", () => {
+    const room = layout.nodes[0]!;
+    const wallPoint = { x: room.x + room.width / 2 - WORLD_GEOMETRY.wallThickness / 2, y: room.y };
+    expect(pointInRoom(wallPoint.x, wallPoint.y, room, 0)).toBe(true);
+    expect(pointInRoomFloor(wallPoint.x, wallPoint.y, room, 0)).toBe(true);
+    expect(pointInRoomFloor(room.x + room.width / 2 + 1, room.y, room, 0)).toBe(false);
+
+    const link = layout.links[0]!;
+    const midpoint = link.points[Math.floor(link.points.length / 2)]!;
+    expect(pointInCorridor(midpoint.x, midpoint.y, link, PLAYER_SPEC.radius)).toBe(true);
+    expect(pointInCorridor(
+      midpoint.x,
+      midpoint.y + link.width / 2 + 1,
+      link,
+      0,
+    )).toBe(false);
   });
 
   it("keeps widened doorways and corridor obstacles traversable by monsters", () => {
@@ -138,25 +204,25 @@ describe("layout and geometry", () => {
         link.source,
         link.target,
         point => {
-          const inFloor = layout.nodes.some(room => pointInRoom(point.x, point.y, room, MONSTER_RADIUS)) ||
-            layout.links.some(candidate => pointInCorridor(point.x, point.y, candidate, MONSTER_RADIUS));
+          const inFloor = layout.nodes.some(room => pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_RADIUS)) ||
+            layout.links.some(candidate => pointInCorridor(point.x, point.y, candidate, MAX_REGULAR_MONSTER_RADIUS));
           const blocked = decorations.some(item =>
             item.obstacle &&
             !item.destroyed &&
-            Math.hypot(point.x - item.x, point.y - item.y) < (item.footprint ?? item.radius) + MONSTER_RADIUS
+            Math.hypot(point.x - item.x, point.y - item.y) < (item.footprint ?? item.radius) + MAX_REGULAR_MONSTER_RADIUS
           );
           return inFloor && !blocked;
         },
         18,
         6_000,
         {
-          minX: Math.min(link.source.x, link.target.x) - 220,
-          maxX: Math.max(link.source.x, link.target.x) + 220,
-          minY: Math.min(link.source.y, link.target.y) - 220,
-          maxY: Math.max(link.source.y, link.target.y) + 220,
+          minX: Math.min(link.source.x, link.target.x) - world(220),
+          maxX: Math.max(link.source.x, link.target.x) + world(220),
+          minY: Math.min(link.source.y, link.target.y) - world(220),
+          maxY: Math.max(link.source.y, link.target.y) + world(220),
         },
       );
-      expect(path).not.toBeNull();
+      expect(path, `Expected route through ${JSON.stringify(link.points)}`).not.toBeNull();
     }
   });
 
@@ -172,7 +238,7 @@ describe("layout and geometry", () => {
     expect(decorations).toEqual(decorationSpecsForCorridor(link));
     expect(decorations.some(item => item.obstacle)).toBe(true);
     expect(decorations.filter(item => item.obstacle).every(item =>
-      (item.footprint ?? item.radius) + MONSTER_RADIUS < link.width / 2
+      (item.footprint ?? item.radius) + MAX_REGULAR_MONSTER_RADIUS < link.width / 2
     )).toBe(true);
     expect(monsters).toEqual(monsterSpecsForCorridor(link, 3));
     expect(monsters).toEqual([]);
@@ -193,7 +259,7 @@ describe("layout and geometry", () => {
       originalCount: nodes.length,
       coalescedCount: 0,
       truncated: false,
-    }, 1200, 800);
+    });
 
     expect(denseLayout.nodes.length).toBeGreaterThan(1);
     expect(denseLayout.nodes.length).toBeLessThan(nodes.length);
@@ -201,7 +267,7 @@ describe("layout and geometry", () => {
     expect(denseLayout.hiddenCount).toBe(nodes.length - denseLayout.nodes.length);
     expect(new Set(denseLayout.nodes.map(room => room.shape)).size).toBeGreaterThan(1);
     for (const link of denseLayout.links) {
-      expect(corridorLength(link.points)).toBeLessThanOrEqual(MAX_CORRIDOR_LENGTH);
+      expect(corridorLength(link.points)).toBeLessThanOrEqual(WORLD_GEOMETRY.maxCorridorLength);
       expect(pointInRoom(link.points[0]!.x, link.points[0]!.y, link.source, 0)).toBe(true);
       expect(pointInRoom(link.points.at(-1)!.x, link.points.at(-1)!.y, link.target, 0)).toBe(true);
       for (const room of denseLayout.nodes) {
@@ -237,6 +303,27 @@ describe("layout and geometry", () => {
     expect(escaped?.x ?? Infinity).toBeCloseTo(0);
     expect(escaped?.y).toBeCloseTo(12);
   });
+
+  it("projects diagonal movement along obstacle surfaces without entering them", () => {
+    const obstacle = { x: 0, y: 0, radius: 10 };
+    const slid = slideAlongObstacles(
+      { x: -20, y: 0 },
+      { x: 10, y: 8 },
+      5,
+      [obstacle],
+      point => Math.hypot(point.x, point.y) >= 15,
+    );
+    expect(slid).not.toBeNull();
+    expect(slid!.y).toBeGreaterThan(0);
+    expect(Math.hypot(slid!.x, slid!.y)).toBeGreaterThanOrEqual(15);
+    expect(slideAlongObstacles(
+      { x: -20, y: 0 },
+      { x: 10, y: 0 },
+      5,
+      [obstacle],
+      point => Math.hypot(point.x, point.y) >= 15,
+    )).toBeNull();
+  });
 });
 
 describe("portal entry", () => {
@@ -256,6 +343,20 @@ describe("portal entry", () => {
     expect(updatePortalContacts([portal], portal, 56, contacts)).toBeNull();
     expect(updatePortalContacts([portal], { x: 200, y: 100 }, 56, contacts)).toBeNull();
     expect(updatePortalContacts([portal], portal, 56, contacts)).toEqual(portal);
+  });
+
+  it("uses the portal energy ring rather than the low sprite anchor", () => {
+    const contacts = new Set<string>();
+    const { contactOffset, contactRadius } = PORTAL_DEFINITION;
+    expect(updatePortalContacts(
+      [portal],
+      { x: portal.x + contactOffset.x, y: portal.y + contactOffset.y },
+      contactRadius,
+      contacts,
+      contactOffset,
+    )).toEqual(portal);
+    contacts.clear();
+    expect(updatePortalContacts([portal], portal, contactRadius, contacts, contactOffset)).toBeNull();
   });
 });
 
@@ -279,6 +380,34 @@ describe("deterministic room contents", () => {
     expect(monsterSpecsForRoom(room)).toEqual([]);
   });
 
+  it("relocates generated monsters away from obstacle footprints", () => {
+    const combatRoom = node(9, 0, 1, {
+      x: 500,
+      y: 400,
+      tag: "section",
+      isRoot: false,
+      lootSeed: stableHash("blocked-monster-room"),
+    });
+    const combatLayout = { nodes: [combatRoom], links: [], hiddenCount: 0 };
+    const original = monsterSpecsForRoom(combatRoom, 1)[0]!;
+    const blocker = {
+      ...DECORATION_DEFINITIONS.crateCargo,
+      id: "spawn-blocker",
+      roomId: combatRoom.id,
+      x: original.x,
+      y: original.y,
+      maxHp: 10,
+      hp: 10,
+      destroyed: false,
+      dropKind: null,
+    };
+    const monsters = buildMonsters(combatLayout, new Map(), new Set(), 1, [blocker]);
+    const relocated = monsters.find(monster => monster.id === original.id)!;
+    expect(relocated).toBeDefined();
+    expect(relocated).not.toMatchObject({ x: original.x, y: original.y });
+    expect(monsterPositionIsClear(relocated, relocated.radius, combatLayout, [blocker])).toBe(true);
+  });
+
   it("creates rich image-room loot and capped stairs", () => {
     const generated = buildInteractiveObjects(layout, "https://example.com/", null, new Set());
     expect(lootCountForRoom(room)).toBeGreaterThanOrEqual(3);
@@ -288,7 +417,7 @@ describe("deterministic room contents", () => {
     expect(new Set(generated.stairs.map(({ id }) => id)).size).toBe(generated.stairs.length);
   });
 
-  it("spaces dense portal grids to fit each room width", () => {
+  it("caps dense portal grids at eight and fits them to each room width", () => {
     const tallRoom = node(8, 0, 1, {
       width: Math.round(460 * WORLD_SCALE),
       height: Math.round(560 * WORLD_SCALE),
@@ -298,8 +427,28 @@ describe("deterministic room contents", () => {
     const distances = positions.flatMap((position, index) =>
       positions.slice(index + 1).map(other => Math.hypot(position.x - other.x, position.y - other.y))
     );
-    expect(positions).toHaveLength(10);
+    expect(positions).toHaveLength(8);
     expect(Math.min(...distances)).toBeGreaterThanOrEqual(Math.round(100 * WORLD_SCALE));
+  });
+
+  it("limits every room to eight total portals", () => {
+    const hrefs = Array.from({ length: 12 }, (_, index) => `https://example.com/${index}`);
+    const rootRoom = node(80, null, 0, { hrefs });
+    const childRoom = node(81, 80, 1, { hrefs, isRoot: false });
+    const generated = buildInteractiveObjects(
+      { nodes: [rootRoom, childRoom], links: [], hiddenCount: 0 },
+      "https://example.com/::floor-2",
+      "https://example.com/previous",
+      new Set(),
+    );
+    const rootPortals = generated.stairs.filter(stair => stair.roomId === rootRoom.id);
+    const childPortals = generated.stairs.filter(stair => stair.roomId === childRoom.id);
+
+    expect(rootPortals).toHaveLength(8);
+    expect(rootPortals.filter(stair => stair.type === "up")).toHaveLength(1);
+    expect(rootPortals.filter(stair => stair.type === "down")).toHaveLength(7);
+    expect(childPortals).toHaveLength(8);
+    expect(childPortals.every(stair => stair.type === "down")).toBe(true);
   });
 
   it("generates denser deterministic monster and loot populations", () => {
@@ -363,7 +512,7 @@ describe("deterministic room contents", () => {
       originalCount: 2,
       coalescedCount: 0,
       truncated: false,
-    }, 1_200, 800);
+    });
     const arena = bossLayout.nodes.find(room => room.tag === "script")!;
     expect(arena).toMatchObject({
       shape: "octagon",
@@ -414,8 +563,14 @@ describe("deterministic room contents", () => {
     expect(new Set(roster.map(monster => monster.bossKind))).toEqual(
       new Set(["packet-storm", "fork-bomb", "heap-titan"]),
     );
-    expect(roster.map(monster => monster.bossKind).slice(0, 3)).toEqual(
-      roster.map(monster => monster.bossKind).slice(3, 6),
+    const reorderedRoster = buildMonsters(
+      { nodes: [rosterRoot, ...rosterScripts].reverse(), links: [], hiddenCount: 0 },
+      new Map(),
+      new Set(),
+      1,
+    ).filter(monster => monster.bossKind);
+    expect(new Map(reorderedRoster.map(monster => [monster.id, monster.bossKind]))).toEqual(
+      new Map(roster.map(monster => [monster.id, monster.bossKind])),
     );
     expect(sampledScripts.some(room => decorationSpecsForRoom(room, 10).some(item => item.spawner))).toBe(true);
   });
@@ -461,6 +616,63 @@ describe("deterministic room contents", () => {
       attackSequence: 3,
       summonedCount: 3,
     });
+  });
+
+  it("preserves boss positions after they pursue the player out of their arena", () => {
+    const room = node(6_000, null, 0, {
+      parentId: 0,
+      isRoot: false,
+      tag: "script",
+      x: 250,
+      y: -150,
+      width: ROOM_DEFINITIONS.boss.width,
+      height: ROOM_DEFINITIONS.boss.height,
+      lootSeed: stableHash("confined-boss"),
+    });
+    const boss = bossSpecForRoom(room, 4);
+    const destination = node(999, room.id, 1, {
+      x: room.x + room.width + world(300),
+      y: room.y,
+      width: ROOM_DEFINITIONS.rectangle.width,
+      height: ROOM_DEFINITIONS.rectangle.height,
+      isRoot: false,
+    });
+    const restored = buildMonsters(
+      { nodes: [room, destination], links: [], hiddenCount: 0 },
+      new Map([[
+        boss.id,
+        {
+          x: destination.x,
+          y: destination.y,
+          roomId: 999,
+          hp: boss.maxHp,
+          dead: false,
+          active: true,
+          droppedLoot: false,
+          dropId: null,
+          dropX: null,
+          dropY: null,
+          dropKind: null,
+        },
+      ]]),
+      new Set([room.id]),
+      4,
+    ).find(monster => monster.id === boss.id)!;
+
+    expect(restored.roomId).toBe(999);
+    expect(restored.x).toBe(destination.x);
+    expect(restored.y).toBe(destination.y);
+    expect(pointInRoom(restored.x, restored.y, room, restored.radius)).toBe(false);
+  });
+
+  it("subtracts the projectile's full damage from obstacle HP", () => {
+    const obstacle = decorationSpecsForRoom(room).find(item => item.obstacle)!;
+    obstacle.hp = 10;
+    obstacle.maxHp = 10;
+    expect(applyObstacleDamage(obstacle, 3)).toBe(true);
+    expect(obstacle).toMatchObject({ hp: 7, destroyed: false });
+    expect(applyObstacleDamage(obstacle, 8)).toBe(true);
+    expect(obstacle).toMatchObject({ hp: 0, destroyed: true });
   });
 
   it("generates deterministic procedural weapons and exposes all archetypes", () => {

@@ -5,7 +5,7 @@ import type {
   WeaponProjectile,
   WeaponSpec,
 } from "../types";
-import { WORLD_SCALE } from "../config";
+import { world } from "../config";
 import { stableHash } from "./hash";
 
 interface WeaponBase {
@@ -20,7 +20,6 @@ interface WeaponBase {
 }
 
 export type WeaponSource = "room" | "hidden" | "boss";
-const world = (value: number): number => Math.round(value * WORLD_SCALE);
 
 const EXTRA_WEAPONS: readonly WeaponBase[] = [
   { kind: "byte-repeater", label: "BYTE REPEATER", fireCooldownMs: 92, projectileSpeed: 650, projectileRange: 760, projectileRadius: 3, damage: 0.25, maxAmmo: 500 },

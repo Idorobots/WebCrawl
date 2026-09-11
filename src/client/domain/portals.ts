@@ -3,12 +3,16 @@ import type { Point, Stair } from "../types";
 export function updatePortalContacts(
   portals: readonly Stair[],
   position: Point,
-  radius: number,
+  radius: number | Point,
   contacts: Set<string>,
+  offset: Point = { x: 0, y: 0 },
 ): Stair | null {
-  const overlapping = portals.filter(portal =>
-    portal.enabled && Math.hypot(position.x - portal.x, position.y - portal.y) <= radius
-  );
+  const radii = typeof radius === "number" ? { x: radius, y: radius } : radius;
+  const overlapping = portals.filter((portal) => {
+    const dx = (position.x - (portal.x + offset.x)) / radii.x;
+    const dy = (position.y - (portal.y + offset.y)) / radii.y;
+    return portal.enabled && dx * dx + dy * dy <= 1;
+  });
   const overlappingIds = new Set(overlapping.map(portal => portal.id));
   for (const id of contacts) {
     if (!overlappingIds.has(id)) contacts.delete(id);

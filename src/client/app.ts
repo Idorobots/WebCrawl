@@ -1,23 +1,21 @@
 import { fetchHtml, normalizeUrl } from "./api/fetch-html";
 import {
-  BULLET_MAX_DISTANCE,
-  BULLET_RADIUS,
   LOOT_ASSETS,
-  LOOT_RADIUS,
   MAX_NODES,
   MAX_ROOMS_AFTER_COALESCE,
-  MONSTER_FRAMES,
   PLAYER_FRAMES,
   PLAYER_IDLE_ASSETS,
-  PLAYER_MAX_HP,
-  PLAYER_MUZZLE_DISTANCE,
-  PLAYER_RADIUS,
-  PLAYER_SPEED,
-  STAIR_RADIUS,
-  WORLD_SCALE,
+  world,
   type SpriteDirection,
 } from "./config";
-import { distanceSquared, pointInCorridor, pointInRoom } from "./domain/geometry";
+import { applyObstacleDamage } from "./domain/combat";
+import {
+  distanceSquared,
+  pointInCorridor,
+  pointInRoom,
+  pointInRoomFloor,
+  slideAlongObstacles,
+} from "./domain/geometry";
 import {
   buildDecorations as createDecorations,
   buildInteractiveObjects as createInteractiveObjects,
@@ -33,6 +31,14 @@ import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { aStarPath, monsterEscapeStep } from "./domain/pathfinding";
 import { updatePortalContacts } from "./domain/portals";
+import {
+  DEFAULT_BULLET_SPEC,
+  LOOT_DEFINITIONS,
+  PLAYER_SPEC,
+  PORTAL_DEFINITION,
+  WEAPON_PICKUP_DEFINITIONS,
+  WORLD_GEOMETRY,
+} from "./domain/specs";
 import { DEFAULT_WEAPON, projectilesForWeapon, replenishWeaponAmmo } from "./domain/weapons";
 import { PhaserRenderer } from "./render/phaser-renderer";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
@@ -48,7 +54,6 @@ import type {
   LoadPageOptions,
   LootItem,
   Monster,
-  MonsterAnimation,
   MonsterState,
   ObstacleState,
   PlayerAnimation,
@@ -72,6 +77,8 @@ const welcomeForm = requireElement<HTMLFormElement>("#welcomeForm");
 const welcomeUrlInput = requireElement<HTMLInputElement>("#welcomeUrlInput");
 const gameUi = requireElement<HTMLDivElement>("#gameUi");
 
+const sideMinimapCanvas = requireElement<HTMLCanvasElement>("#sideMinimapCanvas");
+const sideFloorLabelEl = requireElement<HTMLElement>("#sideFloorLabel");
 const statRoomsEl = requireElement<HTMLElement>("#statRooms");
 const statFloorEl = requireElement<HTMLElement>("#statFloor");
 const statLootEl = requireElement<HTMLElement>("#statLoot");
@@ -96,8 +103,7 @@ const destroyedObstaclesByPage = new Map<string, Map<string, ObstacleState>>();
 let visitedRooms = new Set<number>();
 let roomRoutingDirty = true;
 let nextRoomTowardPlayer = new Map<number, number>();
-const SPATIAL_CELL_SIZE = 512;
-const world = (value: number): number => Math.round(value * WORLD_SCALE);
+const SPATIAL_CELL_SIZE = WORLD_GEOMETRY.spatialCellSize;
 interface GeometryCell {
   rooms: Set<GraphNode>;
   links: Set<LayoutLink>;
@@ -110,8 +116,9 @@ const monsterStatesByPage = new Map<string, Map<string, MonsterState>>();
 let currentRoomId: number | null = null;
 let player: Point = { x: 0, y: 0 };
 let playerFacing: Point = { x: 0, y: -1 };
-let playerHp = PLAYER_MAX_HP;
+let playerHp: number = PLAYER_SPEC.maxHp;
 let playerAlive = true;
+let playerInvulnerable = false;
 let lastPlayerShotAt = -Infinity;
 let currentWeapon: WeaponSpec = { ...DEFAULT_WEAPON };
 let currentWeaponAmmo: number | null = null;
@@ -299,6 +306,102 @@ function centerCameraOnPlayer(): void {
   renderer.centerCamera(player);
 }
 
+function minimapVisibleLayout(): Pick<DungeonLayout, "nodes" | "links"> {
+  if (!currentLayout) return { nodes: [], links: [] };
+
+  const visibleIds = new Set(
+    currentLayout.nodes
+      .filter(room => visitedRooms.has(room.id))
+      .map(room => room.id)
+  );
+
+  return {
+    nodes: currentLayout.nodes.filter(room => visibleIds.has(room.id)),
+    links: currentLayout.links.filter(link =>
+      visibleIds.has(link.source.id) || visibleIds.has(link.target.id)
+    )
+  };
+}
+
+function renderSideMinimap(): void {
+  const { nodes, links } = minimapVisibleLayout();
+  const visibleIds = new Set(nodes.map(node => node.id));
+  const boundsRect = sideMinimapCanvas.getBoundingClientRect();
+  const width = Math.max(1, Math.round(boundsRect.width || sideMinimapCanvas.clientWidth || 320));
+  const height = Math.max(1, Math.round(boundsRect.height || sideMinimapCanvas.clientHeight || 220));
+  const ratio = Math.min(2, window.devicePixelRatio || 1);
+  sideMinimapCanvas.width = Math.round(width * ratio);
+  sideMinimapCanvas.height = Math.round(height * ratio);
+  const context = sideMinimapCanvas.getContext("2d");
+  if (!context) return;
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = "#071018";
+  context.fillRect(0, 0, width, height);
+  if (!nodes.length) return;
+
+  const bounds = nodes.reduce((acc, node) => ({
+    minX: Math.min(acc.minX, node.x - node.width / 2),
+    maxX: Math.max(acc.maxX, node.x + node.width / 2),
+    minY: Math.min(acc.minY, node.y - node.height / 2),
+    maxY: Math.max(acc.maxY, node.y + node.height / 2)
+  }), {
+    minX: Infinity,
+    maxX: -Infinity,
+    minY: Infinity,
+    maxY: -Infinity
+  });
+
+  for (const link of links) {
+    for (const point of link.points) {
+      bounds.minX = Math.min(bounds.minX, point.x);
+      bounds.maxX = Math.max(bounds.maxX, point.x);
+      bounds.minY = Math.min(bounds.minY, point.y);
+      bounds.maxY = Math.max(bounds.maxY, point.y);
+    }
+  }
+  const pad = 18;
+  const scale = Math.min(
+    (width - pad * 2) / Math.max(1, bounds.maxX - bounds.minX),
+    (height - pad * 2) / Math.max(1, bounds.maxY - bounds.minY),
+  );
+  const mapX = (x: number): number => pad + (x - bounds.minX) * scale;
+  const mapY = (y: number): number => pad + (y - bounds.minY) * scale;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeStyle = "#315267";
+  context.lineWidth = Math.max(2, 20 * scale);
+  for (const link of links) {
+    context.beginPath();
+    link.points.forEach((point, index) => index
+      ? context.lineTo(mapX(point.x), mapY(point.y))
+      : context.moveTo(mapX(point.x), mapY(point.y))
+    );
+    context.stroke();
+  }
+  for (const room of nodes) {
+    const x = mapX(room.x - room.width / 2);
+    const y = mapY(room.y - room.height / 2);
+    const roomWidth = Math.max(3, room.width * scale);
+    const roomHeight = Math.max(3, room.height * scale);
+    context.fillStyle = room.id === currentRoomId ? "#57d9c1" : room.isRoot ? "#244d59" : "#1a303e";
+    context.fillRect(x, y, roomWidth, roomHeight);
+    context.strokeStyle = room.id === currentRoomId ? "#bafff1" : "#568198";
+    context.lineWidth = 1;
+    context.strokeRect(x, y, roomWidth, roomHeight);
+  }
+  for (const stair of currentStairs.filter(item => visibleIds.has(item.roomId))) {
+    context.fillStyle = stair.type === "up" ? "#62e6c8" : "#c07cff";
+    context.beginPath();
+    context.arc(mapX(stair.x), mapY(stair.y), 3, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.fillStyle = "#ffffff";
+  context.beginPath();
+  context.arc(mapX(player.x), mapY(player.y), 4, 0, Math.PI * 2);
+  context.fill();
+}
+
 function formatRunTime(): string {
   if (!runStartedAt) return "00:00";
   const seconds = Math.max(0, Math.floor((performance.now() - runStartedAt) / 1000));
@@ -311,12 +414,14 @@ function updateHudPanels(): void {
   const floor = navigationHistory.length + 1;
   const rooms = visitedRooms.size;
 
+  sideFloorLabelEl.textContent = `FLOOR ${floor}`;
   statRoomsEl.textContent = `${rooms} / ${MAX_ROOMS_AFTER_COALESCE}`;
   statFloorEl.textContent = String(floor);
   statLootEl.textContent = String(lootScore);
   statKillsEl.textContent = String(runStats.kills);
   statShotsEl.textContent = String(runStats.shotsFired);
   statTimeEl.textContent = formatRunTime();
+  renderSideMinimap();
 }
 
 function floorNumber(): number {
@@ -332,11 +437,11 @@ function floorIdentity(pageUrl: string): string {
 }
 
 function updateHealthUi(): void {
-  const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_MAX_HP));
+  const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_SPEC.maxHp));
   hpCountEl.textContent = String(playerHp);
   hudHealthFillEl.style.width = `${ratio * 100}%`;
 
-  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
+  renderer.setPlayer(player, playerHp, PLAYER_SPEC.maxHp, currentPlayerSpriteAsset);
 
   if (playerHudPortraitEl) {
     playerHudPortraitEl.src = currentPlayerSpriteAsset;
@@ -481,22 +586,6 @@ function cardinalDirection(dx: number, dy: number): SpriteDirection {
   return dy < 0 ? "up" : "down";
 }
 
-function monsterFrames(monster: Monster, animation: MonsterAnimation): readonly string[] {
-  const direction = monster.moveDir ?? "down";
-  if (monster.bossKind === "packet-storm") return MONSTER_FRAMES.bossArc[direction][animation];
-  if (monster.bossKind === "fork-bomb") return MONSTER_FRAMES.bossMissile[direction][animation];
-  if (monster.bossKind === "heap-titan") return MONSTER_FRAMES.bossFortress[direction][animation];
-  if (monster.kind === "sentry") {
-    const variants = [
-      MONSTER_FRAMES.sentryBallistic,
-      MONSTER_FRAMES.sentryTwin,
-      MONSTER_FRAMES.sentryEnergy,
-    ] as const;
-    return variants[monster.seed % variants.length]![direction][animation];
-  }
-  return (monster.fast ? MONSTER_FRAMES.scout : MONSTER_FRAMES.heavy)[direction][animation];
-}
-
 function isBoss(monster: Monster): boolean {
   return monster.bossKind !== undefined;
 }
@@ -539,9 +628,7 @@ function spawnExplosion(x: number, y: number): void {
 }
 
 function damageObstacle(item: Decoration, amount: number): void {
-  if (!item?.obstacle || item.destroyed) return;
-
-  item.hp = Math.max(0, item.hp - amount);
+  if (!applyObstacleDamage(item, amount)) return;
 
   if (item.hp <= 0) {
     item.destroyed = true;
@@ -639,7 +726,13 @@ function updateBossGates(): void {
   for (const stair of currentStairs) {
     if (stair.type === "down") stair.enabled = !lockedRooms.has(stair.roomId);
   }
-  updatePortalContacts(currentStairs, player, STAIR_RADIUS, portalContacts);
+  updatePortalContacts(
+    currentStairs,
+    player,
+    PORTAL_DEFINITION.contactRadius,
+    portalContacts,
+    PORTAL_DEFINITION.contactOffset,
+  );
 }
 
 function activateMonstersInRoom(roomId: number): void {
@@ -702,7 +795,7 @@ function updateMonsterSpawners(timestamp: number): void {
 }
 
 function renderMonsters(): void {
-  renderer.renderMonsters(currentMonsters, monsterFrames);
+  renderer.renderMonsters(currentMonsters);
 }
 
 function updateMonsterPositions(): void {
@@ -710,7 +803,7 @@ function updateMonsterPositions(): void {
 }
 
 function applyPlayerDamage(amount: number): void {
-  if (!playerAlive) return;
+  if (!playerAlive || playerInvulnerable) return;
 
   playerHp = Math.max(0, playerHp - amount);
   hpCountEl.textContent = String(playerHp);
@@ -789,7 +882,7 @@ function queueEnemyBullet(
   {
     speed = monster.projectileSpeed,
     damage = monster.attackDamage,
-    radius = BULLET_RADIUS,
+    radius = DEFAULT_BULLET_SPEC.radius,
     maxDistance = monster.projectileRange,
     style = "enemy",
   }: {
@@ -911,8 +1004,8 @@ function hasWalkableLine(from: Point, to: Point, radius: number, step: number): 
   return true;
 }
 
-function hasLineOfSight(from: Point, to: Point, step = 14): boolean {
-  return hasWalkableLine(from, to, BULLET_RADIUS, step);
+function hasLineOfSight(from: Point, to: Point, step = WORLD_GEOMETRY.pathLineStep): boolean {
+  return hasWalkableLine(from, to, DEFAULT_BULLET_SPEC.radius, step);
 }
 
 function monsterPathBounds(monster: Monster, target: Point): {
@@ -922,10 +1015,10 @@ function monsterPathBounds(monster: Monster, target: Point): {
   maxY: number;
 } {
   return {
-    minX: Math.min(monster.x, target.x) - 180,
-    maxX: Math.max(monster.x, target.x) + 180,
-    minY: Math.min(monster.y, target.y) - 180,
-    maxY: Math.max(monster.y, target.y) + 180,
+    minX: Math.min(monster.x, target.x) - WORLD_GEOMETRY.pathBoundsPadding,
+    maxX: Math.max(monster.x, target.x) + WORLD_GEOMETRY.pathBoundsPadding,
+    minY: Math.min(monster.y, target.y) - WORLD_GEOMETRY.pathBoundsPadding,
+    maxY: Math.max(monster.y, target.y) + WORLD_GEOMETRY.pathBoundsPadding,
   };
 }
 
@@ -934,13 +1027,14 @@ function updateMonsterPath(monster: Monster, target: Point, targetRoomId: number
   if (timestamp < (monster.nextPathRefreshAt ?? 0) && monster.path?.length) return;
 
   const start = { x: monster.x, y: monster.y };
-  const path = hasWalkableLine(start, target, monster.radius, 24)
+  const walkable = (point: Point): boolean => isMonsterWalkable(monster, point.x, point.y);
+  const path = hasWalkableLine(start, target, monster.radius, WORLD_GEOMETRY.pathLineStep)
     ? [target]
     : aStarPath(
       start,
       target,
-      point => isWalkable(point.x, point.y, monster.radius),
-      18,
+      walkable,
+      WORLD_GEOMETRY.pathGridStep,
       1800,
       monsterPathBounds(monster, target),
     );
@@ -967,24 +1061,12 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
 
   if (distance <= 0.001) {
     monster.moveDir = null;
+    monster.moving = false;
     monster.blockedMoveCount = 0;
     return;
   }
 
   const step = Math.min(distance, monster.speed * dt);
-  if (monster.escapeDirection && timestamp < (monster.escapeUntil ?? 0)) {
-    const escapeDistance = Math.max(step, world(4));
-    const escape = {
-      x: monster.x + monster.escapeDirection.x * escapeDistance,
-      y: monster.y + monster.escapeDirection.y * escapeDistance,
-    };
-    if (isWalkable(escape.x, escape.y, monster.radius)) {
-      monster.moveDir = cardinalDirection(monster.escapeDirection.x, monster.escapeDirection.y);
-      monster.x = escape.x;
-      monster.y = escape.y;
-      return;
-    }
-  }
   monster.escapeDirection = undefined;
   monster.escapeUntil = undefined;
   const nextX = monster.x + dx / distance * step;
@@ -995,9 +1077,10 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
       ? (dx < 0 ? "left" : "right")
       : (dy < 0 ? "up" : "down");
 
-  if (isWalkable(nextX, nextY, monster.radius)) {
+  if (isMonsterWalkable(monster, nextX, nextY)) {
     monster.x = nextX;
     monster.y = nextY;
+    monster.moving = true;
     monster.blockedMoveCount = 0;
     return;
   }
@@ -1009,10 +1092,11 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     : [verticalStep, horizontalStep];
   for (const candidate of axisSteps) {
     if (Math.hypot(candidate.x - monster.x, candidate.y - monster.y) <= 0.001) continue;
-    if (!isWalkable(candidate.x, candidate.y, monster.radius)) continue;
+    if (!isMonsterWalkable(monster, candidate.x, candidate.y)) continue;
     monster.moveDir = cardinalDirection(candidate.x - monster.x, candidate.y - monster.y);
     monster.x = candidate.x;
     monster.y = candidate.y;
+    monster.moving = true;
     monster.blockedMoveCount = 0;
     return;
   }
@@ -1025,28 +1109,27 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     monster,
     { x: dx, y: dy },
     Math.max(step, world(6)),
-    point => isWalkable(point.x, point.y, monster.radius),
+    point => isMonsterWalkable(monster, point.x, point.y),
     monster.seed + monster.blockedMoveCount,
   );
   if (escaped) {
     const escapeDx = escaped.x - monster.x;
     const escapeDy = escaped.y - monster.y;
-    const escapeMagnitude = Math.max(0.001, Math.hypot(escapeDx, escapeDy));
-    monster.escapeDirection = { x: escapeDx / escapeMagnitude, y: escapeDy / escapeMagnitude };
-    monster.escapeUntil = timestamp + 320;
     monster.moveDir = cardinalDirection(escapeDx, escapeDy);
     monster.x = escaped.x;
     monster.y = escaped.y;
+    monster.moving = true;
     monster.blockedMoveCount = 0;
   }
 }
 
 function updateBoss(monster: Monster, dt: number, timestamp: number): void {
   if (currentRoomId === null) return;
-  const sharesPlayerRoom = monster.roomId === currentRoomId;
+  const playerRoom = roomContainingPoint(player.x, player.y);
+  const sharesPlayerRoom = playerRoom?.id === monster.roomId;
   let target: Point = player;
-  let targetRoomId = currentRoomId;
-  if (!sharesPlayerRoom) {
+  let targetRoomId: number | null = playerRoom?.id ?? null;
+  if (!sharesPlayerRoom && playerRoom) {
     const nextRoomId = nextRoomTowardPlayer.get(monster.roomId);
     const nextRoom = nextRoomId === undefined ? undefined : currentRoomsById.get(nextRoomId);
     if (!nextRoom) return;
@@ -1056,6 +1139,10 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
   if (monster.bossKind === "heap-titan" || !sharesPlayerRoom) {
     updateMonsterPath(monster, target, targetRoomId, timestamp);
     moveMonsterTowards(monster, target, dt, timestamp);
+  }
+  if (monster.bossKind === "heap-titan") {
+    updateMonsterPath(monster, player, monster.spawnRoomId, timestamp);
+    moveMonsterTowards(monster, player, dt, timestamp);
   }
   const playerDistance = Math.hypot(player.x - monster.x, player.y - monster.y);
   monster.moveDir = cardinalDirection(player.x - monster.x, player.y - monster.y);
@@ -1120,8 +1207,8 @@ function shootBullet(): void {
   const perpendicular = { x: -playerFacing.y, y: playerFacing.x };
   for (const [index, projectile] of projectiles.entries()) {
     const muzzleDistance = Math.max(
-      PLAYER_RADIUS + projectile.radius + world(7),
-      PLAYER_MUZZLE_DISTANCE,
+      PLAYER_SPEC.radius + projectile.radius + world(7),
+      PLAYER_SPEC.muzzleDistance,
     );
     const x = player.x + playerFacing.x * muzzleDistance + perpendicular.x * projectile.lateralOffset;
     const y = player.y + playerFacing.y * muzzleDistance + perpendicular.y * projectile.lateralOffset;
@@ -1171,10 +1258,10 @@ function updateBullets(dt: number): void {
       bullet.x += dx;
       bullet.y += dy;
       bullet.traveled += Math.hypot(dx, dy);
-      const bulletRadius = bullet.radius ?? BULLET_RADIUS;
+      const bulletRadius = bullet.radius ?? DEFAULT_BULLET_SPEC.radius;
 
       if (
-        bullet.traveled >= (bullet.maxDistance ?? BULLET_MAX_DISTANCE) ||
+        bullet.traveled >= (bullet.maxDistance ?? DEFAULT_BULLET_SPEC.maxDistance) ||
         !isGeometryWalkable(bullet.x, bullet.y, bulletRadius)
       ) {
         alive = false;
@@ -1204,7 +1291,7 @@ function updateBullets(dt: number): void {
           bullet.y - player.y
         );
 
-        if (playerDistance <= PLAYER_RADIUS + bulletRadius) {
+        if (playerDistance <= PLAYER_SPEC.radius + bulletRadius) {
           applyPlayerDamage(bullet.damage);
           alive = false;
           break;
@@ -1220,7 +1307,7 @@ function updateBullets(dt: number): void {
         );
 
         if (hitDistance <= item.radius + bulletRadius) {
-          damageObstacle(item, 1);
+          damageObstacle(item, bullet.damage);
           alive = false;
           break;
         }
@@ -1285,6 +1372,7 @@ function gameTick(timestamp: number): void {
 
   for (const monster of currentMonsters) {
     if (!monster.active || monster.dead) continue;
+    monster.moving = false;
 
     const containingRoom = roomContainingPoint(monster.x, monster.y);
     if (containingRoom && visitedRooms.has(containingRoom.id)) {
@@ -1431,7 +1519,7 @@ function rebuildSpatialIndexes(): void {
   }
 }
 
-function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_RADIUS): boolean {
+function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_SPEC.radius): boolean {
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
     if (!item.obstacle || item.destroyed) continue;
 
@@ -1443,12 +1531,12 @@ function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_RADIUS):
   return false;
 }
 
-function isGeometryWalkable(x: number, y: number, radius = PLAYER_RADIUS): boolean {
+function isGeometryWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): boolean {
   if (!currentLayout) return false;
   const cell = geometryCells.get(spatialCellKey(x, y));
   if (!cell) return false;
   for (const room of cell.rooms) {
-    if (pointInRoom(x, y, room, radius)) return true;
+    if (pointInRoomFloor(x, y, room, radius)) return true;
   }
   for (const link of cell.links) {
     if (pointInCorridor(x, y, link, radius)) return true;
@@ -1457,11 +1545,15 @@ function isGeometryWalkable(x: number, y: number, radius = PLAYER_RADIUS): boole
   return false;
 }
 
-function isWalkable(x: number, y: number, radius = PLAYER_RADIUS): boolean {
+function isWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): boolean {
   return (
     isGeometryWalkable(x, y, radius) &&
     !pointBlockedByDecoration(x, y, radius)
   );
+}
+
+function isMonsterWalkable(monster: Monster, x: number, y: number): boolean {
+  return isWalkable(x, y, monster.radius);
 }
 
 function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
@@ -1482,14 +1574,14 @@ function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
 
 function renderInteractiveObjects(): void {
   renderer.renderObjects(currentStairs, currentLoot, visitedRooms, LOOT_ASSETS);
-  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
+  renderer.setPlayer(player, playerHp, PLAYER_SPEC.maxHp, currentPlayerSpriteAsset);
   updatePlayerVisual();
   updatePlayerAnimationClasses();
   updateHealthUi();
 }
 
 function updatePlayerVisual(): void {
-  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
+  renderer.setPlayer(player, playerHp, PLAYER_SPEC.maxHp, currentPlayerSpriteAsset);
 }
 
 function checkLoot(): void {
@@ -1497,17 +1589,23 @@ function checkLoot(): void {
   queuedLootDrops = [];
 
   for (const item of currentLoot) {
+    const pickupRadius = item.kind === "weapon"
+      ? WEAPON_PICKUP_DEFINITIONS[item.weaponPlacement ?? "floor"].pickupRadius
+      : LOOT_DEFINITIONS[item.kind].pickupRadius;
     if (
       temporarilyBlockedLoot.has(item.id) &&
-      distanceSquared(player, item) > LOOT_RADIUS * LOOT_RADIUS
+      distanceSquared(player, item) > pickupRadius * pickupRadius
     ) {
       temporarilyBlockedLoot.delete(item.id);
     }
   }
 
   currentLoot = currentLoot.filter(item => {
+    const pickupRadius = item.kind === "weapon"
+      ? WEAPON_PICKUP_DEFINITIONS[item.weaponPlacement ?? "floor"].pickupRadius
+      : LOOT_DEFINITIONS[item.kind].pickupRadius;
     if (
-      distanceSquared(player, item) <= LOOT_RADIUS * LOOT_RADIUS &&
+      distanceSquared(player, item) <= pickupRadius * pickupRadius &&
       !temporarilyBlockedLoot.has(item.id)
     ) {
       collectedLoot.add(item.id);
@@ -1530,7 +1628,7 @@ function checkLoot(): void {
       }
 
       if (item.kind === "medkit" && playerAlive) {
-        const restored = playerHp < PLAYER_MAX_HP ? 1 : 0;
+        const restored = playerHp < PLAYER_SPEC.maxHp ? 1 : 0;
 
         if (restored > 0) {
           playerHp += restored;
@@ -1564,10 +1662,16 @@ function checkLoot(): void {
 
 function checkStairs(): boolean {
   if (portalTransitioning) return true;
-  const stair = updatePortalContacts(currentStairs, player, STAIR_RADIUS, portalContacts);
+  const stair = updatePortalContacts(
+    currentStairs,
+    player,
+    PORTAL_DEFINITION.contactRadius,
+    portalContacts,
+    PORTAL_DEFINITION.contactOffset,
+  );
   if (!stair) return false;
   portalTransitioning = true;
-  renderer.spawnEffect("teleport", stair.x, stair.y);
+  renderer.spawnEffect("teleport", player.x, player.y);
   setTimeout(() => {
     portalTransitioning = false;
     if (stair.type === "up") goBack();
@@ -1701,7 +1805,7 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
     return;
   }
 
-  const distance = PLAYER_SPEED * dt;
+  const distance = PLAYER_SPEC.speed * dt;
   const dx = inputX / magnitude * distance;
   const dy = inputY / magnitude * distance;
   const next = {
@@ -1714,6 +1818,22 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
     player = next;
     moved = true;
   } else {
+    const nearbyObstacles = [...(obstacleCells.get(spatialCellKey(next.x, next.y)) ?? [])]
+      .filter(item => item.obstacle && !item.destroyed)
+      .map(item => ({ x: item.x, y: item.y, radius: item.footprint ?? item.radius }));
+    const slid = slideAlongObstacles(
+      player,
+      { x: dx, y: dy },
+      PLAYER_SPEC.radius,
+      nearbyObstacles,
+      point => isWalkable(point.x, point.y),
+    );
+    if (slid) {
+      player = slid;
+      moved = true;
+    }
+  }
+  if (!moved) {
     if (dx !== 0 && isWalkable(player.x + dx, player.y)) {
       player.x += dx;
       moved = true;
@@ -1749,6 +1869,9 @@ function teleportPlayerTo(x: number, y: number): void {
   __webcrawlTest?: {
     teleportPlayerTo: (x: number, y: number) => void;
     setWeaponAmmo: (ammo: number) => void;
+    setPlayerInvulnerable: (enabled: boolean) => void;
+    stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y">>;
+    portalContacts: () => string[];
     loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>;
     lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null; placement: string | null } | null;
   };
@@ -1757,8 +1880,14 @@ function teleportPlayerTo(x: number, y: number): void {
   setWeaponAmmo(ammo: number): void {
     if (currentWeapon.maxAmmo === null) return;
     currentWeaponAmmo = Math.max(0, Math.min(currentWeapon.maxAmmo, ammo));
+    lastPlayerShotAt = -Infinity;
     updateWeaponUi();
   },
+  setPlayerInvulnerable(enabled: boolean): void {
+    playerInvulnerable = enabled;
+  },
+  stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
+  portalContacts: () => [...portalContacts],
   loot: () => currentLoot.map(item => ({
     id: item.id,
     kind: item.kind,
@@ -1871,7 +2000,11 @@ document.addEventListener("visibilitychange", () => {
 function renderGraph(
   graph: DungeonGraph,
   pageUrl: string,
-  { spawnRoomId = null, stateId = null }: Pick<LoadPageOptions, "spawnRoomId" | "stateId"> = {},
+  {
+    spawnRoomId = null,
+    stateId = null,
+    spawnPortalUrl = null,
+  }: Pick<LoadPageOptions, "spawnRoomId" | "stateId"> & { spawnPortalUrl?: string | null } = {},
 ): void {
   currentStateId = stateId ?? stateIdForPage(pageUrl);
   renderer.clear();
@@ -1882,8 +2015,7 @@ function renderGraph(
   bullets = [];
   hideLinkMenu();
 
-  const { width, height } = renderer.viewportSize();
-  const layout = layoutOrthogonal(graph, width, height);
+  const layout = layoutOrthogonal(graph);
   currentLayout = layout;
   currentRoomsById = new Map(layout.nodes.map(room => [room.id, room]));
   roomRoutingDirty = true;
@@ -1917,14 +2049,18 @@ function renderGraph(
     root;
 
   if (spawnRoom) {
-    player = {
-      x: spawnRoom.x,
-      y: spawnRoom.y + world(60)
-    };
-
-    if (!isWalkable(player.x, player.y)) {
-      player = { x: spawnRoom.x, y: spawnRoom.y };
-    }
+    const roomStairs = currentStairs.filter(stair => stair.roomId === spawnRoom.id);
+    const entryPortal =
+      (spawnPortalUrl
+        ? roomStairs.find(stair => stair.url === spawnPortalUrl)
+        : null) ||
+      roomStairs.find(stair => stair.type === "up");
+    player = entryPortal
+      ? {
+          x: entryPortal.x + PORTAL_DEFINITION.contactOffset.x,
+          y: entryPortal.y + PORTAL_DEFINITION.contactOffset.y,
+        }
+      : { x: spawnRoom.x, y: spawnRoom.y };
 
     currentRoomId = spawnRoom.id;
     gameCanvasHost.dataset.currentRoomTag = spawnRoom.tag;
@@ -1937,7 +2073,13 @@ function renderGraph(
     discoveredRoomsByPage.set(currentStateId, new Set(visitedRooms));
   }
   portalContacts.clear();
-  updatePortalContacts(currentStairs, player, STAIR_RADIUS, portalContacts);
+  updatePortalContacts(
+    currentStairs,
+    player,
+    PORTAL_DEFINITION.contactRadius,
+    portalContacts,
+    PORTAL_DEFINITION.contactOffset,
+  );
 
   renderer.setWorld(layout, visitedRooms);
   updateFogOfWar();
@@ -1980,6 +2122,7 @@ async function loadPage(
   resetPlayerInput();
   portalTransitioning = false;
   const requestId = ++currentRequest;
+  const departingPageUrl = currentPageUrl;
 
   let url: string;
   try {
@@ -2015,7 +2158,11 @@ async function loadPage(
 
     currentPageUrl = url;
     currentStateId = stateId ?? stateIdForPage(url);
-    renderGraph(graph, url, { spawnRoomId, stateId: currentStateId });
+    renderGraph(graph, url, {
+      spawnRoomId,
+      stateId: currentStateId,
+      spawnPortalUrl: popBack ? departingPageUrl : null,
+    });
   } catch (err) {
     if (requestId !== currentRequest) return;
     const message = err instanceof Error ? err.message : "Unknown error";

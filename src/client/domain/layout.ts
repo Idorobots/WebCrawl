@@ -1,9 +1,4 @@
-import {
-  CORRIDOR_HALF_WIDTH,
-  MAX_CORRIDOR_LENGTH,
-  ROOM_COLLISION_MARGIN,
-  WORLD_SCALE,
-} from "../config";
+import { world } from "../config";
 import type {
   Direction,
   DungeonGraph,
@@ -13,6 +8,7 @@ import type {
   Point,
   RoomShape,
 } from "../types";
+import { ROOM_DEFINITIONS, WORLD_GEOMETRY } from "./specs";
 
 interface Bounds {
   left: number;
@@ -23,7 +19,6 @@ interface Bounds {
 
 const SHAPES: RoomShape[] = ["rectangle", "wide", "tall", "capsule", "octagon"];
 const CARDINALS: Direction[] = ["N", "E", "S", "W"];
-const world = (value: number): number => Math.round(value * WORLD_SCALE);
 
 export function roomBounds(node: GraphNode, x = node.x, y = node.y, margin = 0): Bounds {
   return {
@@ -45,31 +40,13 @@ function configureRoom(node: GraphNode, childCount: number): void {
   node.childCount = childCount;
   if (node.tag === "script") {
     node.shape = "octagon";
-    node.width = world(900) + exitBonus;
-    node.height = world(650);
+    node.width = ROOM_DEFINITIONS.boss.width + exitBonus;
+    node.height = ROOM_DEFINITIONS.boss.height;
     return;
   }
-  switch (shape) {
-    case "wide":
-      node.width = world(720) + exitBonus;
-      node.height = world(360);
-      break;
-    case "tall":
-      node.width = world(460);
-      node.height = world(560) + exitBonus;
-      break;
-    case "capsule":
-      node.width = world(640) + exitBonus;
-      node.height = world(380);
-      break;
-    case "octagon":
-      node.width = world(580) + exitBonus;
-      node.height = world(460);
-      break;
-    default:
-      node.width = world(580) + exitBonus;
-      node.height = world(400);
-  }
+  const definition = ROOM_DEFINITIONS[shape];
+  node.width = definition.width + (shape === "tall" ? 0 : exitBonus);
+  node.height = definition.height + (shape === "tall" ? exitBonus : 0);
   if (node.isRoot) {
     node.width = Math.max(node.width, world(700));
     node.height = Math.max(node.height, world(480));
@@ -145,7 +122,7 @@ function pointOnSide(room: GraphNode, side: Direction, slot: number): Point {
   }
 }
 
-function segmentBounds(start: Point, end: Point, margin = CORRIDOR_HALF_WIDTH): Bounds {
+function segmentBounds(start: Point, end: Point, margin = WORLD_GEOMETRY.corridorHalfWidth): Bounds {
   return {
     left: Math.min(start.x, end.x) - margin,
     right: Math.max(start.x, end.x) + margin,
@@ -161,7 +138,7 @@ function corridorIntersectsBounds(points: readonly Point[], bounds: Bounds): boo
   return false;
 }
 
-export function corridorIntersectsRoom(link: LayoutLink, room: GraphNode, margin = 32): boolean {
+export function corridorIntersectsRoom(link: LayoutLink, room: GraphNode, margin = world(23)): boolean {
   return corridorIntersectsBounds(link.points, roomBounds(room, room.x, room.y, margin));
 }
 
@@ -203,24 +180,25 @@ function corridorRoute(
     }
   }
   return routes.find(points =>
-    corridorLength(points) <= MAX_CORRIDOR_LENGTH && routeIsClear(points, rooms, sourceId, targetId)
+    corridorLength(points) <= WORLD_GEOMETRY.maxCorridorLength && routeIsClear(points, rooms, sourceId, targetId)
   ) ?? null;
 }
 
-export function layoutOrthogonal(graph: DungeonGraph, width: number, height: number): DungeonLayout {
+export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
+  const nodes = graph.nodes.map(node => ({ ...node, hrefs: [...node.hrefs] }));
   const childrenByParent = new Map<number, GraphNode[]>();
-  for (const node of graph.nodes) {
+  for (const node of nodes) {
     if (node.parentId === null) continue;
     const children = childrenByParent.get(node.parentId) ?? [];
     children.push(node);
     childrenByParent.set(node.parentId, children);
   }
-  for (const node of graph.nodes) configureRoom(node, childrenByParent.get(node.id)?.length ?? 0);
+  for (const node of nodes) configureRoom(node, childrenByParent.get(node.id)?.length ?? 0);
 
-  const root = graph.nodes.find(node => node.isRoot) ?? graph.nodes.find(node => node.parentId === null);
-  if (!root) return { nodes: [], links: [], hiddenCount: graph.nodes.length };
-  root.x = width / 2;
-  root.y = height / 2;
+  const root = nodes.find(node => node.isRoot) ?? nodes.find(node => node.parentId === null);
+  if (!root) return { nodes: [], links: [], hiddenCount: nodes.length };
+  root.x = 0;
+  root.y = 0;
   root.parentSide = null;
   root.directionFromParent = null;
 
@@ -240,8 +218,8 @@ export function layoutOrthogonal(graph: DungeonGraph, width: number, height: num
     for (const child of childrenByParent.get(node.id) ?? []) collectSubtreeHrefs(child, target);
   };
   const roomPlacementIsClear = (node: GraphNode, point: Point): boolean => {
-    const candidate = roomBounds(node, point.x, point.y, ROOM_COLLISION_MARGIN + world(70));
-    if (placed.some(other => boundsOverlap(candidate, roomBounds(other, other.x, other.y, ROOM_COLLISION_MARGIN + world(70))))) return false;
+    const candidate = roomBounds(node, point.x, point.y, WORLD_GEOMETRY.roomCollisionMargin + world(70));
+    if (placed.some(other => boundsOverlap(candidate, roomBounds(other, other.x, other.y, WORLD_GEOMETRY.roomCollisionMargin + world(70))))) return false;
     return links.every(link => !corridorIntersectsBounds(link.points, roomBounds(node, point.x, point.y, world(20))));
   };
 
@@ -266,7 +244,7 @@ export function layoutOrthogonal(graph: DungeonGraph, width: number, height: num
         target: node,
         direction,
         ownerRoomId: parent.id,
-        width: CORRIDOR_HALF_WIDTH * 2,
+        width: WORLD_GEOMETRY.corridorHalfWidth * 2,
         points,
       };
     }
@@ -291,7 +269,7 @@ export function layoutOrthogonal(graph: DungeonGraph, width: number, height: num
     const promoted = promotedHrefMap.get(room.id);
     if (promoted) room.hrefs = [...promoted].slice(0, 10);
   }
-  return { nodes: placed, links, hiddenCount: graph.nodes.length - placed.length };
+  return { nodes: placed, links, hiddenCount: nodes.length - placed.length };
 }
 
 export function corridorEndpoints(link: LayoutLink): { x1: number; y1: number; x2: number; y2: number } {

@@ -12,6 +12,15 @@ export type PlayerAnimation = "walk" | "shoot";
 export type LootKind = "credit" | "crystal" | "core" | "medkit" | "weapon";
 export type BossKind = "packet-storm" | "fork-bomb" | "heap-titan";
 export type MonsterKind = "slow" | "fast" | "sentry" | BossKind;
+export type MonsterVisualKind =
+  | "scout"
+  | "heavy"
+  | "sentry-ballistic"
+  | "sentry-twin"
+  | "sentry-energy"
+  | "boss-arc"
+  | "boss-missile"
+  | "boss-fortress";
 export type BulletOwner = "player" | "enemy";
 export type BulletStyle = "player" | "enemy" | "boss" | "shockwave";
 export type WeaponKind =
@@ -124,12 +133,14 @@ export interface WeaponProjectile {
 
 export interface Decoration extends Point {
   id: string;
+  definitionId: string;
   roomId: number;
   kind: string;
   asset: string;
   obstacle: boolean;
   radius: number;
   size: number;
+  origin: { x: number; y: number };
   footprint?: number;
   maxHp: number;
   hp: number;
@@ -151,7 +162,8 @@ export interface ObstacleState {
 export interface Monster extends Point {
   id: string;
   seed: number;
-   kind: MonsterKind;
+  kind: MonsterKind;
+  visualKind: MonsterVisualKind;
   spawnRoomId: number;
   roomId: number;
   maxHp: number;
@@ -171,6 +183,7 @@ export interface Monster extends Point {
   active: boolean;
   dead: boolean;
   deathAnimating?: boolean;
+  moving?: boolean;
   moveDir?: "up" | "down" | "left" | "right" | null;
   path?: Point[];
   pathIndex?: number;
