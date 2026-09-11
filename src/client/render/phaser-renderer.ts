@@ -54,7 +54,6 @@ export class PhaserRenderer {
   private monsters = new Map<string, Phaser.GameObjects.Container>();
   private player: Phaser.GameObjects.Container | null = null;
   private playerSprite: Phaser.GameObjects.Image | null = null;
-  private playerHpFill: Phaser.GameObjects.Rectangle | null = null;
   private currentPlayer: Point = { x: 0, y: 0 };
   private currentPlayerHp = 10;
   private currentPlayerMaxHp = 10;
@@ -139,7 +138,6 @@ export class PhaserRenderer {
     this.player?.destroy(true);
     this.player = null;
     this.playerSprite = null;
-    this.playerHpFill = null;
     this.currentDecorations = [];
     this.currentStairs = [];
     this.currentLoot = [];

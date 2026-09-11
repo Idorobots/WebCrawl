@@ -154,27 +154,21 @@ const enemyFrames = (
   animated: { walk: boolean; attack: boolean },
 ): MonsterFrameSet => {
   const idle = enemyViews(directory, name);
+  const directionalFrames = (
+    direction: SpriteDirection,
+    assetDirection: "front" | "back" | "right" | "left",
+  ): Record<MonsterAnimation, readonly string[]> => ({
+    idle: [idle[direction]],
+    walk: animated.walk ? enemyActionFrames(directory, "walk", assetDirection) : [idle[direction]],
+    attack: direction === "down" && animated.attack
+      ? enemyActionFrames(directory, "attack", "front")
+      : [idle[direction]],
+  });
   return {
-    up: {
-      idle: [idle.up],
-      walk: animated.walk ? enemyActionFrames(directory, "walk", "back") : [idle.down],
-      attack: animated.attack ? enemyActionFrames(directory, "attack", "back") : [idle.down],
-    },
-    right: {
-      idle: [idle.right],
-      walk: animated.walk ? enemyActionFrames(directory, "walk", "right") : [idle.down],
-      attack: animated.attack ? enemyActionFrames(directory, "attack", "right") : [idle.down],
-    },
-    left:  {
-      idle: [idle.left],
-      walk: animated.walk ? enemyActionFrames(directory, "walk", "left") : [idle.down],
-      attack: animated.attack ? enemyActionFrames(directory, "attack", "left") : [idle.down],
-    },
-    down: {
-      idle: [idle.down],
-      walk: animated.walk ? enemyActionFrames(directory, "walk", "front") : [idle.down],
-      attack: animated.attack ? enemyActionFrames(directory, "attack", "front") : [idle.down],
-    },
+    up: directionalFrames("up", "back"),
+    right: directionalFrames("right", "right"),
+    left: directionalFrames("left", "left"),
+    down: directionalFrames("down", "front"),
   };
 };
 

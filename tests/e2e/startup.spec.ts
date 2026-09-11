@@ -70,7 +70,7 @@ async function lastDroppedWeapon(page: Page): Promise<{ id: string; x: number; y
 test("starts a crawl and renders a playable floor", async ({ page }) => {
   const failedAssets: string[] = [];
   page.on("response", response => {
-    if (response.url().includes("/assets_new/") && response.status() >= 400) {
+    if (response.url().includes("/assets/") && response.status() >= 400) {
       failedAssets.push(`${response.status()} ${response.url()}`);
     }
   });
@@ -181,7 +181,7 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
   const aimX = bounds.x + bounds.width * 0.78;
   const aimY = bounds.y + bounds.height * 0.3;
   await page.mouse.move(aimX, aimY);
-  const rightFacingAsset = /assets_new\/player\/(?:idle\/player_right\.png|walk\/E\/walk_E_\d{2}\.png)/;
+  const rightFacingAsset = /assets\/player\/(?:idle\/player_right\.png|walk\/E\/walk_E_\d{2}\.png)/;
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", rightFacingAsset);
 
   await page.keyboard.press("Space");

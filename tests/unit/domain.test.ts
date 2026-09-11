@@ -500,12 +500,20 @@ describe("deterministic room contents", () => {
     expect(samples.some(room => weaponLootForRoom(room, "https://example.com/room") !== null)).toBe(true);
   });
 
-  it("defines directional monster animation fallbacks until more frames are available", () => {
+  it("defines directional monster animations and fallbacks where frames are unavailable", () => {
     expect(MONSTER_FRAMES.scout.down.walk).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.up.walk).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.right.walk).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.left.walk).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.up.walk[0]).toBe("assets/enemies/scout/walk/back/frame_01.png");
+    expect(MONSTER_FRAMES.scout.right.walk[0]).toBe("assets/enemies/scout/walk/right/frame_01.png");
+    expect(MONSTER_FRAMES.scout.left.walk[0]).toBe("assets/enemies/scout/walk/left/frame_01.png");
     expect(MONSTER_FRAMES.scout.down.attack).toHaveLength(4);
-    expect(MONSTER_FRAMES.scout.left.walk).toEqual(MONSTER_FRAMES.scout.left.idle);
     expect(MONSTER_FRAMES.scout.up.attack).toEqual(MONSTER_FRAMES.scout.up.idle);
+    expect(MONSTER_FRAMES.scout.right.attack).toEqual(MONSTER_FRAMES.scout.right.idle);
+    expect(MONSTER_FRAMES.scout.left.attack).toEqual(MONSTER_FRAMES.scout.left.idle);
     expect(MONSTER_FRAMES.sentryBallistic.down.walk).toHaveLength(1);
+    expect(MONSTER_FRAMES.sentryBallistic.up.walk).toEqual(MONSTER_FRAMES.sentryBallistic.up.idle);
     expect(MONSTER_FRAMES.sentryBallistic.down.attack).toHaveLength(4);
     expect(Object.values(EFFECT_FRAMES).every(frames => frames.length === 4)).toBe(true);
   });
