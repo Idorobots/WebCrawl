@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   CORRIDOR_HALF_WIDTH,
+  EFFECT_FRAMES,
   MAX_CORRIDOR_LENGTH,
+  MONSTER_FRAMES,
   MONSTER_RADIUS,
   ROOM_HEIGHT,
   ROOM_WIDTH,
@@ -23,15 +25,18 @@ import {
   monsterSpecsForRoom,
   monsterSpecForBossSummon,
   monsterSpecForSpawner,
+  staircasePositions,
   weaponLootForRoom,
+  weaponPedestalForRoom,
   sceneryDropKindForSeed,
 } from "../../src/client/domain/generation";
 import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthogonal } from "../../src/client/domain/layout";
-import { aStarPath, revealedRoomPath } from "../../src/client/domain/pathfinding";
+import { aStarPath, monsterEscapeStep, revealedRoomPath } from "../../src/client/domain/pathfinding";
+import { updatePortalContacts } from "../../src/client/domain/portals";
 import { DEFAULT_WEAPON, projectilesForWeapon, replenishWeaponAmmo, weaponForRoom, weaponKinds } from "../../src/client/domain/weapons";
-import type { DungeonGraph, GraphNode } from "../../src/client/types";
+import type { DungeonGraph, GraphNode, Stair } from "../../src/client/types";
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
   id,
@@ -220,6 +225,38 @@ describe("layout and geometry", () => {
     expect(path).not.toBeNull();
     expect(path?.some(point => point.x === 18 && point.y === 18)).toBe(false);
   });
+
+  it("sidesteps monsters away from blocked forward movement", () => {
+    const escaped = monsterEscapeStep(
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      12,
+      point => point.y > 0,
+      0,
+    );
+    expect(escaped?.x ?? Infinity).toBeCloseTo(0);
+    expect(escaped?.y).toBeCloseTo(12);
+  });
+});
+
+describe("portal entry", () => {
+  const portal: Stair = {
+    id: "room-1::portal-down-0",
+    type: "down",
+    roomId: 1,
+    url: "https://example.com/next",
+    enabled: true,
+    x: 100,
+    y: 100,
+  };
+
+  it("requires leaving a portal occupied at spawn before it can activate", () => {
+    const contacts = new Set<string>();
+    updatePortalContacts([portal], portal, 56, contacts);
+    expect(updatePortalContacts([portal], portal, 56, contacts)).toBeNull();
+    expect(updatePortalContacts([portal], { x: 200, y: 100 }, 56, contacts)).toBeNull();
+    expect(updatePortalContacts([portal], portal, 56, contacts)).toEqual(portal);
+  });
 });
 
 describe("deterministic room contents", () => {
@@ -248,6 +285,21 @@ describe("deterministic room contents", () => {
     expect(lootCountForRoom(room)).toBeLessThanOrEqual(5);
     expect(generated.loot.filter(item => item.kind !== "weapon")).toHaveLength(lootCountForRoom(room));
     expect(generated.stairs.map(({ url }) => url)).toEqual(room.hrefs);
+    expect(new Set(generated.stairs.map(({ id }) => id)).size).toBe(generated.stairs.length);
+  });
+
+  it("spaces dense portal grids to fit each room width", () => {
+    const tallRoom = node(8, 0, 1, {
+      width: Math.round(460 * WORLD_SCALE),
+      height: Math.round(560 * WORLD_SCALE),
+      shape: "tall",
+    });
+    const positions = staircasePositions(tallRoom, 10);
+    const distances = positions.flatMap((position, index) =>
+      positions.slice(index + 1).map(other => Math.hypot(position.x - other.x, position.y - other.y))
+    );
+    expect(positions).toHaveLength(10);
+    expect(Math.min(...distances)).toBeGreaterThanOrEqual(Math.round(100 * WORLD_SCALE));
   });
 
   it("generates denser deterministic monster and loot populations", () => {
@@ -291,6 +343,12 @@ describe("deterministic room contents", () => {
     expect(sentry?.speed).toBe(0);
     expect(sentry?.projectileSpeed ?? 0).toBeGreaterThan(0);
     expect(sentry?.projectileRange ?? 0).toBeGreaterThan(0);
+    const scout = floorSeven.find(monster => monster.fast);
+    const heavy = floorSeven.find(monster => monster.kind === "slow");
+    expect(scout).toBeDefined();
+    expect(heavy).toBeDefined();
+    expect(scout!.size).toBeLessThan(heavy!.size);
+    expect(scout!.radius).toBeLessThan(heavy!.radius);
   });
 
   it("turns every script room into a scaled boss arena without removing ambient threats", () => {
@@ -328,6 +386,7 @@ describe("deterministic room contents", () => {
     expect(earlyLoot[0]?.kind).toBe("medkit");
     expect(earlyLoot[1]?.kind).toBe("weapon");
     expect(earlyLoot[1]?.weapon?.maxAmmo).not.toBeNull();
+    expect(earlyLoot[1]?.weaponPlacement).toBe("floor");
     expect(earlyLoot.some(item => item.kind === "core")).toBe(true);
     expect(new Set(earlyLoot.map(item => item.id)).size).toBe(earlyLoot.length);
 
@@ -418,8 +477,17 @@ describe("deterministic room contents", () => {
     expect(hiddenWeapon).not.toBeNull();
     expect(hiddenWeapon?.kind).toBe("weapon");
     expect(hiddenWeapon?.weapon).toEqual(weaponForRoom(hiddenRoom, "hidden"));
+    expect(hiddenWeapon?.weaponPlacement).toBe("pedestal");
     expect(hiddenWeapon?.weapon?.maxAmmo ?? 0).toBeGreaterThan(0);
     expect(hiddenWeapon?.weapon?.name).not.toBe(DEFAULT_WEAPON.name);
+    expect(weaponPedestalForRoom(hiddenRoom, "https://example.com/floor-1")).toMatchObject({
+      id: `${hiddenWeapon?.id}::pedestal`,
+      roomId: hiddenRoom.id,
+      x: hiddenWeapon?.x,
+      y: hiddenWeapon?.y,
+      kind: "weapon-pedestal",
+      obstacle: false,
+    });
 
     const samples = Array.from({ length: 500 }, (_, index) => node(index + 7_100, 0, 1, {
       tag: index % 3 === 0 ? "section" : index % 3 === 1 ? "article" : "aside",
@@ -430,6 +498,16 @@ describe("deterministic room contents", () => {
     const kinds = new Set(samples.map(room => weaponForRoom(room).kind));
     expect(kinds).toEqual(new Set(weaponKinds().filter(kind => kind !== "pulse-rifle")));
     expect(samples.some(room => weaponLootForRoom(room, "https://example.com/room") !== null)).toBe(true);
+  });
+
+  it("defines directional monster animation fallbacks until more frames are available", () => {
+    expect(MONSTER_FRAMES.scout.down.walk).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.down.attack).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.left.walk).toEqual(MONSTER_FRAMES.scout.left.idle);
+    expect(MONSTER_FRAMES.scout.up.attack).toEqual(MONSTER_FRAMES.scout.up.idle);
+    expect(MONSTER_FRAMES.sentryBallistic.down.walk).toHaveLength(1);
+    expect(MONSTER_FRAMES.sentryBallistic.down.attack).toHaveLength(4);
+    expect(Object.values(EFFECT_FRAMES).every(frames => frames.length === 4)).toBe(true);
   });
 
   it("preserves dropped weapon ammo inside weapon loot payloads", () => {

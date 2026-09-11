@@ -3,13 +3,17 @@ import {
   ASSETS,
   BULLET_RADIUS,
   CAMERA_SCALE,
+  EFFECT_FRAMES,
   EXPLOSION_FRAMES,
-  MONSTER_ASSETS,
+  MONSTER_FRAMES,
   PLAYER_FRAMES,
   PLAYER_IDLE_ASSETS,
   PLAYER_SPRITE_SIZE,
+  PORTAL_FRAMES,
   WEAPON_ASSETS,
   WORLD_SCALE,
+  type EffectKind,
+  type MonsterFrameSet,
 } from "../config";
 import { WEAPON_COLORS } from "../domain/weapons";
 import type {
@@ -20,6 +24,7 @@ import type {
   LootItem,
   LootKind,
   Monster,
+  MonsterAnimation,
   Point,
   Stair,
 } from "../types";
@@ -27,8 +32,11 @@ import type {
 const textureKey = (asset: string): string => `asset:${asset}`;
 const world = (value: number): number => Math.round(value * WORLD_SCALE);
 const TILE_SIZE = 128;
-const WALL_THICKNESS = 32;
+const WALL_THICKNESS = 64;
 const HIDDEN_WORLD_ALPHA = 0.24;
+const MONSTER_FRAME_MS = 125;
+const PORTAL_FRAME_MS = 125;
+const PORTAL_SIZE = world(150);
 
 export class PhaserRenderer {
   private game: Phaser.Game | null = null;
@@ -42,6 +50,7 @@ export class PhaserRenderer {
   private bulletsGraphics: Phaser.GameObjects.Graphics | null = null;
   private decorations: Phaser.GameObjects.Container[] = [];
   private objects: Phaser.GameObjects.Container[] = [];
+  private portals = new Map<string, Phaser.GameObjects.Container>();
   private monsters = new Map<string, Phaser.GameObjects.Container>();
   private player: Phaser.GameObjects.Container | null = null;
   private playerSprite: Phaser.GameObjects.Image | null = null;
@@ -56,7 +65,8 @@ export class PhaserRenderer {
   private currentMonsters: Monster[] = [];
   private currentBullets: Bullet[] = [];
   private currentLootAssets: Partial<Record<LootKind, string>> = {};
-  private currentMonsterAssetFor: (monster: Monster) => string = () => MONSTER_ASSETS.scout.down;
+  private currentMonsterFramesFor: (monster: Monster, animation: MonsterAnimation) => readonly string[] =
+    (_, animation) => MONSTER_FRAMES.scout.down[animation];
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -73,7 +83,11 @@ export class PhaserRenderer {
           ...Object.values(ASSETS),
           ...Object.values(PLAYER_IDLE_ASSETS),
           ...Object.values(PLAYER_FRAMES).flatMap(actions => Object.values(actions).flat()),
-          ...Object.values(MONSTER_ASSETS).flatMap(views => Object.values(views)),
+          ...Object.values(MONSTER_FRAMES).flatMap(directions =>
+            Object.values(directions as MonsterFrameSet).flatMap(actions => Object.values(actions).flat())
+          ),
+          ...Object.values(PORTAL_FRAMES).flat(),
+          ...Object.values(EFFECT_FRAMES).flat(),
           ...Object.values(WEAPON_ASSETS),
           ...EXPLOSION_FRAMES,
         ]);
@@ -105,7 +119,7 @@ export class PhaserRenderer {
     this.drawWorld();
     this.renderDecorations(this.currentDecorations, this.visited);
     this.renderObjects(this.currentStairs, this.currentLoot, this.visited, this.currentLootAssets);
-    this.renderMonsters(this.currentMonsters, this.currentMonsterAssetFor);
+    this.renderMonsters(this.currentMonsters, this.currentMonsterFramesFor);
     this.renderBullets(this.currentBullets);
     this.setPlayer(this.currentPlayer, this.currentPlayerHp, this.currentPlayerMaxHp, this.currentPlayerAsset);
     this.centerCamera(this.currentPlayer);
@@ -119,6 +133,7 @@ export class PhaserRenderer {
     this.bulletsGraphics?.clear();
     this.destroyAll(this.decorations);
     this.destroyAll(this.objects);
+    this.destroyPortalObjects();
     for (const object of this.monsters.values()) object.destroy(true);
     this.monsters.clear();
     this.player?.destroy(true);
@@ -139,6 +154,8 @@ export class PhaserRenderer {
     delete this.host.dataset.firstLootX;
     delete this.host.dataset.firstLootY;
     delete this.host.dataset.firstLootKind;
+    delete this.host.dataset.activePortals;
+    delete this.host.dataset.weaponPedestals;
   }
 
   setWorld(layout: DungeonLayout, visited: ReadonlySet<number>): void {
@@ -230,14 +247,16 @@ export class PhaserRenderer {
     const top = room.y - room.height / 2;
     const container = this.rememberStatic(scene.add.container(0, 0).setDepth(-2).setAlpha(alpha));
     this.roomLayers.set(room.id, container);
-    const floor = scene.add.tileSprite(left, top, room.width, room.height, textureKey(ASSETS.floorPlain)).setOrigin(0);
+    const floor = scene.add.tileSprite(left, top, room.width, room.height, textureKey(this.roomFloorAsset(room))).setOrigin(0);
     const maskGraphics = this.rememberStatic(scene.add.graphics().setVisible(false));
     maskGraphics.fillStyle(0xffffff, 1);
     this.drawRoom(maskGraphics, room, false);
-    floor.setMask(maskGraphics.createGeometryMask());
+    const mask = maskGraphics.createGeometryMask();
+    floor.setMask(mask);
     container.add(floor);
+    this.addRoomFloorDetails(container, room, mask);
     if (room.shape === "capsule" || room.shape === "octagon") this.addShapedWallFrame(container, room);
-    else this.addWallFrame(container, left, top, room.width, room.height);
+    else this.addWallFrame(container, left, top, room.width, room.height, room.lootSeed);
     for (const link of this.layout?.links ?? []) {
       if (link.source.id === room.id) container.add(this.createDoor(link.points[0]!, link.direction));
       if (link.target.id === room.id) container.add(this.createDoor(link.points[link.points.length - 1]!, this.opposite(link.direction)));
@@ -252,66 +271,126 @@ export class PhaserRenderer {
     for (let index = 1; index < link.points.length; index += 1) {
       const start = link.points[index - 1]!;
       const end = link.points[index]!;
-      container.add(this.createCorridorSegment(start, end, link.width));
+      container.add(this.createCorridorSegment(start, end, link.width, link.source.lootSeed + index));
     }
     for (let index = 1; index < link.points.length - 1; index += 1) {
-      container.add(this.createCorridorJunction(link.points[index]!, link.width));
+      container.add(this.createCorridorJunction(link.points[index]!, link.width, link.source.lootSeed + index));
     }
   }
 
-  private createCorridorSegment(start: Point, end: Point, width: number): Phaser.GameObjects.Container {
+  private roomFloorAsset(room: GraphNode): string {
+    if (room.isRoot) return ASSETS.floorPlain;
+    if (room.tag === "script") return ASSETS.floorHex;
+    const floors = [ASSETS.floorPlain, ASSETS.floorHex, ASSETS.floorTread, ASSETS.floorAsteroidDust] as const;
+    return floors[room.lootSeed % floors.length] ?? ASSETS.floorPlain;
+  }
+
+  private addRoomFloorDetails(
+    container: Phaser.GameObjects.Container,
+    room: GraphNode,
+    mask: Phaser.Display.Masks.GeometryMask,
+  ): void {
+    const scene = this.scene!;
+    const columns = Math.max(1, Math.floor(room.width / TILE_SIZE));
+    const rows = Math.max(1, Math.floor(room.height / TILE_SIZE));
+    const count = Math.min(5, 2 + room.lootSeed % 4);
+    const occupied = new Set<string>();
+    let seed = room.lootSeed >>> 0;
+    for (let index = 0; index < count; index += 1) {
+      seed = (seed * 1_664_525 + 1_013_904_223) >>> 0;
+      const column = seed % columns;
+      seed = (seed * 1_664_525 + 1_013_904_223) >>> 0;
+      const row = seed % rows;
+      const key = `${column}:${row}`;
+      if (occupied.has(key)) continue;
+      occupied.add(key);
+      const asset = index % 3 === 0 ? ASSETS.floorHatch : ASSETS.floorGrate;
+      const detail = scene.add.image(
+        room.x - room.width / 2 + column * TILE_SIZE + TILE_SIZE / 2,
+        room.y - room.height / 2 + row * TILE_SIZE + TILE_SIZE / 2,
+        textureKey(asset),
+      ).setDisplaySize(TILE_SIZE, TILE_SIZE).setMask(mask);
+      container.add(detail);
+    }
+  }
+
+  private createCorridorSegment(start: Point, end: Point, width: number, seed: number): Phaser.GameObjects.Container {
     const scene = this.scene!;
     const container = scene.add.container(0, 0);
+    const floorAsset = seed % 3 === 0 ? ASSETS.floorTread : ASSETS.floorGrate;
     if (Math.abs(start.x - end.x) >= Math.abs(start.y - end.y)) {
       const left = Math.min(start.x, end.x);
       const length = Math.abs(end.x - start.x);
       const top = start.y - width / 2;
-      container.add(scene.add.tileSprite(left, top, length, width, textureKey(ASSETS.floorGrate)).setOrigin(0));
-      container.add(scene.add.tileSprite(left, top, length, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0));
-      container.add(scene.add.tileSprite(left, top + width - WALL_THICKNESS, length, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0));
+      container.add(scene.add.tileSprite(left, top, length, width, textureKey(floorAsset)).setOrigin(0));
+      container.add(scene.add.tileSprite(left, top, length, WALL_THICKNESS, textureKey(this.wallAsset(seed, false))).setOrigin(0));
+      container.add(scene.add.tileSprite(left, top + width - WALL_THICKNESS, length, WALL_THICKNESS, textureKey(this.wallAsset(seed + 1, false))).setOrigin(0));
       return container;
     }
     const top = Math.min(start.y, end.y);
     const length = Math.abs(end.y - start.y);
     const left = start.x - width / 2;
-    container.add(scene.add.tileSprite(left, top, width, length, textureKey(ASSETS.floorGrate)).setOrigin(0));
-    container.add(scene.add.tileSprite(left, top, WALL_THICKNESS, length, textureKey(ASSETS.wallVertical)).setOrigin(0));
-    container.add(scene.add.tileSprite(left + width - WALL_THICKNESS, top, WALL_THICKNESS, length, textureKey(ASSETS.wallVertical)).setOrigin(0));
+    container.add(scene.add.tileSprite(left, top, width, length, textureKey(floorAsset)).setOrigin(0));
+    container.add(scene.add.tileSprite(left, top, WALL_THICKNESS, length, textureKey(this.wallAsset(seed, true))).setOrigin(0));
+    container.add(scene.add.tileSprite(left + width - WALL_THICKNESS, top, WALL_THICKNESS, length, textureKey(this.wallAsset(seed + 1, true))).setOrigin(0));
     return container;
   }
 
-  private createCorridorJunction(point: Point, width: number): Phaser.GameObjects.Container {
+  private createCorridorJunction(point: Point, width: number, seed: number): Phaser.GameObjects.Container {
     const scene = this.scene!;
     const left = point.x - width / 2;
     const top = point.y - width / 2;
     const container = scene.add.container(0, 0);
     container.add(scene.add.tileSprite(left, top, width, width, textureKey(ASSETS.floorGrate)).setOrigin(0));
-    this.addWallFrame(container, left, top, width, width);
+    this.addWallFrame(container, left, top, width, width, seed);
     return container;
   }
 
-  private addWallFrame(container: Phaser.GameObjects.Container, left: number, top: number, width: number, height: number): void {
+  private wallAsset(seed: number, vertical: boolean): string {
+    const horizontal = [ASSETS.wallHorizontal, ASSETS.wallRibbedHorizontal, ASSETS.wallDamagedHorizontal] as const;
+    const verticalAssets = [ASSETS.wallVertical, ASSETS.wallRibbedVertical, ASSETS.wallDamagedVertical] as const;
+    const assets = vertical ? verticalAssets : horizontal;
+    return assets[Math.abs(seed) % assets.length] ?? assets[0];
+  }
+
+  private addWallFrame(
+    container: Phaser.GameObjects.Container,
+    left: number,
+    top: number,
+    width: number,
+    height: number,
+    seed: number,
+  ): void {
     const scene = this.scene!;
     const innerWidth = Math.max(0, width - TILE_SIZE * 2);
     const innerHeight = Math.max(0, height - TILE_SIZE * 2);
     if (innerWidth > 0) {
-      container.add(scene.add.tileSprite(left + TILE_SIZE, top, innerWidth, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0));
-      container.add(scene.add.tileSprite(left + TILE_SIZE, top + height - WALL_THICKNESS, innerWidth, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0));
+      container.add(scene.add.tileSprite(left + TILE_SIZE, top, innerWidth, WALL_THICKNESS, textureKey(this.wallAsset(seed, false))).setOrigin(0));
+      container.add(scene.add.tileSprite(left + TILE_SIZE, top + height - WALL_THICKNESS, innerWidth, WALL_THICKNESS, textureKey(this.wallAsset(seed + 1, false))).setOrigin(0));
     }
     if (innerHeight > 0) {
-      container.add(scene.add.tileSprite(left, top + TILE_SIZE, WALL_THICKNESS, innerHeight, textureKey(ASSETS.wallVertical)).setOrigin(0));
-      container.add(scene.add.tileSprite(left + width - WALL_THICKNESS, top + TILE_SIZE, WALL_THICKNESS, innerHeight, textureKey(ASSETS.wallVertical)).setOrigin(0));
+      container.add(scene.add.tileSprite(left, top + TILE_SIZE, WALL_THICKNESS, innerHeight, textureKey(this.wallAsset(seed + 2, true))).setOrigin(0));
+      container.add(scene.add.tileSprite(left + width - WALL_THICKNESS, top + TILE_SIZE, WALL_THICKNESS, innerHeight, textureKey(this.wallAsset(seed + 3, true))).setOrigin(0));
     }
-    container.add(scene.add.image(left, top, textureKey(ASSETS.wallCornerNW)).setOrigin(0));
-    container.add(scene.add.image(left + width - TILE_SIZE, top, textureKey(ASSETS.wallCornerNE)).setOrigin(0));
-    container.add(scene.add.image(left, top + height - TILE_SIZE, textureKey(ASSETS.wallCornerSW)).setOrigin(0));
-    container.add(scene.add.image(left + width - TILE_SIZE, top + height - TILE_SIZE, textureKey(ASSETS.wallCornerSE)).setOrigin(0));
+    this.addCorner(container, left, top, 0);
+    this.addCorner(container, left + width - TILE_SIZE, top, Math.PI / 2);
+    this.addCorner(container, left, top + height - TILE_SIZE, -Math.PI / 2);
+    this.addCorner(container, left + width - TILE_SIZE, top + height - TILE_SIZE, Math.PI);
+  }
+
+  private addCorner(container: Phaser.GameObjects.Container, left: number, top: number, rotation: number): void {
+    const corner = this.scene!.add.image(
+      left + TILE_SIZE / 2,
+      top + TILE_SIZE / 2,
+      textureKey(ASSETS.wallCorner),
+    ).setOrigin(0.5).setRotation(rotation);
+    container.add(corner);
   }
 
   private addShapedWallFrame(container: Phaser.GameObjects.Container, room: GraphNode): void {
     const points = this.roomBoundaryPoints(room);
     for (let index = 0; index < points.length; index += 1) {
-      this.addWallSegment(container, points[index]!, points[(index + 1) % points.length]!);
+      this.addWallSegment(container, points[index]!, points[(index + 1) % points.length]!, room.lootSeed + index);
     }
   }
 
@@ -360,7 +439,7 @@ export class PhaserRenderer {
     return points;
   }
 
-  private addWallSegment(container: Phaser.GameObjects.Container, start: Point, end: Point): void {
+  private addWallSegment(container: Phaser.GameObjects.Container, start: Point, end: Point, seed: number): void {
     const scene = this.scene!;
     const dx = end.x - start.x;
     const dy = end.y - start.y;
@@ -368,10 +447,10 @@ export class PhaserRenderer {
     const x = (start.x + end.x) / 2;
     const y = (start.y + end.y) / 2;
     if (Math.abs(dx) < 0.5) {
-      container.add(scene.add.tileSprite(x, y, WALL_THICKNESS, length, textureKey(ASSETS.wallVertical)).setOrigin(0.5));
+      container.add(scene.add.tileSprite(x, y, WALL_THICKNESS, length, textureKey(this.wallAsset(seed, true))).setOrigin(0.5));
       return;
     }
-    const wall = scene.add.tileSprite(x, y, length, WALL_THICKNESS, textureKey(ASSETS.wallHorizontal)).setOrigin(0.5);
+    const wall = scene.add.tileSprite(x, y, length, WALL_THICKNESS, textureKey(this.wallAsset(seed, false))).setOrigin(0.5);
     wall.setRotation(Math.atan2(dy, dx));
     container.add(wall);
   }
@@ -434,6 +513,9 @@ export class PhaserRenderer {
     this.currentDecorations = items.map(item => ({ ...item }));
     this.host.dataset.activeSpawners = String(items.filter(item =>
       item.spawner && !item.destroyed && visited.has(item.roomId)
+    ).length);
+    this.host.dataset.weaponPedestals = String(items.filter(item =>
+      item.kind === "weapon-pedestal" && visited.has(item.roomId)
     ).length);
     this.destroyAll(this.decorations);
     const scene = this.scene;
@@ -507,20 +589,14 @@ export class PhaserRenderer {
     this.destroyAll(this.objects);
     const scene = this.scene;
     if (!scene) return;
-    for (const stair of stairs) {
-      if (!visited.has(stair.roomId)) continue;
-      const ring = scene.add.circle(0, 0, world(27), stair.type === "up" ? 0x183a48 : 0x2b2145, stair.enabled ? 0.95 : 0.35)
-        .setStrokeStyle(world(3), stair.type === "up" ? 0x62e6c8 : 0xc07cff);
-      const marker = scene.add.text(0, stair.type === "up" ? -world(3) : world(3), stair.type === "up" ? "▲" : "▼", {
-        color: stair.type === "up" ? "#62e6c8" : "#d9a3ff", fontSize: `${world(20)}px`, fontStyle: "bold",
-      }).setOrigin(0.5);
-      this.objects.push(scene.add.container(stair.x, stair.y, [ring, marker]).setDepth(15));
-    }
+    this.syncPortals(stairs, visited);
     for (const item of loot) {
       if (!visited.has(item.roomId)) continue;
       if (item.kind === "weapon" && item.weapon) {
-        const sprite = scene.add.image(0, 0, textureKey(WEAPON_ASSETS[item.weapon.kind]))
-          .setDisplaySize(world(68), world(68));
+        const weaponY = item.weaponPlacement === "pedestal" ? -world(24) : 0;
+        const weaponSize = item.weaponPlacement === "pedestal" ? world(92) : world(74);
+        const sprite = scene.add.image(0, weaponY, textureKey(WEAPON_ASSETS[item.weapon.kind]))
+          .setDisplaySize(weaponSize, weaponSize);
         this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(25));
         continue;
       }
@@ -534,9 +610,71 @@ export class PhaserRenderer {
     }
   }
 
-  renderMonsters(items: readonly Monster[], assetFor: (monster: Monster) => string): void {
+  private syncPortals(stairs: readonly Stair[], visited: ReadonlySet<number>): void {
+    const scene = this.scene;
+    if (!scene) return;
+    const visible = new Set(stairs.filter(stair => visited.has(stair.roomId)).map(stair => stair.id));
+    for (const [id, container] of this.portals) {
+      if (visible.has(id)) continue;
+      container.destroy(true);
+      this.portals.delete(id);
+    }
+
+    for (const stair of stairs) {
+      if (!visible.has(stair.id)) continue;
+      let container = this.portals.get(stair.id);
+      if (!container) {
+        const sprite = scene.add.image(0, 0, textureKey(PORTAL_FRAMES[stair.type][0]))
+          .setDisplaySize(PORTAL_SIZE, PORTAL_SIZE)
+          .setOrigin(0.5)
+          .setName("sprite");
+        container = scene.add.container(stair.x, stair.y, [sprite]).setDepth(24);
+        container.setData("enabled", false);
+        container.setData("animationToken", 0);
+        this.portals.set(stair.id, container);
+        this.animatePortal(container, stair.type, stair.enabled, true);
+        continue;
+      }
+      container.setPosition(stair.x, stair.y);
+      if (Boolean(container.getData("enabled")) !== stair.enabled) {
+        this.animatePortal(container, stair.type, stair.enabled, false);
+      }
+    }
+    this.host.dataset.activePortals = String(visible.size);
+  }
+
+  private animatePortal(
+    container: Phaser.GameObjects.Container,
+    type: Stair["type"],
+    enabled: boolean,
+    initial: boolean,
+  ): void {
+    const scene = this.scene!;
+    const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
+    const frames = PORTAL_FRAMES[type];
+    const token = Number(container.getData("animationToken") ?? 0) + 1;
+    container.setData("animationToken", token);
+    container.setData("enabled", enabled);
+    container.setAlpha(enabled ? 1 : 0.78);
+    if (initial && !enabled) {
+      sprite.setTexture(textureKey(frames[0]));
+      return;
+    }
+    const sequence = enabled ? frames : [...frames].reverse();
+    sequence.forEach((asset, index) => {
+      scene.time.delayedCall(index * PORTAL_FRAME_MS, () => {
+        if (!container.active || Number(container.getData("animationToken")) !== token) return;
+        sprite.setTexture(textureKey(asset));
+      });
+    });
+  }
+
+  renderMonsters(
+    items: readonly Monster[],
+    framesFor: (monster: Monster, animation: MonsterAnimation) => readonly string[],
+  ): void {
     this.currentMonsters = items.map(item => ({ ...item }));
-    this.currentMonsterAssetFor = assetFor;
+    this.currentMonsterFramesFor = framesFor;
     this.host.dataset.activeMonsters = String(items.filter(item => item.active && !item.dead).length);
     this.host.dataset.activeBosses = String(items.filter(item => item.active && item.bossKind && !item.dead).length);
     const activeBoss = items.find(item => item.active && item.bossKind && !item.dead);
@@ -564,7 +702,7 @@ export class PhaserRenderer {
       if (!visibleIds.has(item.id)) continue;
       let container = this.monsters.get(item.id);
       if (!container) {
-        const assetKey = textureKey(assetFor(item));
+        const assetKey = textureKey(framesFor(item, "idle")[0]!);
         const sprite = scene.add.image(0, 0, assetKey)
           .setDisplaySize(item.size, item.size)
           .setOrigin(0.5)
@@ -593,7 +731,7 @@ export class PhaserRenderer {
       }
       container.setPosition(item.x, item.y).setAlpha(item.deathAnimating ? 0.35 : 1);
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
-      const assetKey = textureKey(assetFor(item));
+      const assetKey = textureKey(this.monsterFrameAsset(item, false, performance.now()));
       if (scene.textures.exists(assetKey) && sprite.texture.key !== assetKey) sprite.setTexture(assetKey);
       const hp = container.getByName("hp") as Phaser.GameObjects.Rectangle;
       hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
@@ -604,13 +742,27 @@ export class PhaserRenderer {
     for (const item of items) {
       const container = this.monsters.get(item.id);
       if (!container) continue;
+      const moved = Math.hypot(item.x - container.x, item.y - container.y) > 0.5;
       container.setPosition(item.x, item.y);
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
-      const assetKey = textureKey(this.currentMonsterAssetFor(item));
+      const assetKey = textureKey(this.monsterFrameAsset(item, moved, performance.now()));
       if (this.scene?.textures.exists(assetKey) && sprite.texture.key !== assetKey) sprite.setTexture(assetKey);
       const hp = container.getByName("hp") as Phaser.GameObjects.Rectangle;
       hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
     }
+  }
+
+  private monsterFrameAsset(item: Monster, moving: boolean, now: number): string {
+    const attackFrames = this.currentMonsterFramesFor(item, "attack");
+    const attackElapsed = now - item.lastAttackAt;
+    if (attackElapsed >= 0 && attackElapsed < attackFrames.length * MONSTER_FRAME_MS) {
+      return attackFrames[Math.min(attackFrames.length - 1, Math.floor(attackElapsed / MONSTER_FRAME_MS))]!;
+    }
+    if (moving) {
+      const walkFrames = this.currentMonsterFramesFor(item, "walk");
+      return walkFrames[Math.floor(now / MONSTER_FRAME_MS) % walkFrames.length]!;
+    }
+    return this.currentMonsterFramesFor(item, "idle")[0]!;
   }
 
   renderBullets(items: readonly Bullet[]): void {
@@ -670,6 +822,34 @@ export class PhaserRenderer {
     this.scene.tweens.add({ targets: this.player, alpha: 0.25, duration: 60, yoyo: true });
   }
 
+  spawnEffect(kind: EffectKind, x: number, y: number): void {
+    const scene = this.scene;
+    if (!scene) return;
+    const frames = EFFECT_FRAMES[kind];
+    const sizes: Record<EffectKind, number> = {
+      damage: world(72),
+      healing: world(112),
+      plantBreak: world(132),
+      teleport: PORTAL_SIZE,
+    };
+    const effect = scene.add.image(x, y, textureKey(frames[0]!))
+      .setDisplaySize(sizes[kind], sizes[kind])
+      .setDepth(55);
+    let frameIndex = 0;
+    scene.time.addEvent({
+      delay: 100,
+      repeat: frames.length - 1,
+      callback: () => {
+        if (frameIndex >= frames.length - 1) {
+          effect.destroy();
+          return;
+        }
+        frameIndex += 1;
+        effect.setTexture(textureKey(frames[frameIndex]!));
+      },
+    });
+  }
+
   spawnExplosion(x: number, y: number): void {
     const scene = this.scene;
     if (!scene) return;
@@ -703,5 +883,10 @@ export class PhaserRenderer {
   private destroyAll(objects: Phaser.GameObjects.Container[]): void {
     for (const object of objects) object.destroy(true);
     objects.length = 0;
+  }
+
+  private destroyPortalObjects(): void {
+    for (const object of this.portals.values()) object.destroy(true);
+    this.portals.clear();
   }
 }

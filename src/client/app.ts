@@ -6,7 +6,7 @@ import {
   LOOT_RADIUS,
   MAX_NODES,
   MAX_ROOMS_AFTER_COALESCE,
-  MONSTER_ASSETS,
+  MONSTER_FRAMES,
   PLAYER_FRAMES,
   PLAYER_IDLE_ASSETS,
   PLAYER_MAX_HP,
@@ -27,10 +27,12 @@ import {
   lootKindForSeed,
   monsterSpecForBossSummon,
   monsterSpecForSpawner,
+  weaponPedestalForRoom,
 } from "./domain/generation";
 import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
-import { aStarPath } from "./domain/pathfinding";
+import { aStarPath, monsterEscapeStep } from "./domain/pathfinding";
+import { updatePortalContacts } from "./domain/portals";
 import { DEFAULT_WEAPON, projectilesForWeapon, replenishWeaponAmmo } from "./domain/weapons";
 import { PhaserRenderer } from "./render/phaser-renderer";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
@@ -46,6 +48,7 @@ import type {
   LoadPageOptions,
   LootItem,
   Monster,
+  MonsterAnimation,
   MonsterState,
   ObstacleState,
   PlayerAnimation,
@@ -148,6 +151,8 @@ let playerShooting = false;
 let currentPlayerSpriteAsset = PLAYER_IDLE_ASSETS.up;
 let primaryPointerDown = false;
 let pointerInViewport = false;
+let portalTransitioning = false;
+const portalContacts = new Set<string>();
 const heldMovementKeys = new Set<string>();
 
 // These duplicate counters were removed from the bottom HUD in v19.
@@ -517,6 +522,7 @@ function persistDroppedWeapon(weapon: WeaponSpec, ammo: number, position: Point,
     kind: "weapon",
     weapon: { ...weapon },
     weaponAmmo: ammo,
+    weaponPlacement: "floor",
   };
   const items = extraLootForCurrentPage();
   if (items.some(item => item.id === dropped.id)) return;
@@ -594,20 +600,20 @@ function cardinalDirection(dx: number, dy: number): SpriteDirection {
   return dy < 0 ? "up" : "down";
 }
 
-function monsterAsset(monster: Monster): string {
+function monsterFrames(monster: Monster, animation: MonsterAnimation): readonly string[] {
   const direction = monster.moveDir ?? "down";
-  if (monster.bossKind === "packet-storm") return MONSTER_ASSETS.bossArc[direction];
-  if (monster.bossKind === "fork-bomb") return MONSTER_ASSETS.bossMissile[direction];
-  if (monster.bossKind === "heap-titan") return MONSTER_ASSETS.bossFortress[direction];
+  if (monster.bossKind === "packet-storm") return MONSTER_FRAMES.bossArc[direction][animation];
+  if (monster.bossKind === "fork-bomb") return MONSTER_FRAMES.bossMissile[direction][animation];
+  if (monster.bossKind === "heap-titan") return MONSTER_FRAMES.bossFortress[direction][animation];
   if (monster.kind === "sentry") {
     const variants = [
-      MONSTER_ASSETS.sentryBallistic,
-      MONSTER_ASSETS.sentryTwin,
-      MONSTER_ASSETS.sentryEnergy,
+      MONSTER_FRAMES.sentryBallistic,
+      MONSTER_FRAMES.sentryTwin,
+      MONSTER_FRAMES.sentryEnergy,
     ] as const;
-    return variants[monster.seed % variants.length]![direction];
+    return variants[monster.seed % variants.length]![direction][animation];
   }
-  return (monster.fast ? MONSTER_ASSETS.scout : MONSTER_ASSETS.heavy)[direction];
+  return (monster.fast ? MONSTER_FRAMES.scout : MONSTER_FRAMES.heavy)[direction][animation];
 }
 
 function isBoss(monster: Monster): boolean {
@@ -633,7 +639,14 @@ function saveObstacleState(item: Decoration): void {
 }
 
 function buildDecorations(layout: DungeonLayout, pageUrl: string): Decoration[] {
-  return createDecorations(layout, obstacleStateMapForPage(pageUrl), floorNumber());
+  const pageIdentity = floorIdentity(pageUrl);
+  return [
+    ...createDecorations(layout, obstacleStateMapForPage(pageUrl), floorNumber()),
+    ...layout.nodes.flatMap((room) => {
+      const pedestal = weaponPedestalForRoom(room, pageIdentity);
+      return pedestal ? [pedestal] : [];
+    }),
+  ];
 }
 
 function renderDecorations(): void {
@@ -652,7 +665,8 @@ function damageObstacle(item: Decoration, amount: number): void {
   if (item.hp <= 0) {
     item.destroyed = true;
     saveObstacleState(item);
-    spawnExplosion(item.x, item.y);
+    if (item.kind === "plant") renderer.spawnEffect("plantBreak", item.x, item.y);
+    else spawnExplosion(item.x, item.y);
     renderDecorations();
     if (currentPageUrl) {
       const drops = createSceneryDrops([item], floorIdentity(currentPageUrl), collectedLoot);
@@ -660,6 +674,7 @@ function damageObstacle(item: Decoration, amount: number): void {
       if (drops.length) renderInteractiveObjects();
     }
   } else {
+    renderer.spawnEffect("damage", item.x, item.y);
     saveObstacleState(item);
     renderDecorations();
   }
@@ -743,6 +758,7 @@ function updateBossGates(): void {
   for (const stair of currentStairs) {
     if (stair.type === "down") stair.enabled = !lockedRooms.has(stair.roomId);
   }
+  updatePortalContacts(currentStairs, player, STAIR_RADIUS, portalContacts);
 }
 
 function activateMonstersInRoom(roomId: number): void {
@@ -805,7 +821,7 @@ function updateMonsterSpawners(timestamp: number): void {
 }
 
 function renderMonsters(): void {
-  renderer.renderMonsters(currentMonsters, monsterAsset);
+  renderer.renderMonsters(currentMonsters, monsterFrames);
 }
 
 function updateMonsterPositions(): void {
@@ -818,6 +834,7 @@ function applyPlayerDamage(amount: number): void {
   playerHp = Math.max(0, playerHp - amount);
   hpCountEl.textContent = String(playerHp);
 
+  renderer.spawnEffect("damage", player.x, player.y);
   renderer.flashPlayer();
 
   updateHealthUi();
@@ -853,6 +870,7 @@ function damageMonster(monster: Monster, amount: number): void {
   if (monster.hp <= 0) {
     monster.dead = true;
     monster.deathAnimating = true;
+    spawnExplosion(monster.x, monster.y);
     runStats.kills += 1;
 
     if (isBoss(monster)) {
@@ -879,6 +897,7 @@ function damageMonster(monster: Monster, amount: number): void {
       renderMonsters();
     }, 460);
   } else {
+    renderer.spawnEffect("damage", monster.x, monster.y);
     saveMonsterState(monster);
     updateMonsterPositions();
   }
@@ -1054,7 +1073,7 @@ function updateMonsterPath(monster: Monster, target: Point, targetRoomId: number
   monster.nextPathRefreshAt = timestamp + 420;
 }
 
-function moveMonsterTowards(monster: Monster, target: Point, dt: number): void {
+function moveMonsterTowards(monster: Monster, target: Point, dt: number, timestamp: number): void {
   const waypoint = monster.path?.[monster.pathIndex ?? 0] ?? target;
   const dx = waypoint.x - monster.x;
   const dy = waypoint.y - monster.y;
@@ -1062,16 +1081,32 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number): void {
 
   if (distance <= 10 && monster.path && (monster.pathIndex ?? 0) < monster.path.length - 1) {
     monster.pathIndex = (monster.pathIndex ?? 0) + 1;
-    moveMonsterTowards(monster, target, dt);
+    moveMonsterTowards(monster, target, dt, timestamp);
     return;
   }
 
   if (distance <= 0.001) {
     monster.moveDir = null;
+    monster.blockedMoveCount = 0;
     return;
   }
 
   const step = Math.min(distance, monster.speed * dt);
+  if (monster.escapeDirection && timestamp < (monster.escapeUntil ?? 0)) {
+    const escapeDistance = Math.max(step, world(4));
+    const escape = {
+      x: monster.x + monster.escapeDirection.x * escapeDistance,
+      y: monster.y + monster.escapeDirection.y * escapeDistance,
+    };
+    if (isWalkable(escape.x, escape.y, monster.radius)) {
+      monster.moveDir = cardinalDirection(monster.escapeDirection.x, monster.escapeDirection.y);
+      monster.x = escape.x;
+      monster.y = escape.y;
+      return;
+    }
+  }
+  monster.escapeDirection = undefined;
+  monster.escapeUntil = undefined;
   const nextX = monster.x + dx / distance * step;
   const nextY = monster.y + dy / distance * step;
 
@@ -1083,16 +1118,46 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number): void {
   if (isWalkable(nextX, nextY, monster.radius)) {
     monster.x = nextX;
     monster.y = nextY;
+    monster.blockedMoveCount = 0;
     return;
   }
 
-  if (Math.abs(dx) > Math.abs(dy) && isWalkable(nextX, monster.y, monster.radius)) {
-    monster.x = nextX;
-  } else if (isWalkable(monster.x, nextY, monster.radius)) {
-    monster.y = nextY;
-  } else {
-    monster.path = [];
-    monster.nextPathRefreshAt = 0;
+  const horizontalStep = { x: nextX, y: monster.y };
+  const verticalStep = { x: monster.x, y: nextY };
+  const axisSteps = Math.abs(dx) > Math.abs(dy)
+    ? [horizontalStep, verticalStep]
+    : [verticalStep, horizontalStep];
+  for (const candidate of axisSteps) {
+    if (Math.hypot(candidate.x - monster.x, candidate.y - monster.y) <= 0.001) continue;
+    if (!isWalkable(candidate.x, candidate.y, monster.radius)) continue;
+    monster.moveDir = cardinalDirection(candidate.x - monster.x, candidate.y - monster.y);
+    monster.x = candidate.x;
+    monster.y = candidate.y;
+    monster.blockedMoveCount = 0;
+    return;
+  }
+
+  monster.path = [];
+  monster.nextPathRefreshAt = 0;
+  monster.blockedMoveCount = (monster.blockedMoveCount ?? 0) + 1;
+  if (monster.blockedMoveCount < 4) return;
+  const escaped = monsterEscapeStep(
+    monster,
+    { x: dx, y: dy },
+    Math.max(step, world(6)),
+    point => isWalkable(point.x, point.y, monster.radius),
+    monster.seed + monster.blockedMoveCount,
+  );
+  if (escaped) {
+    const escapeDx = escaped.x - monster.x;
+    const escapeDy = escaped.y - monster.y;
+    const escapeMagnitude = Math.max(0.001, Math.hypot(escapeDx, escapeDy));
+    monster.escapeDirection = { x: escapeDx / escapeMagnitude, y: escapeDy / escapeMagnitude };
+    monster.escapeUntil = timestamp + 320;
+    monster.moveDir = cardinalDirection(escapeDx, escapeDy);
+    monster.x = escaped.x;
+    monster.y = escaped.y;
+    monster.blockedMoveCount = 0;
   }
 }
 
@@ -1110,7 +1175,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
   }
   if (monster.bossKind === "heap-titan" || !sharesPlayerRoom) {
     updateMonsterPath(monster, target, targetRoomId, timestamp);
-    moveMonsterTowards(monster, target, dt);
+    moveMonsterTowards(monster, target, dt, timestamp);
   }
   const playerDistance = Math.hypot(player.x - monster.x, player.y - monster.y);
   monster.moveDir = cardinalDirection(player.x - monster.x, player.y - monster.y);
@@ -1151,6 +1216,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
     }
     monster.nextSpecialAt = timestamp + Math.max(1_800, 3_600 - floorNumber() * 90);
     monster.attackSequence = (monster.attackSequence ?? 0) + 1;
+    monster.lastAttackAt = timestamp;
     saveMonsterState(monster);
     renderBullets();
   }
@@ -1389,7 +1455,7 @@ function gameTick(timestamp: number): void {
       Math.hypot((monster.pathTargetX ?? targetX) - targetX, (monster.pathTargetY ?? targetY) - targetY) > 48;
     if (pathStale) monster.nextPathRefreshAt = 0;
     updateMonsterPath(monster, targetPoint, targetRoomId, timestamp);
-    moveMonsterTowards(monster, targetPoint, dt);
+    moveMonsterTowards(monster, targetPoint, dt, timestamp);
 
     const playerDistance = Math.hypot(
       player.x - monster.x,
@@ -1588,6 +1654,7 @@ function checkLoot(): void {
 
         if (restored > 0) {
           playerHp += restored;
+          renderer.spawnEffect("healing", player.x, player.y);
           updateHealthUi();
           setStatus(`Health pack restored 1 HP · ${currentPageUrl}`);
         }
@@ -1616,20 +1683,17 @@ function checkLoot(): void {
 }
 
 function checkStairs(): boolean {
-  for (const stair of currentStairs) {
-    if (stair.enabled === false) continue;
-
-    if (distanceSquared(player, stair) <= STAIR_RADIUS * STAIR_RADIUS) {
-      if (stair.type === "up") {
-        goBack();
-      } else {
-        if (stair.url) navigateTo(stair.url, stair.roomId);
-      }
-      return true;
-    }
-  }
-
-  return false;
+  if (portalTransitioning) return true;
+  const stair = updatePortalContacts(currentStairs, player, STAIR_RADIUS, portalContacts);
+  if (!stair) return false;
+  portalTransitioning = true;
+  renderer.spawnEffect("teleport", stair.x, stair.y);
+  setTimeout(() => {
+    portalTransitioning = false;
+    if (stair.type === "up") goBack();
+    else if (stair.url) navigateTo(stair.url, stair.roomId);
+  }, 400);
+  return true;
 }
 
 function playerFramesFor(
@@ -1805,8 +1869,8 @@ function teleportPlayerTo(x: number, y: number): void {
   __webcrawlTest?: {
     teleportPlayerTo: (x: number, y: number) => void;
     setWeaponAmmo: (ammo: number) => void;
-    loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null }>;
-    lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null } | null;
+    loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>;
+    lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null; placement: string | null } | null;
   };
 }).__webcrawlTest = {
   teleportPlayerTo,
@@ -1822,6 +1886,7 @@ function teleportPlayerTo(x: number, y: number): void {
     y: item.y,
     ammo: item.weaponAmmo ?? item.weapon?.maxAmmo ?? null,
     name: item.weapon?.name ?? null,
+    placement: item.weaponPlacement ?? null,
   })),
   lastDroppedWeapon: () => lastDroppedWeapon
     ? {
@@ -1831,6 +1896,7 @@ function teleportPlayerTo(x: number, y: number): void {
       ammo: lastDroppedWeapon.weaponAmmo ?? lastDroppedWeapon.weapon?.maxAmmo ?? null,
       maxAmmo: lastDroppedWeapon.weapon?.maxAmmo ?? null,
       name: lastDroppedWeapon.weapon?.name ?? null,
+      placement: lastDroppedWeapon.weaponPlacement ?? null,
     }
     : null,
 };
@@ -2010,6 +2076,8 @@ function renderGraph(
 
     discoveredRoomsByPage.set(currentStateId, new Set(visitedRooms));
   }
+  portalContacts.clear();
+  updatePortalContacts(currentStairs, player, STAIR_RADIUS, portalContacts);
 
   renderer.setWorld(layout, visitedRooms);
   updateFogOfWar();
@@ -2050,6 +2118,7 @@ async function loadPage(
   }: LoadPageOptions = {},
 ): Promise<void> {
   resetPlayerInput();
+  portalTransitioning = false;
   const requestId = ++currentRequest;
 
   let url: string;

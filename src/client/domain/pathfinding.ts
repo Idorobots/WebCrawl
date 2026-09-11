@@ -181,3 +181,32 @@ export function aStarPath(
 
   return null;
 }
+
+export function monsterEscapeStep(
+  position: Point,
+  desiredDirection: Point,
+  distance: number,
+  isWalkable: (point: Point) => boolean,
+  seed = 0,
+): Point | null {
+  const magnitude = Math.hypot(desiredDirection.x, desiredDirection.y);
+  const forward = magnitude > 0
+    ? { x: desiredDirection.x / magnitude, y: desiredDirection.y / magnitude }
+    : { x: 1, y: 0 };
+  const side = seed % 2 === 0 ? 1 : -1;
+  const angles = [side * Math.PI / 2, -side * Math.PI / 2, side * Math.PI / 4, -side * Math.PI / 4, Math.PI];
+  for (const angle of angles) {
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const direction = {
+      x: forward.x * cosine - forward.y * sine,
+      y: forward.x * sine + forward.y * cosine,
+    };
+    const candidate = {
+      x: position.x + direction.x * distance,
+      y: position.y + direction.y * distance,
+    };
+    if (isWalkable(candidate)) return candidate;
+  }
+  return null;
+}

@@ -47,21 +47,21 @@ async function setWeaponAmmo(page: Page, ammo: number): Promise<void> {
   }, ammo);
 }
 
-async function visibleLoot(page: Page): Promise<Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null }>> {
+async function visibleLoot(page: Page): Promise<Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>> {
   return page.evaluate(() =>
     (window as Window & {
       __webcrawlTest?: {
-        loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null }>;
+        loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>;
       };
     }).__webcrawlTest?.loot() ?? []
   );
 }
 
-async function lastDroppedWeapon(page: Page): Promise<{ id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null } | null> {
+async function lastDroppedWeapon(page: Page): Promise<{ id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null; placement: string | null } | null> {
   return page.evaluate(() =>
     (window as Window & {
       __webcrawlTest?: {
-        lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null } | null;
+        lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null; placement: string | null } | null;
       };
     }).__webcrawlTest?.lastDroppedWeapon() ?? null
   );
@@ -79,6 +79,7 @@ test("starts a crawl and renders a playable floor", async ({ page }) => {
     (image as HTMLImageElement).naturalWidth
   )).toBeGreaterThan(0);
   expect(failedAssets).toEqual([]);
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-portals", "1");
   await expect(page.locator("#gameViewport")).toHaveCSS("cursor", "crosshair");
   await page.keyboard.press("m");
   await expect(page.locator("#minimapModal")).toBeVisible();
@@ -167,10 +168,11 @@ test("moves continuously with WASD and arrow keys", async ({ page }) => {
   expect(second.x).toBeGreaterThan(first.x + 5);
 
   await page.keyboard.down("ArrowLeft");
-  await page.waitForTimeout(220);
-  await page.keyboard.up("ArrowLeft");
-  const afterArrow = await playerPosition(page);
-  expect(afterArrow.x).toBeLessThan(second.x - 5);
+  try {
+    await expect.poll(async () => (await playerPosition(page)).x).toBeLessThan(second.x - 5);
+  } finally {
+    await page.keyboard.up("ArrowLeft");
+  }
 });
 
 test("aims with the cursor and repeatedly fires while moving backward", async ({ page }) => {
@@ -288,6 +290,8 @@ test("swaps temporary weapons, refills only from orbs, and falls back to pulse r
   }).toBeGreaterThanOrEqual(2);
 
   await expect(game).toHaveAttribute("data-available-weapons", /[1-9]/);
+  await expect(game).toHaveAttribute("data-weapon-pedestals", /[1-9]/);
+  const pedestalCount = await game.getAttribute("data-weapon-pedestals");
 
   const weaponTarget = {
     x: Number(await game.getAttribute("data-first-weapon-x")),
@@ -295,6 +299,7 @@ test("swaps temporary weapons, refills only from orbs, and falls back to pulse r
   };
   await teleportPlayer(page, weaponTarget);
   await expect(game).not.toHaveAttribute("data-weapon-kind", "pulse-rifle");
+  await expect(game).toHaveAttribute("data-weapon-pedestals", pedestalCount ?? "");
 
   const equippedKind = await game.getAttribute("data-weapon-kind");
   const startingAmmo = Number(await game.getAttribute("data-weapon-ammo"));
@@ -308,6 +313,7 @@ test("swaps temporary weapons, refills only from orbs, and falls back to pulse r
     item.kind === "weapon" && Math.hypot(item.x - weaponTarget.x, item.y - weaponTarget.y) > 30
   );
   if (!secondWeapon) throw new Error("Expected a second weapon pickup for swap coverage");
+  expect(secondWeapon.placement).toBe("pedestal");
   await teleportPlayer(page, { x: secondWeapon.x, y: secondWeapon.y });
   const swappedAmmoBeforeShot = Number(await game.getAttribute("data-weapon-ammo"));
   expect(swappedAmmoBeforeShot).toBeGreaterThan(0);
@@ -316,6 +322,7 @@ test("swaps temporary weapons, refills only from orbs, and falls back to pulse r
   expect(droppedWeapon).toBeDefined();
   expect(droppedWeapon?.ammo).toBe(reducedAmmo);
   expect(droppedWeapon?.maxAmmo).toBe(startingAmmo);
+  expect(droppedWeapon?.placement).toBe("floor");
   expect(droppedWeapon?.x).toBe(secondWeapon.x);
   expect(droppedWeapon?.y).toBe(secondWeapon.y);
   await expect(game).toHaveAttribute("data-weapon-ammo", String(swappedAmmoBeforeShot));

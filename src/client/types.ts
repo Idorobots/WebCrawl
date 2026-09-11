@@ -27,6 +27,8 @@ export type WeaponKind =
   | "helix-emitter"
   | "sideband-projector";
 export type RoomShape = "rectangle" | "wide" | "tall" | "capsule" | "octagon";
+export type MonsterAnimation = "idle" | "walk" | "attack";
+export type WeaponPlacement = "pedestal" | "floor";
 
 export interface Point {
   x: number;
@@ -83,6 +85,7 @@ export interface DungeonLayout {
 }
 
 export interface Stair extends Point {
+  id: string;
   type: "up" | "down";
   roomId: number;
   url: string | null;
@@ -95,6 +98,7 @@ export interface LootItem extends Point {
   kind: LootKind;
   weapon?: WeaponSpec;
   weaponAmmo?: number | null;
+  weaponPlacement?: WeaponPlacement;
 }
 
 export interface WeaponSpec {
@@ -174,6 +178,9 @@ export interface Monster extends Point {
   pathTargetX?: number;
   pathTargetY?: number;
   nextPathRefreshAt?: number;
+  blockedMoveCount?: number;
+  escapeDirection?: Point;
+  escapeUntil?: number;
   attackSequence?: number;
   summonedCount?: number;
   nextSpecialAt?: number;

@@ -1,6 +1,7 @@
 import type {
   Direction,
   LootKind,
+  MonsterAnimation,
   PlayerAnimation,
   PlayerDirection,
   WeaponKind,
@@ -29,7 +30,7 @@ export const BULLET_MAX_DISTANCE = 1_440;
 export const MONSTER_RADIUS = 96;
 export const CORRIDOR_HALF_WIDTH = 160;
 export const MAX_CORRIDOR_LENGTH = 1_152;
-export const STAIR_RADIUS = 44;
+export const STAIR_RADIUS = 56;
 export const LOOT_RADIUS = 46;
 export const CAMERA_SCALE = 0.92;
 export const HIGH_SCORE_KEY = "alien-web-crawler-high-scores-v1";
@@ -54,16 +55,22 @@ export const ASSETS = {
   playerUp: asset("player/idle/player_back.png"),
   playerDown: asset("player/idle/player_front.png"),
   backgroundTechTile: asset("environment/background_tech_tile.png"),
-  floorPlain: asset("environment/tiles/floor_plain.png"),
-  floorGrate: asset("environment/tiles/floor_grate.png"),
-  wallHorizontal: asset("environment/walls/horizontal.png"),
-  wallVertical: asset("environment/walls/vertical.png"),
-  wallCornerNW: asset("environment/walls/corner_NW.png"),
-  wallCornerNE: asset("environment/walls/corner_NE.png"),
-  wallCornerSW: asset("environment/walls/corner_SW.png"),
-  wallCornerSE: asset("environment/walls/corner_SE.png"),
-  doorOpenHorizontal: asset("environment/doors/open_horizontal.png"),
-  doorOpenVertical: asset("environment/doors/open_vertical.png"),
+  floorPlain: asset("environment/rugged/floor_plate.png"),
+  floorGrate: asset("environment/rugged/floor_grate.png"),
+  floorHex: asset("environment/rugged/floor_hex.png"),
+  floorHatch: asset("environment/rugged/floor_hatch.png"),
+  floorTread: asset("environment/rugged/floor_tread.png"),
+  floorAsteroidDust: asset("environment/rugged/floor_asteroid_dust.png"),
+  wallHorizontal: asset("environment/rugged/wall_horizontal.png"),
+  wallVertical: asset("environment/rugged/wall_vertical.png"),
+  wallRibbedHorizontal: asset("environment/rugged/wall_ribbed.png"),
+  wallRibbedVertical: asset("environment/rugged/wall_ribbed_vertical.png"),
+  wallDamagedHorizontal: asset("environment/rugged/wall_damaged.png"),
+  wallDamagedVertical: asset("environment/rugged/wall_damaged_vertical.png"),
+  wallCorner: asset("environment/rugged/corner.png"),
+  doorOpenHorizontal: asset("environment/rugged/door_open.png"),
+  doorOpenVertical: asset("environment/rugged/door_open_vertical.png"),
+  pedestal: asset("props/pedestal.png"),
   lootCrystal: asset("pickups/crystal.png"),
   lootMedkit: asset("pickups/medkit.png"),
   lootCredit: asset("pickups/gold.png"),
@@ -121,6 +128,7 @@ export const PLAYER_FRAMES: Record<PlayerDirection, Record<PlayerAnimation, stri
 };
 
 export type SpriteDirection = "up" | "down" | "left" | "right";
+export type MonsterFrameSet = Record<SpriteDirection, Record<MonsterAnimation, readonly string[]>>;
 
 const enemyViews = (directory: string, name: string): Record<SpriteDirection, string> => ({
   up: asset(`enemies/${directory}/${name}_back.png`),
@@ -129,34 +137,93 @@ const enemyViews = (directory: string, name: string): Record<SpriteDirection, st
   right: asset(`enemies/${directory}/${name}_right.png`),
 });
 
-export const MONSTER_ASSETS = {
-  scout: enemyViews("scout", "scout"),
-  heavy: enemyViews("heavy", "heavy"),
-  sentryBallistic: enemyViews("sentry_ballistic", "sentry_ballistic"),
-  sentryTwin: enemyViews("sentry_twin", "sentry_twin"),
-  sentryEnergy: enemyViews("sentry_energy", "sentry_energy"),
-  bossArc: enemyViews("boss_arc", "boss_arc"),
-  bossMissile: enemyViews("boss_missile", "boss_missile"),
-  bossFortress: enemyViews("boss_fortress", "boss_fortress"),
+const enemyActionFrames = (directory: string, action: "walk" | "attack"): string[] =>
+  Array.from({ length: 4 }, (_, index) =>
+    asset(`enemies/${directory}/${action}_front/frame_${String(index + 1).padStart(2, "0")}.png`),
+  );
+
+const enemyFrames = (
+  directory: string,
+  name: string,
+  animated: { walk: boolean; attack: boolean },
+): MonsterFrameSet => {
+  const idle = enemyViews(directory, name);
+  const oneFrame = (direction: SpriteDirection): Record<MonsterAnimation, readonly string[]> => ({
+    idle: [idle[direction]],
+    walk: [idle[direction]],
+    attack: [idle[direction]],
+  });
+  return {
+    up: oneFrame("up"),
+    right: oneFrame("right"),
+    left: oneFrame("left"),
+    down: {
+      idle: [idle.down],
+      walk: animated.walk ? enemyActionFrames(directory, "walk") : [idle.down],
+      attack: animated.attack ? enemyActionFrames(directory, "attack") : [idle.down],
+    },
+  };
+};
+
+export const MONSTER_FRAMES = {
+  scout: enemyFrames("scout", "scout", { walk: true, attack: true }),
+  heavy: enemyFrames("heavy", "heavy", { walk: true, attack: true }),
+  sentryBallistic: enemyFrames("sentry_ballistic", "sentry_ballistic", { walk: false, attack: true }),
+  sentryTwin: enemyFrames("sentry_twin", "sentry_twin", { walk: false, attack: true }),
+  sentryEnergy: enemyFrames("sentry_energy", "sentry_energy", { walk: false, attack: true }),
+  bossArc: enemyFrames("boss_arc", "boss_arc", { walk: true, attack: true }),
+  bossMissile: enemyFrames("boss_missile", "boss_missile", { walk: true, attack: true }),
+  bossFortress: enemyFrames("boss_fortress", "boss_fortress", { walk: true, attack: true }),
+  bossLaser: enemyFrames("boss_laser", "boss_laser", { walk: true, attack: true }),
+  bossSiege: enemyFrames("boss_siege", "boss_siege", { walk: true, attack: true }),
+} as const satisfies Record<string, MonsterFrameSet>;
+
+export const PORTAL_FRAMES = {
+  up: [
+    asset("environment/portals/portal_up_inactive.png"),
+    asset("environment/portals/portal_up_activation_01.png"),
+    asset("environment/portals/portal_up_activation_02.png"),
+    asset("environment/portals/portal_up_active.png"),
+  ],
+  down: [
+    asset("environment/portals/portal_down_inactive.png"),
+    asset("environment/portals/portal_down_activation_01.png"),
+    asset("environment/portals/portal_down_activation_02.png"),
+    asset("environment/portals/portal_down_active.png"),
+  ],
 } as const;
 
 export const WEAPON_ASSETS: Record<WeaponKind, string> = {
-  "pulse-rifle": asset("pickups/weapons/weapon_assault_rifle.png"),
-  "byte-repeater": asset("pickups/weapons/weapon_smg.png"),
-  "scatter-array": asset("pickups/weapons/weapon_shotgun.png"),
-  "fork-driver": asset("pickups/weapons/weapon_assault_rifle.png"),
-  trident: asset("pickups/weapons/weapon_plasma.png"),
-  "needle-rail": asset("pickups/weapons/weapon_sniper.png"),
-  "packet-lobber": asset("pickups/weapons/weapon_rocket.png"),
-  "cross-compiler": asset("pickups/weapons/weapon_laser.png"),
-  "nova-cache": asset("pickups/weapons/weapon_flamer.png"),
-  "helix-emitter": asset("pickups/weapons/weapon_arc.png"),
-  "sideband-projector": asset("pickups/weapons/weapon_pistol.png"),
+  "pulse-rifle": asset("pickups/weapons/assault_rifle.png"),
+  "byte-repeater": asset("pickups/weapons/smg.png"),
+  "scatter-array": asset("pickups/weapons/shotgun.png"),
+  "fork-driver": asset("pickups/weapons/assault_rifle.png"),
+  trident: asset("pickups/weapons/plasma.png"),
+  "needle-rail": asset("pickups/weapons/sniper.png"),
+  "packet-lobber": asset("pickups/weapons/rocket.png"),
+  "cross-compiler": asset("pickups/weapons/laser.png"),
+  "nova-cache": asset("pickups/weapons/flamer.png"),
+  "helix-emitter": asset("pickups/weapons/arc.png"),
+  "sideband-projector": asset("pickups/weapons/pistol.png"),
 };
 
 export const EXPLOSION_FRAMES = Array.from({ length: 6 }, (_, index) =>
   asset(`effects/explosion/explosion_${String(index + 1).padStart(2, "0")}.png`),
 );
+
+const effectFrames = (directory: string): string[] =>
+  Array.from({ length: 4 }, (_, index) =>
+    asset(`effects/${directory}/frame_${String(index + 1).padStart(2, "0")}.png`),
+  );
+
+export const EFFECT_FRAMES = {
+  damage: effectFrames("damage"),
+  healing: effectFrames("healing"),
+  plantBreak: effectFrames("plant_break"),
+  teleport: effectFrames("teleport"),
+} as const;
+
+export type EffectKind = keyof typeof EFFECT_FRAMES;
 
 export const LOOT_ASSETS: Partial<Record<LootKind, string>> = {
   credit: ASSETS.lootCredit,
