@@ -180,16 +180,16 @@ export const MONSTER_FRAMES = {
 
 export const PORTAL_FRAMES = {
   up: [
-    asset("environment/portals/portal_up_inactive.png"),
-    asset("environment/portals/portal_up_activation_01.png"),
-    asset("environment/portals/portal_up_activation_02.png"),
-    asset("environment/portals/portal_up_active.png"),
+    asset("portals/portal_up_inactive.png"),
+    asset("portals/portal_up_activation_01.png"),
+    asset("portals/portal_up_activation_02.png"),
+    asset("portals/portal_up_active.png"),
   ],
   down: [
-    asset("environment/portals/portal_down_inactive.png"),
-    asset("environment/portals/portal_down_activation_01.png"),
-    asset("environment/portals/portal_down_activation_02.png"),
-    asset("environment/portals/portal_down_active.png"),
+    asset("portals/portal_down_inactive.png"),
+    asset("portals/portal_down_activation_01.png"),
+    asset("portals/portal_down_activation_02.png"),
+    asset("portals/portal_down_active.png"),
   ],
 } as const;
 
