@@ -716,7 +716,6 @@ function applyPlayerDamage(amount: number): void {
   hpCountEl.textContent = String(playerHp);
 
   renderer.spawnEffect("damage", player.x, player.y);
-  renderer.flashPlayer();
 
   updateHealthUi();
 

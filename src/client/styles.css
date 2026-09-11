@@ -748,7 +748,7 @@ body {
   overflow: hidden;
   background:
     linear-gradient(90deg, rgba(2,7,13,.96) 0%, rgba(2,7,13,.88) 42%, rgba(2,7,13,.48) 72%, rgba(2,7,13,.72) 100%),
-      url("/assets/mockups/webcrawl_mockup_07.png") center / cover no-repeat;
+      url("/assets/webcrawl_mockup_07.png") center / cover no-repeat;
 }
 
 #welcomeScreen[hidden] { display: none; }
@@ -1096,25 +1096,25 @@ body {
 #bottomHud > section,
 #deathPanel {
   border: 8px solid transparent;
-  border-image: url("/assets_new/ui/panel_plain/source.png") 52 fill / 8px stretch;
+  border-image: url("/assets/ui/panel_plain/source.png") 52 fill / 8px stretch;
 }
 
 button {
   border: 6px 14px solid transparent;
-  border-image: url("/assets_new/ui/button_plain/source.png") 30 72 fill / 6px 14px stretch;
+  border-image: url("/assets/ui/button_plain/source.png") 30 72 fill / 6px 14px stretch;
   border-radius: 0;
 }
 
 .hud-panel-title {
   min-height: 38px;
   border-bottom: 0;
-  background: url("/assets_new/ui/decorations/header.png") right center / 142px auto no-repeat;
+  background: url("/assets/ui/decorations/header.png") right center / 142px auto no-repeat;
 }
 
 .big-health-track {
   height: 18px;
   border: 4px 10px solid transparent;
-  border-image: url("/assets_new/ui/health_bar_plain/source.png") 20 60 fill / 4px 10px stretch;
+  border-image: url("/assets/ui/health_bar_plain/source.png") 20 60 fill / 4px 10px stretch;
 }
 
 /* Correct monster death positioning: animate the sprite, not the

@@ -799,15 +799,10 @@ export class PhaserRenderer {
     if (!this.player) {
       this.playerSprite = scene.add.image(0, 0, textureKey(asset))
         .setDisplaySize(PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE)
-        .setOrigin(0.5);
-      const barWidth = world(68);
-      const barY = -PLAYER_SPRITE_SIZE / 2 - world(10);
-      const bg = scene.add.rectangle(-barWidth / 2 - 1, barY, barWidth + 2, world(7), 0x071018).setOrigin(0, 0.5);
-      this.playerHpFill = scene.add.rectangle(-barWidth / 2, barY, barWidth, world(5), 0x62e6c8).setOrigin(0, 0.5);
-      this.player = scene.add.container(position.x, position.y, [this.playerSprite, bg, this.playerHpFill]).setDepth(50);
+        .setOrigin(0.5, 0.75);
+      this.player = scene.add.container(position.x, position.y, [this.playerSprite]).setDepth(50);
     }
     this.player.setPosition(position.x, position.y);
-    this.playerHpFill!.width = world(68) * Math.max(0, hp) / Math.max(1, maxHp);
     if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
   }
 
@@ -815,11 +810,6 @@ export class PhaserRenderer {
     this.currentPlayerAsset = asset;
     this.host.dataset.playerAsset = asset;
     if (this.playerSprite && this.scene?.textures.exists(textureKey(asset))) this.playerSprite.setTexture(textureKey(asset));
-  }
-
-  flashPlayer(): void {
-    if (!this.player || !this.scene) return;
-    this.scene.tweens.add({ targets: this.player, alpha: 0.25, duration: 60, yoyo: true });
   }
 
   spawnEffect(kind: EffectKind, x: number, y: number): void {

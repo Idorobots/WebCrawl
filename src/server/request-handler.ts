@@ -53,8 +53,7 @@ export function createRequestHandler(
     } else if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       serveIndex(response, config.clientDirectory);
     } else if (
-      request.method === "GET" &&
-      (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/assets_new/"))
+      request.method === "GET" && url.pathname.startsWith("/assets/")
     ) {
       serveAsset(url.pathname, response, config.clientDirectory);
     } else {

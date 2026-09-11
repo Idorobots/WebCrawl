@@ -11,16 +11,16 @@ export const MAX_NODES = 450;
 export const MAX_ROOMS_AFTER_COALESCE = 100;
 export const MAX_CHILDREN_PER_ROOM = 10;
 
-export const WORLD_SCALE = 1.6;
+export const WORLD_SCALE = 1.8;
 export const ROOM_WIDTH = 960;
 export const ROOM_HEIGHT = 640;
 export const ROOM_X_SPACING = 1_002;
 export const ROOM_Y_SPACING = 682;
 export const ROOM_COLLISION_MARGIN = 6;
 
-export const PLAYER_RADIUS = 32;
-export const PLAYER_SPRITE_SIZE = 160;
-export const PLAYER_MUZZLE_DISTANCE = 68;
+export const PLAYER_RADIUS = 50;
+export const PLAYER_SPRITE_SIZE = 320;
+export const PLAYER_MUZZLE_DISTANCE = 30;
 export const PLAYER_SPEED = 640;
 export const PLAYER_MAX_HP = 10;
 export const PLAYER_FIRE_COOLDOWN_MS = 220;
@@ -47,7 +47,7 @@ export const DIRECTIONS: Record<Direction, {
   W: { name: "W", dx: -1, dy: 0, opposite: "E" },
 };
 
-const asset = (path: string): string => `assets_new/${path}`;
+const asset = (path: string): string => `assets/${path}`;
 
 export const ASSETS = {
   playerRight: asset("player/idle/player_right.png"),
@@ -87,7 +87,7 @@ export const ASSETS = {
   decorTerminal: asset("props/terminal_front.png"),
   decorSceneryCrate: asset("props/crate_front.png"),
   decorSceneryTerminal: asset("props/terminal_front.png"),
-  decorDebris: "assets/decor_debris.png",
+  decorDebris: asset("environment/rugged/floor_asteroid_dust.png"),
 } as const;
 
 const walkFramePaths = (direction: string): string[] =>

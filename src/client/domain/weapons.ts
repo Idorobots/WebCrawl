@@ -47,7 +47,7 @@ export const DEFAULT_WEAPON: WeaponSpec = {
   projectileSpeed: world(520),
   projectileRange: world(900),
   projectileRadius: world(5),
-  damage: 1,
+  damage: 0.5,
   maxAmmo: null,
   ammoPerLoot: 0,
 };
