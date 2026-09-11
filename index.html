@@ -67,14 +67,6 @@
     </main>
 
     <aside id="rightHud">
-      <section class="hud-panel minimap-panel">
-        <div class="hud-panel-title">
-          <span>MINIMAP</span>
-          <span id="sideFloorLabel">FLOOR 1</span>
-        </div>
-        <canvas id="sideMinimapCanvas" aria-label="Discovered rooms minimap"></canvas>
-      </section>
-
       <section class="hud-panel stats-panel">
         <div class="hud-panel-title">LEVEL STATS</div>
         <div class="stat-row"><span>Rooms discovered</span><strong id="statRooms">0 / 100</strong></div>
@@ -104,16 +96,6 @@
     </footer>
 
     <div id="linkMenu" hidden></div>
-
-    <div id="minimapModal" hidden>
-      <div id="minimapPanel" role="dialog" aria-modal="true" aria-label="Tactical map">
-        <div id="minimapHeader">
-          <strong>TACTICAL MAP</strong>
-          <button id="minimapClose" type="button">Close</button>
-        </div>
-        <canvas id="minimapCanvas" aria-label="Tactical map"></canvas>
-      </div>
-    </div>
 
     <div id="deathModal" hidden>
       <div id="deathPanel" role="dialog" aria-modal="true" aria-label="Run over">

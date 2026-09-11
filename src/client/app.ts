@@ -72,9 +72,6 @@ const welcomeForm = requireElement<HTMLFormElement>("#welcomeForm");
 const welcomeUrlInput = requireElement<HTMLInputElement>("#welcomeUrlInput");
 const gameUi = requireElement<HTMLDivElement>("#gameUi");
 
-const sideMinimapCanvas = requireElement<HTMLCanvasElement>("#sideMinimapCanvas");
-const minimapCanvas = requireElement<HTMLCanvasElement>("#minimapCanvas");
-const sideFloorLabelEl = requireElement<HTMLElement>("#sideFloorLabel");
 const statRoomsEl = requireElement<HTMLElement>("#statRooms");
 const statFloorEl = requireElement<HTMLElement>("#statFloor");
 const statLootEl = requireElement<HTMLElement>("#statLoot");
@@ -175,8 +172,6 @@ const deathBossKillsEl = requireElement<HTMLElement>("#deathBossKills");
 const deathShotsEl = requireElement<HTMLElement>("#deathShots");
 const highScoreRowsEl = requireElement<HTMLTableSectionElement>("#highScoreRows");
 const restartButton = requireElement<HTMLButtonElement>("#restartButton");
-const minimapModal = requireElement<HTMLDivElement>("#minimapModal");
-const minimapClose = requireElement<HTMLButtonElement>("#minimapClose");
 
 function setStatus(message: string, isError = false): void {
   if (isError) {
@@ -304,101 +299,6 @@ function centerCameraOnPlayer(): void {
   renderer.centerCamera(player);
 }
 
-function minimapVisibleLayout(): Pick<DungeonLayout, "nodes" | "links"> {
-  if (!currentLayout) return { nodes: [], links: [] };
-
-  const visibleIds = new Set(
-    currentLayout.nodes
-      .filter(room => visitedRooms.has(room.id))
-      .map(room => room.id)
-  );
-
-  return {
-    nodes: currentLayout.nodes.filter(room => visibleIds.has(room.id)),
-    links: currentLayout.links.filter(link =>
-      visibleIds.has(link.source.id) ||
-      visibleIds.has(link.target.id)
-    )
-  };
-}
-
-function renderMapInto(canvas: HTMLCanvasElement): void {
-  const { nodes, links } = minimapVisibleLayout();
-  const visibleIds = new Set(nodes.map(node => node.id));
-  const boundsRect = canvas.getBoundingClientRect();
-  const width = Math.max(1, Math.round(boundsRect.width || canvas.clientWidth || 320));
-  const height = Math.max(1, Math.round(boundsRect.height || canvas.clientHeight || 220));
-  const ratio = Math.min(2, window.devicePixelRatio || 1);
-  canvas.width = Math.round(width * ratio);
-  canvas.height = Math.round(height * ratio);
-  const context = canvas.getContext("2d");
-  if (!context) return;
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "#071018";
-  context.fillRect(0, 0, width, height);
-  if (!nodes.length) return;
-
-  const bounds = nodes.reduce((acc, node) => ({
-    minX: Math.min(acc.minX, node.x - node.width / 2),
-    maxX: Math.max(acc.maxX, node.x + node.width / 2),
-    minY: Math.min(acc.minY, node.y - node.height / 2),
-    maxY: Math.max(acc.maxY, node.y + node.height / 2)
-  }), {
-    minX: Infinity,
-    maxX: -Infinity,
-    minY: Infinity,
-    maxY: -Infinity
-  });
-
-  for (const link of links) {
-    for (const point of link.points) {
-      bounds.minX = Math.min(bounds.minX, point.x);
-      bounds.maxX = Math.max(bounds.maxX, point.x);
-      bounds.minY = Math.min(bounds.minY, point.y);
-      bounds.maxY = Math.max(bounds.maxY, point.y);
-    }
-  }
-  const pad = 18;
-  const scale = Math.min((width - pad * 2) / Math.max(1, bounds.maxX - bounds.minX), (height - pad * 2) / Math.max(1, bounds.maxY - bounds.minY));
-  const mapX = (x: number): number => pad + (x - bounds.minX) * scale;
-  const mapY = (y: number): number => pad + (y - bounds.minY) * scale;
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  context.strokeStyle = "#315267";
-  context.lineWidth = Math.max(2, 20 * scale);
-  for (const link of links) {
-    context.beginPath();
-    link.points.forEach((point, index) => index ? context.lineTo(mapX(point.x), mapY(point.y)) : context.moveTo(mapX(point.x), mapY(point.y)));
-    context.stroke();
-  }
-  for (const room of nodes) {
-    const x = mapX(room.x - room.width / 2);
-    const y = mapY(room.y - room.height / 2);
-    const roomWidth = Math.max(3, room.width * scale);
-    const roomHeight = Math.max(3, room.height * scale);
-    context.fillStyle = room.id === currentRoomId ? "#57d9c1" : room.isRoot ? "#244d59" : "#1a303e";
-    context.fillRect(x, y, roomWidth, roomHeight);
-    context.strokeStyle = room.id === currentRoomId ? "#bafff1" : "#568198";
-    context.lineWidth = 1;
-    context.strokeRect(x, y, roomWidth, roomHeight);
-  }
-  for (const stair of currentStairs.filter(item => visibleIds.has(item.roomId))) {
-    context.fillStyle = stair.type === "up" ? "#62e6c8" : "#c07cff";
-    context.beginPath();
-    context.arc(mapX(stair.x), mapY(stair.y), 3, 0, Math.PI * 2);
-    context.fill();
-  }
-  context.fillStyle = "#ffffff";
-  context.beginPath();
-  context.arc(mapX(player.x), mapY(player.y), 4, 0, Math.PI * 2);
-  context.fill();
-}
-
-function renderSideMinimap(): void {
-  renderMapInto(sideMinimapCanvas);
-}
-
 function formatRunTime(): string {
   if (!runStartedAt) return "00:00";
   const seconds = Math.max(0, Math.floor((performance.now() - runStartedAt) / 1000));
@@ -411,14 +311,12 @@ function updateHudPanels(): void {
   const floor = navigationHistory.length + 1;
   const rooms = visitedRooms.size;
 
-  sideFloorLabelEl.textContent = `FLOOR ${floor}`;
   statRoomsEl.textContent = `${rooms} / ${MAX_ROOMS_AFTER_COALESCE}`;
   statFloorEl.textContent = String(floor);
   statLootEl.textContent = String(lootScore);
   statKillsEl.textContent = String(runStats.kills);
   statShotsEl.textContent = String(runStats.shotsFired);
   statTimeEl.textContent = formatRunTime();
-  renderSideMinimap();
 }
 
 function floorNumber(): number {
@@ -432,23 +330,6 @@ function stateIdForPage(url: string, floor = floorNumber()): string {
 function floorIdentity(pageUrl: string): string {
   return currentStateId ?? stateIdForPage(pageUrl);
 }
-
-function closeMinimap(): void {
-  minimapModal.classList.remove("open");
-  minimapModal.hidden = true;
-}
-
-function openMinimap(): void {
-  if (!currentLayout) return;
-  minimapModal.hidden = false;
-  minimapModal.classList.add("open");
-  requestAnimationFrame(() => renderMapInto(minimapCanvas));
-}
-
-minimapClose.addEventListener("click", closeMinimap);
-minimapModal.addEventListener("click", event => {
-  if (event.target === minimapModal) closeMinimap();
-});
 
 function updateHealthUi(): void {
   const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_MAX_HP));
@@ -1227,7 +1108,7 @@ function renderBullets(): void {
 }
 
 function shootBullet(): void {
-  if (!playerAlive || !minimapModal.hidden) return;
+  if (!playerAlive) return;
 
   const now = performance.now();
   if (now - lastPlayerShotAt < currentWeapon.fireCooldownMs) return;
@@ -1382,7 +1263,7 @@ function rebuildRoomRouting(): void {
 function gameTick(timestamp: number): void {
   gameAnimationFrame = requestAnimationFrame(gameTick);
 
-  if (!playerAlive || !minimapModal.hidden || !currentLayout) {
+  if (!playerAlive || !currentLayout) {
     lastGameTick = timestamp;
     setPlayerMoving(false, timestamp);
     return;
@@ -1902,26 +1783,8 @@ function teleportPlayerTo(x: number, y: number): void {
 };
 
 window.addEventListener("keydown", event => {
-  if (event.key === "Escape" && !minimapModal.hidden) {
-    event.preventDefault();
-    closeMinimap();
-    return;
-  }
-
-  if (event.key.toLowerCase() === "m" && !gameUi.hidden) {
-    event.preventDefault();
-    if (minimapModal.hidden) {
-      resetPlayerInput();
-      openMinimap();
-    } else {
-      closeMinimap();
-    }
-    return;
-  }
-
   if (!(event.code in movementDirections)) return;
   if (
-    !minimapModal.hidden ||
     gameUi.hidden ||
     event.target instanceof HTMLInputElement ||
     event.target instanceof HTMLTextAreaElement ||
@@ -1973,8 +1836,7 @@ gameViewport.addEventListener("pointerdown", event => {
     event.button !== 0 ||
     gameUi.hidden ||
     !currentLayout ||
-    !playerAlive ||
-    !minimapModal.hidden
+    !playerAlive
   ) return;
 
   event.preventDefault();
@@ -2020,7 +1882,6 @@ function renderGraph(
   updateWeaponUi();
   bullets = [];
   hideLinkMenu();
-  closeMinimap();
 
   const { width, height } = renderer.viewportSize();
   const layout = layoutOrthogonal(graph, width, height);

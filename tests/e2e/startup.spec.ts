@@ -81,11 +81,8 @@ test("starts a crawl and renders a playable floor", async ({ page }) => {
   expect(failedAssets).toEqual([]);
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-portals", "1");
   await expect(page.locator("#gameViewport")).toHaveCSS("cursor", "crosshair");
-  await page.keyboard.press("m");
-  await expect(page.locator("#minimapModal")).toBeVisible();
-  await expect(page.locator("#minimapCanvas")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.locator("#minimapModal")).toBeHidden();
+  await expect(page.locator("#rightHud")).toBeVisible();
+  await expect(page.locator("#rightHud")).not.toContainText("MINIMAP");
 });
 
 test("keeps the Phaser viewport playable on mobile", async ({ page }) => {

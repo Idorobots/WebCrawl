@@ -291,106 +291,6 @@ button:hover { background: #242c37; }
   transition: opacity 220ms ease;
 }
 
-#minimapModal {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  background: rgba(0, 0, 0, 0.72);
-}
-
-#minimapModal[hidden] {
-  display: none;
-}
-
-#minimapModal.open {
-  display: grid;
-}
-
-#minimapPanel {
-  width: min(760px, calc(100vw - 40px));
-  height: min(560px, calc(100vh - 40px));
-  border: 1px solid #46515f;
-  border-radius: 10px;
-  background: #0d1117;
-  box-shadow: 0 20px 60px rgba(0,0,0,.45);
-  display: grid;
-  grid-template-rows: auto 1fr;
-  overflow: hidden;
-}
-
-#minimapHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-bottom: 1px solid #28313d;
-  background: #12161c;
-}
-
-#minimapHeader strong {
-  font-size: 13px;
-}
-
-#minimapClose {
-  padding: 4px 8px;
-}
-
-#minimapCanvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-  background: #0b0d10;
-}
-
-.minimap-room rect {
-  fill: #171d25;
-  stroke: #7f8c9d;
-  stroke-width: 2;
-}
-
-.minimap-room.root rect {
-  stroke: #61d982;
-  stroke-width: 3;
-}
-
-.minimap-room.current rect {
-  stroke: #f2f5f8;
-  stroke-width: 4;
-}
-
-.minimap-corridor {
-  stroke: #46515f;
-  stroke-width: 8;
-  stroke-linecap: butt;
-}
-
-.minimap-player image {
-  image-rendering: pixelated;
-  mix-blend-mode: screen;
-}
-
-.minimap-stair.down rect,
-.minimap-stair.down line {
-  stroke: #d3b66b;
-}
-
-.minimap-stair.up rect,
-.minimap-stair.up line {
-  stroke: #61d982;
-}
-
-.minimap-stair rect {
-  fill: #20262f;
-  stroke-width: 2;
-}
-
-.minimap-stair line {
-  stroke-width: 2;
-}
-
 .hud-health-track {
   display: inline-block;
   width: 120px;
@@ -1047,7 +947,7 @@ body {
   bottom: 112px;
   width: 312px;
   display: grid;
-  grid-template-rows: minmax(260px, 1.15fr) minmax(250px, .85fr);
+  grid-template-rows: 1fr;
   gap: 10px;
   z-index: 35;
 }
@@ -1069,14 +969,6 @@ body {
   padding: 2px 2px 8px;
   letter-spacing: .08em;
   font-weight: 700;
-}
-
-#sideMinimapCanvas {
-  width: 100%;
-  height: calc(100% - 34px);
-  display: block;
-  margin-top: 6px;
-  background: #030a10;
 }
 
 .stats-panel {
@@ -1202,7 +1094,6 @@ body {
 .welcome-card,
 .hud-panel,
 #bottomHud > section,
-#minimapPanel,
 #deathPanel {
   border: 8px solid transparent;
   border-image: url("/assets_new/ui/panel_plain/source.png") 52 fill / 8px stretch;
@@ -1224,18 +1115,6 @@ button {
   height: 18px;
   border: 4px 10px solid transparent;
   border-image: url("/assets_new/ui/health_bar_plain/source.png") 20 60 fill / 4px 10px stretch;
-}
-
-/* Keep the M-key tactical map as a larger overlay. */
-#minimapModal {
-  background: rgba(0,5,10,.86);
-}
-
-#minimapPanel {
-  width: min(900px, calc(100vw - 50px));
-  height: min(700px, calc(100vh - 50px));
-  border-color: #2f9bd2;
-  background: #040c13;
 }
 
 /* Correct monster death positioning: animate the sprite, not the
