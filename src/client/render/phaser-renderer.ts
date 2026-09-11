@@ -798,7 +798,7 @@ export class PhaserRenderer {
     if (!scene) return;
     if (!this.player) {
       this.playerSprite = scene.add.image(0, 0, textureKey(asset))
-        .setDisplaySize(PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE)
+        .setDisplaySize(world(PLAYER_SPRITE_SIZE), world(PLAYER_SPRITE_SIZE))
         .setOrigin(0.5, 0.75);
       this.player = scene.add.container(position.x, position.y, [this.playerSprite]).setDepth(50);
     }

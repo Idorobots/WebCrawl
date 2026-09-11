@@ -11,7 +11,7 @@ export const MAX_NODES = 450;
 export const MAX_ROOMS_AFTER_COALESCE = 100;
 export const MAX_CHILDREN_PER_ROOM = 10;
 
-export const WORLD_SCALE = 1.8;
+export const WORLD_SCALE = 1.4;
 export const ROOM_WIDTH = 960;
 export const ROOM_HEIGHT = 640;
 export const ROOM_X_SPACING = 1_002;
@@ -19,7 +19,7 @@ export const ROOM_Y_SPACING = 682;
 export const ROOM_COLLISION_MARGIN = 6;
 
 export const PLAYER_RADIUS = 50;
-export const PLAYER_SPRITE_SIZE = 320;
+export const PLAYER_SPRITE_SIZE = 190;
 export const PLAYER_MUZZLE_DISTANCE = 30;
 export const PLAYER_SPEED = 640;
 export const PLAYER_MAX_HP = 10;
@@ -143,9 +143,9 @@ const enemyViews = (directory: string, name: string): Record<SpriteDirection, st
   right: asset(`enemies/${directory}/${name}_right.png`),
 });
 
-const enemyActionFrames = (directory: string, action: "walk" | "attack"): string[] =>
+const enemyActionFrames = (directory: string, action: "walk" | "attack", direction: "front" | "back" | "right" | "left"): string[] =>
   Array.from({ length: 4 }, (_, index) =>
-    asset(`enemies/${directory}/${action}_front/frame_${String(index + 1).padStart(2, "0")}.png`),
+    asset(`enemies/${directory}/${action}/${direction}/frame_${String(index + 1).padStart(2, "0")}.png`),
   );
 
 const enemyFrames = (
@@ -154,19 +154,26 @@ const enemyFrames = (
   animated: { walk: boolean; attack: boolean },
 ): MonsterFrameSet => {
   const idle = enemyViews(directory, name);
-  const oneFrame = (direction: SpriteDirection): Record<MonsterAnimation, readonly string[]> => ({
-    idle: [idle[direction]],
-    walk: [idle[direction]],
-    attack: [idle[direction]],
-  });
   return {
-    up: oneFrame("up"),
-    right: oneFrame("right"),
-    left: oneFrame("left"),
+    up: {
+      idle: [idle.up],
+      walk: animated.walk ? enemyActionFrames(directory, "walk", "back") : [idle.down],
+      attack: animated.attack ? enemyActionFrames(directory, "attack", "back") : [idle.down],
+    },
+    right: {
+      idle: [idle.right],
+      walk: animated.walk ? enemyActionFrames(directory, "walk", "right") : [idle.down],
+      attack: animated.attack ? enemyActionFrames(directory, "attack", "right") : [idle.down],
+    },
+    left:  {
+      idle: [idle.left],
+      walk: animated.walk ? enemyActionFrames(directory, "walk", "left") : [idle.down],
+      attack: animated.attack ? enemyActionFrames(directory, "attack", "left") : [idle.down],
+    },
     down: {
       idle: [idle.down],
-      walk: animated.walk ? enemyActionFrames(directory, "walk") : [idle.down],
-      attack: animated.attack ? enemyActionFrames(directory, "attack") : [idle.down],
+      walk: animated.walk ? enemyActionFrames(directory, "walk", "front") : [idle.down],
+      attack: animated.attack ? enemyActionFrames(directory, "attack", "front") : [idle.down],
     },
   };
 };
