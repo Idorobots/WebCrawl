@@ -531,7 +531,7 @@ export class PhaserRenderer {
           .setStrokeStyle(world(2), 0xf09cff, 0.85);
         container.addAt(field, 0);
       }
-      if (item.obstacle) {
+      if (item.obstacle && item.hp != item.maxHp) {
         const barWidth = Math.max(world(44), item.size * 0.62);
         const barY = -item.size / 2 - world(8);
         const bg = scene.add.rectangle(-barWidth / 2, barY, barWidth, world(5), 0x071018).setOrigin(0, 0.5);

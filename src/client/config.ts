@@ -83,11 +83,17 @@ export const ASSETS = {
   decorBarrel: asset("props/barrel_red.png"),
   decorBarrelCoolant: asset("props/barrel_coolant.png"),
   decorBarrelHazard: asset("props/barrel_hazard.png"),
-  decorCrate: asset("props/crate.png"),
+  decorCrateCargo: asset("props/crates/crate_cargo.png"),
+  decorCrateArmored: asset("props/crates/crate_armored.png"),
+  decorCrateMedical: asset("props/crates/crate_medical.png"),
+  decorCrateAmmo: asset("props/crates/crate_ammo.png"),
   decorTerminal: asset("props/terminal_front.png"),
-  decorSceneryCrate: asset("props/crate_front.png"),
+  decorSceneryCrateCargo: asset("props/crates/crate_cargo.png"),
+  decorSceneryCrateArmored: asset("props/crates/crate_armored.png"),
+  decorSceneryCrateMedical: asset("props/crates/crate_medical.png"),
+  decorSceneryCrateAmmo: asset("props/crates/crate_ammo.png"),
   decorSceneryTerminal: asset("props/terminal_front.png"),
-  decorDebris: asset("environment/rugged/floor_asteroid_dust.png"),
+  decorDebris: asset("environment/rugged/floor_asteroid_dust.png")
 } as const;
 
 const walkFramePaths = (direction: string): string[] =>

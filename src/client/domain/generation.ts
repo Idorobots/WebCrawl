@@ -19,7 +19,7 @@ import { weaponForRoom, type WeaponSource } from "./weapons";
 
 const world = (value: number): number => Math.round(value * WORLD_SCALE);
 const obstacleScale = (value: number): number => Math.round(world(value) * 0.37125);
-const DECOR_OBSTACLE_SIZE = obstacleScale(272);
+const DECOR_OBSTACLE_SIZE = obstacleScale(250);
 const DECOR_PROP_SIZE = world(76);
 
 function regularMonsterDimensions(sentry: boolean, fast: boolean): { radius: number; size: number } {
@@ -130,7 +130,10 @@ export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[]
     { kind: "barrel", asset: ASSETS.decorBarrel, obstacle: true, radius: obstacleScale(44), footprint: obstacleScale(22), size: DECOR_OBSTACLE_SIZE },
     { kind: "barrel", asset: ASSETS.decorBarrelCoolant, obstacle: true, radius: obstacleScale(44), footprint: obstacleScale(22), size: DECOR_OBSTACLE_SIZE },
     { kind: "barrel", asset: ASSETS.decorBarrelHazard, obstacle: true, radius: obstacleScale(44), footprint: obstacleScale(22), size: DECOR_OBSTACLE_SIZE },
-    { kind: "crate", asset: ASSETS.decorCrate, obstacle: true, radius: obstacleScale(50), footprint: obstacleScale(25), size: DECOR_OBSTACLE_SIZE },
+    { kind: "crate", asset: ASSETS.decorCrateCargo, obstacle: true, radius: obstacleScale(30), footprint: obstacleScale(15), size: DECOR_OBSTACLE_SIZE * 0.75 },
+    { kind: "crate", asset: ASSETS.decorCrateArmored, obstacle: true, radius: obstacleScale(30), footprint: obstacleScale(15), size: DECOR_OBSTACLE_SIZE * 0.75 },
+    { kind: "crate", asset: ASSETS.decorCrateAmmo, obstacle: true, radius: obstacleScale(30), footprint: obstacleScale(15), size: DECOR_OBSTACLE_SIZE * 0.75},
+    { kind: "crate", asset: ASSETS.decorCrateMedical, obstacle: true, radius: obstacleScale(30), footprint: obstacleScale(15), size: DECOR_OBSTACLE_SIZE * 0.75 },
     { kind: "terminal", asset: ASSETS.decorTerminal, obstacle: true, radius: obstacleScale(42), footprint: obstacleScale(21), size: DECOR_OBSTACLE_SIZE },
   ];
   const sceneryAssets = [
@@ -140,6 +143,10 @@ export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[]
     ASSETS.decorPlantMagenta,
     ASSETS.decorPlantTeal,
     ASSETS.decorPlantAmber,
+    //ASSETS.decorSceneryCrateCargo,
+    //ASSETS.decorSceneryCrateAmmo,
+    //ASSETS.decorSceneryCrateArmored,
+    //ASSETS.decorSceneryCrateMedical,
   ];
   const slotSteps = [1, 5, 7, 11];
   const slotStep = slotSteps[(seed >>> 8) % slotSteps.length]!;
@@ -263,11 +270,11 @@ export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decorat
       roomId: link.ownerRoomId,
       ...position,
       kind: obstacle ? "corridor-obstacle" : "corridor-prop",
-      asset: obstacle ? ASSETS.decorCrate : assets[itemSeed % assets.length]!,
+      asset: obstacle ? ASSETS.decorCrateCargo : assets[itemSeed % assets.length]!,
       obstacle,
       radius: obstacle ? obstacleScale(92) : 0,
       footprint: obstacle ? obstacleScale(25) : 0,
-      size: obstacle ? DECOR_OBSTACLE_SIZE : DECOR_PROP_SIZE,
+      size: obstacle ? DECOR_OBSTACLE_SIZE * 0.75 : DECOR_PROP_SIZE,
       maxHp: hp,
       hp,
       destroyed: false,
