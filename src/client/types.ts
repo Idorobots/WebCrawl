@@ -8,7 +8,7 @@ export type PlayerDirection =
   | "downLeft"
   | "left"
   | "upLeft";
-export type PlayerAnimation = "walk" | "shoot";
+export type PlayerAnimation = "normal" | "walk";
 export type LootKind = "credit" | "crystal" | "core" | "medkit" | "weapon";
 export type BossKind = "packet-storm" | "fork-bomb" | "heap-titan";
 export type MonsterKind = "slow" | "fast" | "sentry" | BossKind;
@@ -20,7 +20,9 @@ export type MonsterVisualKind =
   | "sentry-energy"
   | "boss-arc"
   | "boss-missile"
-  | "boss-fortress";
+  | "boss-fortress"
+  | "boss-laser"
+  | "boss-siege";
 export type BulletOwner = "player" | "enemy";
 export type BulletStyle = "player" | "enemy" | "boss" | "shockwave";
 export type WeaponKind =
@@ -36,12 +38,44 @@ export type WeaponKind =
   | "helix-emitter"
   | "sideband-projector";
 export type RoomShape = "rectangle" | "wide" | "tall" | "capsule" | "octagon";
-export type MonsterAnimation = "idle" | "walk" | "attack";
+export type SpriteDirection = "up" | "down" | "left" | "right";
+export type MonsterAnimation = "normal" | "walk" | "melee" | "ranged";
+export type MonsterAttackKind = "melee" | "ranged";
+export type VisualEvent = "damage" | "destroy" | "spawn" | "healing" | "teleport";
 export type WeaponPlacement = "pedestal" | "floor";
 
 export interface Point {
   x: number;
   y: number;
+}
+
+export interface SpriteClip {
+  frames: readonly string[];
+  frameDurationMs: number;
+  sizeScale: number;
+  origin: Point;
+  loop?: boolean;
+  holdLast?: boolean;
+  eventFrame?: number;
+}
+
+export interface DirectionalSpriteVisual {
+  normal: SpriteClip;
+  walk?: SpriteClip;
+  melee?: SpriteClip;
+  ranged?: SpriteClip;
+}
+
+export interface ActorVisualDefinition {
+  directions: Readonly<Record<string, DirectionalSpriteVisual>>;
+  effects?: Partial<Record<VisualEvent, SpriteClip>>;
+  destroyed?: readonly SpriteClip[];
+}
+
+export interface ObjectVisualDefinition {
+  normal: SpriteClip;
+  destroyed?: readonly SpriteClip[];
+  animations?: Partial<Record<VisualEvent, SpriteClip>>;
 }
 
 export interface GraphNode extends Point {
@@ -136,9 +170,12 @@ export interface Decoration extends Point {
   definitionId: string;
   roomId: number;
   kind: string;
-  asset: string;
+  visual: ObjectVisualDefinition;
+  visualVariant?: number;
+  destructible: boolean;
   obstacle: boolean;
   radius: number;
+  hitOffsetY: number;
   size: number;
   origin: { x: number; y: number };
   footprint?: number;
@@ -151,6 +188,7 @@ export interface Decoration extends Point {
   spawnLimit?: number;
   spawnedCount?: number;
   nextSpawnAt?: number;
+  spawnAnimationStartedAt?: number;
 }
 
 export interface ObstacleState {
@@ -164,6 +202,7 @@ export interface Monster extends Point {
   seed: number;
   kind: MonsterKind;
   visualKind: MonsterVisualKind;
+  visual: ActorVisualDefinition;
   spawnRoomId: number;
   roomId: number;
   maxHp: number;
@@ -180,6 +219,7 @@ export interface Monster extends Point {
   projectileRange: number;
   dropsLoot: boolean;
   lastAttackAt: number;
+  attackKind?: MonsterAttackKind;
   active: boolean;
   dead: boolean;
   deathAnimating?: boolean;
@@ -195,6 +235,7 @@ export interface Monster extends Point {
   escapeDirection?: Point;
   escapeUntil?: number;
   attackSequence?: number;
+  spawnSourceId?: string;
   summonedCount?: number;
   nextSpecialAt?: number;
   droppedLoot?: boolean;

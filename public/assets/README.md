@@ -1,40 +1,44 @@
-# WEBCRAWL asset pack
+# WEBCRAWL complete sprite pack
 
-Individual PNG sprites based on your reference artwork. Start with `index.html` to browse the pack locally. No server is required.
+Start with `index.html` to browse assets locally. `manifest.json` is the authoritative runtime index; its paths are relative to the archive root that contains this `assets` directory. Load the JSON files directly in your engine or use them to generate engine-specific resources. Every runtime asset has a stable ID, path, dimensions, alpha range, visible bounds, anchor and SHA-256 checksum.
 
-## Contents
+## Layout
 
-- Player: four idle orientations and 32 walking frames (eight directions, four frames each).
-- Enemies: scout and heavy variants, plus three sentry designs and five boss designs, each with front/back/left/right files.
-- Pickups: ten different weapons on pedestals, gold, crystal, and medkit.
-- Props: three barrels, two ammo cases, terminal, crate, and five plants including four size/color/pot variations.
-- UI: six nine-slice sets (panel, health bar, and button, each with an additional plain version), separate header decoration, and additional panels.
-- Environment: 128-pixel floor/corridor grid, 15 corridor exit combinations, wall strips and corners, open/closed door modules, larger assembled art variants, and a repeating dark tech background.
-- Effects: six individual generic explosion frames.
-- Previews: contact sheets, walk/explosion GIFs, and an assembled room.
+- player: normalized idle and eight-direction walking sprites.
+- enemies: seven mobile enemies with four-direction walk, melee and shooting cycles, plus three sentries with four-direction shooting cycles.
+- scenery, debris and pickups: destructible room props, persistent debris, ammo, pedestal-ready weapons and other pickups.
+- environment: floor tiles, compatible wall modules, static horizontal/vertical doors and the repeating tech background.
+- portals: up/down inactive, activation and active sprites.
+- effects: explosion, barrel explosion, healing, teleport, damage and flame-free plant destruction.
+- ui: six nine-slice sets, masters and decorations.
+- manifests: generated clips, UI slicing, current environment data, validation results and an empty legacy inventory.
 
-## Import
+## Animation and placement
 
-Use PNG alpha blending. Sprites have actual transparent pixels. Floor tiles, background textures, and filled UI centers intentionally contain opaque pixels. JPG/GIF previews have solid backgrounds and are not sprite assets.
+Animation manifests list ordered asset IDs, fps and looping behavior. Each asset ID resolves through the root manifest. Suggested timing is adjustable. Walk cycles loop at 8 fps; attacks and effects play once. Portal activation holds the last frame and is not a seamless active-idle loop. Static states use fps 0.
 
-Use nearest-neighbor filtering for the pixel-art appearance. All walking frames are 256 × 256 with a bottom-center anchor at (128,240). Start at 8 frames/second, repeating 01–04. These are independently generated poses; some directions have slight pose/proportion variation and can benefit from a final hand-animation pass. Idle poses are separate artwork and may need scale adjustment to match walking.
+Player movement and enemy walk/attack frames use 512 x 512 canvases with anchor (256,464). Draw at `world_position - anchor_px`. Scout, heavy and bosses retain distinct size classes. Suggested anchors are explicitly marked. Some generated poses retain mechanical/proportion variations.
 
-Sentry canvases are 256 × 256; boss canvases are 512 × 512. The `manifest.json` records dimensions and available anchors. Scale props and pickups to suit your world units; canvas size does not imply collision size. Define collision shapes separately.
+Use straight PNG alpha blending and nearest-neighbor filtering. Floors and filled UI centers may intentionally be opaque. Define collision shapes and gameplay triggers separately from visible bounds. All foreground frames retain real transparency.
 
-Play explosion frames 01–06 once at roughly 12 fps. Each uses a 256 × 256 canvas and center anchor (128,128). Smoke was reconstructed with partial alpha to remove the painted checker pattern; no barrel is included.
+## Rooms, crates and UI
 
-## Resizable UI
+Floors use a 128-pixel grid and current walls use 64-pixel thickness. Angled wall modules are decorative assemblies, not interchangeable grid tiles. The tech background repeats in both axes.
 
-Each UI set has nine independent files: four corners, four edges, and a center. Keep corners fixed. Stretch top/bottom horizontally, left/right vertically, and center in both dimensions. Read `manifest.json` → `ui` for exact borders and minimum dimensions. `source.png` is the combined master; `example_*.png` demonstrate resizing. Empty panel centers are transparent, so place a color fill underneath when desired.
+Crates and their matching debris use 256-pixel canvases. Portal ground anchor is (256,448). Use per-asset metadata rather than assuming a universal prop origin.
 
-## Room construction
+For nine-slice UI, keep corners fixed, stretch horizontal/vertical edges along their length, and stretch the center in both axes. Exact pieces, borders and minimum sizes are in manifests/ui.json. Do not apply master-image border dimensions to the already-separated pieces.
 
-Use `environment/tiles` for a 128 × 128 grid. Corridor filenames list open exits with N/E/S/W letters; openings span pixels 32–95 along each open edge. Match exits to adjacent tiles. Wall strips are 128 × 32 or 32 × 128; corners occupy 128 × 128 with transparent interiors. Open doors have transparent centers to overlay floors.
+The generated root manifest supersedes historical notes and source manifests. This archive contains individual sprites, not a texture atlas; pack an atlas in your engine if needed.
 
-`environment/art_variants` contains larger illustrated assemblies. They are decorative alternatives, not interchangeable grid tiles. The dark tech texture repeats in both axes using a mirrored layout with matching opposite edges. The assembled-room preview demonstrates placement and scale, not a finished level.
+## Latest expansion
 
-## Known unfinished art
+Robot spawner: dormant, charging, discharge and ready states. Spawn the enemy at the manifest spawn anchor; discharge frame index 2 is the suggested spawn event. New debris is persistent floor scenery, including barrel, plant, crate, robot and generic scrap piles.
 
-Six rear-view files need an art revision: `sentry_twin_back`, `boss_siege_back`, `boss_missile_back`, `boss_laser_back`, `boss_arc_back`, and `boss_fortress_back`. Their bodies include rear details, but some forward weapon/sensor details remain visible or ambiguous. They are retained as drafts so no generated work is lost. They are also flagged `needs_art_revision` in the manifest and labeled in the browser. Image generation reached its usage limit during the correction attempt.
+Lab, control room and boss arena each have nine scenery props. Standalone weapons now have exactly 192 pixels of visible width on a 256 × 256 canvas, centered at (128,128); this standardizes pickup display size, not physical weapon dimensions.
 
-All requested asset categories are represented. The six rear-view corrections above remain unfinished; transparency cleanup does not fix their viewing geometry.
+The environment expansion adds plain and damaged floors, diagonal pieces, bends and rotated junctions. These are authored wall art modules requiring visual end alignment, not guaranteed seamless autotiles. Acute wall pieces and animated doors are intentionally absent from the current pack.
+
+Barrel explosion is a separate eight-frame effect including a rising smoke cloud and sparks, played once at 12 fps. Other explosion and plant-break effects remain available.
+
+All seven mobile enemies have four-frame melee and shooting cycles for front/back/left/right; three sentries have shooting only. No diagonal attack directions. Play once at 8 fps; suggested hit/projectile events use zero-based frame index 2. Muzzle flashes are artwork; gameplay projectiles/hitboxes are separate. All new attack frames have real alpha, shared 512-pixel canvases and palette normalization for armor. Generated anatomy/pose detail can vary slightly, especially between static, walking and attack states.

@@ -1,0 +1,490 @@
+{
+  "grid_px": 128,
+  "wall_thickness_px": 64,
+  "background_repeat": "both_axes",
+  "assets": {
+    "environment/background_tech_tile": {
+      "size": [
+        1024,
+        1024
+      ],
+      "role": "background"
+    },
+    "environment/doors/door_closed": {
+      "size": [
+        128,
+        64
+      ],
+      "role": "door"
+    },
+    "environment/doors/door_closed_vertical": {
+      "size": [
+        64,
+        128
+      ],
+      "role": "door"
+    },
+    "environment/doors/door_open": {
+      "size": [
+        128,
+        64
+      ],
+      "role": "door"
+    },
+    "environment/doors/door_open_vertical": {
+      "size": [
+        64,
+        128
+      ],
+      "role": "door"
+    },
+    "environment/floor/floor_asteroid_dust": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_composite_rubble": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_dented_bolts": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_exposed_cables": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_hatch": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_hex": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_plain_composite": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_plain_steel": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_plate": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_rock_grit": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_scorched": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_steel_cracks": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_tread": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/floor/floor_worn_slabs": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "floor"
+    },
+    "environment/walls/corner": {
+      "size": [
+        128,
+        128
+      ],
+      "role": "wall"
+    },
+    "environment/walls/pillar": {
+      "size": [
+        64,
+        64
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_E_NW": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_E_NW_rot180": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_E_NW_rot270": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_E_NW_rot90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_E_SW": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_E_SW_rot180": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_E_SW_rot270": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_E_SW_rot90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_W_NE": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_W_NE_rot180": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_W_NE_rot270": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_W_NE_rot90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_W_SE": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_W_SE_rot180": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_W_SE_rot270": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_bend_W_SE_rot90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_broken_horizontal": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_broken_horizontal_rot180": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_broken_horizontal_rot270": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_broken_horizontal_rot90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_corner_90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_corner_90_rot180": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_corner_90_rot270": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_corner_90_rot90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_damaged": {
+      "size": [
+        128,
+        64
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_damaged_vertical": {
+      "size": [
+        64,
+        128
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_diagonal_NE_SW": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_diagonal_NW_SE": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_end_cap": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_end_cap_rot180": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_end_cap_rot270": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_end_cap_rot90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_horizontal": {
+      "size": [
+        128,
+        64
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_horizontal_vertical": {
+      "size": [
+        64,
+        128
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_junction_T": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_junction_T_rot180": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_junction_T_rot270": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_junction_T_rot90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_junction_Y": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_junction_Y_rot180": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_junction_Y_rot270": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_junction_Y_rot90": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_junction_diagonal_X": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_plain_horizontal": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_plain_vertical": {
+      "size": [
+        256,
+        256
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_ribbed": {
+      "size": [
+        128,
+        64
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_ribbed_vertical": {
+      "size": [
+        64,
+        128
+      ],
+      "role": "wall"
+    },
+    "environment/walls/wall_vertical": {
+      "size": [
+        64,
+        128
+      ],
+      "role": "wall"
+    }
+  }
+}

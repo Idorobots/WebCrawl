@@ -254,6 +254,26 @@ test("moves continuously with WASD and arrow keys", async ({ page }) => {
   }
 });
 
+test("displays every player walk frame", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  const direction = await game.getAttribute("data-first-exit");
+  const key = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
+  const seen = new Set<string>();
+  await page.keyboard.down(key);
+  try {
+    for (let index = 0; index < 14; index += 1) {
+      await page.waitForTimeout(50);
+      const asset = await game.getAttribute("data-player-asset") ?? "";
+      const frame = asset.match(/walk_[A-Z]+_(\d{2})\.png$/)?.[1];
+      if (frame) seen.add(frame);
+    }
+  } finally {
+    await page.keyboard.up(key);
+  }
+  expect(seen).toEqual(new Set(["01", "02", "03", "04"]));
+});
+
 test("aims with the cursor and repeatedly fires while moving backward", async ({ page }) => {
   await startGame(page);
 
@@ -308,7 +328,10 @@ test("does not pan or zoom the game viewport", async ({ page }) => {
 });
 
 test("spawns multiple enemies once another room is revealed", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
   await startGame(page);
+  await setPlayerInvulnerable(page, true);
 
   const game = page.locator("#gameCanvas");
   const direction = await game.getAttribute("data-first-exit");
@@ -337,6 +360,17 @@ test("spawns multiple enemies once another room is revealed", async ({ page }) =
   await expect.poll(async () => Number(await page.locator("#gameCanvas").getAttribute("data-active-monsters"))).toBeGreaterThanOrEqual(2);
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-spawners", /^[0-4]$/);
   await page.keyboard.up(key);
+  await expect.poll(async () => Number(await game.getAttribute("data-rendered-monsters"))).toBeGreaterThanOrEqual(2);
+
+  const seen = new Set<string>();
+  const samples: string[] = [];
+  for (let index = 0; index < 14; index += 1) {
+    await page.waitForTimeout(50);
+    const assets = await game.getAttribute("data-monster-assets") ?? "";
+    samples.push(`${await game.getAttribute("data-rendered-monsters")}:${assets}`);
+    for (const match of assets.matchAll(/frame_(\d{2})\.png/g)) seen.add(match[1]!);
+  }
+  expect(seen, `Page errors: ${pageErrors.join(" | ")}\nMonster asset samples: ${samples.join(" | ")}`).toEqual(new Set(["01", "02", "03", "04"]));
 });
 
 test("swaps temporary weapons, refills only from orbs, and falls back to pulse rifle", async ({ page }) => {

@@ -1,0 +1,152 @@
+{
+  "panel": {
+    "borders": {
+      "left": 220,
+      "right": 45,
+      "top": 45,
+      "bottom": 40
+    },
+    "minimum_size": [
+      266,
+      86
+    ],
+    "behavior": "corners fixed, edges stretch along length, center stretches in both axes",
+    "pieces": {
+      "top_left": "ui/panel/top_left",
+      "top": "ui/panel/top",
+      "top_right": "ui/panel/top_right",
+      "left": "ui/panel/left",
+      "center": "ui/panel/center",
+      "right": "ui/panel/right",
+      "bottom_left": "ui/panel/bottom_left",
+      "bottom": "ui/panel/bottom",
+      "bottom_right": "ui/panel/bottom_right"
+    },
+    "master": "ui/panel/source"
+  },
+  "health_bar": {
+    "borders": {
+      "left": 52,
+      "right": 52,
+      "top": 18,
+      "bottom": 18
+    },
+    "minimum_size": [
+      105,
+      37
+    ],
+    "behavior": "corners fixed, edges stretch along length, center stretches in both axes",
+    "pieces": {
+      "top_left": "ui/health_bar/top_left",
+      "top": "ui/health_bar/top",
+      "top_right": "ui/health_bar/top_right",
+      "left": "ui/health_bar/left",
+      "center": "ui/health_bar/center",
+      "right": "ui/health_bar/right",
+      "bottom_left": "ui/health_bar/bottom_left",
+      "bottom": "ui/health_bar/bottom",
+      "bottom_right": "ui/health_bar/bottom_right"
+    },
+    "master": "ui/health_bar/source"
+  },
+  "button": {
+    "borders": {
+      "left": 68,
+      "right": 68,
+      "top": 28,
+      "bottom": 28
+    },
+    "minimum_size": [
+      137,
+      57
+    ],
+    "behavior": "corners fixed, edges stretch along length, center stretches in both axes",
+    "pieces": {
+      "top_left": "ui/button/top_left",
+      "top": "ui/button/top",
+      "top_right": "ui/button/top_right",
+      "left": "ui/button/left",
+      "center": "ui/button/center",
+      "right": "ui/button/right",
+      "bottom_left": "ui/button/bottom_left",
+      "bottom": "ui/button/bottom",
+      "bottom_right": "ui/button/bottom_right"
+    },
+    "master": "ui/button/source"
+  },
+  "panel_plain": {
+    "borders": {
+      "left": 52,
+      "right": 52,
+      "top": 52,
+      "bottom": 52
+    },
+    "minimum_size": [
+      105,
+      105
+    ],
+    "behavior": "corners fixed, edges stretch along length, center stretches in both axes",
+    "pieces": {
+      "top_left": "ui/panel_plain/top_left",
+      "top": "ui/panel_plain/top",
+      "top_right": "ui/panel_plain/top_right",
+      "left": "ui/panel_plain/left",
+      "center": "ui/panel_plain/center",
+      "right": "ui/panel_plain/right",
+      "bottom_left": "ui/panel_plain/bottom_left",
+      "bottom": "ui/panel_plain/bottom",
+      "bottom_right": "ui/panel_plain/bottom_right"
+    },
+    "master": "ui/panel_plain/source"
+  },
+  "health_bar_plain": {
+    "borders": {
+      "left": 60,
+      "right": 60,
+      "top": 20,
+      "bottom": 20
+    },
+    "minimum_size": [
+      121,
+      41
+    ],
+    "behavior": "corners fixed, edges stretch along length, center stretches in both axes",
+    "pieces": {
+      "top_left": "ui/health_bar_plain/top_left",
+      "top": "ui/health_bar_plain/top",
+      "top_right": "ui/health_bar_plain/top_right",
+      "left": "ui/health_bar_plain/left",
+      "center": "ui/health_bar_plain/center",
+      "right": "ui/health_bar_plain/right",
+      "bottom_left": "ui/health_bar_plain/bottom_left",
+      "bottom": "ui/health_bar_plain/bottom",
+      "bottom_right": "ui/health_bar_plain/bottom_right"
+    },
+    "master": "ui/health_bar_plain/source"
+  },
+  "button_plain": {
+    "borders": {
+      "left": 72,
+      "right": 72,
+      "top": 30,
+      "bottom": 30
+    },
+    "minimum_size": [
+      145,
+      61
+    ],
+    "behavior": "corners fixed, edges stretch along length, center stretches in both axes",
+    "pieces": {
+      "top_left": "ui/button_plain/top_left",
+      "top": "ui/button_plain/top",
+      "top_right": "ui/button_plain/top_right",
+      "left": "ui/button_plain/left",
+      "center": "ui/button_plain/center",
+      "right": "ui/button_plain/right",
+      "bottom_left": "ui/button_plain/bottom_left",
+      "bottom": "ui/button_plain/bottom",
+      "bottom_right": "ui/button_plain/bottom_right"
+    },
+    "master": "ui/button_plain/source"
+  }
+}

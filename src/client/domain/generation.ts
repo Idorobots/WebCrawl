@@ -20,12 +20,17 @@ import {
   DECORATION_DEFINITIONS,
   MAX_REGULAR_MONSTER_RADIUS,
   MONSTER_SPAWN_PROFILES,
+  MONSTER_VISUAL_DEFINITIONS,
   OBSTACLE_DEFINITIONS,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   REGULAR_MONSTER_DEFINITIONS,
+  ROOM_SCENERY_THEMES,
   SCENERY_DEFINITIONS,
   WORLD_GEOMETRY,
+  type DecorationDefinition,
+  type RoomSceneryTheme,
+  type WeightedDecorationDefinition,
 } from "./specs";
 import { weaponForRoom, type WeaponSource } from "./weapons";
 
@@ -93,6 +98,7 @@ export function weaponPedestalForRoom(room: GraphNode, pageUrl: string): Decorat
     roomId: room.id,
     x: weapon.x,
     y: weapon.y,
+    visualVariant: room.lootSeed,
     maxHp: 0,
     hp: 0,
     destroyed: false,
@@ -110,64 +116,108 @@ export function sceneryDropKindForSeed(seed: number): LootKind | null {
   return kinds[kindRoll % kinds.length] ?? "credit";
 }
 
+const ROOM_SCENERY_THEME_IDS = Object.keys(ROOM_SCENERY_THEMES) as RoomSceneryTheme[];
+
+export function roomSceneryThemeForRoom(room: Pick<GraphNode, "lootSeed">): RoomSceneryTheme {
+  return ROOM_SCENERY_THEME_IDS[
+    stableHash(`${room.lootSeed}|scenery-theme`) % ROOM_SCENERY_THEME_IDS.length
+  ]!;
+}
+
+function weightedDecoration(
+  entries: readonly WeightedDecorationDefinition[],
+  seed: number,
+): DecorationDefinition {
+  const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0);
+  let roll = seed % totalWeight;
+  for (const entry of entries) {
+    if (roll < entry.weight) return entry.definition;
+    roll -= entry.weight;
+  }
+  return entries[0]!.definition;
+}
+
+function roomDecorationSlots(room: GraphNode, seed: number): Point[] {
+  const edgeClearance = WORLD_GEOMETRY.wallThickness + PLAYER_SPEC.radius + world(20);
+  const edgeX = Math.max(world(70), room.width / 2 - edgeClearance);
+  const edgeY = Math.max(world(65), room.height / 2 - edgeClearance);
+  const horizontal = [-1, -0.5, 0, 0.5, 1].map(scale => ({ x: scale * edgeX, y: -edgeY }));
+  const vertical = [-0.5, 0, 0.5].map(scale => ({ x: edgeX, y: scale * edgeY }));
+  const groups: Point[][] = [
+    horizontal,
+    vertical,
+    horizontal.map(point => ({ x: -point.x, y: edgeY })),
+    vertical.map(point => ({ x: -edgeX, y: -point.y })),
+    [-0.6, -0.2, 0.2, 0.6].map(scale => ({ x: scale * edgeX, y: -edgeY * 0.35 })),
+    [-0.6, -0.2, 0.2, 0.6].map(scale => ({ x: -scale * edgeX, y: edgeY * 0.35 })),
+  ];
+  const start = seed % 4;
+  const perimeter = [...groups.slice(start, 4), ...groups.slice(0, start), ...groups.slice(4)];
+  if ((seed >>> 5) % 2) perimeter.forEach(group => group.reverse());
+  return perimeter.flat().map(point => ({ x: room.x + point.x, y: room.y + point.y }));
+}
+
+function decorationFits(
+  position: Point,
+  definition: DecorationDefinition,
+  room: GraphNode,
+  placed: readonly Decoration[],
+): boolean {
+  const radius = Math.max(world(10), definition.footprint);
+  const maxWeaponYOffset = Math.max(
+    0,
+    room.height / 2 - WORLD_GEOMETRY.wallThickness - PLAYER_SPEC.radius - world(10),
+  );
+  const interactionPoints = [
+    { x: room.x, y: room.y - Math.min(world(135), maxWeaponYOffset) },
+    ...lootPositions(room, 5),
+    ...staircasePositions(
+      room,
+      room.hrefs.length + (room.isRoot ? 1 : 0),
+      room.tag === "script" ? room.height * 0.24 : 0,
+    ),
+  ];
+  const leavesInteractionsClear = !definition.obstacle || interactionPoints.every(point =>
+    Math.hypot(position.x - point.x, position.y - point.y) >=
+      radius + PLAYER_SPEC.radius + world(10)
+  );
+  const leavesRoomCenterClear = !definition.obstacle || Math.hypot(
+    position.x - room.x,
+    position.y - room.y,
+  ) >= radius + MAX_REGULAR_MONSTER_RADIUS + world(20);
+  return leavesRoomCenterClear && leavesInteractionsClear &&
+    pointInRoomFloor(position.x, position.y, room, radius) && placed.every(item =>
+    Math.hypot(position.x - item.x, position.y - item.y) >=
+      radius + Math.max(world(10), item.footprint ?? 0) + world(8)
+  );
+}
+
 export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[] {
   const seed = stableHash(`${room.lootSeed}|decor`);
   const difficulty = floorDifficulty(floor);
   const count = 5 + (seed % 3) + Math.min(4, Math.floor(difficulty / 2));
-  const edgeClearance = WORLD_GEOMETRY.wallThickness + PLAYER_SPEC.radius + world(20);
-  const edgeX = Math.max(world(70), room.width / 2 - edgeClearance);
-  const edgeY = Math.max(world(65), room.height / 2 - edgeClearance);
-  const slots: Array<[number, number]> = [
-    [-edgeX, -edgeY], [edgeX, -edgeY], [-edgeX, edgeY], [edgeX, edgeY], [-edgeX / 2, -edgeY],
-    [edgeX / 2, -edgeY], [-edgeX / 2, edgeY], [edgeX / 2, edgeY], [-edgeX, -edgeY / 2], [edgeX, -edgeY / 2],
-    [-edgeX, edgeY / 2], [edgeX, edgeY / 2],
-  ];
-  const slotSteps = [1, 5, 7, 11];
-  const slotStep = slotSteps[(seed >>> 8) % slotSteps.length]!;
-
-  const decorations = Array.from({ length: count }, (_, index): Decoration => {
-    const itemSeed = stableHash(`${room.lootSeed}|decor|${index}`);
-    const slot = slots[(seed + index * slotStep) % slots.length]!;
-    const type = index >= 2 && itemSeed % 5 === 0
-      ? SCENERY_DEFINITIONS[(itemSeed >>> 5) % SCENERY_DEFINITIONS.length]!
-      : OBSTACLE_DEFINITIONS[(itemSeed >>> 4) % OBSTACLE_DEFINITIONS.length]!;
-    const hp = type.obstacle ? 3 + ((itemSeed >>> 9) % 4) + Math.floor(difficulty / 3) : 0;
-    return {
-      id: `${room.id}::decor-${index}`,
-      roomId: room.id,
-      x: room.x + slot[0],
-      y: room.y + slot[1],
-      maxHp: hp,
-      hp,
-      destroyed: false,
-      dropKind: type.obstacle ? sceneryDropKindForSeed(itemSeed) : null,
-      ...type,
-    };
-  });
-
-  if (room.isRoot || room.tag === "img") return decorations;
+  const theme = ROOM_SCENERY_THEMES[roomSceneryThemeForRoom(room)];
+  const slots = roomDecorationSlots(room, seed);
   const spawnerRate = Math.min(82, 12 + difficulty * 6);
   const spawnerRoomRoll = stableHash(`${room.lootSeed}|spawner-rate`) % 100;
   const maxSpawnerCount = Math.min(4, 1 + Math.floor(difficulty / 3));
-  const spawnerCount = spawnerRoomRoll < spawnerRate
-    ? 1 + (stableHash(`${room.lootSeed}|spawner-count`) % maxSpawnerCount)
-    : 0;
-  const spawnerSlots: Array<[number, number]> = [
-    [-edgeX, edgeY * 0.65],
-    [edgeX, -edgeY * 0.65],
-    [0, edgeY],
-    [0, -edgeY],
-  ];
-  for (let index = 0; index < spawnerCount; index += 1) {
+  const requestedSpawnerCount = room.isRoot || room.tag === "img" || spawnerRoomRoll >= spawnerRate
+    ? 0
+    : 1 + (stableHash(`${room.lootSeed}|spawner-count`) % maxSpawnerCount);
+  const spawners: Decoration[] = [];
+  for (let index = 0; index < requestedSpawnerCount; index += 1) {
     const itemSeed = stableHash(`${room.lootSeed}|spawner|${index}|${floor}`);
-    const slot = spawnerSlots[index]!;
+    const type = DECORATION_DEFINITIONS.spawner;
+    const slotIndex = slots.findIndex(position => decorationFits(position, type, room, spawners));
+    if (slotIndex < 0) break;
+    const [position] = slots.splice(slotIndex, 1);
     const hp = 6 + difficulty + (itemSeed % 3);
-    decorations.push({
-      ...DECORATION_DEFINITIONS.spawner,
+    spawners.push({
+      ...type,
       id: `${room.id}::spawner-${index}`,
       roomId: room.id,
-      x: room.x + slot[0],
-      y: room.y + slot[1],
+      ...position!,
+      visualVariant: itemSeed,
       maxHp: hp,
       hp,
       destroyed: false,
@@ -178,7 +228,36 @@ export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[]
       spawnedCount: 0,
     });
   }
-  return decorations;
+  const decorations: Decoration[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const itemSeed = stableHash(`${room.lootSeed}|decor|${index}`);
+    const usePrimary = itemSeed % 100 < theme.primaryPercent;
+    let pool = usePrimary ? theme.primary : theme.accents;
+    if (index < 4) {
+      const blocking = pool.filter(entry => entry.definition.obstacle);
+      pool = blocking.length
+        ? blocking
+        : [...theme.primary, ...theme.accents].filter(entry => entry.definition.obstacle);
+    }
+    const type = weightedDecoration(pool, itemSeed >>> 7);
+    const slotIndex = slots.findIndex(position => decorationFits(position, type, room, [...spawners, ...decorations]));
+    if (slotIndex < 0) continue;
+    const [position] = slots.splice(slotIndex, 1);
+    const hp = type.destructible ? 3 + ((itemSeed >>> 9) % 4) + Math.floor(difficulty / 3) : 0;
+    decorations.push({
+      ...type,
+      id: `${room.id}::decor-${index}`,
+      roomId: room.id,
+      ...position!,
+      visualVariant: itemSeed,
+      maxHp: hp,
+      hp,
+      destroyed: false,
+      dropKind: type.destructible ? sceneryDropKindForSeed(itemSeed) : null,
+    });
+  }
+
+  return [...decorations, ...spawners];
 }
 
 function pointAlongCorridor(link: LayoutLink, fraction: number, lateral = 0): Point {
@@ -222,23 +301,24 @@ export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decorat
       index === 0 ? 0.5 : index === 1 ? 0.28 : 0.72,
       (index % 2 ? 1 : -1) * (obstacle ? obstacleLateral : world(26)),
     );
-    const hp = obstacle ? 3 + (itemSeed % 3) + Math.floor(difficulty / 3) : 0;
     const definition = obstacle
-      ? DECORATION_DEFINITIONS.crateCargo
+      ? OBSTACLE_DEFINITIONS[itemSeed % OBSTACLE_DEFINITIONS.length]!
       : SCENERY_DEFINITIONS[itemSeed % SCENERY_DEFINITIONS.length]!;
+    const hp = definition.destructible ? 3 + (itemSeed % 3) + Math.floor(difficulty / 3) : 0;
     return {
       ...definition,
       id: `${link.id}::decor-${index}`,
       roomId: link.ownerRoomId,
       ...position,
+      visualVariant: itemSeed,
       kind: obstacle ? "corridor-obstacle" : "corridor-prop",
       obstacle,
-      radius: obstacle ? definition.radius : 0,
+      radius: definition.radius,
       footprint: obstacle ? definition.footprint : 0,
       maxHp: hp,
       hp,
       destroyed: false,
-      dropKind: obstacle ? sceneryDropKindForSeed(itemSeed) : null,
+      dropKind: definition.destructible ? sceneryDropKindForSeed(itemSeed) : null,
     };
   });
 }
@@ -261,7 +341,7 @@ function blocksDoorApproach(item: Decoration, room: GraphNode, door: Point): boo
     x: door.x + dx / distance * Math.min(world(140), distance),
     y: door.y + dy / distance * Math.min(world(140), distance),
   };
-  return pointToSegmentDistance(item, door, approach) < item.radius + MAX_REGULAR_MONSTER_RADIUS + world(20);
+  return pointToSegmentDistance(item, door, approach) < (item.footprint ?? item.radius) + MAX_REGULAR_MONSTER_RADIUS + world(20);
 }
 
 function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly Point[]): Decoration[] {
@@ -284,7 +364,7 @@ function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly
     }
     return {
       ...item,
-      ...DECORATION_DEFINITIONS.debris,
+      ...DECORATION_DEFINITIONS.debrisCircuit,
       kind: "doorway-debris",
       maxHp: 0,
       hp: 0,
@@ -381,6 +461,7 @@ export function bossSpecForRoom(
   const difficulty = floorDifficulty(floor);
   const seed = stableHash(`${room.lootSeed}|boss|${floor}`);
   const definition = BOSS_DEFINITIONS[bossKind];
+  const visualKind = definition.visualKinds[seed % definition.visualKinds.length]!;
   const positionSeed = stableHash(`${room.lootSeed}|boss-position`);
   const xOffset = ((positionSeed % 3) - 1) * world(38);
   const yOffset = -room.height * 0.18 + (((positionSeed >>> 5) % 3) - 1) * world(14);
@@ -388,7 +469,8 @@ export function bossSpecForRoom(
     id: `${room.id}::boss`,
     seed,
     kind: bossKind,
-    visualKind: definition.visualKind,
+    visualKind,
+    visual: MONSTER_VISUAL_DEFINITIONS[visualKind],
     bossKind,
     spawnRoomId: room.id,
     roomId: room.id,
@@ -436,6 +518,7 @@ function regularMonsterSpec(
   const kind = monsterKindForSeed(seed, difficulty);
   const definition = REGULAR_MONSTER_DEFINITIONS[kind];
   const profile = MONSTER_SPAWN_PROFILES[profileName];
+  const visualKind = definition.visualKinds[seed % definition.visualKinds.length]!;
   const scaledPercent = (value: number, percent: number): number => Math.round(value * percent / 100);
   const speed = definition.speed + Math.min(definition.maxSpeedBonus, difficulty * definition.speedPerDifficulty);
   const attackRange = definition.attackRange + Math.min(
@@ -454,7 +537,8 @@ function regularMonsterSpec(
     id,
     seed,
     kind,
-    visualKind: definition.visualKinds[seed % definition.visualKinds.length]!,
+    visualKind,
+    visual: MONSTER_VISUAL_DEFINITIONS[visualKind],
     spawnRoomId: roomId,
     roomId,
     ...position,
@@ -532,16 +616,17 @@ export function monsterSpecsForCorridor(link: LayoutLink, floor = 1): Monster[] 
 
 export function monsterSpecForSpawner(spawner: Decoration, floor: number, index: number): Monster {
   const seed = stableHash(`${spawner.id}|reinforcement|${floor}|${index}`);
-  const offsets: Array<[number, number]> = [[world(90), 0], [-world(90), 0], [0, world(90)], [0, -world(90)]];
-  const offset = offsets[index % offsets.length]!;
-  return regularMonsterSpec(
+  return {
+    ...regularMonsterSpec(
     `${spawner.id}::reinforcement-${index}`,
     seed,
     spawner.roomId,
-    { x: spawner.x + offset[0], y: spawner.y + offset[1] },
+    { x: spawner.x, y: spawner.y },
     floor,
     "spawner",
-  );
+    ),
+    spawnSourceId: spawner.id,
+  };
 }
 
 export function monsterSpecForBossSummon(boss: Monster, floor: number, index: number): Monster {
@@ -613,11 +698,13 @@ export function monsterPositionIsClear(
   radius: number,
   layout: DungeonLayout,
   decorations: readonly Decoration[],
+  ignoredDecorationId?: string,
 ): boolean {
   const onFloor = layout.nodes.some(room => pointInRoomFloor(position.x, position.y, room, radius)) ||
     layout.links.some(link => pointInCorridor(position.x, position.y, link, radius));
   if (!onFloor) return false;
   return decorations.every(item =>
+    item.id === ignoredDecorationId ||
     !item.obstacle ||
     item.destroyed ||
     Math.hypot(position.x - item.x, position.y - item.y) >= radius + (item.footprint ?? item.radius)
@@ -647,7 +734,9 @@ function safeMonsterPosition(
       }
     }
   }
-  return candidates.find(position => monsterPositionIsClear(position, monster.radius, layout, decorations)) ?? null;
+  return candidates.find(position =>
+    monsterPositionIsClear(position, monster.radius, layout, decorations, monster.spawnSourceId)
+  ) ?? null;
 }
 
 export function lootCountForRoom(room: GraphNode): number {

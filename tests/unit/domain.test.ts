@@ -7,7 +7,12 @@ import {
   WORLD_SCALE,
   world,
 } from "../../src/client/config";
-import { applyObstacleDamage } from "../../src/client/domain/combat";
+import {
+  applyObstacleDamage,
+  actorProjectileOrigin,
+  monsterAttackIsReady,
+  projectileHitsDecoration,
+} from "../../src/client/domain/combat";
 import {
   distanceSquared,
   pointInCorridor,
@@ -31,6 +36,7 @@ import {
   monsterPositionIsClear,
   monsterSpecForBossSummon,
   monsterSpecForSpawner,
+  roomSceneryThemeForRoom,
   staircasePositions,
   weaponLootForRoom,
   weaponPedestalForRoom,
@@ -46,9 +52,11 @@ import {
   MAX_REGULAR_MONSTER_RADIUS,
   MONSTER_VISUAL_DEFINITIONS,
   monsterHealthBarY,
+  monsterVisualCenterOffsetY,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   REGULAR_MONSTER_DEFINITIONS,
+  ROOM_SCENERY_THEMES,
   ROOM_DEFINITIONS,
   WEAPON_VISUAL_DEFINITIONS,
   WORLD_GEOMETRY,
@@ -140,15 +148,17 @@ describe("layout and geometry", () => {
   });
 
   it("aligns visual content with collision centers and normalizes monster animations", () => {
-    expect(PLAYER_SPEC.spriteOrigin).toEqual({ x: 0.5, y: 0.6875 });
+    expect(PLAYER_SPEC.visual.directions.down?.normal.origin).toEqual({ x: 0.5, y: 0.90625 });
     expect(REGULAR_MONSTER_DEFINITIONS.fast.size).toBe(world(137 * 1.25));
     expect(REGULAR_MONSTER_DEFINITIONS.slow.size).toBe(world(183 * 1.25));
     expect(REGULAR_MONSTER_DEFINITIONS.sentry.size).toBe(world(160 * 1.25));
-    expect(monsterDisplaySize(200, "scout", "attack")).toBe(96);
+    expect(monsterDisplaySize(200, "scout", "melee")).toBe(200);
     expect(monsterDisplaySize(200, "scout", "walk")).toBe(200);
-    expect(MONSTER_VISUAL_DEFINITIONS.scout.origins.attack.y).toBeCloseTo(0.56);
+    expect(MONSTER_VISUAL_DEFINITIONS.scout.directions.down?.melee?.origin.y).toBeCloseTo(0.90625);
+    expect(PLAYER_SPEC.visualCenterOffsetY).toBeLessThan(0);
+    expect(monsterVisualCenterOffsetY(200, "scout")).toBe(-40);
     expect(monsterHealthBarY(200, "scout")).toBeGreaterThan(-60);
-    expect(DECORATION_DEFINITIONS.crateCargo.origin).toEqual({ x: 0.5, y: 0.5 });
+    expect(DECORATION_DEFINITIONS.crateCargo.origin).toEqual({ x: 0.5, y: 0.9375 });
     expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
   });
 
@@ -378,6 +388,35 @@ describe("deterministic room contents", () => {
     expect(decorations.filter(item => item.obstacle).length).toBeGreaterThanOrEqual(4);
     expect(new Set(decorations.map(item => `${item.x},${item.y}`)).size).toBe(decorations.length);
     expect(monsterSpecsForRoom(room)).toEqual([]);
+  });
+
+  it("uses deterministic configurable themes and keeps neighboring scenery separated", () => {
+    const themedRooms = Array.from({ length: 600 }, (_, index) => node(index + 10_000, 0, 1, {
+      isRoot: false,
+      tag: "img",
+      lootSeed: stableHash(`themed-room-${index}`),
+    }));
+    const labRooms = themedRooms.filter(candidate => roomSceneryThemeForRoom(candidate) === "lab");
+    const labDecorations = labRooms.flatMap(candidate => decorationSpecsForRoom(candidate));
+    const medicalCrates = labDecorations.filter(item => item.definitionId === "crate-medical").length;
+    expect(roomSceneryThemeForRoom(labRooms[0]!)).toBe(roomSceneryThemeForRoom(labRooms[0]!));
+    expect(ROOM_SCENERY_THEMES.lab.primary.find(entry =>
+      entry.definition.definitionId === "crate-medical"
+    )?.weight).toBe(6);
+    expect(medicalCrates).toBeGreaterThan(labDecorations.filter(item =>
+      item.definitionId === "crate-cargo"
+    ).length);
+
+    for (const candidate of themedRooms.slice(0, 100)) {
+      const decorations = decorationSpecsForRoom(candidate, 10);
+      for (const [index, item] of decorations.entries()) {
+        for (const other of decorations.slice(index + 1)) {
+          const minimum = Math.max(world(10), item.footprint ?? 0) +
+            Math.max(world(10), other.footprint ?? 0) + world(8);
+          expect(Math.hypot(item.x - other.x, item.y - other.y)).toBeGreaterThanOrEqual(minimum);
+        }
+      }
+    }
   });
 
   it("relocates generated monsters away from obstacle footprints", () => {
@@ -675,6 +714,39 @@ describe("deterministic room contents", () => {
     expect(obstacle).toMatchObject({ hp: 0, destroyed: true });
   });
 
+  it("centers scenery projectile hitboxes on the visible object", () => {
+    const item = {
+      ...DECORATION_DEFINITIONS.crateCargo,
+      id: "hitbox-crate",
+      roomId: room.id,
+      x: 100,
+      y: 200,
+      maxHp: 3,
+      hp: 3,
+      destroyed: false,
+      dropKind: null,
+    };
+    expect(item.hitOffsetY).toBeLessThan(-item.radius);
+    expect(projectileHitsDecoration(item, { x: item.x, y: item.y + item.hitOffsetY }, 1)).toBe(true);
+    expect(projectileHitsDecoration(item, { x: item.x, y: item.y }, 1)).toBe(false);
+  });
+
+  it("releases actor projectiles from the visual center instead of the floor anchor", () => {
+    expect(actorProjectileOrigin(
+      { x: 100, y: 200 },
+      { x: 1, y: 0 },
+      -50,
+      40,
+      10,
+    )).toEqual({ x: 140, y: 160 });
+    expect(actorProjectileOrigin(
+      { x: 100, y: 200 },
+      { x: 0, y: -1 },
+      -50,
+      40,
+    )).toEqual({ x: 100, y: 110 });
+  });
+
   it("generates deterministic procedural weapons and exposes all archetypes", () => {
     const hiddenRoom = node(7_000, 0, 1, {
       tag: "section",
@@ -717,17 +789,43 @@ describe("deterministic room contents", () => {
     expect(MONSTER_FRAMES.scout.up.walk).toHaveLength(4);
     expect(MONSTER_FRAMES.scout.right.walk).toHaveLength(4);
     expect(MONSTER_FRAMES.scout.left.walk).toHaveLength(4);
-    expect(MONSTER_FRAMES.scout.up.walk[0]).toBe("assets/enemies/scout/walk/back/frame_01.png");
-    expect(MONSTER_FRAMES.scout.right.walk[0]).toBe("assets/enemies/scout/walk/right/frame_01.png");
-    expect(MONSTER_FRAMES.scout.left.walk[0]).toBe("assets/enemies/scout/walk/left/frame_01.png");
-    expect(MONSTER_FRAMES.scout.down.attack).toHaveLength(4);
-    expect(MONSTER_FRAMES.scout.up.attack).toEqual(MONSTER_FRAMES.scout.up.idle);
-    expect(MONSTER_FRAMES.scout.right.attack).toEqual(MONSTER_FRAMES.scout.right.idle);
-    expect(MONSTER_FRAMES.scout.left.attack).toEqual(MONSTER_FRAMES.scout.left.idle);
-    expect(MONSTER_FRAMES.sentryBallistic.down.walk).toHaveLength(1);
-    expect(MONSTER_FRAMES.sentryBallistic.up.walk).toEqual(MONSTER_FRAMES.sentryBallistic.up.idle);
-    expect(MONSTER_FRAMES.sentryBallistic.down.attack).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.up.walk![0]).toBe("assets/enemies/scout/walk/back/frame_01.png");
+    expect(MONSTER_FRAMES.scout.right.walk![0]).toBe("assets/enemies/scout/walk/right/frame_01.png");
+    expect(MONSTER_FRAMES.scout.left.walk![0]).toBe("assets/enemies/scout/walk/left/frame_01.png");
+    expect(MONSTER_FRAMES.scout.down.melee).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.up.ranged).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.right.ranged).toHaveLength(4);
+    expect(MONSTER_FRAMES.scout.left.melee).toHaveLength(4);
+    expect(MONSTER_FRAMES.sentryBallistic.down.walk).toBeUndefined();
+    expect(MONSTER_FRAMES.sentryBallistic.up.normal).toEqual([MONSTER_FRAMES.sentryBallistic.up.ranged![0]]);
+    expect(MONSTER_FRAMES.sentryBallistic.down.ranged).toHaveLength(4);
     expect(Object.values(EFFECT_FRAMES).every(frames => frames.length === 4)).toBe(true);
+  });
+
+  it("keeps destruction, collision, debris, and spawner visuals as separate concerns", () => {
+    const lowProp = {
+      ...DECORATION_DEFINITIONS.reagentRack,
+      id: "low-prop",
+      roomId: room.id,
+      x: room.x,
+      y: room.y,
+      visualVariant: 3,
+      maxHp: 2,
+      hp: 2,
+      destroyed: false,
+      dropKind: null,
+    };
+    expect(lowProp).toMatchObject({ obstacle: false, destructible: true });
+    expect(applyObstacleDamage(lowProp, 2)).toBe(true);
+    expect(lowProp.destroyed).toBe(true);
+    expect(lowProp.visual.destroyed?.length).toBeGreaterThan(0);
+    expect(DECORATION_DEFINITIONS.spawner.visual.animations?.spawn).toMatchObject({
+      eventFrame: 2,
+      holdLast: true,
+    });
+    expect(DECORATION_DEFINITIONS.spawner.visual.animations?.spawn?.frames).toHaveLength(4);
+    expect(REGULAR_MONSTER_DEFINITIONS.slow.projectileSpeed).toBeGreaterThan(0);
+    expect(REGULAR_MONSTER_DEFINITIONS.fast.projectileSpeed).toBeGreaterThan(0);
   });
 
   it("preserves dropped weapon ammo inside weapon loot payloads", () => {
@@ -853,6 +951,16 @@ describe("deterministic room contents", () => {
     expect(restoredSpawner).toMatchObject({ hp: 2, spawnedCount: 2 });
 
     const reinforcement = monsterSpecForSpawner(restoredSpawner, 10, 0);
+    expect(reinforcement).toMatchObject({
+      x: restoredSpawner.x,
+      y: restoredSpawner.y,
+      spawnSourceId: restoredSpawner.id,
+    });
+    reinforcement.attackKind = "ranged";
+    reinforcement.attackCooldownMs = 1;
+    reinforcement.lastAttackAt = 1_000;
+    expect(monsterAttackIsReady(reinforcement, 1_499)).toBe(false);
+    expect(monsterAttackIsReady(reinforcement, 1_500)).toBe(true);
     const restoredMonsters = buildMonsters(combatLayout, new Map([[
       reinforcement.id,
       {
@@ -869,12 +977,18 @@ describe("deterministic room contents", () => {
         dropKind: null,
       },
     ]]), new Set([combatRoom.id]), 10, restoredDecorations);
-    expect(restoredMonsters.find(item => item.id === reinforcement.id)).toMatchObject({
-      x: reinforcement.x + 31,
-      y: reinforcement.y - 17,
+    const restoredReinforcement = restoredMonsters.find(item => item.id === reinforcement.id)!;
+    expect(restoredReinforcement).toMatchObject({
       hp: 1,
       active: true,
     });
+    expect(monsterPositionIsClear(
+      restoredReinforcement,
+      restoredReinforcement.radius,
+      combatLayout,
+      restoredDecorations,
+      restoredReinforcement.spawnSourceId,
+    )).toBe(true);
   });
 
   it("namespaces collected loot to a specific floor instance", () => {

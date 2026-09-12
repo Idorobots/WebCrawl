@@ -1,0 +1,1310 @@
+{
+  "effects/barrel_explosion": {
+    "frames": [
+      "effects/barrel_explosion/frame_01",
+      "effects/barrel_explosion/frame_02",
+      "effects/barrel_explosion/frame_03",
+      "effects/barrel_explosion/frame_04",
+      "effects/barrel_explosion/frame_05",
+      "effects/barrel_explosion/frame_06",
+      "effects/barrel_explosion/frame_07",
+      "effects/barrel_explosion/frame_08"
+    ],
+    "fps": 12,
+    "frame_duration_ms": 83.33333333333333,
+    "loop": false
+  },
+  "effects/damage": {
+    "frames": [
+      "effects/damage/frame_01",
+      "effects/damage/frame_02",
+      "effects/damage/frame_03",
+      "effects/damage/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false
+  },
+  "effects/healing": {
+    "frames": [
+      "effects/healing/frame_01",
+      "effects/healing/frame_02",
+      "effects/healing/frame_03",
+      "effects/healing/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false
+  },
+  "effects/plant_break": {
+    "frames": [
+      "effects/plant_break/frame_01",
+      "effects/plant_break/frame_02",
+      "effects/plant_break/frame_03",
+      "effects/plant_break/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false
+  },
+  "effects/teleport": {
+    "frames": [
+      "effects/teleport/frame_01",
+      "effects/teleport/frame_02",
+      "effects/teleport/frame_03",
+      "effects/teleport/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false
+  },
+  "enemies/boss_arc/attack/melee/back": {
+    "frames": [
+      "enemies/boss_arc/attack/melee/back/frame_01",
+      "enemies/boss_arc/attack/melee/back/frame_02",
+      "enemies/boss_arc/attack/melee/back/frame_03",
+      "enemies/boss_arc/attack/melee/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_arc/attack/melee/front": {
+    "frames": [
+      "enemies/boss_arc/attack/melee/front/frame_01",
+      "enemies/boss_arc/attack/melee/front/frame_02",
+      "enemies/boss_arc/attack/melee/front/frame_03",
+      "enemies/boss_arc/attack/melee/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_arc/attack/melee/left": {
+    "frames": [
+      "enemies/boss_arc/attack/melee/left/frame_01",
+      "enemies/boss_arc/attack/melee/left/frame_02",
+      "enemies/boss_arc/attack/melee/left/frame_03",
+      "enemies/boss_arc/attack/melee/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_arc/attack/melee/right": {
+    "frames": [
+      "enemies/boss_arc/attack/melee/right/frame_01",
+      "enemies/boss_arc/attack/melee/right/frame_02",
+      "enemies/boss_arc/attack/melee/right/frame_03",
+      "enemies/boss_arc/attack/melee/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_arc/attack/shoot/back": {
+    "frames": [
+      "enemies/boss_arc/attack/shoot/back/frame_01",
+      "enemies/boss_arc/attack/shoot/back/frame_02",
+      "enemies/boss_arc/attack/shoot/back/frame_03",
+      "enemies/boss_arc/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_arc/attack/shoot/front": {
+    "frames": [
+      "enemies/boss_arc/attack/shoot/front/frame_01",
+      "enemies/boss_arc/attack/shoot/front/frame_02",
+      "enemies/boss_arc/attack/shoot/front/frame_03",
+      "enemies/boss_arc/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_arc/attack/shoot/left": {
+    "frames": [
+      "enemies/boss_arc/attack/shoot/left/frame_01",
+      "enemies/boss_arc/attack/shoot/left/frame_02",
+      "enemies/boss_arc/attack/shoot/left/frame_03",
+      "enemies/boss_arc/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_arc/attack/shoot/right": {
+    "frames": [
+      "enemies/boss_arc/attack/shoot/right/frame_01",
+      "enemies/boss_arc/attack/shoot/right/frame_02",
+      "enemies/boss_arc/attack/shoot/right/frame_03",
+      "enemies/boss_arc/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_arc/walk/back": {
+    "frames": [
+      "enemies/boss_arc/walk/back/frame_01",
+      "enemies/boss_arc/walk/back/frame_02",
+      "enemies/boss_arc/walk/back/frame_03",
+      "enemies/boss_arc/walk/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_arc/walk/front": {
+    "frames": [
+      "enemies/boss_arc/walk/front/frame_01",
+      "enemies/boss_arc/walk/front/frame_02",
+      "enemies/boss_arc/walk/front/frame_03",
+      "enemies/boss_arc/walk/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_arc/walk/left": {
+    "frames": [
+      "enemies/boss_arc/walk/left/frame_01",
+      "enemies/boss_arc/walk/left/frame_02",
+      "enemies/boss_arc/walk/left/frame_03",
+      "enemies/boss_arc/walk/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_arc/walk/right": {
+    "frames": [
+      "enemies/boss_arc/walk/right/frame_01",
+      "enemies/boss_arc/walk/right/frame_02",
+      "enemies/boss_arc/walk/right/frame_03",
+      "enemies/boss_arc/walk/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_fortress/attack/melee/back": {
+    "frames": [
+      "enemies/boss_fortress/attack/melee/back/frame_01",
+      "enemies/boss_fortress/attack/melee/back/frame_02",
+      "enemies/boss_fortress/attack/melee/back/frame_03",
+      "enemies/boss_fortress/attack/melee/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_fortress/attack/melee/front": {
+    "frames": [
+      "enemies/boss_fortress/attack/melee/front/frame_01",
+      "enemies/boss_fortress/attack/melee/front/frame_02",
+      "enemies/boss_fortress/attack/melee/front/frame_03",
+      "enemies/boss_fortress/attack/melee/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_fortress/attack/melee/left": {
+    "frames": [
+      "enemies/boss_fortress/attack/melee/left/frame_01",
+      "enemies/boss_fortress/attack/melee/left/frame_02",
+      "enemies/boss_fortress/attack/melee/left/frame_03",
+      "enemies/boss_fortress/attack/melee/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_fortress/attack/melee/right": {
+    "frames": [
+      "enemies/boss_fortress/attack/melee/right/frame_01",
+      "enemies/boss_fortress/attack/melee/right/frame_02",
+      "enemies/boss_fortress/attack/melee/right/frame_03",
+      "enemies/boss_fortress/attack/melee/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_fortress/attack/shoot/back": {
+    "frames": [
+      "enemies/boss_fortress/attack/shoot/back/frame_01",
+      "enemies/boss_fortress/attack/shoot/back/frame_02",
+      "enemies/boss_fortress/attack/shoot/back/frame_03",
+      "enemies/boss_fortress/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_fortress/attack/shoot/front": {
+    "frames": [
+      "enemies/boss_fortress/attack/shoot/front/frame_01",
+      "enemies/boss_fortress/attack/shoot/front/frame_02",
+      "enemies/boss_fortress/attack/shoot/front/frame_03",
+      "enemies/boss_fortress/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_fortress/attack/shoot/left": {
+    "frames": [
+      "enemies/boss_fortress/attack/shoot/left/frame_01",
+      "enemies/boss_fortress/attack/shoot/left/frame_02",
+      "enemies/boss_fortress/attack/shoot/left/frame_03",
+      "enemies/boss_fortress/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_fortress/attack/shoot/right": {
+    "frames": [
+      "enemies/boss_fortress/attack/shoot/right/frame_01",
+      "enemies/boss_fortress/attack/shoot/right/frame_02",
+      "enemies/boss_fortress/attack/shoot/right/frame_03",
+      "enemies/boss_fortress/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_fortress/walk/back": {
+    "frames": [
+      "enemies/boss_fortress/walk/back/frame_01",
+      "enemies/boss_fortress/walk/back/frame_02",
+      "enemies/boss_fortress/walk/back/frame_03",
+      "enemies/boss_fortress/walk/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_fortress/walk/front": {
+    "frames": [
+      "enemies/boss_fortress/walk/front/frame_01",
+      "enemies/boss_fortress/walk/front/frame_02",
+      "enemies/boss_fortress/walk/front/frame_03",
+      "enemies/boss_fortress/walk/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_fortress/walk/left": {
+    "frames": [
+      "enemies/boss_fortress/walk/left/frame_01",
+      "enemies/boss_fortress/walk/left/frame_02",
+      "enemies/boss_fortress/walk/left/frame_03",
+      "enemies/boss_fortress/walk/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_fortress/walk/right": {
+    "frames": [
+      "enemies/boss_fortress/walk/right/frame_01",
+      "enemies/boss_fortress/walk/right/frame_02",
+      "enemies/boss_fortress/walk/right/frame_03",
+      "enemies/boss_fortress/walk/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_laser/attack/melee/back": {
+    "frames": [
+      "enemies/boss_laser/attack/melee/back/frame_01",
+      "enemies/boss_laser/attack/melee/back/frame_02",
+      "enemies/boss_laser/attack/melee/back/frame_03",
+      "enemies/boss_laser/attack/melee/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_laser/attack/melee/front": {
+    "frames": [
+      "enemies/boss_laser/attack/melee/front/frame_01",
+      "enemies/boss_laser/attack/melee/front/frame_02",
+      "enemies/boss_laser/attack/melee/front/frame_03",
+      "enemies/boss_laser/attack/melee/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_laser/attack/melee/left": {
+    "frames": [
+      "enemies/boss_laser/attack/melee/left/frame_01",
+      "enemies/boss_laser/attack/melee/left/frame_02",
+      "enemies/boss_laser/attack/melee/left/frame_03",
+      "enemies/boss_laser/attack/melee/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_laser/attack/melee/right": {
+    "frames": [
+      "enemies/boss_laser/attack/melee/right/frame_01",
+      "enemies/boss_laser/attack/melee/right/frame_02",
+      "enemies/boss_laser/attack/melee/right/frame_03",
+      "enemies/boss_laser/attack/melee/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_laser/attack/shoot/back": {
+    "frames": [
+      "enemies/boss_laser/attack/shoot/back/frame_01",
+      "enemies/boss_laser/attack/shoot/back/frame_02",
+      "enemies/boss_laser/attack/shoot/back/frame_03",
+      "enemies/boss_laser/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_laser/attack/shoot/front": {
+    "frames": [
+      "enemies/boss_laser/attack/shoot/front/frame_01",
+      "enemies/boss_laser/attack/shoot/front/frame_02",
+      "enemies/boss_laser/attack/shoot/front/frame_03",
+      "enemies/boss_laser/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_laser/attack/shoot/left": {
+    "frames": [
+      "enemies/boss_laser/attack/shoot/left/frame_01",
+      "enemies/boss_laser/attack/shoot/left/frame_02",
+      "enemies/boss_laser/attack/shoot/left/frame_03",
+      "enemies/boss_laser/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_laser/attack/shoot/right": {
+    "frames": [
+      "enemies/boss_laser/attack/shoot/right/frame_01",
+      "enemies/boss_laser/attack/shoot/right/frame_02",
+      "enemies/boss_laser/attack/shoot/right/frame_03",
+      "enemies/boss_laser/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_laser/walk/back": {
+    "frames": [
+      "enemies/boss_laser/walk/back/frame_01",
+      "enemies/boss_laser/walk/back/frame_02",
+      "enemies/boss_laser/walk/back/frame_03",
+      "enemies/boss_laser/walk/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_laser/walk/front": {
+    "frames": [
+      "enemies/boss_laser/walk/front/frame_01",
+      "enemies/boss_laser/walk/front/frame_02",
+      "enemies/boss_laser/walk/front/frame_03",
+      "enemies/boss_laser/walk/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_laser/walk/left": {
+    "frames": [
+      "enemies/boss_laser/walk/left/frame_01",
+      "enemies/boss_laser/walk/left/frame_02",
+      "enemies/boss_laser/walk/left/frame_03",
+      "enemies/boss_laser/walk/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_laser/walk/right": {
+    "frames": [
+      "enemies/boss_laser/walk/right/frame_01",
+      "enemies/boss_laser/walk/right/frame_02",
+      "enemies/boss_laser/walk/right/frame_03",
+      "enemies/boss_laser/walk/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_missile/attack/melee/back": {
+    "frames": [
+      "enemies/boss_missile/attack/melee/back/frame_01",
+      "enemies/boss_missile/attack/melee/back/frame_02",
+      "enemies/boss_missile/attack/melee/back/frame_03",
+      "enemies/boss_missile/attack/melee/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_missile/attack/melee/front": {
+    "frames": [
+      "enemies/boss_missile/attack/melee/front/frame_01",
+      "enemies/boss_missile/attack/melee/front/frame_02",
+      "enemies/boss_missile/attack/melee/front/frame_03",
+      "enemies/boss_missile/attack/melee/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_missile/attack/melee/left": {
+    "frames": [
+      "enemies/boss_missile/attack/melee/left/frame_01",
+      "enemies/boss_missile/attack/melee/left/frame_02",
+      "enemies/boss_missile/attack/melee/left/frame_03",
+      "enemies/boss_missile/attack/melee/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_missile/attack/melee/right": {
+    "frames": [
+      "enemies/boss_missile/attack/melee/right/frame_01",
+      "enemies/boss_missile/attack/melee/right/frame_02",
+      "enemies/boss_missile/attack/melee/right/frame_03",
+      "enemies/boss_missile/attack/melee/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_missile/attack/shoot/back": {
+    "frames": [
+      "enemies/boss_missile/attack/shoot/back/frame_01",
+      "enemies/boss_missile/attack/shoot/back/frame_02",
+      "enemies/boss_missile/attack/shoot/back/frame_03",
+      "enemies/boss_missile/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_missile/attack/shoot/front": {
+    "frames": [
+      "enemies/boss_missile/attack/shoot/front/frame_01",
+      "enemies/boss_missile/attack/shoot/front/frame_02",
+      "enemies/boss_missile/attack/shoot/front/frame_03",
+      "enemies/boss_missile/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_missile/attack/shoot/left": {
+    "frames": [
+      "enemies/boss_missile/attack/shoot/left/frame_01",
+      "enemies/boss_missile/attack/shoot/left/frame_02",
+      "enemies/boss_missile/attack/shoot/left/frame_03",
+      "enemies/boss_missile/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_missile/attack/shoot/right": {
+    "frames": [
+      "enemies/boss_missile/attack/shoot/right/frame_01",
+      "enemies/boss_missile/attack/shoot/right/frame_02",
+      "enemies/boss_missile/attack/shoot/right/frame_03",
+      "enemies/boss_missile/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_missile/walk/back": {
+    "frames": [
+      "enemies/boss_missile/walk/back/frame_01",
+      "enemies/boss_missile/walk/back/frame_02",
+      "enemies/boss_missile/walk/back/frame_03",
+      "enemies/boss_missile/walk/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_missile/walk/front": {
+    "frames": [
+      "enemies/boss_missile/walk/front/frame_01",
+      "enemies/boss_missile/walk/front/frame_02",
+      "enemies/boss_missile/walk/front/frame_03",
+      "enemies/boss_missile/walk/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_missile/walk/left": {
+    "frames": [
+      "enemies/boss_missile/walk/left/frame_01",
+      "enemies/boss_missile/walk/left/frame_02",
+      "enemies/boss_missile/walk/left/frame_03",
+      "enemies/boss_missile/walk/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_missile/walk/right": {
+    "frames": [
+      "enemies/boss_missile/walk/right/frame_01",
+      "enemies/boss_missile/walk/right/frame_02",
+      "enemies/boss_missile/walk/right/frame_03",
+      "enemies/boss_missile/walk/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_siege/attack/melee/back": {
+    "frames": [
+      "enemies/boss_siege/attack/melee/back/frame_01",
+      "enemies/boss_siege/attack/melee/back/frame_02",
+      "enemies/boss_siege/attack/melee/back/frame_03",
+      "enemies/boss_siege/attack/melee/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_siege/attack/melee/front": {
+    "frames": [
+      "enemies/boss_siege/attack/melee/front/frame_01",
+      "enemies/boss_siege/attack/melee/front/frame_02",
+      "enemies/boss_siege/attack/melee/front/frame_03",
+      "enemies/boss_siege/attack/melee/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_siege/attack/melee/left": {
+    "frames": [
+      "enemies/boss_siege/attack/melee/left/frame_01",
+      "enemies/boss_siege/attack/melee/left/frame_02",
+      "enemies/boss_siege/attack/melee/left/frame_03",
+      "enemies/boss_siege/attack/melee/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_siege/attack/melee/right": {
+    "frames": [
+      "enemies/boss_siege/attack/melee/right/frame_01",
+      "enemies/boss_siege/attack/melee/right/frame_02",
+      "enemies/boss_siege/attack/melee/right/frame_03",
+      "enemies/boss_siege/attack/melee/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_siege/attack/shoot/back": {
+    "frames": [
+      "enemies/boss_siege/attack/shoot/back/frame_01",
+      "enemies/boss_siege/attack/shoot/back/frame_02",
+      "enemies/boss_siege/attack/shoot/back/frame_03",
+      "enemies/boss_siege/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_siege/attack/shoot/front": {
+    "frames": [
+      "enemies/boss_siege/attack/shoot/front/frame_01",
+      "enemies/boss_siege/attack/shoot/front/frame_02",
+      "enemies/boss_siege/attack/shoot/front/frame_03",
+      "enemies/boss_siege/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_siege/attack/shoot/left": {
+    "frames": [
+      "enemies/boss_siege/attack/shoot/left/frame_01",
+      "enemies/boss_siege/attack/shoot/left/frame_02",
+      "enemies/boss_siege/attack/shoot/left/frame_03",
+      "enemies/boss_siege/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_siege/attack/shoot/right": {
+    "frames": [
+      "enemies/boss_siege/attack/shoot/right/frame_01",
+      "enemies/boss_siege/attack/shoot/right/frame_02",
+      "enemies/boss_siege/attack/shoot/right/frame_03",
+      "enemies/boss_siege/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/boss_siege/walk/back": {
+    "frames": [
+      "enemies/boss_siege/walk/back/frame_01",
+      "enemies/boss_siege/walk/back/frame_02",
+      "enemies/boss_siege/walk/back/frame_03",
+      "enemies/boss_siege/walk/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_siege/walk/front": {
+    "frames": [
+      "enemies/boss_siege/walk/front/frame_01",
+      "enemies/boss_siege/walk/front/frame_02",
+      "enemies/boss_siege/walk/front/frame_03",
+      "enemies/boss_siege/walk/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_siege/walk/left": {
+    "frames": [
+      "enemies/boss_siege/walk/left/frame_01",
+      "enemies/boss_siege/walk/left/frame_02",
+      "enemies/boss_siege/walk/left/frame_03",
+      "enemies/boss_siege/walk/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/boss_siege/walk/right": {
+    "frames": [
+      "enemies/boss_siege/walk/right/frame_01",
+      "enemies/boss_siege/walk/right/frame_02",
+      "enemies/boss_siege/walk/right/frame_03",
+      "enemies/boss_siege/walk/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/heavy/attack/melee/back": {
+    "frames": [
+      "enemies/heavy/attack/melee/back/frame_01",
+      "enemies/heavy/attack/melee/back/frame_02",
+      "enemies/heavy/attack/melee/back/frame_03",
+      "enemies/heavy/attack/melee/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/heavy/attack/melee/front": {
+    "frames": [
+      "enemies/heavy/attack/melee/front/frame_01",
+      "enemies/heavy/attack/melee/front/frame_02",
+      "enemies/heavy/attack/melee/front/frame_03",
+      "enemies/heavy/attack/melee/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/heavy/attack/melee/left": {
+    "frames": [
+      "enemies/heavy/attack/melee/left/frame_01",
+      "enemies/heavy/attack/melee/left/frame_02",
+      "enemies/heavy/attack/melee/left/frame_03",
+      "enemies/heavy/attack/melee/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/heavy/attack/melee/right": {
+    "frames": [
+      "enemies/heavy/attack/melee/right/frame_01",
+      "enemies/heavy/attack/melee/right/frame_02",
+      "enemies/heavy/attack/melee/right/frame_03",
+      "enemies/heavy/attack/melee/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/heavy/attack/shoot/back": {
+    "frames": [
+      "enemies/heavy/attack/shoot/back/frame_01",
+      "enemies/heavy/attack/shoot/back/frame_02",
+      "enemies/heavy/attack/shoot/back/frame_03",
+      "enemies/heavy/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/heavy/attack/shoot/front": {
+    "frames": [
+      "enemies/heavy/attack/shoot/front/frame_01",
+      "enemies/heavy/attack/shoot/front/frame_02",
+      "enemies/heavy/attack/shoot/front/frame_03",
+      "enemies/heavy/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/heavy/attack/shoot/left": {
+    "frames": [
+      "enemies/heavy/attack/shoot/left/frame_01",
+      "enemies/heavy/attack/shoot/left/frame_02",
+      "enemies/heavy/attack/shoot/left/frame_03",
+      "enemies/heavy/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/heavy/attack/shoot/right": {
+    "frames": [
+      "enemies/heavy/attack/shoot/right/frame_01",
+      "enemies/heavy/attack/shoot/right/frame_02",
+      "enemies/heavy/attack/shoot/right/frame_03",
+      "enemies/heavy/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/heavy/walk/back": {
+    "frames": [
+      "enemies/heavy/walk/back/frame_01",
+      "enemies/heavy/walk/back/frame_02",
+      "enemies/heavy/walk/back/frame_03",
+      "enemies/heavy/walk/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/heavy/walk/front": {
+    "frames": [
+      "enemies/heavy/walk/front/frame_01",
+      "enemies/heavy/walk/front/frame_02",
+      "enemies/heavy/walk/front/frame_03",
+      "enemies/heavy/walk/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/heavy/walk/left": {
+    "frames": [
+      "enemies/heavy/walk/left/frame_01",
+      "enemies/heavy/walk/left/frame_02",
+      "enemies/heavy/walk/left/frame_03",
+      "enemies/heavy/walk/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/heavy/walk/right": {
+    "frames": [
+      "enemies/heavy/walk/right/frame_01",
+      "enemies/heavy/walk/right/frame_02",
+      "enemies/heavy/walk/right/frame_03",
+      "enemies/heavy/walk/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/scout/attack/melee/back": {
+    "frames": [
+      "enemies/scout/attack/melee/back/frame_01",
+      "enemies/scout/attack/melee/back/frame_02",
+      "enemies/scout/attack/melee/back/frame_03",
+      "enemies/scout/attack/melee/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/scout/attack/melee/front": {
+    "frames": [
+      "enemies/scout/attack/melee/front/frame_01",
+      "enemies/scout/attack/melee/front/frame_02",
+      "enemies/scout/attack/melee/front/frame_03",
+      "enemies/scout/attack/melee/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/scout/attack/melee/left": {
+    "frames": [
+      "enemies/scout/attack/melee/left/frame_01",
+      "enemies/scout/attack/melee/left/frame_02",
+      "enemies/scout/attack/melee/left/frame_03",
+      "enemies/scout/attack/melee/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/scout/attack/melee/right": {
+    "frames": [
+      "enemies/scout/attack/melee/right/frame_01",
+      "enemies/scout/attack/melee/right/frame_02",
+      "enemies/scout/attack/melee/right/frame_03",
+      "enemies/scout/attack/melee/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/scout/attack/shoot/back": {
+    "frames": [
+      "enemies/scout/attack/shoot/back/frame_01",
+      "enemies/scout/attack/shoot/back/frame_02",
+      "enemies/scout/attack/shoot/back/frame_03",
+      "enemies/scout/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/scout/attack/shoot/front": {
+    "frames": [
+      "enemies/scout/attack/shoot/front/frame_01",
+      "enemies/scout/attack/shoot/front/frame_02",
+      "enemies/scout/attack/shoot/front/frame_03",
+      "enemies/scout/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/scout/attack/shoot/left": {
+    "frames": [
+      "enemies/scout/attack/shoot/left/frame_01",
+      "enemies/scout/attack/shoot/left/frame_02",
+      "enemies/scout/attack/shoot/left/frame_03",
+      "enemies/scout/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/scout/attack/shoot/right": {
+    "frames": [
+      "enemies/scout/attack/shoot/right/frame_01",
+      "enemies/scout/attack/shoot/right/frame_02",
+      "enemies/scout/attack/shoot/right/frame_03",
+      "enemies/scout/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/scout/walk/back": {
+    "frames": [
+      "enemies/scout/walk/back/frame_01",
+      "enemies/scout/walk/back/frame_02",
+      "enemies/scout/walk/back/frame_03",
+      "enemies/scout/walk/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/scout/walk/front": {
+    "frames": [
+      "enemies/scout/walk/front/frame_01",
+      "enemies/scout/walk/front/frame_02",
+      "enemies/scout/walk/front/frame_03",
+      "enemies/scout/walk/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/scout/walk/left": {
+    "frames": [
+      "enemies/scout/walk/left/frame_01",
+      "enemies/scout/walk/left/frame_02",
+      "enemies/scout/walk/left/frame_03",
+      "enemies/scout/walk/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/scout/walk/right": {
+    "frames": [
+      "enemies/scout/walk/right/frame_01",
+      "enemies/scout/walk/right/frame_02",
+      "enemies/scout/walk/right/frame_03",
+      "enemies/scout/walk/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "enemies/sentry_ballistic/attack/shoot/back": {
+    "frames": [
+      "enemies/sentry_ballistic/attack/shoot/back/frame_01",
+      "enemies/sentry_ballistic/attack/shoot/back/frame_02",
+      "enemies/sentry_ballistic/attack/shoot/back/frame_03",
+      "enemies/sentry_ballistic/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_ballistic/attack/shoot/front": {
+    "frames": [
+      "enemies/sentry_ballistic/attack/shoot/front/frame_01",
+      "enemies/sentry_ballistic/attack/shoot/front/frame_02",
+      "enemies/sentry_ballistic/attack/shoot/front/frame_03",
+      "enemies/sentry_ballistic/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_ballistic/attack/shoot/left": {
+    "frames": [
+      "enemies/sentry_ballistic/attack/shoot/left/frame_01",
+      "enemies/sentry_ballistic/attack/shoot/left/frame_02",
+      "enemies/sentry_ballistic/attack/shoot/left/frame_03",
+      "enemies/sentry_ballistic/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_ballistic/attack/shoot/right": {
+    "frames": [
+      "enemies/sentry_ballistic/attack/shoot/right/frame_01",
+      "enemies/sentry_ballistic/attack/shoot/right/frame_02",
+      "enemies/sentry_ballistic/attack/shoot/right/frame_03",
+      "enemies/sentry_ballistic/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_energy/attack/shoot/back": {
+    "frames": [
+      "enemies/sentry_energy/attack/shoot/back/frame_01",
+      "enemies/sentry_energy/attack/shoot/back/frame_02",
+      "enemies/sentry_energy/attack/shoot/back/frame_03",
+      "enemies/sentry_energy/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_energy/attack/shoot/front": {
+    "frames": [
+      "enemies/sentry_energy/attack/shoot/front/frame_01",
+      "enemies/sentry_energy/attack/shoot/front/frame_02",
+      "enemies/sentry_energy/attack/shoot/front/frame_03",
+      "enemies/sentry_energy/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_energy/attack/shoot/left": {
+    "frames": [
+      "enemies/sentry_energy/attack/shoot/left/frame_01",
+      "enemies/sentry_energy/attack/shoot/left/frame_02",
+      "enemies/sentry_energy/attack/shoot/left/frame_03",
+      "enemies/sentry_energy/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_energy/attack/shoot/right": {
+    "frames": [
+      "enemies/sentry_energy/attack/shoot/right/frame_01",
+      "enemies/sentry_energy/attack/shoot/right/frame_02",
+      "enemies/sentry_energy/attack/shoot/right/frame_03",
+      "enemies/sentry_energy/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_twin/attack/shoot/back": {
+    "frames": [
+      "enemies/sentry_twin/attack/shoot/back/frame_01",
+      "enemies/sentry_twin/attack/shoot/back/frame_02",
+      "enemies/sentry_twin/attack/shoot/back/frame_03",
+      "enemies/sentry_twin/attack/shoot/back/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_twin/attack/shoot/front": {
+    "frames": [
+      "enemies/sentry_twin/attack/shoot/front/frame_01",
+      "enemies/sentry_twin/attack/shoot/front/frame_02",
+      "enemies/sentry_twin/attack/shoot/front/frame_03",
+      "enemies/sentry_twin/attack/shoot/front/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_twin/attack/shoot/left": {
+    "frames": [
+      "enemies/sentry_twin/attack/shoot/left/frame_01",
+      "enemies/sentry_twin/attack/shoot/left/frame_02",
+      "enemies/sentry_twin/attack/shoot/left/frame_03",
+      "enemies/sentry_twin/attack/shoot/left/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "enemies/sentry_twin/attack/shoot/right": {
+    "frames": [
+      "enemies/sentry_twin/attack/shoot/right/frame_01",
+      "enemies/sentry_twin/attack/shoot/right/frame_02",
+      "enemies/sentry_twin/attack/shoot/right/frame_03",
+      "enemies/sentry_twin/attack/shoot/right/frame_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "event_frame": 2
+  },
+  "player/walk/E": {
+    "frames": [
+      "player/walk/E/walk_E_01",
+      "player/walk/E/walk_E_02",
+      "player/walk/E/walk_E_03",
+      "player/walk/E/walk_E_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "player/walk/N": {
+    "frames": [
+      "player/walk/N/walk_N_01",
+      "player/walk/N/walk_N_02",
+      "player/walk/N/walk_N_03",
+      "player/walk/N/walk_N_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "player/walk/NE": {
+    "frames": [
+      "player/walk/NE/walk_NE_01",
+      "player/walk/NE/walk_NE_02",
+      "player/walk/NE/walk_NE_03",
+      "player/walk/NE/walk_NE_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "player/walk/NW": {
+    "frames": [
+      "player/walk/NW/walk_NW_01",
+      "player/walk/NW/walk_NW_02",
+      "player/walk/NW/walk_NW_03",
+      "player/walk/NW/walk_NW_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "player/walk/S": {
+    "frames": [
+      "player/walk/S/walk_S_01",
+      "player/walk/S/walk_S_02",
+      "player/walk/S/walk_S_03",
+      "player/walk/S/walk_S_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "player/walk/SE": {
+    "frames": [
+      "player/walk/SE/walk_SE_01",
+      "player/walk/SE/walk_SE_02",
+      "player/walk/SE/walk_SE_03",
+      "player/walk/SE/walk_SE_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "player/walk/SW": {
+    "frames": [
+      "player/walk/SW/walk_SW_01",
+      "player/walk/SW/walk_SW_02",
+      "player/walk/SW/walk_SW_03",
+      "player/walk/SW/walk_SW_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "player/walk/W": {
+    "frames": [
+      "player/walk/W/walk_W_01",
+      "player/walk/W/walk_W_02",
+      "player/walk/W/walk_W_03",
+      "player/walk/W/walk_W_04"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": true
+  },
+  "portals/down_activation": {
+    "frames": [
+      "portals/portal_down_inactive",
+      "portals/portal_down_activation_01",
+      "portals/portal_down_activation_02",
+      "portals/portal_down_active"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "hold_last": true
+  },
+  "portals/up_activation": {
+    "frames": [
+      "portals/portal_up_inactive",
+      "portals/portal_up_activation_01",
+      "portals/portal_up_activation_02",
+      "portals/portal_up_active"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "hold_last": true
+  },
+  "scenery/spawner/spawn": {
+    "frames": [
+      "scenery/spawner/dormant",
+      "scenery/spawner/charging",
+      "scenery/spawner/discharge",
+      "scenery/spawner/ready"
+    ],
+    "fps": 8,
+    "frame_duration_ms": 125,
+    "loop": false,
+    "hold_last": true,
+    "event_frame": 2
+  }
+}

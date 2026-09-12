@@ -1,23 +1,49 @@
 import {
   ASSETS,
+  BARREL_EXPLOSION_FRAMES,
+  DEBRIS_ASSETS,
   EFFECT_FRAMES,
+  EXPLOSION_FRAMES,
   MONSTER_FRAMES,
+  PLAYER_FRAMES,
   PORTAL_FRAMES,
+  SCENERY_ASSETS,
   WEAPON_ASSETS,
   world,
-  type EffectKind,
   type MonsterFrameSet,
 } from "../config";
 import type {
+  ActorVisualDefinition,
   BossKind,
   LootKind,
   MonsterAnimation,
   MonsterKind,
   MonsterVisualKind,
+  ObjectVisualDefinition,
+  PlayerDirection,
   RoomShape,
+  SpriteClip,
+  SpriteDirection,
   WeaponKind,
   WeaponPlacement,
 } from "../types";
+
+const clip = (
+  frames: readonly string[],
+  sizeScale = 1,
+  origin = { x: 0.5, y: 0.5 },
+  frameDurationMs = 100,
+  options: Pick<SpriteClip, "loop" | "holdLast" | "eventFrame"> = {},
+): SpriteClip => ({ frames, sizeScale, origin, frameDurationMs, ...options });
+
+const damageEffect = (sizeScale = 0.4): SpriteClip =>
+  clip(EFFECT_FRAMES.damage, sizeScale, { x: 0.5, y: 0.5 });
+const explosionEffect = (sizeScale = 0.8): SpriteClip =>
+  clip(EXPLOSION_FRAMES, sizeScale, { x: 0.5, y: 0.5 }, 1_000 / 12);
+const robotDebris = (sizeScale: number): readonly SpriteClip[] => [
+  clip([DEBRIS_ASSETS.robotTorso], sizeScale, { x: 0.5, y: 0.9375 }),
+  clip([DEBRIS_ASSETS.robotLimbs], sizeScale, { x: 0.5, y: 0.9375 }),
+];
 
 export const WORLD_GEOMETRY = {
   tileSize: world(128),
@@ -40,10 +66,27 @@ export const ROOM_DEFINITIONS: Record<RoomShape | "boss", { width: number; heigh
   boss: { width: world(900), height: world(650) },
 };
 
+const PLAYER_ORIGIN = { x: 0.5, y: 0.90625 };
+const PLAYER_WALK_ORIGIN = { x: 0.5, y: 0.90625 };
+const PLAYER_VISUAL: ActorVisualDefinition = {
+  directions: Object.fromEntries(
+    Object.entries(PLAYER_FRAMES).map(([direction, frames]) => [direction, {
+      normal: clip(frames.normal, 1, PLAYER_ORIGIN),
+      walk: clip(frames.walk, 1, PLAYER_WALK_ORIGIN, 125, { loop: true }),
+    }]),
+  ) as Record<PlayerDirection, ActorVisualDefinition["directions"][string]>,
+  effects: {
+    damage: clip(EFFECT_FRAMES.damage, 72 / 190),
+    healing: clip(EFFECT_FRAMES.healing, 112 / 190),
+    teleport: clip(EFFECT_FRAMES.teleport, 150 / 190),
+  },
+};
+
 export const PLAYER_SPEC = {
   radius: world(36),
   spriteSize: world(190),
-  spriteOrigin: { x: 0.5, y: 0.6875 },
+  visualCenterOffsetY: -world(38),
+  visual: PLAYER_VISUAL,
   muzzleDistance: world(21),
   speed: world(457),
   maxHp: 10,
@@ -99,12 +142,12 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<"slow" | "fast" | "sentry", Mon
     attackCooldownMs: 1_150,
     cooldownReductionPerDifficulty: 35,
     minAttackCooldownMs: 420,
-    projectileSpeed: 0,
-    projectileSpeedPerDifficulty: 0,
-    maxProjectileSpeedBonus: 0,
-    projectileRange: 0,
-    projectileRangePerDifficulty: 0,
-    maxProjectileRangeBonus: 0,
+    projectileSpeed: world(185),
+    projectileSpeedPerDifficulty: world(10),
+    maxProjectileSpeedBonus: world(120),
+    projectileRange: world(510),
+    projectileRangePerDifficulty: world(20),
+    maxProjectileRangeBonus: world(180),
   },
   fast: {
     kind: "fast",
@@ -124,12 +167,12 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<"slow" | "fast" | "sentry", Mon
     attackCooldownMs: 1_150,
     cooldownReductionPerDifficulty: 35,
     minAttackCooldownMs: 420,
-    projectileSpeed: 0,
-    projectileSpeedPerDifficulty: 0,
-    maxProjectileSpeedBonus: 0,
-    projectileRange: 0,
-    projectileRangePerDifficulty: 0,
-    maxProjectileRangeBonus: 0,
+    projectileSpeed: world(230),
+    projectileSpeedPerDifficulty: world(12),
+    maxProjectileSpeedBonus: world(145),
+    projectileRange: world(450),
+    projectileRangePerDifficulty: world(18),
+    maxProjectileRangeBonus: world(160),
   },
   sentry: {
     kind: "sentry",
@@ -166,7 +209,7 @@ export const MONSTER_SPAWN_PROFILES = {
 
 interface BossDefinition {
   kind: BossKind;
-  visualKind: MonsterVisualKind;
+  visualKinds: readonly MonsterVisualKind[];
   label: string;
   color: number;
   radius: number;
@@ -191,7 +234,7 @@ interface BossDefinition {
 export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
   "packet-storm": {
     kind: "packet-storm",
-    visualKind: "boss-arc",
+    visualKinds: ["boss-arc", "boss-laser"],
     label: "PACKET STORM",
     color: 0xd975ff,
     radius: world(64),
@@ -202,7 +245,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     speed: world(72),
     speedPerDifficulty: world(3),
     maxSpeedBonus: world(38),
-    attackRange: world(1_200),
+    attackRange: world(70),
     attackDamage: 1,
     attackDamageDifficultyDivisor: 4,
     attackCooldownMs: 1_150,
@@ -214,7 +257,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
   },
   "fork-bomb": {
     kind: "fork-bomb",
-    visualKind: "boss-missile",
+    visualKinds: ["boss-missile", "boss-siege"],
     label: "FORK BOMB",
     color: 0x55e3cf,
     radius: world(70),
@@ -225,7 +268,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     speed: world(64),
     speedPerDifficulty: world(3),
     maxSpeedBonus: world(36),
-    attackRange: world(1_000),
+    attackRange: world(76),
     attackDamage: 1,
     attackDamageDifficultyDivisor: 4,
     attackCooldownMs: 1_650,
@@ -237,7 +280,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
   },
   "heap-titan": {
     kind: "heap-titan",
-    visualKind: "boss-fortress",
+    visualKinds: ["boss-fortress"],
     label: "HEAP TITAN",
     color: 0xff8b4d,
     radius: world(78),
@@ -260,66 +303,50 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
   },
 };
 
-interface MonsterVisualDefinition {
-  frames: MonsterFrameSet;
-  displayScales: Record<"idle" | "walk" | "attack", number>;
+export interface MonsterVisualDefinition extends ActorVisualDefinition {
   contentHalfHeight: number;
-  origins: {
-    idle: { x: number; y: number };
-    walk: { x: number; y: number };
-    attack: { x: number; y: number };
+}
+
+function monsterVisual(
+  frames: MonsterFrameSet,
+  sizeScale: number,
+  origin: { x: number; y: number },
+  contentHalfHeight: number,
+  debrisScale = 0.72,
+): MonsterVisualDefinition {
+  const directions = Object.fromEntries(
+    Object.entries(frames).map(([direction, directionalFrames]) => [direction, {
+      normal: clip(directionalFrames.normal, sizeScale, origin),
+      ...(directionalFrames.walk
+        ? { walk: clip(directionalFrames.walk, sizeScale, origin, 125, { loop: true }) }
+        : {}),
+      ...(directionalFrames.melee
+        ? { melee: clip(directionalFrames.melee, sizeScale, origin, 125, { eventFrame: 2 }) }
+        : {}),
+      ...(directionalFrames.ranged
+        ? { ranged: clip(directionalFrames.ranged, sizeScale, origin, 125, { eventFrame: 2 }) }
+        : {}),
+    }]),
+  ) as Record<SpriteDirection, ActorVisualDefinition["directions"][string]>;
+  return {
+    directions,
+    effects: { damage: damageEffect(0.32), destroy: explosionEffect(0.78) },
+    destroyed: robotDebris(debrisScale),
+    contentHalfHeight,
   };
 }
 
 export const MONSTER_VISUAL_DEFINITIONS: Record<MonsterVisualKind, MonsterVisualDefinition> = {
-  scout: {
-    frames: MONSTER_FRAMES.scout,
-    displayScales: { idle: 0.5, walk: 1, attack: 0.48 },
-    contentHalfHeight: 0.2,
-    origins: { idle: { x: 0.5, y: 0.59 }, walk: { x: 0.5, y: 0.72 }, attack: { x: 0.5, y: 0.56 } },
-  },
-  heavy: {
-    frames: MONSTER_FRAMES.heavy,
-    displayScales: { idle: 0.61, walk: 1, attack: 0.64 },
-    contentHalfHeight: 0.22,
-    origins: { idle: { x: 0.5, y: 0.62 }, walk: { x: 0.5, y: 0.68 }, attack: { x: 0.5, y: 0.56 } },
-  },
-  "sentry-ballistic": {
-    frames: MONSTER_FRAMES.sentryBallistic,
-    displayScales: { idle: 1, walk: 1, attack: 1.42 },
-    contentHalfHeight: 0.44,
-    origins: { idle: { x: 0.5, y: 0.5 }, walk: { x: 0.5, y: 0.5 }, attack: { x: 0.5, y: 0.49 } },
-  },
-  "sentry-twin": {
-    frames: MONSTER_FRAMES.sentryTwin,
-    displayScales: { idle: 1, walk: 1, attack: 1.34 },
-    contentHalfHeight: 0.35,
-    origins: { idle: { x: 0.5, y: 0.6 }, walk: { x: 0.5, y: 0.6 }, attack: { x: 0.5, y: 0.48 } },
-  },
-  "sentry-energy": {
-    frames: MONSTER_FRAMES.sentryEnergy,
-    displayScales: { idle: 1, walk: 1, attack: 1.2 },
-    contentHalfHeight: 0.44,
-    origins: { idle: { x: 0.5, y: 0.5 }, walk: { x: 0.5, y: 0.5 }, attack: { x: 0.5, y: 0.47 } },
-  },
-  "boss-arc": {
-    frames: MONSTER_FRAMES.bossArc,
-    displayScales: { idle: 1, walk: 1, attack: 0.91 },
-    contentHalfHeight: 0.36,
-    origins: { idle: { x: 0.5, y: 0.55 }, walk: { x: 0.5, y: 0.55 }, attack: { x: 0.5, y: 0.59 } },
-  },
-  "boss-missile": {
-    frames: MONSTER_FRAMES.bossMissile,
-    displayScales: { idle: 1, walk: 1, attack: 0.93 },
-    contentHalfHeight: 0.38,
-    origins: { idle: { x: 0.5, y: 0.53 }, walk: { x: 0.5, y: 0.53 }, attack: { x: 0.5, y: 0.57 } },
-  },
-  "boss-fortress": {
-    frames: MONSTER_FRAMES.bossFortress,
-    displayScales: { idle: 1, walk: 1, attack: 0.97 },
-    contentHalfHeight: 0.38,
-    origins: { idle: { x: 0.5, y: 0.53 }, walk: { x: 0.5, y: 0.53 }, attack: { x: 0.5, y: 0.56 } },
-  },
+  scout: monsterVisual(MONSTER_FRAMES.scout, 1, { x: 0.5, y: 0.90625 }, 0.2),
+  heavy: monsterVisual(MONSTER_FRAMES.heavy, 1, { x: 0.5, y: 0.90625 }, 0.22),
+  "sentry-ballistic": monsterVisual(MONSTER_FRAMES.sentryBallistic, 1.42, { x: 0.5, y: 0.90625 }, 0.44),
+  "sentry-twin": monsterVisual(MONSTER_FRAMES.sentryTwin, 1.34, { x: 0.5, y: 0.90625 }, 0.35),
+  "sentry-energy": monsterVisual(MONSTER_FRAMES.sentryEnergy, 1.2, { x: 0.5, y: 0.90625 }, 0.44),
+  "boss-arc": monsterVisual(MONSTER_FRAMES.bossArc, 1, { x: 0.5, y: 0.90625 }, 0.36, 0.5),
+  "boss-missile": monsterVisual(MONSTER_FRAMES.bossMissile, 1, { x: 0.5, y: 0.90625 }, 0.38, 0.5),
+  "boss-fortress": monsterVisual(MONSTER_FRAMES.bossFortress, 1, { x: 0.5, y: 0.90625 }, 0.38, 0.45),
+  "boss-laser": monsterVisual(MONSTER_FRAMES.bossLaser, 1, { x: 0.5, y: 0.90625 }, 0.36, 0.5),
+  "boss-siege": monsterVisual(MONSTER_FRAMES.bossSiege, 1, { x: 0.5, y: 0.90625 }, 0.36, 0.5),
 };
 
 export function monsterDisplaySize(
@@ -327,19 +354,26 @@ export function monsterDisplaySize(
   visualKind: MonsterVisualKind,
   animation: MonsterAnimation,
 ): number {
-  return size * MONSTER_VISUAL_DEFINITIONS[visualKind].displayScales[animation];
+  const direction = MONSTER_VISUAL_DEFINITIONS[visualKind].directions.down!;
+  return size * (direction[animation] ?? direction.normal).sizeScale;
 }
 
 export function monsterHealthBarY(size: number, visualKind: MonsterVisualKind): number {
-  return -size * MONSTER_VISUAL_DEFINITIONS[visualKind].contentHalfHeight - world(8);
+  return monsterVisualCenterOffsetY(size, visualKind) - world(8);
+}
+
+export function monsterVisualCenterOffsetY(size: number, visualKind: MonsterVisualKind): number {
+  return -size * MONSTER_VISUAL_DEFINITIONS[visualKind].contentHalfHeight;
 }
 
 export interface DecorationDefinition {
   definitionId: string;
   kind: string;
-  asset: string;
+  visual: ObjectVisualDefinition;
+  destructible: boolean;
   obstacle: boolean;
   radius: number;
+  hitOffsetY: number;
   footprint: number;
   size: number;
   origin: { x: number; y: number };
@@ -350,28 +384,133 @@ const decoration = (
   kind: string,
   asset: string,
   size: number,
-  radius = 0,
-  footprint = 0,
-  origin = { x: 0.5, y: 0.5 },
-): DecorationDefinition => ({ definitionId: id, kind, asset, obstacle: radius > 0, radius, footprint, size, origin });
+  {
+    radius = 0,
+    footprint = 0,
+    obstacle = footprint > 0,
+    origin = { x: 0.5, y: 0.9375 },
+    hitOffsetY = -size * 0.4,
+    debris = [],
+    destroy,
+  }: {
+    radius?: number;
+    footprint?: number;
+    obstacle?: boolean;
+    origin?: { x: number; y: number };
+    hitOffsetY?: number;
+    debris?: readonly string[];
+    destroy?: SpriteClip;
+  } = {},
+): DecorationDefinition => {
+  const destructible = debris.length > 0;
+  return {
+    definitionId: id,
+    kind,
+    visual: {
+      normal: clip([asset], 1, origin),
+      destroyed: debris.map(debrisAsset => clip([debrisAsset], 1.18, { x: 0.5, y: 0.9375 })),
+      animations: destructible ? { damage: damageEffect(0.55), destroy } : undefined,
+    },
+    destructible,
+    obstacle,
+    radius,
+    hitOffsetY,
+    footprint,
+    size,
+    origin,
+  };
+};
+
+const plantDebris = [
+  DEBRIS_ASSETS.plantGreenPot,
+  DEBRIS_ASSETS.plantMagentaPot,
+  DEBRIS_ASSETS.plantDryLeaves,
+  DEBRIS_ASSETS.plantRoots,
+] as const;
+const circuitDebris = [DEBRIS_ASSETS.genericCircuit, DEBRIS_ASSETS.genericMetal] as const;
+const plantBreak = clip(EFFECT_FRAMES.plantBreak, 1.45, { x: 0.5, y: 0.5 });
+const barrelExplosion = clip(BARREL_EXPLOSION_FRAMES, 2.8, { x: 0.5, y: 0.84375 }, 1_000 / 12);
+const objectExplosion = explosionEffect(1.5);
+const sceneryOrigin = { x: 0.5, y: 0.9375 };
+const blockingScenery = (id: string, asset: string, size = world(145), radius = world(28)): DecorationDefinition =>
+  decoration(id, "machinery", asset, size, {
+    radius,
+    footprint: radius * 0.72,
+    debris: circuitDebris,
+    destroy: objectExplosion,
+  });
+const lowScenery = (id: string, asset: string, size = world(105), radius = world(24)): DecorationDefinition =>
+  decoration(id, "scenery", asset, size, {
+    radius,
+    hitOffsetY: -size * 0.25,
+    obstacle: false,
+    debris: circuitDebris,
+    destroy: objectExplosion,
+  });
 
 export const DECORATION_DEFINITIONS = {
-  plantViolet: decoration("plant-violet", "plant", ASSETS.decorPlant, world(93), world(19), world(10)),
-  plantGreen: decoration("plant-green", "plant", ASSETS.decorPlantGreen, world(93), world(19), world(10)),
-  plantMagenta: decoration("plant-magenta", "plant", ASSETS.decorPlantMagenta, world(88), world(18), world(9)),
-  plantTeal: decoration("plant-teal", "plant", ASSETS.decorPlantTeal, world(65), world(14), world(7)),
-  plantAmber: decoration("plant-amber", "plant", ASSETS.decorPlantAmber, world(65), world(14), world(7)),
-  barrelRed: decoration("barrel-red", "barrel", ASSETS.decorBarrel, world(82), world(16), world(9)),
-  barrelCoolant: decoration("barrel-coolant", "barrel", ASSETS.decorBarrelCoolant, world(82), world(16), world(9)),
-  barrelHazard: decoration("barrel-hazard", "barrel", ASSETS.decorBarrelHazard, world(82), world(16), world(9)),
-  crateCargo: decoration("crate-cargo", "crate", ASSETS.decorCrateCargo, world(70), world(14), world(10)),
-  crateArmored: decoration("crate-armored", "crate", ASSETS.decorCrateArmored, world(70), world(14), world(10)),
-  crateAmmo: decoration("crate-ammo", "crate", ASSETS.decorCrateAmmo, world(70), world(14), world(10)),
-  crateMedical: decoration("crate-medical", "crate", ASSETS.decorCrateMedical, world(70), world(14), world(10)),
-  terminal: decoration("terminal", "terminal", ASSETS.decorTerminal, world(93), world(16), world(9)),
-  spawner: decoration("monster-spawner", "monster-spawner", ASSETS.decorTerminal, world(93), world(20), world(13)),
-  debris: decoration("debris", "debris", ASSETS.decorDebris, world(76), 0, 0, { x: 0.5, y: 0.5 }),
-  pedestal: decoration("weapon-pedestal", "weapon-pedestal", ASSETS.pedestal, world(108), 0, 0, { x: 0.512, y: 0.693 }),
+  plantViolet: decoration("plant-violet", "plant", SCENERY_ASSETS.plantViolet, world(93), { radius: world(19), footprint: world(10), origin: { x: 0.5, y: 0.975 }, debris: plantDebris, destroy: plantBreak }),
+  plantGreen: decoration("plant-green", "plant", SCENERY_ASSETS.plantGreen, world(93), { radius: world(19), footprint: world(10), origin: { x: 0.5, y: 0.975 }, debris: plantDebris, destroy: plantBreak }),
+  plantMagenta: decoration("plant-magenta", "plant", SCENERY_ASSETS.plantMagenta, world(88), { radius: world(18), footprint: world(9), debris: plantDebris, destroy: plantBreak }),
+  plantTeal: decoration("plant-teal", "plant", SCENERY_ASSETS.plantTeal, world(65), { radius: world(14), footprint: world(7), origin: { x: 0.5, y: 0.941 }, debris: plantDebris, destroy: plantBreak }),
+  plantAmber: decoration("plant-amber", "plant", SCENERY_ASSETS.plantAmber, world(65), { radius: world(14), footprint: world(7), origin: { x: 0.5, y: 0.941 }, debris: plantDebris, destroy: plantBreak }),
+  barrelRed: decoration("barrel-red", "barrel", SCENERY_ASSETS.barrelRed, world(82), { radius: world(16), footprint: world(9), origin: { x: 0.5, y: 0.917 }, debris: [DEBRIS_ASSETS.barrelRedCrushed, DEBRIS_ASSETS.barrelRedShards], destroy: barrelExplosion }),
+  barrelCoolant: decoration("barrel-coolant", "barrel", SCENERY_ASSETS.barrelCoolant, world(82), { radius: world(16), footprint: world(9), origin: { x: 0.5, y: 0.917 }, debris: [DEBRIS_ASSETS.barrelCoolantRuptured], destroy: barrelExplosion }),
+  barrelHazard: decoration("barrel-hazard", "barrel", SCENERY_ASSETS.barrelHazard, world(82), { radius: world(16), footprint: world(9), origin: { x: 0.5, y: 0.917 }, debris: [DEBRIS_ASSETS.barrelHazardBands], destroy: barrelExplosion }),
+  crateCargo: decoration("crate-cargo", "crate", SCENERY_ASSETS.crateCargo, world(70), { radius: world(14), footprint: world(10), debris: [DEBRIS_ASSETS.crateCargo], destroy: objectExplosion }),
+  crateArmored: decoration("crate-armored", "crate", SCENERY_ASSETS.crateArmored, world(70), { radius: world(14), footprint: world(10), debris: [DEBRIS_ASSETS.crateArmored], destroy: objectExplosion }),
+  crateAmmo: decoration("crate-ammo", "crate", SCENERY_ASSETS.crateAmmo, world(70), { radius: world(14), footprint: world(10), debris: [DEBRIS_ASSETS.crateAmmo], destroy: objectExplosion }),
+  crateMedical: decoration("crate-medical", "crate", SCENERY_ASSETS.crateMedical, world(70), { radius: world(14), footprint: world(10), debris: [DEBRIS_ASSETS.crateMedical], destroy: objectExplosion }),
+  terminal: decoration("terminal", "terminal", SCENERY_ASSETS.terminal, world(93), { radius: world(16), footprint: world(9), origin: { x: 0.5, y: 0.967 }, debris: circuitDebris, destroy: objectExplosion }),
+  specimenTank: blockingScenery("specimen-tank", SCENERY_ASSETS.specimenTank, world(155), world(28)),
+  researchBench: blockingScenery("research-bench", SCENERY_ASSETS.researchBench, world(135), world(35)),
+  analyzer: blockingScenery("analyzer", SCENERY_ASSETS.analyzer, world(145), world(31)),
+  reagentRack: lowScenery("reagent-rack", SCENERY_ASSETS.reagentRack),
+  refrigerator: blockingScenery("refrigerator", SCENERY_ASSETS.refrigerator, world(145), world(27)),
+  roboticManipulator: blockingScenery("robotic-manipulator", SCENERY_ASSETS.roboticManipulator, world(145), world(31)),
+  pipeValve: lowScenery("pipe-valve", SCENERY_ASSETS.pipeValve, world(95)),
+  pipeElbow: lowScenery("pipe-elbow", SCENERY_ASSETS.pipeElbow, world(115)),
+  coiledCables: lowScenery("coiled-cables", SCENERY_ASSETS.coiledCables, world(90)),
+  monitorBank: blockingScenery("monitor-bank", SCENERY_ASSETS.monitorBank, world(125), world(33)),
+  serverRack: blockingScenery("server-rack", SCENERY_ASSETS.serverRack, world(145), world(26)),
+  radarDisplay: blockingScenery("radar-display", SCENERY_ASSETS.radarDisplay, world(130), world(31)),
+  operatorTerminal: blockingScenery("operator-terminal", SCENERY_ASSETS.operatorTerminal, world(140), world(31)),
+  communicationsCabinet: blockingScenery("communications-cabinet", SCENERY_ASSETS.communicationsCabinet, world(145), world(26)),
+  hologramTable: blockingScenery("hologram-table", SCENERY_ASSETS.hologramTable, world(125), world(34)),
+  conduitJunction: lowScenery("conduit-junction", SCENERY_ASSETS.conduitJunction, world(82)),
+  powerCabinet: blockingScenery("power-cabinet", SCENERY_ASSETS.powerCabinet, world(145), world(29)),
+  floorCables: lowScenery("floor-cables", SCENERY_ASSETS.floorCables, world(78)),
+  reactorPylon: blockingScenery("reactor-pylon", SCENERY_ASSETS.reactorPylon, world(165), world(32)),
+  coolantPump: blockingScenery("coolant-pump", SCENERY_ASSETS.coolantPump, world(130), world(34)),
+  energyCapacitor: blockingScenery("energy-capacitor", SCENERY_ASSETS.energyCapacitor, world(155), world(30)),
+  barricade: blockingScenery("barricade", SCENERY_ASSETS.barricade, world(105), world(36)),
+  maintenanceRack: blockingScenery("maintenance-rack", SCENERY_ASSETS.maintenanceRack, world(125), world(33)),
+  hydraulicSupport: blockingScenery("hydraulic-support", SCENERY_ASSETS.hydraulicSupport, world(150), world(31)),
+  pipeManifold: lowScenery("pipe-manifold", SCENERY_ASSETS.pipeManifold, world(95)),
+  damagedFuseCabinet: blockingScenery("damaged-fuse-cabinet", SCENERY_ASSETS.damagedFuseCabinet, world(120), world(31)),
+  cableTrunk: lowScenery("cable-trunk", SCENERY_ASSETS.cableTrunk, world(85)),
+  spawner: {
+    ...blockingScenery("monster-spawner", SCENERY_ASSETS.spawnerDormant, world(205), world(34)),
+    kind: "monster-spawner",
+    hitOffsetY: -world(40),
+    visual: {
+      normal: clip([SCENERY_ASSETS.spawnerDormant], 1, { x: 0.5, y: 0.90625 }),
+      destroyed: circuitDebris.map(asset => clip([asset], 0.68, sceneryOrigin)),
+      animations: {
+        damage: damageEffect(0.4),
+        destroy: explosionEffect(0.72),
+        spawn: clip([
+          SCENERY_ASSETS.spawnerDormant,
+          SCENERY_ASSETS.spawnerCharging,
+          SCENERY_ASSETS.spawnerDischarge,
+          SCENERY_ASSETS.spawnerReady,
+        ], 1, { x: 0.5, y: 0.90625 }, 125, { holdLast: true, eventFrame: 2 }),
+      },
+    },
+  },
+  debrisCircuit: decoration("debris-circuit", "debris", DEBRIS_ASSETS.genericCircuit, world(90), { origin: sceneryOrigin }),
+  debrisMetal: decoration("debris-metal", "debris", DEBRIS_ASSETS.genericMetal, world(90), { origin: sceneryOrigin }),
+  pedestal: decoration("weapon-pedestal", "weapon-pedestal", ASSETS.pedestal, world(108), { origin: { x: 0.5, y: 0.898 } }),
 } as const;
 
 export const OBSTACLE_DEFINITIONS: readonly DecorationDefinition[] = [
@@ -388,16 +527,121 @@ export const OBSTACLE_DEFINITIONS: readonly DecorationDefinition[] = [
   DECORATION_DEFINITIONS.crateAmmo,
   DECORATION_DEFINITIONS.crateMedical,
   DECORATION_DEFINITIONS.terminal,
+  DECORATION_DEFINITIONS.specimenTank,
+  DECORATION_DEFINITIONS.researchBench,
+  DECORATION_DEFINITIONS.analyzer,
+  DECORATION_DEFINITIONS.refrigerator,
+  DECORATION_DEFINITIONS.roboticManipulator,
+  DECORATION_DEFINITIONS.monitorBank,
+  DECORATION_DEFINITIONS.serverRack,
+  DECORATION_DEFINITIONS.radarDisplay,
+  DECORATION_DEFINITIONS.operatorTerminal,
+  DECORATION_DEFINITIONS.communicationsCabinet,
+  DECORATION_DEFINITIONS.hologramTable,
+  DECORATION_DEFINITIONS.powerCabinet,
+  DECORATION_DEFINITIONS.reactorPylon,
+  DECORATION_DEFINITIONS.coolantPump,
+  DECORATION_DEFINITIONS.energyCapacitor,
+  DECORATION_DEFINITIONS.barricade,
+  DECORATION_DEFINITIONS.maintenanceRack,
+  DECORATION_DEFINITIONS.hydraulicSupport,
+  DECORATION_DEFINITIONS.damagedFuseCabinet,
 ];
 
 export const SCENERY_DEFINITIONS: readonly DecorationDefinition[] = [
-  DECORATION_DEFINITIONS.debris,
-  { ...DECORATION_DEFINITIONS.plantViolet, definitionId: "scenery-plant-violet", obstacle: false, radius: 0, footprint: 0 },
-  { ...DECORATION_DEFINITIONS.plantGreen, definitionId: "scenery-plant-green", obstacle: false, radius: 0, footprint: 0 },
-  { ...DECORATION_DEFINITIONS.plantMagenta, definitionId: "scenery-plant-magenta", obstacle: false, radius: 0, footprint: 0 },
-  { ...DECORATION_DEFINITIONS.plantTeal, definitionId: "scenery-plant-teal", obstacle: false, radius: 0, footprint: 0 },
-  { ...DECORATION_DEFINITIONS.plantAmber, definitionId: "scenery-plant-amber", obstacle: false, radius: 0, footprint: 0 },
+  DECORATION_DEFINITIONS.debrisCircuit,
+  DECORATION_DEFINITIONS.debrisMetal,
+  DECORATION_DEFINITIONS.reagentRack,
+  DECORATION_DEFINITIONS.pipeValve,
+  DECORATION_DEFINITIONS.pipeElbow,
+  DECORATION_DEFINITIONS.coiledCables,
+  DECORATION_DEFINITIONS.conduitJunction,
+  DECORATION_DEFINITIONS.floorCables,
+  DECORATION_DEFINITIONS.pipeManifold,
+  DECORATION_DEFINITIONS.cableTrunk,
 ];
+
+export type RoomSceneryTheme = "lab" | "control" | "arena";
+
+export interface WeightedDecorationDefinition {
+  definition: DecorationDefinition;
+  weight: number;
+}
+
+export interface RoomSceneryThemeDefinition {
+  primary: readonly WeightedDecorationDefinition[];
+  accents: readonly WeightedDecorationDefinition[];
+  primaryPercent: number;
+}
+
+const weighted = (
+  definition: DecorationDefinition,
+  weight = 1,
+): WeightedDecorationDefinition => ({ definition, weight });
+
+export const ROOM_SCENERY_THEMES: Readonly<Record<RoomSceneryTheme, RoomSceneryThemeDefinition>> = {
+  lab: {
+    primaryPercent: 78,
+    primary: [
+      weighted(DECORATION_DEFINITIONS.crateMedical, 6),
+      weighted(DECORATION_DEFINITIONS.specimenTank, 2),
+      weighted(DECORATION_DEFINITIONS.researchBench, 2),
+      weighted(DECORATION_DEFINITIONS.analyzer, 2),
+      weighted(DECORATION_DEFINITIONS.refrigerator, 2),
+      weighted(DECORATION_DEFINITIONS.roboticManipulator),
+      weighted(DECORATION_DEFINITIONS.reagentRack),
+      weighted(DECORATION_DEFINITIONS.pipeValve),
+      weighted(DECORATION_DEFINITIONS.coiledCables),
+    ],
+    accents: [
+      weighted(DECORATION_DEFINITIONS.barrelCoolant, 2),
+      weighted(DECORATION_DEFINITIONS.plantGreen),
+      weighted(DECORATION_DEFINITIONS.crateCargo),
+      weighted(DECORATION_DEFINITIONS.debrisCircuit),
+    ],
+  },
+  control: {
+    primaryPercent: 78,
+    primary: [
+      weighted(DECORATION_DEFINITIONS.terminal, 3),
+      weighted(DECORATION_DEFINITIONS.monitorBank, 2),
+      weighted(DECORATION_DEFINITIONS.serverRack, 2),
+      weighted(DECORATION_DEFINITIONS.radarDisplay),
+      weighted(DECORATION_DEFINITIONS.operatorTerminal, 2),
+      weighted(DECORATION_DEFINITIONS.communicationsCabinet),
+      weighted(DECORATION_DEFINITIONS.hologramTable),
+      weighted(DECORATION_DEFINITIONS.conduitJunction),
+      weighted(DECORATION_DEFINITIONS.powerCabinet),
+      weighted(DECORATION_DEFINITIONS.floorCables),
+    ],
+    accents: [
+      weighted(DECORATION_DEFINITIONS.crateArmored, 2),
+      weighted(DECORATION_DEFINITIONS.crateAmmo, 2),
+      weighted(DECORATION_DEFINITIONS.plantViolet),
+      weighted(DECORATION_DEFINITIONS.debrisCircuit),
+    ],
+  },
+  arena: {
+    primaryPercent: 78,
+    primary: [
+      weighted(DECORATION_DEFINITIONS.reactorPylon, 2),
+      weighted(DECORATION_DEFINITIONS.coolantPump, 2),
+      weighted(DECORATION_DEFINITIONS.energyCapacitor, 2),
+      weighted(DECORATION_DEFINITIONS.barricade, 3),
+      weighted(DECORATION_DEFINITIONS.maintenanceRack),
+      weighted(DECORATION_DEFINITIONS.hydraulicSupport),
+      weighted(DECORATION_DEFINITIONS.pipeManifold),
+      weighted(DECORATION_DEFINITIONS.damagedFuseCabinet),
+      weighted(DECORATION_DEFINITIONS.cableTrunk),
+    ],
+    accents: [
+      weighted(DECORATION_DEFINITIONS.barrelHazard, 3),
+      weighted(DECORATION_DEFINITIONS.crateAmmo, 2),
+      weighted(DECORATION_DEFINITIONS.crateArmored),
+      weighted(DECORATION_DEFINITIONS.debrisMetal),
+    ],
+  },
+};
 
 export const MAX_REGULAR_MONSTER_RADIUS = Math.max(
   ...Object.values(REGULAR_MONSTER_DEFINITIONS).map(definition => definition.radius),
@@ -436,15 +680,6 @@ export const PORTAL_DEFINITION = {
   origin: { x: 0.5, y: 0.875 },
   contactOffset: { x: 0, y: -world(56) },
 } as const;
-
-export const EFFECT_DEFINITIONS: Record<EffectKind, { frames: readonly string[]; size: number; origin: { x: number; y: number } }> = {
-  damage: { frames: EFFECT_FRAMES.damage, size: world(72), origin: { x: 0.5, y: 0.5 } },
-  healing: { frames: EFFECT_FRAMES.healing, size: world(112), origin: { x: 0.5, y: 0.5 } },
-  plantBreak: { frames: EFFECT_FRAMES.plantBreak, size: world(132), origin: { x: 0.5, y: 0.5 } },
-  teleport: { frames: EFFECT_FRAMES.teleport, size: PORTAL_DEFINITION.size, origin: { x: 0.5, y: 0.5 } },
-};
-
-export const EXPLOSION_SIZE = world(118);
 
 export function weaponAsset(kind: WeaponKind): string {
   return WEAPON_VISUAL_DEFINITIONS[kind].asset;

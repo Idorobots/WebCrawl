@@ -3,12 +3,16 @@ import {
   LOOT_ASSETS,
   MAX_NODES,
   MAX_ROOMS_AFTER_COALESCE,
+  PLAYER_DEFAULT_ASSETS,
   PLAYER_FRAMES,
-  PLAYER_IDLE_ASSETS,
   world,
-  type SpriteDirection,
 } from "./config";
-import { applyObstacleDamage } from "./domain/combat";
+import {
+  actorProjectileOrigin,
+  applyObstacleDamage,
+  monsterAttackIsReady,
+  projectileHitsDecoration,
+} from "./domain/combat";
 import {
   distanceSquared,
   pointInCorridor,
@@ -34,6 +38,7 @@ import { updatePortalContacts } from "./domain/portals";
 import {
   DEFAULT_BULLET_SPEC,
   LOOT_DEFINITIONS,
+  monsterVisualCenterOffsetY,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   WEAPON_PICKUP_DEFINITIONS,
@@ -60,6 +65,7 @@ import type {
   PlayerDirection,
   Point,
   RunStats,
+  SpriteDirection,
   Stair,
   WeaponSpec,
 } from "./types";
@@ -152,7 +158,7 @@ let lastPlayerWalkFrameAt = -Infinity;
 let playerSpriteAnimationToken = 0;
 let playerMoving = false;
 let playerShooting = false;
-let currentPlayerSpriteAsset = PLAYER_IDLE_ASSETS.up;
+let currentPlayerSpriteAsset = PLAYER_DEFAULT_ASSETS.up;
 let primaryPointerDown = false;
 let pointerInViewport = false;
 let portalTransitioning = false;
@@ -599,7 +605,7 @@ function obstacleStateMapForPage(pageUrl: string): Map<string, ObstacleState> {
 }
 
 function saveObstacleState(item: Decoration): void {
-  if (!currentPageUrl || !item.obstacle) return;
+  if (!currentPageUrl || !item.destructible) return;
 
   obstacleStateMapForPage(currentPageUrl).set(item.id, {
     hp: item.hp,
@@ -623,18 +629,13 @@ function renderDecorations(): void {
   renderer.renderDecorations(currentDecorations, visitedRooms);
 }
 
-function spawnExplosion(x: number, y: number): void {
-  renderer.spawnExplosion(x, y);
-}
-
 function damageObstacle(item: Decoration, amount: number): void {
   if (!applyObstacleDamage(item, amount)) return;
 
   if (item.hp <= 0) {
     item.destroyed = true;
     saveObstacleState(item);
-    if (item.kind === "plant") renderer.spawnEffect("plantBreak", item.x, item.y);
-    else spawnExplosion(item.x, item.y);
+    renderer.spawnEffect(item.visual.animations?.destroy, item.x, item.y, item.size);
     renderDecorations();
     if (currentPageUrl) {
       const drops = createSceneryDrops([item], floorIdentity(currentPageUrl), collectedLoot);
@@ -642,7 +643,7 @@ function damageObstacle(item: Decoration, amount: number): void {
       if (drops.length) renderInteractiveObjects();
     }
   } else {
-    renderer.spawnEffect("damage", item.x, item.y);
+    renderer.spawnEffect(item.visual.animations?.damage, item.x, item.y + item.hitOffsetY, item.size);
     saveObstacleState(item);
     renderDecorations();
   }
@@ -698,7 +699,7 @@ function saveCurrentFloorState(): void {
   if (!currentPageUrl || !currentStateId) return;
   discoveredRoomsByPage.set(currentStateId, new Set(visitedRooms));
   for (const item of currentDecorations) {
-    if (item.obstacle) saveObstacleState(item);
+    if (item.destructible) saveObstacleState(item);
   }
   for (const monster of currentMonsters) saveMonsterState(monster);
 }
@@ -763,20 +764,28 @@ function updateMonsterSpawners(timestamp: number): void {
       spawner.nextSpawnAt = timestamp + (spawner.spawnIntervalMs ?? 7_000);
       continue;
     }
+    const spawnClip = spawner.visual.animations?.spawn;
+    const eventDelay = (spawnClip?.eventFrame ?? 0) * (spawnClip?.frameDurationMs ?? 0);
+    const animationStartAt = spawner.nextSpawnAt - eventDelay;
+    if (timestamp >= animationStartAt && (spawner.spawnAnimationStartedAt ?? -Infinity) < animationStartAt) {
+      spawner.spawnAnimationStartedAt = animationStartAt;
+    }
     if (timestamp < spawner.nextSpawnAt) continue;
 
     const index = spawner.spawnedCount ?? 0;
     const monster = monsterSpecForSpawner(spawner, floorNumber(), index);
     monster.hp = monster.maxHp;
     monster.active = true;
+    const sideDistance = (spawner.footprint ?? spawner.radius) + monster.radius + world(8);
     const spawnOffsets: Point[] = [
-      { x: world(64), y: 0 }, { x: -world(64), y: 0 },
-      { x: 0, y: world(64) }, { x: 0, y: -world(64) },
-      { x: world(78), y: world(78) }, { x: -world(78), y: -world(78) },
+      { x: 0, y: 0 },
+      { x: sideDistance, y: 0 }, { x: -sideDistance, y: 0 },
+      { x: 0, y: sideDistance }, { x: 0, y: -sideDistance },
+      { x: sideDistance, y: sideDistance }, { x: -sideDistance, y: -sideDistance },
     ];
     const safePosition = spawnOffsets
       .map(offset => ({ x: spawner.x + offset.x, y: spawner.y + offset.y }))
-      .find(point => isWalkable(point.x, point.y, monster.radius));
+      .find(point => monsterSpawnPositionIsClear(monster, spawner, point));
     if (!safePosition) {
       spawner.nextSpawnAt = timestamp + 1_000;
       continue;
@@ -788,9 +797,10 @@ function updateMonsterSpawners(timestamp: number): void {
     spawner.nextSpawnAt = timestamp + (spawner.spawnIntervalMs ?? 7_000);
     saveObstacleState(spawner);
     saveMonsterState(monster);
-    spawnExplosion(monster.x, monster.y);
+    renderer.spawnEffect(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
     spawned = true;
   }
+  renderer.updateDecorationAnimations(currentDecorations, timestamp);
   if (spawned) renderMonsters();
 }
 
@@ -808,7 +818,12 @@ function applyPlayerDamage(amount: number): void {
   playerHp = Math.max(0, playerHp - amount);
   hpCountEl.textContent = String(playerHp);
 
-  renderer.spawnEffect("damage", player.x, player.y);
+  renderer.spawnEffect(
+    PLAYER_SPEC.visual.effects?.damage,
+    player.x,
+    player.y + PLAYER_SPEC.visualCenterOffsetY,
+    PLAYER_SPEC.spriteSize,
+  );
 
   updateHealthUi();
 
@@ -843,7 +858,7 @@ function damageMonster(monster: Monster, amount: number): void {
   if (monster.hp <= 0) {
     monster.dead = true;
     monster.deathAnimating = true;
-    spawnExplosion(monster.x, monster.y);
+    renderer.spawnEffect(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
     runStats.kills += 1;
 
     if (isBoss(monster)) {
@@ -870,7 +885,12 @@ function damageMonster(monster: Monster, amount: number): void {
       renderMonsters();
     }, 460);
   } else {
-    renderer.spawnEffect("damage", monster.x, monster.y);
+    renderer.spawnEffect(
+      monster.visual.effects?.damage,
+      monster.x,
+      monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+      monster.size,
+    );
     saveMonsterState(monster);
     updateMonsterPositions();
   }
@@ -894,12 +914,17 @@ function queueEnemyBullet(
   } = {},
 ): void {
   const muzzleDistance = Math.max(monster.radius + radius + world(5), monster.size * 0.42);
+  const origin = actorProjectileOrigin(
+    monster,
+    direction,
+    monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+    muzzleDistance,
+  );
   bullets.push({
     id: `${monster.id}-${performance.now()}-${bullets.length}`,
     owner: "enemy",
     damage,
-    x: monster.x + direction.x * muzzleDistance,
-    y: monster.y + direction.y * muzzleDistance,
+    ...origin,
     vx: direction.x * speed,
     vy: direction.y * speed,
     traveled: 0,
@@ -912,6 +937,7 @@ function queueEnemyBullet(
 function shootEnemyBullet(monster: Monster, direction: Point): void {
   const now = performance.now();
   queueEnemyBullet(monster, direction);
+  monster.attackKind = "ranged";
   monster.lastAttackAt = now;
   renderBullets();
 }
@@ -953,6 +979,7 @@ function fireBossVolley(monster: Monster, timestamp: number): void {
     }
   }
   monster.attackSequence = sequence + 1;
+  monster.attackKind = "ranged";
   monster.lastAttackAt = timestamp;
   saveMonsterState(monster);
   renderBullets();
@@ -978,7 +1005,7 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
     minion.active = true;
     currentMonsters.push(minion);
     saveMonsterState(minion);
-    spawnExplosion(minion.x, minion.y);
+    renderer.spawnEffect(minion.visual.effects?.destroy, minion.x, minion.y, minion.size);
     added += 1;
   }
   boss.summonedCount = summonedCount + added;
@@ -1150,7 +1177,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
   if (monster.bossKind === "packet-storm") {
     if (
       playerDistance <= monster.projectileRange &&
-      timestamp - monster.lastAttackAt >= monster.attackCooldownMs
+      monsterAttackIsReady(monster, timestamp)
     ) fireBossVolley(monster, timestamp);
     return;
   }
@@ -1160,12 +1187,13 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
     if (sharesPlayerRoom && timestamp >= monster.nextSpecialAt) summonBossMinions(monster, timestamp);
     if (
       playerDistance <= monster.projectileRange &&
-      timestamp - monster.lastAttackAt >= monster.attackCooldownMs
+      monsterAttackIsReady(monster, timestamp)
     ) fireBossVolley(monster, timestamp);
     return;
   }
 
-  if (playerDistance <= monster.attackRange && timestamp - monster.lastAttackAt >= monster.attackCooldownMs) {
+  if (playerDistance <= monster.attackRange && monsterAttackIsReady(monster, timestamp)) {
+    monster.attackKind = "melee";
     monster.lastAttackAt = timestamp;
     applyPlayerDamage(monster.attackDamage);
   }
@@ -1183,6 +1211,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
     }
     monster.nextSpecialAt = timestamp + Math.max(1_800, 3_600 - floorNumber() * 90);
     monster.attackSequence = (monster.attackSequence ?? 0) + 1;
+    monster.attackKind = "ranged";
     monster.lastAttackAt = timestamp;
     saveMonsterState(monster);
     renderBullets();
@@ -1204,20 +1233,23 @@ function shootBullet(): void {
   playPlayerShootFrames();
 
   const projectiles = projectilesForWeapon(currentWeapon, playerFacing, weaponShotSequence);
-  const perpendicular = { x: -playerFacing.y, y: playerFacing.x };
   for (const [index, projectile] of projectiles.entries()) {
     const muzzleDistance = Math.max(
       PLAYER_SPEC.radius + projectile.radius + world(7),
       PLAYER_SPEC.muzzleDistance,
     );
-    const x = player.x + playerFacing.x * muzzleDistance + perpendicular.x * projectile.lateralOffset;
-    const y = player.y + playerFacing.y * muzzleDistance + perpendicular.y * projectile.lateralOffset;
+    const origin = actorProjectileOrigin(
+      player,
+      playerFacing,
+      PLAYER_SPEC.visualCenterOffsetY,
+      muzzleDistance,
+      projectile.lateralOffset,
+    );
     bullets.push({
       id: `${now}-${weaponShotSequence}-${index}`,
       owner: "player",
       damage: projectile.damage,
-      x,
-      y,
+      ...origin,
       vx: projectile.direction.x * projectile.speed,
       vy: projectile.direction.y * projectile.speed,
       traveled: 0,
@@ -1299,14 +1331,9 @@ function updateBullets(dt: number): void {
       }
 
       for (const item of currentDecorations) {
-        if (!item.obstacle || item.destroyed) continue;
+        if (!item.destructible || item.destroyed) continue;
 
-        const hitDistance = Math.hypot(
-          bullet.x - item.x,
-          bullet.y - item.y
-        );
-
-        if (hitDistance <= item.radius + bulletRadius) {
+        if (projectileHitsDecoration(item, bullet, bulletRadius)) {
           damageObstacle(item, bullet.damage);
           alive = false;
           break;
@@ -1404,12 +1431,13 @@ function gameTick(timestamp: number): void {
       const playerDistance = Math.hypot(player.x - monster.x, player.y - monster.y);
       if (
         playerDistance <= monster.projectileRange &&
-        timestamp - monster.lastAttackAt >= monster.attackCooldownMs &&
+        monsterAttackIsReady(monster, timestamp) &&
         hasLineOfSight(monster, player)
       ) {
+        const distance = Math.max(1, playerDistance);
         const direction = {
-          x: (player.x - monster.x) / playerDistance,
-          y: (player.y - monster.y) / playerDistance,
+          x: (player.x - monster.x) / distance,
+          y: (player.y - monster.y) / distance,
         };
         shootEnemyBullet(monster, direction);
       }
@@ -1432,10 +1460,21 @@ function gameTick(timestamp: number): void {
 
     if (
       playerDistance <= monster.attackRange &&
-      timestamp - monster.lastAttackAt >= monster.attackCooldownMs
+      monsterAttackIsReady(monster, timestamp)
     ) {
+      monster.attackKind = "melee";
       monster.lastAttackAt = timestamp;
       applyPlayerDamage(monster.attackDamage);
+    } else if (
+      monster.projectileSpeed > 0 &&
+      playerDistance <= monster.projectileRange &&
+      monsterAttackIsReady(monster, timestamp) &&
+      hasLineOfSight(monster, player)
+    ) {
+      shootEnemyBullet(monster, {
+        x: (player.x - monster.x) / Math.max(1, playerDistance),
+        y: (player.y - monster.y) / Math.max(1, playerDistance),
+      });
     }
   }
 
@@ -1553,7 +1592,30 @@ function isWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): boolean 
 }
 
 function isMonsterWalkable(monster: Monster, x: number, y: number): boolean {
-  return isWalkable(x, y, monster.radius);
+  if (!isGeometryWalkable(x, y, monster.radius)) return false;
+  for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
+    if (!item.obstacle || item.destroyed) continue;
+    const extent = monster.radius + (item.footprint ?? item.radius);
+    const nextDistance = Math.hypot(x - item.x, y - item.y);
+    if (nextDistance >= extent) continue;
+    if (item.id === monster.spawnSourceId) {
+      const currentDistance = Math.hypot(monster.x - item.x, monster.y - item.y);
+      if (currentDistance < extent && nextDistance >= currentDistance) continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+function monsterSpawnPositionIsClear(monster: Monster, spawner: Decoration, position: Point): boolean {
+  if (!isGeometryWalkable(position.x, position.y, monster.radius)) return false;
+  for (const item of currentDecorations) {
+    if (item.id === spawner.id || !item.obstacle || item.destroyed) continue;
+    if (Math.hypot(position.x - item.x, position.y - item.y) <
+      monster.radius + (item.footprint ?? item.radius)) return false;
+  }
+  if (Math.hypot(position.x - player.x, position.y - player.y) < monster.radius + PLAYER_SPEC.radius) return false;
+  return currentMonsters.every(item => item.dead || Math.hypot(position.x - item.x, position.y - item.y) >= monster.radius + item.radius);
 }
 
 function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
@@ -1632,7 +1694,7 @@ function checkLoot(): void {
 
         if (restored > 0) {
           playerHp += restored;
-          renderer.spawnEffect("healing", player.x, player.y);
+          renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize);
           updateHealthUi();
           setStatus(`Health pack restored 1 HP · ${currentPageUrl}`);
         }
@@ -1671,7 +1733,7 @@ function checkStairs(): boolean {
   );
   if (!stair) return false;
   portalTransitioning = true;
-  renderer.spawnEffect("teleport", player.x, player.y);
+  renderer.spawnEffect(PLAYER_SPEC.visual.effects?.teleport, player.x, player.y, PLAYER_SPEC.spriteSize);
   setTimeout(() => {
     portalTransitioning = false;
     if (stair.type === "up") goBack();
@@ -1688,7 +1750,7 @@ function playerFramesFor(
 }
 
 function playerAssetForDirection(direction: PlayerDirection = playerDirectionName()): string {
-  return PLAYER_IDLE_ASSETS[direction];
+  return PLAYER_DEFAULT_ASSETS[direction];
 }
 
 function setPlayerSpriteAsset(asset: string): void {
@@ -1720,25 +1782,7 @@ function advancePlayerWalkFrame(timestamp: number): void {
 }
 
 function playPlayerShootFrames(): void {
-  const token = ++playerSpriteAnimationToken;
-  const frameCount = playerFramesFor(playerDirectionName(), "shoot").length;
-  playerShooting = true;
-  updatePlayerAnimationClasses();
-
-  for (let index = 0; index < frameCount; index++) {
-    setTimeout(() => {
-      if (token !== playerSpriteAnimationToken) return;
-      const frames = playerFramesFor(playerDirectionName(), "shoot");
-      setPlayerSpriteAsset(frames[index % frames.length]!);
-    }, index * 55);
-  }
-
-  setTimeout(() => {
-    if (token !== playerSpriteAnimationToken) return;
-    playerShooting = false;
-    updatePlayerAnimationClasses();
-    updatePlayerFacingAsset();
-  }, frameCount * 55 + 10);
+  // The current player pack has no shooting frames, so retain the directional movement frame.
 }
 
 function playerDirectionName(): PlayerDirection {
@@ -1764,7 +1808,11 @@ function setPlayerMoving(moving: boolean, timestamp: number): void {
     playerMoving = moving;
     updatePlayerAnimationClasses();
 
-    if (!moving && !playerShooting) {
+    if (moving && !playerShooting) {
+      playerWalkFrameIndex = 0;
+      lastPlayerWalkFrameAt = timestamp;
+      updatePlayerFacingAsset();
+    } else if (!moving && !playerShooting) {
       playerWalkFrameIndex = 0;
       updatePlayerFacingAsset();
     }
