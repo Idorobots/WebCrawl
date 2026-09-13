@@ -101,6 +101,14 @@ test("starts a crawl and renders a playable floor", async ({ page }) => {
   await expect(minimap).toBeVisible();
 });
 
+test("reports the configured collision-debug state", async ({ page }) => {
+  await startGame(page);
+  await expect(page.locator("#gameCanvas")).toHaveAttribute(
+    "data-debug-hitboxes",
+    process.env.VITE_DEBUG_HITBOXES === "true" ? "true" : "false",
+  );
+});
+
 test("spawns on an enabled entry portal without immediately retriggering it", async ({ page }) => {
   await startGame(page);
   await page.locator("#urlInput").fill("https://example.com/next");

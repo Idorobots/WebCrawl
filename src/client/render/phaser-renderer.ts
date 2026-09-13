@@ -22,6 +22,7 @@ import {
   DEFAULT_BULLET_SPEC,
   LOOT_DEFINITIONS,
   monsterHealthBarY,
+  monsterVisualCenterOffsetY,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   WEAPON_PICKUP_DEFINITIONS,
@@ -48,6 +49,7 @@ const TILE_SIZE = WORLD_GEOMETRY.tileSize;
 const WALL_THICKNESS = WORLD_GEOMETRY.wallThickness;
 const HIDDEN_WORLD_ALPHA = 0.24;
 const PORTAL_FRAME_MS = 125;
+const SHOW_DEBUG_GEOMETRY = import.meta.env.VITE_DEBUG_HITBOXES === "true";
 
 interface WallTileDefinition {
   asset: string;
@@ -55,19 +57,12 @@ interface WallTileDefinition {
 }
 
 const HORIZONTAL_WALL_TILES: readonly WallTileDefinition[] = [
-  { asset: ASSETS.wallHorizontal },
   { asset: ASSETS.wallPlainHorizontal, crop: { x: 23, y: 96, width: 209, height: 64 } },
-  { asset: ASSETS.wallRibbedHorizontal },
-  { asset: ASSETS.wallDamagedHorizontal },
   { asset: ASSETS.wallBrokenHorizontal, crop: { x: 21, y: 95, width: 214, height: 66 } },
 ];
 
 const VERTICAL_WALL_TILES: readonly WallTileDefinition[] = [
-  { asset: ASSETS.wallVertical },
   { asset: ASSETS.wallPlainVertical, crop: { x: 96, y: 44, width: 64, height: 167 } },
-  { asset: ASSETS.wallRibbedVertical },
-  { asset: ASSETS.wallDamagedVertical },
-  { asset: ASSETS.wallBrokenVertical, crop: { x: 95, y: 21, width: 66, height: 214 } },
 ];
 
 function assetPaths(...sources: unknown[]): string[] {
@@ -97,6 +92,7 @@ export class PhaserRenderer {
   private roomLayers = new Map<number, Phaser.GameObjects.Container>();
   private corridorLayers = new Map<string, Phaser.GameObjects.Container>();
   private bulletsGraphics: Phaser.GameObjects.Graphics | null = null;
+  private debugGraphics: Phaser.GameObjects.Graphics | null = null;
   private decorations: Phaser.GameObjects.Container[] = [];
   private decorationSprites = new Map<string, Phaser.GameObjects.Image>();
   private objects: Phaser.GameObjects.Container[] = [];
@@ -119,6 +115,7 @@ export class PhaserRenderer {
 
   start(): void {
     if (this.game) return;
+    this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
     const renderer = this;
     class DungeonScene extends Phaser.Scene {
       constructor() {
@@ -172,6 +169,7 @@ export class PhaserRenderer {
     this.renderBullets(this.currentBullets);
     this.setPlayer(this.currentPlayer, this.currentPlayerHp, this.currentPlayerMaxHp, this.currentPlayerAsset);
     this.centerCamera(this.currentPlayer);
+    this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
   }
 
   clear(): void {
@@ -180,6 +178,7 @@ export class PhaserRenderer {
     this.background = null;
     this.destroyStaticObjects();
     this.bulletsGraphics?.clear();
+    this.debugGraphics?.clear();
     this.destroyAll(this.decorations);
     this.decorationSprites.clear();
     this.destroyAll(this.objects);
@@ -632,7 +631,7 @@ export class PhaserRenderer {
       this.decorationSprites.set(item.id, sprite);
       if (item.destructible && !item.destroyed && item.hp != item.maxHp) {
         const barWidth = Math.max(world(44), item.size * 0.62);
-        const barY = -item.size / 2 - world(8);
+        const barY = -item.size * state.clip.origin.y - world(8);
         const bg = scene.add.rectangle(-barWidth / 2, barY, barWidth, world(5), 0x071018).setOrigin(0, 0.5);
         const hp = scene.add.rectangle(
           -barWidth / 2,
@@ -645,6 +644,7 @@ export class PhaserRenderer {
       }
       this.decorations.push(container);
     }
+    this.renderDebugGeometry();
   }
 
   updateDecorationAnimations(items: readonly Decoration[], now: number): void {
@@ -870,6 +870,7 @@ export class PhaserRenderer {
       }
     }
     this.updateMonsterAssetDataset();
+    this.renderDebugGeometry();
   }
 
   updateMonsterPositions(items: readonly Monster[]): void {
@@ -889,6 +890,7 @@ export class PhaserRenderer {
       }
     }
     this.updateMonsterAssetDataset();
+    this.renderDebugGeometry();
   }
 
   private updateMonsterAssetDataset(): void {
@@ -942,6 +944,7 @@ export class PhaserRenderer {
       this.bulletsGraphics.fillStyle(color, 1);
       this.bulletsGraphics.fillCircle(bullet.x, bullet.y, bullet.radius ?? DEFAULT_BULLET_SPEC.radius);
     }
+    this.renderDebugGeometry();
   }
 
   setPlayer(position: Point, hp: number, maxHp: number, asset: string): void {
@@ -964,6 +967,39 @@ export class PhaserRenderer {
     this.player.setPosition(position.x, position.y);
     if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
     this.applyClip(this.playerSprite!, clip, PLAYER_SPEC.spriteSize, 0, asset);
+    this.renderDebugGeometry();
+  }
+
+  private renderDebugGeometry(): void {
+    if (!SHOW_DEBUG_GEOMETRY || !this.scene) return;
+    const graphics = this.debugGraphics ??= this.scene.add.graphics().setDepth(70);
+    graphics.clear();
+    graphics.lineStyle(world(1), 0x69f7de, 0.9);
+    graphics.strokeCircle(this.currentPlayer.x, this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY, PLAYER_SPEC.radius);
+    for (const monster of this.currentMonsters) {
+      if (!monster.active || monster.dead) continue;
+      graphics.lineStyle(world(1), 0xff5c77, 0.9);
+      graphics.strokeCircle(
+        monster.x,
+        monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+        monster.radius,
+      );
+    }
+    for (const item of this.currentDecorations) {
+      if (item.destroyed) continue;
+      if (item.destructible && item.radius) {
+        graphics.lineStyle(world(1), 0x8cf6ff, 0.85);
+        graphics.strokeCircle(item.x, item.y + item.hitOffsetY, item.radius);
+      }
+      if (item.obstacle && item.footprint) {
+        graphics.lineStyle(world(1), 0xffbd5d, 0.85);
+        graphics.strokeCircle(item.x, item.y, item.footprint);
+      }
+    }
+    graphics.lineStyle(world(1), 0xf8ef77, 0.9);
+    for (const bullet of this.currentBullets) {
+      graphics.strokeCircle(bullet.x, bullet.y, bullet.radius ?? DEFAULT_BULLET_SPEC.radius);
+    }
   }
 
   setPlayerAsset(asset: string): void {

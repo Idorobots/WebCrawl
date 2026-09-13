@@ -9,8 +9,10 @@ import {
 } from "../../src/client/config";
 import {
   applyObstacleDamage,
+  actorCollisionCenter,
   actorProjectileOrigin,
   monsterAttackIsReady,
+  projectileHitsCircle,
   projectileHitsDecoration,
 } from "../../src/client/domain/combat";
 import {
@@ -157,7 +159,7 @@ describe("layout and geometry", () => {
     expect(MONSTER_VISUAL_DEFINITIONS.scout.directions.down?.melee?.origin.y).toBeCloseTo(0.90625);
     expect(PLAYER_SPEC.visualCenterOffsetY).toBeLessThan(0);
     expect(monsterVisualCenterOffsetY(200, "scout")).toBe(-40);
-    expect(monsterHealthBarY(200, "scout")).toBeGreaterThan(-60);
+    expect(monsterHealthBarY(200, "scout")).toBeLessThan(-80);
     expect(DECORATION_DEFINITIONS.crateCargo.origin).toEqual({ x: 0.5, y: 0.9375 });
     expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
   });
@@ -745,6 +747,9 @@ describe("deterministic room contents", () => {
       -50,
       40,
     )).toEqual({ x: 100, y: 110 });
+    expect(actorCollisionCenter({ x: 100, y: 200 }, -50)).toEqual({ x: 100, y: 150 });
+    expect(projectileHitsCircle({ x: 100, y: 150 }, 30, { x: 100, y: 150 }, 5)).toBe(true);
+    expect(projectileHitsCircle({ x: 100, y: 150 }, 30, { x: 100, y: 200 }, 5)).toBe(false);
   });
 
   it("generates deterministic procedural weapons and exposes all archetypes", () => {

@@ -305,6 +305,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
 
 export interface MonsterVisualDefinition extends ActorVisualDefinition {
   contentHalfHeight: number;
+  healthBarHeight: number;
 }
 
 function monsterVisual(
@@ -313,6 +314,7 @@ function monsterVisual(
   origin: { x: number; y: number },
   contentHalfHeight: number,
   debrisScale = 0.72,
+  healthBarHeight = contentHalfHeight,
 ): MonsterVisualDefinition {
   const directions = Object.fromEntries(
     Object.entries(frames).map(([direction, directionalFrames]) => [direction, {
@@ -333,12 +335,13 @@ function monsterVisual(
     effects: { damage: damageEffect(0.32), destroy: explosionEffect(0.78) },
     destroyed: robotDebris(debrisScale),
     contentHalfHeight,
+    healthBarHeight,
   };
 }
 
 export const MONSTER_VISUAL_DEFINITIONS: Record<MonsterVisualKind, MonsterVisualDefinition> = {
-  scout: monsterVisual(MONSTER_FRAMES.scout, 1, { x: 0.5, y: 0.90625 }, 0.2),
-  heavy: monsterVisual(MONSTER_FRAMES.heavy, 1, { x: 0.5, y: 0.90625 }, 0.22),
+  scout: monsterVisual(MONSTER_FRAMES.scout, 1, { x: 0.5, y: 0.90625 }, 0.2, 0.72, 0.42),
+  heavy: monsterVisual(MONSTER_FRAMES.heavy, 1, { x: 0.5, y: 0.90625 }, 0.22, 0.72, 0.42),
   "sentry-ballistic": monsterVisual(MONSTER_FRAMES.sentryBallistic, 1.42, { x: 0.5, y: 0.90625 }, 0.44),
   "sentry-twin": monsterVisual(MONSTER_FRAMES.sentryTwin, 1.34, { x: 0.5, y: 0.90625 }, 0.35),
   "sentry-energy": monsterVisual(MONSTER_FRAMES.sentryEnergy, 1.2, { x: 0.5, y: 0.90625 }, 0.44),
@@ -359,7 +362,7 @@ export function monsterDisplaySize(
 }
 
 export function monsterHealthBarY(size: number, visualKind: MonsterVisualKind): number {
-  return monsterVisualCenterOffsetY(size, visualKind) - world(8);
+  return -size * MONSTER_VISUAL_DEFINITIONS[visualKind].healthBarHeight - world(8);
 }
 
 export function monsterVisualCenterOffsetY(size: number, visualKind: MonsterVisualKind): number {

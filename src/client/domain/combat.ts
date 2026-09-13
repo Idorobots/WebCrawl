@@ -18,6 +18,15 @@ export function projectileHitsDecoration(
   ) <= item.radius + projectileRadius;
 }
 
+export function projectileHitsCircle(
+  target: Point,
+  targetRadius: number,
+  projectile: Point,
+  projectileRadius: number,
+): boolean {
+  return Math.hypot(projectile.x - target.x, projectile.y - target.y) <= targetRadius + projectileRadius;
+}
+
 export function monsterAttackIsReady(monster: Monster, timestamp: number): boolean {
   const animation = monster.attackKind ?? "melee";
   const animationDuration = Math.max(0, ...Object.values(monster.visual.directions).map(direction => {
@@ -34,8 +43,13 @@ export function actorProjectileOrigin(
   muzzleDistance: number,
   lateralOffset = 0,
 ): Point {
+  const center = actorCollisionCenter(anchor, visualCenterOffsetY);
   return {
-    x: anchor.x + direction.x * muzzleDistance - direction.y * lateralOffset,
-    y: anchor.y + visualCenterOffsetY + direction.y * muzzleDistance + direction.x * lateralOffset,
+    x: center.x + direction.x * muzzleDistance - direction.y * lateralOffset,
+    y: center.y + direction.y * muzzleDistance + direction.x * lateralOffset,
   };
+}
+
+export function actorCollisionCenter(anchor: Point, visualCenterOffsetY: number): Point {
+  return { x: anchor.x, y: anchor.y + visualCenterOffsetY };
 }

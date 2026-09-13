@@ -1,5 +1,6 @@
 import { fetchHtml, normalizeUrl } from "./api/fetch-html";
 import {
+  CAMERA_SCALE,
   LOOT_ASSETS,
   MAX_NODES,
   MAX_ROOMS_AFTER_COALESCE,
@@ -8,9 +9,11 @@ import {
   world,
 } from "./config";
 import {
+  actorCollisionCenter,
   actorProjectileOrigin,
   applyObstacleDamage,
   monsterAttackIsReady,
+  projectileHitsCircle,
   projectileHitsDecoration,
 } from "./domain/combat";
 import {
@@ -934,6 +937,10 @@ function queueEnemyBullet(
   });
 }
 
+function playerCollisionCenter(): Point {
+  return actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+}
+
 function shootEnemyBullet(monster: Monster, direction: Point): void {
   const now = performance.now();
   queueEnemyBullet(monster, direction);
@@ -954,7 +961,8 @@ function rotatedDirection(direction: Point, angle: number): Point {
 function fireBossVolley(monster: Monster, timestamp: number): void {
   const sequence = monster.attackSequence ?? 0;
   const enraged = monster.hp <= monster.maxHp / 2;
-  const toPlayer = { x: player.x - monster.x, y: player.y - monster.y };
+  const target = playerCollisionCenter();
+  const toPlayer = { x: target.x - monster.x, y: target.y - monster.y };
   const playerDistance = Math.max(1, Math.hypot(toPlayer.x, toPlayer.y));
   const aimed = { x: toPlayer.x / playerDistance, y: toPlayer.y / playerDistance };
 
@@ -1303,12 +1311,12 @@ function updateBullets(dt: number): void {
       for (const monster of currentMonsters) {
         if (bullet.owner !== "player" || !monster.active || monster.dead) continue;
 
-        const hitDistance = Math.hypot(
-          bullet.x - monster.x,
-          bullet.y - monster.y
-        );
-
-        if (hitDistance <= monster.radius + bulletRadius) {
+        if (projectileHitsCircle(
+          { x: monster.x, y: monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind) },
+          monster.radius,
+          bullet,
+          bulletRadius,
+        )) {
           damageMonster(monster, bullet.damage);
           alive = false;
           break;
@@ -1318,12 +1326,7 @@ function updateBullets(dt: number): void {
       if (!alive) break;
 
       if (bullet.owner === "enemy") {
-        const playerDistance = Math.hypot(
-          bullet.x - player.x,
-          bullet.y - player.y
-        );
-
-        if (playerDistance <= PLAYER_SPEC.radius + bulletRadius) {
+        if (projectileHitsCircle(playerCollisionCenter(), PLAYER_SPEC.radius, bullet, bulletRadius)) {
           applyPlayerDamage(bullet.damage);
           alive = false;
           break;
@@ -1427,17 +1430,18 @@ function gameTick(timestamp: number): void {
     const targetRoomId = monster.roomId !== currentRoomId ? nextRoomId : currentRoomId;
 
     if (monster.kind === "sentry") {
-      monster.moveDir = cardinalDirection(player.x - monster.x, player.y - monster.y);
-      const playerDistance = Math.hypot(player.x - monster.x, player.y - monster.y);
+      const target = playerCollisionCenter();
+      monster.moveDir = cardinalDirection(target.x - monster.x, target.y - monster.y);
+      const playerDistance = Math.hypot(target.x - monster.x, target.y - monster.y);
       if (
         playerDistance <= monster.projectileRange &&
         monsterAttackIsReady(monster, timestamp) &&
-        hasLineOfSight(monster, player)
+        hasLineOfSight(monster, target)
       ) {
         const distance = Math.max(1, playerDistance);
         const direction = {
-          x: (player.x - monster.x) / distance,
-          y: (player.y - monster.y) / distance,
+          x: (target.x - monster.x) / distance,
+          y: (target.y - monster.y) / distance,
         };
         shootEnemyBullet(monster, direction);
       }
@@ -1453,10 +1457,8 @@ function gameTick(timestamp: number): void {
     updateMonsterPath(monster, targetPoint, targetRoomId, timestamp);
     moveMonsterTowards(monster, targetPoint, dt, timestamp);
 
-    const playerDistance = Math.hypot(
-      player.x - monster.x,
-      player.y - monster.y
-    );
+    const target = playerCollisionCenter();
+    const playerDistance = Math.hypot(target.x - monster.x, target.y - monster.y);
 
     if (
       playerDistance <= monster.attackRange &&
@@ -1469,11 +1471,11 @@ function gameTick(timestamp: number): void {
       monster.projectileSpeed > 0 &&
       playerDistance <= monster.projectileRange &&
       monsterAttackIsReady(monster, timestamp) &&
-      hasLineOfSight(monster, player)
+        hasLineOfSight(monster, target)
     ) {
       shootEnemyBullet(monster, {
-        x: (player.x - monster.x) / Math.max(1, playerDistance),
-        y: (player.y - monster.y) / Math.max(1, playerDistance),
+        x: (target.x - monster.x) / Math.max(1, playerDistance),
+        y: (target.y - monster.y) / Math.max(1, playerDistance),
       });
     }
   }
@@ -1979,7 +1981,8 @@ window.addEventListener("keyup", event => {
 function updatePlayerAim(clientX: number, clientY: number): void {
   const bounds = gameViewport.getBoundingClientRect();
   const dx = clientX - (bounds.left + bounds.width / 2);
-  const dy = clientY - (bounds.top + bounds.height / 2);
+  const dy = clientY - (bounds.top + bounds.height / 2) -
+    PLAYER_SPEC.visualCenterOffsetY * CAMERA_SCALE;
   const magnitude = Math.hypot(dx, dy);
   if (magnitude < 1) return;
 
