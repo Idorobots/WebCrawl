@@ -1,0 +1,248 @@
+* Redo UI to look more like the mockups
+Minimap should convey the room shapes and place icons for most important stuff found in those rooms (for instance portals/staircases).
+Add loot counters next to the HP bar.
+Remove the "level stats" panel from the UI. It's not very useful.
+The currently browsed URL should be displayed as an info box at the top, not an input box.
+
+* DONE Redo the rooms to look more like the mockups
+:LOGBOOK:
+- State "DONE"       from              [2026-09-11 Fri 12:46]
+:END:
+Ideally, rooms vary more in scenery, shape and internal layout of obstackles.
+
+* DONE Redo the sprites to look more like the mockups
+:LOGBOOK:
+- State "DONE"       from              [2026-09-11 Fri 12:46]
+:END:
+Keep the style consistent but make the game visually pleasing and closer to the mockups.
+
+* DONE Get rid of D3 and replace that with something better.
+:LOGBOOK:
+- State "DONE"       from              [2026-09-09 Wed 18:09]
+:END:
+* DONE Redo the room layout algorithm
+:LOGBOOK:
+- State "DONE"       from              [2026-09-09 Wed 18:09]
+:END:
+Should allow for more than four exists from each room.
+Should generate longer corridors in order to use more elements. Corridors can have bends and turns to accomodate the layout generation.
+Rooms should come in different sizes and shapes to accomudate the new layout generation.
+It should be possible to generate enemies & scenery in corridors as well.
+* DONE Updated movement & shooting
+:LOGBOOK:
+- State "DONE"       from              [2026-09-09 Wed 14:39]
+:END:
+WSAD or arrows for movement, cursor direction from player as the shooting direction. Smooth movement and shooting.
+* DONE Better enemy AI
+:LOGBOOK:
+- State "DONE"       from              [2026-09-09 Wed 16:38]
+:END:
+Use A* for pathfinding.
+* DONE Extra weapons with different shot patterns and ammo
+:LOGBOOK:
+- State "DONE"       from              [2026-09-09 Wed 20:10]
+:END:
+There should be different weapons available in the game with different shot speeds, shot patterns etc. By default the player should start with the default weapon but it should be possible to find different weapons as part of the loot (especially in the hidden rooms and as drops from bosses). Weapons other than the default weapon should come with a limitted ammo. Once spent, the weapon reverts to the default. Collecting loot orbs should replenish the ammo of the currently held weapon. Weapons should be procedurally generated based on room's DOM contents.
+Add at least 10 types of weapons.
+
+* DONE More monster types
+:LOGBOOK:
+- State "DONE"       from              [2026-09-09 Wed 16:40]
+:END:
+Allow enemies to shoot bullets.
+* DONE Boss monsters
+:LOGBOOK:
+- State "DONE"       from              [2026-09-09 Wed 19:26]
+:END:
+Each `script` should be a boss fight - there should be several types of bosses that have different semantics (some stationary, shooting lot's of bullets in various pattern, some spawning additional monsters, some large and slow, but having lot's of HP and dealing lot's of damage, etc.).
+
+* Crystals giving a temporary invulnerability
+* More use of HTML elements in-game.
+- Show what each room is based on the element type, etc.
+- Scripts should be boss rooms with a larger, harder oponen.
+- Use shorter text contents as signage on rooms' floor (use a modern font for the rendering).
+- Data Terminals - when a room has text contents (`p` etc) place a data-terminal in the room allowing the player to read the contents in a modal popover visible whenever the player character is over the terminal.
+
+* Procedurally generated names
+Boss, monster, item and weapon names should be procedurally generated based on the DOM contents.
+* Game sounds
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-11 Fri 23:12]
+:END:
+- Inconsistent world scale setting - some objects are not resized according to the world scale. Ideally, everything would be rescaled according to that with sizes selected so that it looks good.
+
+- Inconsistent definitions for objects - please extract static definitions for monsters, bosses, different kinds of obstackles, drops, etc and reuse those definitions where appropriate. The way it is done in `decorationSpecsForRoom` is good, it should be done like that globally. Also, make sure to make the sizes and hitbox definitions correct for all of these objects.
+
+- Map layouts are not deterministic, nor are bosses found in boss arenas. They all should be deterministically generated based on th room hash.
+
+- Enemy animations are sometimes jittery, as if the origin of the enemy is moving rapidly. Perhaps it's due to the "wiggle" fix for corners?
+
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-11 Fri 23:27]
+:END:
+- Damage and explosion effects are misaligned on the enemies and obstackles.
+- Attack animations of enemies are much larger than walk animations, please make these uniform in size. Enemies got a lot smaller, please make them 1.25 times the size.
+- Weapons are misaligned on the pedestals.
+- Hitboxes on various things seem to be misaligned.
+
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-11 Fri 23:59]
+:END:
+- Obstacles seem to take a set number of hits which is wrong. Obstackles should have HP and take damage proportional to the bullet that hits them.
+- Walls should not be walkable.
+- Player can easily get stuck on obstackles. They should be impassable, but should allow "gliding along" their surface.
+- Bosses should follow the player out of the room.
+
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-12 Sat 00:20]
+:END:
+- Health bars appear too high above the enemies.
+- Enemies sometimes are generated (or stuck) on obstackles making them unable to move.
+- Hitboxes on portals are way too low - player should be teleported when they walk onto the portal pedestal.
+
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-12 Sat 00:39]
+:END:
+- Minimap was removed when I asked to remove the tactical map. The mini map sholud be retained as a UI element (top rigth panel). There should be no map modal displayed when pressing "m".
+- Player should be placed on the portal pedestal when entering a new floor (including the very first floor). The portal should not trigger until the player exits it and then enters it again.
+- Limit the max number of portals in any room to 8.
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-13 Sun 01:52]
+:END:
+- It seems that not all frames of annimations are displayed for the player and enemies.
+- Hitboxes on scenery are way too low.
+- Each room should be themed and prefer scenery assets from the given theme. First deterministically generate the room theme, then use assets for that theme along with generic crates etc. Make the sets of themed assets configurable (so that lab can contain predominantly medical crates).
+- Some rooms are missing walls, please make sure to use the new wall sprites, but crop them correctly for their purpose.
+- Spawners don't need a pink circle around them or pink hue anymore. Monsters should appear on the center of the spawner (or to the side if already occupied).
+- Scenery items are sometimes placed in the same location. Instead, scenery should be placed next to one another.
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-13 Sun 23:36]
+:END:
+- Player bullets aim above the cursor.
+- Player hitbox is still wrong - monster bullets go straight through a stationary player.
+- Add an environment switch that enables debug display of hitboxes, footprints etc.
+- Healthbars are shown way too low now.
+* DONE Wall refactor
+:LOGBOOK:
+- State "DONE"       from              [2026-09-14 Mon 10:24]
+:END:
+I made some changes to the wall sprites. These are now tile-able. Each sprite is 256x256 pixels and there are both variants for left/right or top/bottom orientations and corners. On top of that, there are now open doors available, both left/right and top/bottom, however these sprites are 512x256, so they occupy two "segments".
+Please adjust the layout renderer to make use of these sprites as intended (bottom panels go to the bottom of the room, top panels go to the top, etc). You can change the predetermined layouts of the rooms that we currently have, let's start with rectangular rooms for now, each sized for a multiple of some segment size that will map directly to the 256x256 wall and floor tiles.
+Corridors should use the same tiling mechanism and the same wall sprites.
+We will be expanding this new system shortly, so there's absolutely no need to keep any backwards compatibility - replace the current room layout & wall building with these "lego-style" tiles.
+* Scenery Refactor
+All object visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
+
+- Each in-game scenery object should have a spec that includes various animations (idle, destroyed, other optional animations), effect animations (damage, destroy) as well as other properties (hitpoints, position, footprint, hitbox, loot, etc).
+
+- Each scenery object should have a `destructible` property that determines if the object can take damage and become destroyed.
+
+- Each scenery object should have a `blocking` property that determines if it's passable and if it blocks bullets. When true, the player and monsters can't move through this scenery object. If the scenery object is destructible, it should become passable when destroyed.
+
+- The `idle` animation should be the default animation displayed (for now, let's use the primary scenery sprite as the entire animation - 1 frame only).
+
+- Some object can have additional animations that can be triggered externally. These should be displayed whenever its needed (for instance, the enemy spawner should periodically display the animation of spawning an enemy).
+
+- When the object is destructible and takes damage, it should display the `damage` effect animation. When the object is destroyed, it should display the `destroy` effect animation.
+
+- When the object becomes destroyed, the `destroyed` animation becomes the displayed animation (for now, let's use a debris sprite as the entire animation - 1 frame only, when a scenery object can have different debris sprites, it should be selected at generation time deterministically, based on the room hash).
+
+- When a scenery object is destroyed, it no longer can be interacted with and it should display no health bar.
+
+- In addition to that, scenery should have a pre-generated loot attached to it. Upon destruction, the scenery object remains in-game, but becomes destroyed and spawns its loot at its location.
+
+It's OK if the specs are not entirely static - it's perfectly fine to have a function generating a scenery object based on the room seed.
+
+The goal is to be able to generate a room with all its scenery objects that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
+
+* Scenery semantics
+Don't show healthbars on scenery when they are full, damaged scenery should have a health bar displayed over it.
+Don't explode crates or plants, these should "break down".
+Barrels should be the only scenery item that blows up. When they do, they should deal 2 damage to all objects/enemies/players in their vicinity.
+There likelyhood of there being obstackles in corridors should be much lowered.
+
+Scenario sprites ordering should "be on top" of the characters when above the "midline" and under the characters otherwise. This can be achieved by ordering the sprites by their Y and X coordinates before displaying them. The same is true for walls.
+
+Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
+
+Broken walls and floor tiles should be used sparingly as a means to add flavour to the game.
+
+* Enemy refactor
+All enemy visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
+
+- Each in-game enemy should have a spec that includes various animations (idle, destroyed, walk, different attacks), effect animations (damage, destroy) as well as other properties (hitpoints, speed, projectileSpeed, range, position, footprint, hitbox, loot, etc).
+
+- Each enemy should be destructible, meaning they take damage and can become destroyed.
+
+- Each enemy should block the players path and also block other enemies. When the enemy becomes destroyed, it becomes passable as well.
+
+- The `idle` animations should be the default animation displayed (initially, let's go with a single-frame idle animation based on the first frames of either the walk or attack animations).
+
+- The `walk` and various attack animations should be displayed whenever the enemy is moving (walk) or attacking (matching attack animation).
+
+- When the enemy takes damage, it should display the `damage` effect animation. When the enemy is destroyed, it should display the `destroy` effect animation.
+
+- When the enemy becomes destroyed, the `destroyed` animation becomes the displayed animation (for now, let's use a debris sprite as the entire animation - 1 frame only, when an enemy can have different debris sprites, it should be selected at generation time deterministically, based on the room hash).
+
+- When an enemy is destroyed, it no longer can be interacted with and it should display no health bar.
+
+- In addition to that, enemies should have a pre-generated loot attached to them. Upon destruction, the enemy remains in-game, but becomes destroyed and spawns its loot at its location.
+
+There's no need for the `fast` property in the enemy specs. It should all be determined with the speed. Neither is there any need for `*PerDifficulty` properties, this should all be set when the enemy is generated initially.
+
+It's OK if the specs are not entirely static - it's perfectly fine to have a function generating an enemy object based on the room seed.
+
+The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
+
+* Additional scenery
+There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
+
+More scenery items & enemies now have dedicated debris sprites. Please add them to the game.
+
+There are several backgrounds now, these could be used as an alternative for the current dark "technology" background. Each URL visited should deterministically determine which background to use for those levels.
+
+* More enemy types
+Add extra enemy types: shooting walkers, spray turrets, mini-boss type larger oponents. In general, there should be these types of enemies:
+- melee slow heavy walker - high HP high damage, but slow
+- melee fast light walker - low HP, low damage, fast
+- shooting light walker - low HP, low damage, walks up to a a distance and starts shooting bullets fast
+- shooting heavy walker - high HP, high damage, walks up to a distance nad starts shooting bullets slowly
+- light sentry - low HP, low damage, stationary, shoots bullets slowly
+- heavy sentry - high HP, low damage, stationary, shoots bullets fast (double barrels)
+- scatter sentry - medium HP, medium damage, stationary, shoots bullets in a scatter pattern.
+Each one of these can come in a "miniboss" variant - it should be larger, higher damage and higher HP, but otherwise "look and feel" the same. Minibosses should be fairly rare and generated deterministically based on the room seed.
+
+* Level generator/renderer refactor
+The level regenation sholud be carried out entirely on the client side. The server component should just serve the assets and download the desired URL returning the HTML contents.
+
+The client-side generator should first traverse the returned DOM and bulid a graph of rooms and corridors, which is then laid out to form the level map. Then for each of generated room and corridor, the level generator should deterministically generate themed scenery and enemies and their loot. That generated level should be a large data structure that serves the purpose of the game state.
+
+The client-side level renderer should take the large data structure and render the level using datastructure-stored layout, scenery, enemies and loot. It is OK to limit the rendered level to just the "visible" rooms - the rooms that the player's viewport is currently showing.
+The player character should be rendered onto the level and the viewport camera should be focused on the player.
+
+* Room layout
+We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
+
+* Hidden rooms
+`display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.
+There should be no doors generated leading to these hidden rooms, only walls with a passable section (essentially a "holographic" wall), to maintain the illusion of those rooms being hidden.
+
+* Camera work
+Make the camera dynamic, "following the player on a string".
+When entering a boss arena, the viewport should zoom out to encompass the entire boss room.
+
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-14 Mon 10:58]
+:END:
+- The game runs pretty slow. Not sure why, but please ensure that it's performant.
+- Enemies still aim too high when shooting horizontally.
+- Boss footprint is displayed too low.
+- Heap Titan boss is way too easy to kill - make it shoot waves of bullets more often and from a greater distance to player.
