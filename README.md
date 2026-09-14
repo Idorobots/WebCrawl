@@ -1,6 +1,15 @@
 # WebCrawl
 
-WebCrawl turns a remote page's HTML structure into a deterministic sci-fi dungeon. Explore rooms generated from DOM elements, follow links to descend through floors, collect loot, and fight robots.
+WebCrawl turns a remote page's HTML structure into a deterministic sci-fi dungeon. Explore rooms generated from DOM elements, follow links to descend through floors, collect loot, and fight robots. The goal is to survive.
+
+The game was AI generated with some (much needed) guidance to make it playable and, well, "fun" (spoiler alert, it's still not very fun). All game assets were also AI-generated and some needed a bit of retouching. Expect weird animations and disappearing or mutating limbs.
+
+![welcome page](./img/welcome.png)
+
+![actual game](./img/we-have-a-game-at-home.png)
+
+
+AI generated README follows.
 
 ## Requirements
 
