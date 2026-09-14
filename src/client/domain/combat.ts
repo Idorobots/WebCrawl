@@ -50,6 +50,14 @@ export function actorProjectileOrigin(
   };
 }
 
+export function actorAimDirection(anchor: Point, visualCenterOffsetY: number, target: Point): Point {
+  const center = actorCollisionCenter(anchor, visualCenterOffsetY);
+  const dx = target.x - center.x;
+  const dy = target.y - center.y;
+  const distance = Math.max(1, Math.hypot(dx, dy));
+  return { x: dx / distance, y: dy / distance };
+}
+
 export function actorCollisionCenter(anchor: Point, visualCenterOffsetY: number): Point {
   return { x: anchor.x, y: anchor.y + visualCenterOffsetY };
 }

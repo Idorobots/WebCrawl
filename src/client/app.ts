@@ -9,6 +9,7 @@ import {
   world,
 } from "./config";
 import {
+  actorAimDirection,
   actorCollisionCenter,
   actorProjectileOrigin,
   applyObstacleDamage,
@@ -40,6 +41,7 @@ import { aStarPath, monsterEscapeStep } from "./domain/pathfinding";
 import { updatePortalContacts } from "./domain/portals";
 import {
   DEFAULT_BULLET_SPEC,
+  HEAP_TITAN_WAVE,
   LOOT_DEFINITIONS,
   monsterVisualCenterOffsetY,
   PLAYER_SPEC,
@@ -119,6 +121,7 @@ interface GeometryCell {
 }
 let geometryCells = new Map<string, GeometryCell>();
 let obstacleCells = new Map<string, Set<Decoration>>();
+let damageableCells = new Map<string, Set<Decoration>>();
 const discoveredRoomsByPage = new Map<string, Set<number>>();
 const monsterStatesByPage = new Map<string, Map<string, MonsterState>>();
 
@@ -962,9 +965,11 @@ function fireBossVolley(monster: Monster, timestamp: number): void {
   const sequence = monster.attackSequence ?? 0;
   const enraged = monster.hp <= monster.maxHp / 2;
   const target = playerCollisionCenter();
-  const toPlayer = { x: target.x - monster.x, y: target.y - monster.y };
-  const playerDistance = Math.max(1, Math.hypot(toPlayer.x, toPlayer.y));
-  const aimed = { x: toPlayer.x / playerDistance, y: toPlayer.y / playerDistance };
+  const aimed = actorAimDirection(
+    monster,
+    monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+    target,
+  );
 
   if (monster.bossKind === "packet-storm" && sequence % 2 === 0) {
     const count = 10 + Math.min(6, floorNumber()) + (enraged ? 4 : 0);
@@ -1171,13 +1176,12 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
     target = nextRoom;
     targetRoomId = nextRoom.id;
   }
-  if (monster.bossKind === "heap-titan" || !sharesPlayerRoom) {
+  if (monster.bossKind === "heap-titan") {
+    updateMonsterPath(monster, player, playerRoom?.id ?? null, timestamp);
+    moveMonsterTowards(monster, player, dt, timestamp);
+  } else if (!sharesPlayerRoom) {
     updateMonsterPath(monster, target, targetRoomId, timestamp);
     moveMonsterTowards(monster, target, dt, timestamp);
-  }
-  if (monster.bossKind === "heap-titan") {
-    updateMonsterPath(monster, player, monster.spawnRoomId, timestamp);
-    moveMonsterTowards(monster, player, dt, timestamp);
   }
   const playerDistance = Math.hypot(player.x - monster.x, player.y - monster.y);
   monster.moveDir = cardinalDirection(player.x - monster.x, player.y - monster.y);
@@ -1205,9 +1209,11 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
     monster.lastAttackAt = timestamp;
     applyPlayerDamage(monster.attackDamage);
   }
-  if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 2_000;
+  if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + HEAP_TITAN_WAVE.initialDelayMs;
   if (timestamp >= monster.nextSpecialAt && playerDistance <= monster.projectileRange) {
-    const count = monster.hp <= monster.maxHp / 2 ? 12 : 8;
+    const count = monster.hp <= monster.maxHp / 2
+      ? HEAP_TITAN_WAVE.enragedBulletCount
+      : HEAP_TITAN_WAVE.bulletCount;
     for (let index = 0; index < count; index += 1) {
       const angle = index / count * Math.PI * 2;
       queueEnemyBullet(monster, { x: Math.cos(angle), y: Math.sin(angle) }, {
@@ -1217,7 +1223,10 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
         style: "shockwave",
       });
     }
-    monster.nextSpecialAt = timestamp + Math.max(1_800, 3_600 - floorNumber() * 90);
+    monster.nextSpecialAt = timestamp + Math.max(
+      HEAP_TITAN_WAVE.minIntervalMs,
+      HEAP_TITAN_WAVE.baseIntervalMs - floorNumber() * HEAP_TITAN_WAVE.floorReductionMs,
+    );
     monster.attackSequence = (monster.attackSequence ?? 0) + 1;
     monster.attackKind = "ranged";
     monster.lastAttackAt = timestamp;
@@ -1308,18 +1317,20 @@ function updateBullets(dt: number): void {
         break;
       }
 
-      for (const monster of currentMonsters) {
-        if (bullet.owner !== "player" || !monster.active || monster.dead) continue;
+      if (bullet.owner === "player") {
+        for (const monster of currentMonsters) {
+          if (!monster.active || monster.dead) continue;
 
-        if (projectileHitsCircle(
-          { x: monster.x, y: monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind) },
-          monster.radius,
-          bullet,
-          bulletRadius,
-        )) {
-          damageMonster(monster, bullet.damage);
-          alive = false;
-          break;
+          if (projectileHitsCircle(
+            { x: monster.x, y: monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind) },
+            monster.radius,
+            bullet,
+            bulletRadius,
+          )) {
+            damageMonster(monster, bullet.damage);
+            alive = false;
+            break;
+          }
         }
       }
 
@@ -1333,7 +1344,7 @@ function updateBullets(dt: number): void {
         }
       }
 
-      for (const item of currentDecorations) {
+      for (const item of damageableCells.get(spatialCellKey(bullet.x, bullet.y)) ?? []) {
         if (!item.destructible || item.destroyed) continue;
 
         if (projectileHitsDecoration(item, bullet, bulletRadius)) {
@@ -1431,19 +1442,22 @@ function gameTick(timestamp: number): void {
 
     if (monster.kind === "sentry") {
       const target = playerCollisionCenter();
-      monster.moveDir = cardinalDirection(target.x - monster.x, target.y - monster.y);
-      const playerDistance = Math.hypot(target.x - monster.x, target.y - monster.y);
+      const monsterCenter = actorCollisionCenter(
+        monster,
+        monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+      );
+      monster.moveDir = cardinalDirection(target.x - monsterCenter.x, target.y - monsterCenter.y);
+      const playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
       if (
         playerDistance <= monster.projectileRange &&
         monsterAttackIsReady(monster, timestamp) &&
         hasLineOfSight(monster, target)
       ) {
-        const distance = Math.max(1, playerDistance);
-        const direction = {
-          x: (target.x - monster.x) / distance,
-          y: (target.y - monster.y) / distance,
-        };
-        shootEnemyBullet(monster, direction);
+        shootEnemyBullet(monster, actorAimDirection(
+          monster,
+          monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+          target,
+        ));
       }
       continue;
     }
@@ -1458,7 +1472,11 @@ function gameTick(timestamp: number): void {
     moveMonsterTowards(monster, targetPoint, dt, timestamp);
 
     const target = playerCollisionCenter();
-    const playerDistance = Math.hypot(target.x - monster.x, target.y - monster.y);
+    const monsterCenter = actorCollisionCenter(
+      monster,
+      monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+    );
+    const playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
 
     if (
       playerDistance <= monster.attackRange &&
@@ -1474,8 +1492,11 @@ function gameTick(timestamp: number): void {
         hasLineOfSight(monster, target)
     ) {
       shootEnemyBullet(monster, {
-        x: (target.x - monster.x) / Math.max(1, playerDistance),
-        y: (target.y - monster.y) / Math.max(1, playerDistance),
+        ...actorAimDirection(
+          monster,
+          monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+          target,
+        ),
       });
     }
   }
@@ -1515,6 +1536,7 @@ function forSpatialCells(
 function rebuildSpatialIndexes(): void {
   geometryCells = new Map();
   obstacleCells = new Map();
+  damageableCells = new Map();
   if (!currentLayout) return;
   const margin = world(48);
 
@@ -1550,13 +1572,22 @@ function rebuildSpatialIndexes(): void {
     }
   }
   for (const item of currentDecorations) {
-    if (!item.obstacle) continue;
-    const extent = item.radius + margin;
-    forSpatialCells(item.x - extent, item.x + extent, item.y - extent, item.y + extent, key => {
-      const cell = obstacleCells.get(key) ?? new Set();
-      cell.add(item);
-      obstacleCells.set(key, cell);
-    });
+    if (item.obstacle) {
+      const extent = item.radius + margin;
+      forSpatialCells(item.x - extent, item.x + extent, item.y - extent, item.y + extent, key => {
+        const cell = obstacleCells.get(key) ?? new Set();
+        cell.add(item);
+        obstacleCells.set(key, cell);
+      });
+    }
+    if (item.destructible) {
+      const extent = item.radius + world(24);
+      forSpatialCells(item.x - extent, item.x + extent, item.y - extent, item.y + extent, key => {
+        const cell = damageableCells.get(key) ?? new Set();
+        cell.add(item);
+        damageableCells.set(key, cell);
+      });
+    }
   }
 }
 

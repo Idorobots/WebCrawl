@@ -91,11 +91,11 @@ export class PhaserRenderer {
   private currentPlayerHp = 10;
   private currentPlayerMaxHp = 10;
   private currentPlayerAsset: string = PLAYER_DEFAULT_ASSETS.right;
-  private currentDecorations: Decoration[] = [];
-  private currentStairs: Stair[] = [];
-  private currentLoot: LootItem[] = [];
-  private currentMonsters: Monster[] = [];
-  private currentBullets: Bullet[] = [];
+  private currentDecorations: readonly Decoration[] = [];
+  private currentStairs: readonly Stair[] = [];
+  private currentLoot: readonly LootItem[] = [];
+  private currentMonsters: readonly Monster[] = [];
+  private currentBullets: readonly Bullet[] = [];
   private currentLootAssets: Partial<Record<LootKind, string>> = {};
 
   constructor(private readonly host: HTMLElement) {}
@@ -495,9 +495,16 @@ export class PhaserRenderer {
   ): void {
     const asset = assetOverride ?? this.clipAsset(clip, elapsedMs);
     const key = textureKey(asset);
-    if (this.scene?.textures.exists(key) && sprite.texture.key !== key) sprite.setTexture(key);
+    const textureChanged = this.scene?.textures.exists(key) && sprite.texture.key !== key;
+    if (textureChanged) sprite.setTexture(key);
     const height = baseSize * clip.sizeScale;
-    sprite.setDisplaySize(height * sprite.width / sprite.height, height).setOrigin(clip.origin.x, clip.origin.y);
+    const width = height * sprite.width / sprite.height;
+    if (textureChanged || sprite.displayWidth !== width || sprite.displayHeight !== height) {
+      sprite.setDisplaySize(width, height);
+    }
+    if (sprite.originX !== clip.origin.x || sprite.originY !== clip.origin.y) {
+      sprite.setOrigin(clip.origin.x, clip.origin.y);
+    }
   }
 
   private decorationClip(item: Decoration, now: number): { clip: SpriteClip; elapsed: number } {
@@ -513,7 +520,7 @@ export class PhaserRenderer {
   }
 
   renderDecorations(items: readonly Decoration[], visited: ReadonlySet<number>): void {
-    this.currentDecorations = items.map(item => ({ ...item }));
+    this.currentDecorations = items;
     this.host.dataset.activeSpawners = String(items.filter(item =>
       item.spawner && !item.destroyed && visited.has(item.roomId)
     ).length);
@@ -551,6 +558,7 @@ export class PhaserRenderer {
 
   updateDecorationAnimations(items: readonly Decoration[], now: number): void {
     for (const item of items) {
+      if (item.spawnAnimationStartedAt === undefined) continue;
       const sprite = this.decorationSprites.get(item.id);
       if (!sprite) continue;
       const state = this.decorationClip(item, now);
@@ -564,8 +572,8 @@ export class PhaserRenderer {
     visited: ReadonlySet<number>,
     lootAssets: Partial<Record<LootKind, string>>,
   ): void {
-    this.currentStairs = stairs.map(item => ({ ...item }));
-    this.currentLoot = loot.map(item => ({ ...item }));
+    this.currentStairs = stairs;
+    this.currentLoot = loot;
     this.currentLootAssets = lootAssets;
     const visibleItems = loot.filter(item => visited.has(item.roomId));
     const byDistance = (left: LootItem, right: LootItem): number =>
@@ -686,7 +694,7 @@ export class PhaserRenderer {
   }
 
   renderMonsters(items: readonly Monster[]): void {
-    this.currentMonsters = items.map(item => ({ ...item }));
+    this.currentMonsters = items;
     this.host.dataset.activeMonsters = String(items.filter(item => item.active && !item.dead).length);
     this.host.dataset.activeBosses = String(items.filter(item => item.active && item.bossKind && !item.dead).length);
     const activeBoss = items.find(item => item.active && item.bossKind && !item.dead);
@@ -744,7 +752,13 @@ export class PhaserRenderer {
         const children: Phaser.GameObjects.GameObject[] = [sprite];
         if (item.bossKind && !item.dead) {
           const color = BOSS_DEFINITIONS[item.bossKind].color;
-          children.unshift(scene.add.circle(0, 0, item.radius + world(11), color, 0.16)
+          children.unshift(scene.add.circle(
+            0,
+            monsterVisualCenterOffsetY(item.size, item.visualKind),
+            item.radius + world(11),
+            color,
+            0.16,
+          )
             .setStrokeStyle(world(3), color, 0.8));
         }
         if (!item.dead) {
@@ -776,31 +790,35 @@ export class PhaserRenderer {
   }
 
   updateMonsterPositions(items: readonly Monster[]): void {
+    let assetChanged = false;
+    const now = performance.now();
     for (const item of items) {
       const container = this.monsters.get(item.id);
       if (!container) continue;
       container.setPosition(item.x, item.y);
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
-      this.applyMonsterFrame(sprite, item, performance.now());
+      const previousAsset = sprite.texture.key;
+      this.applyMonsterFrame(sprite, item, now);
+      assetChanged ||= previousAsset !== sprite.texture.key;
       const hp = container.getByName("hp") as Phaser.GameObjects.Rectangle | null;
       if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
       if (item.bossKind && item.active && !item.dead) {
-        this.host.dataset.activeBossX = String(Math.round(item.x));
-        this.host.dataset.activeBossY = String(Math.round(item.y));
-        this.host.dataset.activeBossDisplayWidth = String(sprite.displayWidth);
-        this.host.dataset.activeBossDisplayHeight = String(sprite.displayHeight);
+        this.setHostData("activeBossX", String(Math.round(item.x)));
+        this.setHostData("activeBossY", String(Math.round(item.y)));
+        this.setHostData("activeBossDisplayWidth", String(sprite.displayWidth));
+        this.setHostData("activeBossDisplayHeight", String(sprite.displayHeight));
       }
     }
-    this.updateMonsterAssetDataset();
+    if (assetChanged) this.updateMonsterAssetDataset();
     this.renderDebugGeometry();
   }
 
   private updateMonsterAssetDataset(): void {
-    this.host.dataset.renderedMonsters = String(this.monsters.size);
-    this.host.dataset.monsterAssets = [...this.monsters.values()].flatMap(container => {
+    this.setHostData("renderedMonsters", String(this.monsters.size));
+    this.setHostData("monsterAssets", [...this.monsters.values()].flatMap(container => {
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image | null;
       return sprite ? [sprite.texture.key.replace(/^asset:/, "")] : [];
-    }).join(",");
+    }).join(","));
   }
 
   private applyMonsterFrame(sprite: Phaser.GameObjects.Image, item: Monster, now: number): void {
@@ -828,8 +846,8 @@ export class PhaserRenderer {
   }
 
   renderBullets(items: readonly Bullet[]): void {
-    this.currentBullets = items.map(item => ({ ...item }));
-    this.host.dataset.bullets = String(items.length);
+    this.currentBullets = items;
+    this.setHostData("bullets", String(items.length));
     if (!this.scene) return;
     this.bulletsGraphics ??= this.scene.add.graphics().setDepth(40);
     this.bulletsGraphics.clear();
@@ -850,13 +868,14 @@ export class PhaserRenderer {
   }
 
   setPlayer(position: Point, hp: number, maxHp: number, asset: string): void {
-    this.currentPlayer = { ...position };
+    this.currentPlayer.x = position.x;
+    this.currentPlayer.y = position.y;
     this.currentPlayerHp = hp;
     this.currentPlayerMaxHp = maxHp;
     this.currentPlayerAsset = asset;
-    this.host.dataset.playerAsset = asset;
-    this.host.dataset.playerX = String(Math.round(position.x));
-    this.host.dataset.playerY = String(Math.round(position.y));
+    this.setHostData("playerAsset", asset);
+    this.setHostData("playerX", String(Math.round(position.x)));
+    this.setHostData("playerY", String(Math.round(position.y)));
     const scene = this.scene;
     if (!scene) return;
     const clip = this.playerClipForAsset(asset);
@@ -906,11 +925,15 @@ export class PhaserRenderer {
 
   setPlayerAsset(asset: string): void {
     this.currentPlayerAsset = asset;
-    this.host.dataset.playerAsset = asset;
+    this.setHostData("playerAsset", asset);
     if (this.playerSprite && this.scene?.textures.exists(textureKey(asset))) {
       this.playerSprite.setTexture(textureKey(asset));
       this.applyClip(this.playerSprite, this.playerClipForAsset(asset), PLAYER_SPEC.spriteSize, 0, asset);
     }
+  }
+
+  private setHostData(key: string, value: string): void {
+    if (this.host.dataset[key] !== value) this.host.dataset[key] = value;
   }
 
   private playerClipForAsset(asset: string): SpriteClip {
@@ -943,7 +966,8 @@ export class PhaserRenderer {
   }
 
   centerCamera(position: Point): void {
-    this.currentPlayer = { ...position };
+    this.currentPlayer.x = position.x;
+    this.currentPlayer.y = position.y;
     this.scene?.cameras.main.centerOn(position.x, position.y);
   }
 

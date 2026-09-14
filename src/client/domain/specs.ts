@@ -290,9 +290,9 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     color: 0xff8b4d,
     radius: world(78),
     size: world(393.75),
-    baseHp: 92,
-    hpPerDifficulty: 14,
-    hpVariance: 22,
+    baseHp: 160,
+    hpPerDifficulty: 20,
+    hpVariance: 30,
     speed: world(48),
     speedPerDifficulty: world(4),
     maxSpeedBonus: world(52),
@@ -302,11 +302,20 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     attackCooldownMs: 1_250,
     cooldownReductionPerDifficulty: 35,
     minAttackCooldownMs: 650,
-    projectileSpeed: world(155),
-    projectileSpeedPerDifficulty: world(8),
-    projectileRange: world(230),
+    projectileSpeed: world(210),
+    projectileSpeedPerDifficulty: world(10),
+    projectileRange: world(780),
   },
 };
+
+export const HEAP_TITAN_WAVE = {
+  initialDelayMs: 1_200,
+  baseIntervalMs: 2_200,
+  floorReductionMs: 60,
+  minIntervalMs: 1_000,
+  bulletCount: 12,
+  enragedBulletCount: 18,
+} as const;
 
 export interface MonsterVisualDefinition extends ActorVisualDefinition {
   contentHalfHeight: number;

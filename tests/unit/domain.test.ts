@@ -10,6 +10,7 @@ import {
 } from "../../src/client/config";
 import {
   applyObstacleDamage,
+  actorAimDirection,
   actorCollisionCenter,
   actorProjectileOrigin,
   monsterAttackIsReady,
@@ -52,6 +53,7 @@ import { aStarPath, monsterEscapeStep, revealedRoomPath } from "../../src/client
 import { updatePortalContacts } from "../../src/client/domain/portals";
 import {
   DECORATION_DEFINITIONS,
+  HEAP_TITAN_WAVE,
   MAX_REGULAR_MONSTER_RADIUS,
   MONSTER_VISUAL_DEFINITIONS,
   monsterHealthBarY,
@@ -666,6 +668,14 @@ describe("deterministic room contents", () => {
     expect(earlyLoot.some(item => item.kind === "core")).toBe(true);
     expect(new Set(earlyLoot.map(item => item.id)).size).toBe(earlyLoot.length);
 
+    const heapTitan = bossSpecForRoom(arena, 1, "heap-titan");
+    expect(heapTitan.maxHp).toBeGreaterThan(150);
+    expect(heapTitan.projectileRange).toBeGreaterThanOrEqual(world(780));
+    expect(HEAP_TITAN_WAVE.initialDelayMs).toBeLessThan(2_000);
+    expect(HEAP_TITAN_WAVE.baseIntervalMs).toBeLessThan(3_000);
+    expect(HEAP_TITAN_WAVE.bulletCount).toBeGreaterThanOrEqual(12);
+    expect(HEAP_TITAN_WAVE.enragedBulletCount).toBeGreaterThan(HEAP_TITAN_WAVE.bulletCount);
+
     const sampledScripts = Array.from({ length: 200 }, (_, index) => node(index + 3_000, 0, 1, {
       tag: "script",
       lootSeed: stableHash(`boss-kind-${index}`),
@@ -820,6 +830,11 @@ describe("deterministic room contents", () => {
   });
 
   it("releases actor projectiles from the visual center instead of the floor anchor", () => {
+    expect(actorAimDirection(
+      { x: 100, y: 200 },
+      -50,
+      { x: 200, y: 150 },
+    )).toEqual({ x: 1, y: 0 });
     expect(actorProjectileOrigin(
       { x: 100, y: 200 },
       { x: 1, y: 0 },
