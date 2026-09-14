@@ -45,25 +45,12 @@ import type {
 } from "../types";
 
 const textureKey = (asset: string): string => `asset:${asset}`;
-const TILE_SIZE = WORLD_GEOMETRY.tileSize;
-const WALL_THICKNESS = WORLD_GEOMETRY.wallThickness;
+const SEGMENT_SIZE = WORLD_GEOMETRY.segmentSize;
+const FLOOR_TILE_SIZE = WORLD_GEOMETRY.floorTileSize;
+const FLOOR_TILE_SCALE = FLOOR_TILE_SIZE / 128;
 const HIDDEN_WORLD_ALPHA = 0.24;
 const PORTAL_FRAME_MS = 125;
 const SHOW_DEBUG_GEOMETRY = import.meta.env.VITE_DEBUG_HITBOXES === "true";
-
-interface WallTileDefinition {
-  asset: string;
-  crop?: { x: number; y: number; width: number; height: number };
-}
-
-const HORIZONTAL_WALL_TILES: readonly WallTileDefinition[] = [
-  { asset: ASSETS.wallPlainHorizontal, crop: { x: 23, y: 96, width: 209, height: 64 } },
-  { asset: ASSETS.wallBrokenHorizontal, crop: { x: 21, y: 95, width: 214, height: 66 } },
-];
-
-const VERTICAL_WALL_TILES: readonly WallTileDefinition[] = [
-  { asset: ASSETS.wallPlainVertical, crop: { x: 96, y: 44, width: 64, height: 167 } },
-];
 
 function assetPaths(...sources: unknown[]): string[] {
   const paths = new Set<string>();
@@ -300,20 +287,12 @@ export class PhaserRenderer {
     this.roomLayers.set(room.id, container);
     const floor = scene.add.tileSprite(left, top, room.width, room.height, textureKey(this.roomFloorAsset(room)))
       .setOrigin(0)
-      .setTileScale(WORLD_SCALE);
-    const maskGraphics = this.rememberStatic(scene.add.graphics().setVisible(false));
-    maskGraphics.fillStyle(0xffffff, 1);
-    this.drawRoom(maskGraphics, room, false);
-    const mask = maskGraphics.createGeometryMask();
-    floor.setMask(mask);
+      .setTileScale(FLOOR_TILE_SCALE);
     container.add(floor);
-    this.addRoomFloorDetails(container, room, mask);
-    if (room.shape === "capsule" || room.shape === "octagon") this.addShapedWallFrame(container, room);
-    else this.addWallFrame(container, left, top, room.width, room.height, room.lootSeed);
-    for (const link of this.layout?.links ?? []) {
-      if (link.source.id === room.id) container.add(this.createDoor(link.points[0]!, link.direction));
-      if (link.target.id === room.id) container.add(this.createDoor(link.points[link.points.length - 1]!, this.opposite(link.direction)));
-    }
+    this.addRoomFloorDetails(container, room);
+    const doors = this.roomDoors(room);
+    this.addRoomWalls(container, room, doors);
+    for (const door of doors) container.add(this.createDoor(door.position, door.side));
   }
 
   private renderCorridor(link: DungeonLayout["links"][number], alpha: number): void {
@@ -326,9 +305,6 @@ export class PhaserRenderer {
       const end = link.points[index]!;
       container.add(this.createCorridorSegment(start, end, link.width, link.source.lootSeed + index));
     }
-    for (let index = 1; index < link.points.length - 1; index += 1) {
-      container.add(this.createCorridorJunction(link.points[index]!, link.width));
-    }
   }
 
   private roomFloorAsset(room: GraphNode): string {
@@ -340,11 +316,10 @@ export class PhaserRenderer {
   private addRoomFloorDetails(
     container: Phaser.GameObjects.Container,
     room: GraphNode,
-    mask: Phaser.Display.Masks.GeometryMask,
   ): void {
     const scene = this.scene!;
-    const columns = Math.max(1, Math.floor(room.width / TILE_SIZE));
-    const rows = Math.max(1, Math.floor(room.height / TILE_SIZE));
+    const columns = Math.max(1, Math.floor(room.width / FLOOR_TILE_SIZE));
+    const rows = Math.max(1, Math.floor(room.height / FLOOR_TILE_SIZE));
     const count = Math.min(5, 2 + room.lootSeed % 4);
     const occupied = new Set<string>();
     let seed = room.lootSeed >>> 0;
@@ -358,10 +333,10 @@ export class PhaserRenderer {
       occupied.add(key);
       const asset = FLOOR_ASSETS[(room.lootSeed + index * 5) % FLOOR_ASSETS.length] ?? ASSETS.floorHatch;
       const detail = scene.add.image(
-        room.x - room.width / 2 + column * TILE_SIZE + TILE_SIZE / 2,
-        room.y - room.height / 2 + row * TILE_SIZE + TILE_SIZE / 2,
+        room.x - room.width / 2 + column * FLOOR_TILE_SIZE + FLOOR_TILE_SIZE / 2,
+        room.y - room.height / 2 + row * FLOOR_TILE_SIZE + FLOOR_TILE_SIZE / 2,
         textureKey(asset),
-      ).setDisplaySize(TILE_SIZE, TILE_SIZE).setMask(mask);
+      ).setDisplaySize(FLOOR_TILE_SIZE, FLOOR_TILE_SIZE);
       container.add(detail);
     }
   }
@@ -374,164 +349,116 @@ export class PhaserRenderer {
       const left = Math.min(start.x, end.x);
       const length = Math.abs(end.x - start.x);
       const top = start.y - width / 2;
-      container.add(scene.add.tileSprite(left, top, length, width, textureKey(floorAsset)).setOrigin(0).setTileScale(WORLD_SCALE));
-      container.add(this.createWallTile(left, top, length, WALL_THICKNESS, seed, false).setOrigin(0));
-      container.add(this.createWallTile(left, top + width - WALL_THICKNESS, length, WALL_THICKNESS, seed + 1, false).setOrigin(0));
+      container.add(scene.add.tileSprite(left, top, length, width, textureKey(floorAsset)).setOrigin(0).setTileScale(FLOOR_TILE_SCALE));
+      const columns = Math.round(length / SEGMENT_SIZE);
+      for (let column = 0; column < columns; column += 1) {
+        const x = left + (column + 0.5) * SEGMENT_SIZE;
+        container.add(this.createEnvironmentModule(x, top + SEGMENT_SIZE / 2, ASSETS.wallHorizontalTop));
+        container.add(this.createEnvironmentModule(x, top + width - SEGMENT_SIZE / 2, ASSETS.wallHorizontalBottom));
+      }
       return container;
     }
     const top = Math.min(start.y, end.y);
     const length = Math.abs(end.y - start.y);
     const left = start.x - width / 2;
-    container.add(scene.add.tileSprite(left, top, width, length, textureKey(floorAsset)).setOrigin(0).setTileScale(WORLD_SCALE));
-    container.add(this.createWallTile(left, top, WALL_THICKNESS, length, seed, true).setOrigin(0));
-    container.add(this.createWallTile(left + width - WALL_THICKNESS, top, WALL_THICKNESS, length, seed + 1, true).setOrigin(0));
-    return container;
-  }
-
-  private createCorridorJunction(point: Point, width: number): Phaser.GameObjects.Container {
-    const scene = this.scene!;
-    const left = point.x - width / 2;
-    const top = point.y - width / 2;
-    const container = scene.add.container(0, 0);
-    container.add(scene.add.tileSprite(left, top, width, width, textureKey(ASSETS.floorPlate)).setOrigin(0).setTileScale(WORLD_SCALE));
-    return container;
-  }
-
-  private wallAsset(seed: number, vertical: boolean): WallTileDefinition {
-    const assets = vertical ? VERTICAL_WALL_TILES : HORIZONTAL_WALL_TILES;
-    return assets[Math.abs(seed) % assets.length] ?? assets[0]!;
-  }
-
-  private createWallTile(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    seed: number,
-    vertical: boolean,
-  ): Phaser.GameObjects.TileSprite {
-    const definition = this.wallAsset(seed, vertical);
-    const key = textureKey(definition.asset);
-    let frame: string | undefined;
-    if (definition.crop) {
-      const { x: cropX, y: cropY, width: cropWidth, height: cropHeight } = definition.crop;
-      frame = `wall:${cropX}:${cropY}:${cropWidth}:${cropHeight}`;
-      const texture = this.scene!.textures.get(key);
-      if (!texture.has(frame)) texture.add(frame, 0, cropX, cropY, cropWidth, cropHeight);
+    container.add(scene.add.tileSprite(left, top, width, length, textureKey(floorAsset)).setOrigin(0).setTileScale(FLOOR_TILE_SCALE));
+    const rows = Math.round(length / SEGMENT_SIZE);
+    for (let row = 0; row < rows; row += 1) {
+      const y = top + (row + 0.5) * SEGMENT_SIZE;
+      container.add(this.createEnvironmentModule(
+        left + SEGMENT_SIZE / 2,
+        y,
+        ASSETS.wallVerticalLeft,
+      ));
+      container.add(this.createEnvironmentModule(
+        left + width - SEGMENT_SIZE / 2,
+        y,
+        ASSETS.wallVerticalRight,
+      ));
     }
-    return this.scene!.add.tileSprite(x, y, width, height, key, frame).setTileScale(WORLD_SCALE);
+    return container;
   }
 
-  private addWallFrame(
+  private createEnvironmentModule(x: number, y: number, asset: string): Phaser.GameObjects.Image {
+    return this.scene!.add.image(x, y, textureKey(asset)).setDisplaySize(SEGMENT_SIZE, SEGMENT_SIZE);
+  }
+
+  private roomDoors(room: GraphNode): Array<{ position: Point; side: "N" | "E" | "S" | "W" }> {
+    const doors: Array<{ position: Point; side: "N" | "E" | "S" | "W" }> = [];
+    for (const link of this.layout?.links ?? []) {
+      if (link.source.id === room.id) doors.push({
+        position: this.roomDoorPosition(link.points[0]!, link.direction),
+        side: link.direction,
+      });
+      if (link.target.id === room.id) doors.push({
+        position: this.roomDoorPosition(link.points[link.points.length - 1]!, this.opposite(link.direction)),
+        side: this.opposite(link.direction),
+      });
+    }
+    return doors;
+  }
+
+  private roomDoorPosition(boundary: Point, side: "N" | "E" | "S" | "W"): Point {
+    const inset = SEGMENT_SIZE / 2;
+    return {
+      x: boundary.x + (side === "W" ? inset : side === "E" ? -inset : 0),
+      y: boundary.y + (side === "N" ? inset : side === "S" ? -inset : 0),
+    };
+  }
+
+  private addRoomWalls(
     container: Phaser.GameObjects.Container,
-    left: number,
-    top: number,
-    width: number,
-    height: number,
-    seed: number,
+    room: GraphNode,
+    doors: ReadonlyArray<{ position: Point; side: "N" | "E" | "S" | "W" }>,
   ): void {
-    const innerWidth = Math.max(0, width - TILE_SIZE * 2);
-    const innerHeight = Math.max(0, height - TILE_SIZE * 2);
-    if (innerWidth > 0) {
-      container.add(this.createWallTile(left + TILE_SIZE, top, innerWidth, WALL_THICKNESS, seed, false).setOrigin(0));
-      container.add(this.createWallTile(left + TILE_SIZE, top + height - WALL_THICKNESS, innerWidth, WALL_THICKNESS, seed + 1, false).setOrigin(0));
-    }
-    if (innerHeight > 0) {
-      container.add(this.createWallTile(left, top + TILE_SIZE, WALL_THICKNESS, innerHeight, seed + 2, true).setOrigin(0));
-      container.add(this.createWallTile(left + width - WALL_THICKNESS, top + TILE_SIZE, WALL_THICKNESS, innerHeight, seed + 3, true).setOrigin(0));
-    }
-    this.addCorner(container, left, top, 0);
-    this.addCorner(container, left + width - TILE_SIZE, top, Math.PI / 2);
-    this.addCorner(container, left, top + height - TILE_SIZE, -Math.PI / 2);
-    this.addCorner(container, left + width - TILE_SIZE, top + height - TILE_SIZE, Math.PI);
-  }
-
-  private addCorner(container: Phaser.GameObjects.Container, left: number, top: number, rotation: number): void {
-    const corner = this.scene!.add.image(
-      left + TILE_SIZE / 2,
-      top + TILE_SIZE / 2,
-      textureKey(ASSETS.wallCorner),
-    ).setDisplaySize(TILE_SIZE, TILE_SIZE).setOrigin(0.5).setRotation(rotation);
-    container.add(corner);
-  }
-
-  private addShapedWallFrame(container: Phaser.GameObjects.Container, room: GraphNode): void {
-    const points = this.roomBoundaryPoints(room);
-    for (let index = 0; index < points.length; index += 1) {
-      this.addWallSegment(container, points[index]!, points[(index + 1) % points.length]!, room.lootSeed + index);
-    }
-  }
-
-  private roomBoundaryPoints(room: GraphNode): Point[] {
     const left = room.x - room.width / 2;
-    const right = room.x + room.width / 2;
     const top = room.y - room.height / 2;
-    const bottom = room.y + room.height / 2;
-    if (room.shape === "octagon") {
-      const cut = Math.min(room.width, room.height) * 0.18;
-      return [
-        { x: left + cut, y: top }, { x: right - cut, y: top },
-        { x: right, y: top + cut }, { x: right, y: bottom - cut },
-        { x: right - cut, y: bottom }, { x: left + cut, y: bottom },
-        { x: left, y: bottom - cut }, { x: left, y: top + cut },
-      ];
+    const columns = Math.round(room.width / SEGMENT_SIZE);
+    const rows = Math.round(room.height / SEGMENT_SIZE);
+    const occupied = new Map<string, Set<number>>();
+    for (const door of doors) {
+      const horizontal = door.side === "N" || door.side === "S";
+      const axisStart = horizontal ? left : top;
+      const axisPosition = horizontal ? door.position.x : door.position.y;
+      const startIndex = Math.round((axisPosition - axisStart) / SEGMENT_SIZE - 1);
+      const cells = occupied.get(door.side) ?? new Set<number>();
+      cells.add(startIndex);
+      cells.add(startIndex + 1);
+      occupied.set(door.side, cells);
     }
+    const isDoorCell = (side: string, index: number): boolean => occupied.get(side)?.has(index) ?? false;
 
-    const radius = Math.min(room.width, room.height) / 2;
-    const steps = 8;
-    const points: Point[] = [];
-    if (room.width >= room.height) {
-      const rightCenter = { x: right - radius, y: room.y };
-      const leftCenter = { x: left + radius, y: room.y };
-      for (let index = 0; index <= steps; index += 1) {
-        const angle = -Math.PI / 2 + Math.PI * index / steps;
-        points.push({ x: rightCenter.x + Math.cos(angle) * radius, y: rightCenter.y + Math.sin(angle) * radius });
-      }
-      for (let index = 0; index <= steps; index += 1) {
-        const angle = Math.PI / 2 + Math.PI * index / steps;
-        points.push({ x: leftCenter.x + Math.cos(angle) * radius, y: leftCenter.y + Math.sin(angle) * radius });
-      }
-      return points;
-    }
+    container.add(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, top + SEGMENT_SIZE / 2, ASSETS.wallCornerTopLeft));
+    container.add(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, top + SEGMENT_SIZE / 2, ASSETS.wallCornerTopRight));
+    container.add(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallCornerBottomLeft));
+    container.add(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallCornerBottomRight));
 
-    const topCenter = { x: room.x, y: top + radius };
-    const bottomCenter = { x: room.x, y: bottom - radius };
-    for (let index = 0; index <= steps; index += 1) {
-      const angle = Math.PI + Math.PI * index / steps;
-      points.push({ x: topCenter.x + Math.cos(angle) * radius, y: topCenter.y + Math.sin(angle) * radius });
+    for (let column = 1; column < columns - 1; column += 1) {
+      const x = left + (column + 0.5) * SEGMENT_SIZE;
+      if (!isDoorCell("N", column)) container.add(this.createEnvironmentModule(x, top + SEGMENT_SIZE / 2, ASSETS.wallHorizontalTop));
+      if (!isDoorCell("S", column)) container.add(this.createEnvironmentModule(x, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallHorizontalBottom));
     }
-    for (let index = 0; index <= steps; index += 1) {
-      const angle = Math.PI * index / steps;
-      points.push({ x: bottomCenter.x + Math.cos(angle) * radius, y: bottomCenter.y + Math.sin(angle) * radius });
+    for (let row = 1; row < rows - 1; row += 1) {
+      const y = top + (row + 0.5) * SEGMENT_SIZE;
+      if (!isDoorCell("W", row)) container.add(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, y, ASSETS.wallVerticalLeft));
+      if (!isDoorCell("E", row)) container.add(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, y, ASSETS.wallVerticalRight));
     }
-    return points;
-  }
-
-  private addWallSegment(container: Phaser.GameObjects.Container, start: Point, end: Point, seed: number): void {
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
-    const length = Math.hypot(dx, dy);
-    const x = (start.x + end.x) / 2;
-    const y = (start.y + end.y) / 2;
-    if (Math.abs(dx) < 0.5) {
-      container.add(this.createWallTile(x, y, WALL_THICKNESS, length, seed, true).setOrigin(0.5));
-      return;
-    }
-    const wall = this.createWallTile(x, y, length, WALL_THICKNESS, seed, false).setOrigin(0.5);
-    wall.setRotation(Math.atan2(dy, dx));
-    container.add(wall);
   }
 
   private createDoor(position: Point, side: "N" | "E" | "S" | "W"): Phaser.GameObjects.Container {
     const scene = this.scene!;
     const container = scene.add.container(0, 0);
-    if (side === "N" || side === "S") {
-      container.add(scene.add.tileSprite(position.x, position.y, TILE_SIZE, WALL_THICKNESS, textureKey(ASSETS.floorPlain)).setOrigin(0.5).setTileScale(WORLD_SCALE));
-      container.add(scene.add.image(position.x, position.y, textureKey(ASSETS.doorOpenHorizontal)).setDisplaySize(TILE_SIZE, WALL_THICKNESS).setOrigin(0.5));
-      return container;
-    }
-    container.add(scene.add.tileSprite(position.x, position.y, WALL_THICKNESS, TILE_SIZE, textureKey(ASSETS.floorPlain)).setOrigin(0.5).setTileScale(WORLD_SCALE));
-    container.add(scene.add.image(position.x, position.y, textureKey(ASSETS.doorOpenVertical)).setDisplaySize(WALL_THICKNESS, TILE_SIZE).setOrigin(0.5));
+    const horizontal = side === "N" || side === "S";
+    const asset = ({
+      N: ASSETS.doorOpenTop,
+      E: ASSETS.doorOpenRight,
+      S: ASSETS.doorOpenBottom,
+      W: ASSETS.doorOpenLeft,
+    } as const)[side];
+    container.add(scene.add.image(position.x, position.y, textureKey(asset)).setDisplaySize(
+      horizontal ? SEGMENT_SIZE * WORLD_GEOMETRY.doorSpanSegments : SEGMENT_SIZE,
+      horizontal ? SEGMENT_SIZE : SEGMENT_SIZE * WORLD_GEOMETRY.doorSpanSegments,
+    ));
     return container;
   }
 
@@ -549,31 +476,6 @@ export class PhaserRenderer {
     this.staticObjects.length = 0;
     this.roomLayers.clear();
     this.corridorLayers.clear();
-  }
-
-  private drawRoom(graphics: Phaser.GameObjects.Graphics, room: GraphNode, stroke: boolean): void {
-    const left = room.x - room.width / 2;
-    const top = room.y - room.height / 2;
-    if (room.shape === "capsule") {
-      const radius = Math.min(room.width, room.height) / 2;
-      graphics.fillRoundedRect(left, top, room.width, room.height, radius);
-      if (stroke) graphics.strokeRoundedRect(left, top, room.width, room.height, radius);
-      return;
-    }
-    if (room.shape === "octagon") {
-      const cut = Math.min(room.width, room.height) * 0.18;
-      const points = [
-        new Phaser.Math.Vector2(left + cut, top), new Phaser.Math.Vector2(left + room.width - cut, top),
-        new Phaser.Math.Vector2(left + room.width, top + cut), new Phaser.Math.Vector2(left + room.width, top + room.height - cut),
-        new Phaser.Math.Vector2(left + room.width - cut, top + room.height), new Phaser.Math.Vector2(left + cut, top + room.height),
-        new Phaser.Math.Vector2(left, top + room.height - cut), new Phaser.Math.Vector2(left, top + cut),
-      ];
-      graphics.fillPoints(points, true);
-      if (stroke) graphics.strokePoints(points, true);
-      return;
-    }
-    graphics.fillRect(left, top, room.width, room.height);
-    if (stroke) graphics.strokeRect(left, top, room.width, room.height);
   }
 
   private clipAsset(clip: SpriteClip, elapsedMs = 0): string {

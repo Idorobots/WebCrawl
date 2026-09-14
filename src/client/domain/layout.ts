@@ -1,4 +1,3 @@
-import { world } from "../config";
 import type {
   Direction,
   DungeonGraph,
@@ -6,7 +5,6 @@ import type {
   GraphNode,
   LayoutLink,
   Point,
-  RoomShape,
 } from "../types";
 import { ROOM_DEFINITIONS, WORLD_GEOMETRY } from "./specs";
 
@@ -17,8 +15,8 @@ interface Bounds {
   bottom: number;
 }
 
-const SHAPES: RoomShape[] = ["rectangle", "wide", "tall", "capsule", "octagon"];
 const CARDINALS: Direction[] = ["N", "E", "S", "W"];
+const SEGMENT_SIZE = WORLD_GEOMETRY.segmentSize;
 
 export function roomBounds(node: GraphNode, x = node.x, y = node.y, margin = 0): Bounds {
   return {
@@ -34,86 +32,46 @@ function boundsOverlap(left: Bounds, right: Bounds): boolean {
 }
 
 function configureRoom(node: GraphNode, childCount: number): void {
-  const shape = SHAPES[node.lootSeed % SHAPES.length] ?? "rectangle";
-  const exitBonus = Math.max(0, childCount - 3) * world(46);
-  node.shape = shape;
+  const exitCount = childCount + (node.isRoot ? 0 : 1);
+  node.shape = "rectangle";
   node.childCount = childCount;
-  if (node.tag === "script") {
-    node.shape = "octagon";
-    node.width = ROOM_DEFINITIONS.boss.width + exitBonus;
+  if (node.tag === "script" || exitCount > 8) {
+    node.width = ROOM_DEFINITIONS.boss.width;
     node.height = ROOM_DEFINITIONS.boss.height;
     return;
   }
-  const definition = ROOM_DEFINITIONS[shape];
-  node.width = definition.width + (shape === "tall" ? 0 : exitBonus);
-  node.height = definition.height + (shape === "tall" ? exitBonus : 0);
-  if (node.isRoot) {
-    node.width = Math.max(node.width, world(700));
-    node.height = Math.max(node.height, world(480));
+  if (exitCount > 4) {
+    const definition = node.lootSeed % 2 ? ROOM_DEFINITIONS.wide : ROOM_DEFINITIONS.tall;
+    node.width = definition.width;
+    node.height = definition.height;
+    return;
   }
-}
-
-function directionForDelta(dx: number, dy: number): Direction {
-  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? "E" : "W";
-  return dy >= 0 ? "S" : "N";
+  node.width = ROOM_DEFINITIONS.rectangle.width;
+  node.height = ROOM_DEFINITIONS.rectangle.height;
 }
 
 function opposite(direction: Direction): Direction {
   return ({ N: "S", E: "W", S: "N", W: "E" } as const)[direction];
 }
 
-function placementCandidates(parent: GraphNode, node: GraphNode): Point[] {
-  const candidates: Point[] = [];
-  const rotation = node.lootSeed % CARDINALS.length;
-  const order = CARDINALS.map((_, index) => CARDINALS[(index + rotation) % CARDINALS.length]!);
-  for (let ring = 0; ring < 18; ring += 1) {
-    const lateral = [0, -1, 1, -2, 2, -3, 3][ring % 7]! * world(170);
-    const reach = world(160) + Math.floor(ring / 7) * world(250);
-    for (const direction of order) {
-      const horizontal = direction === "E" || direction === "W";
-      const distance = horizontal
-        ? (parent.width + node.width) / 2 + reach
-        : (parent.height + node.height) / 2 + reach;
-      candidates.push({
-        x: parent.x + (direction === "E" ? distance : direction === "W" ? -distance : lateral),
-        y: parent.y + (direction === "S" ? distance : direction === "N" ? -distance : lateral),
-      });
-    }
-  }
-  return candidates;
+function sideSegmentCount(room: GraphNode, side: Direction): number {
+  const length = side === "N" || side === "S" ? room.width : room.height;
+  return Math.round(length / SEGMENT_SIZE);
 }
 
-function pointOnSide(room: GraphNode, side: Direction, slot: number): Point {
-  const extent = (side === "N" || side === "S" ? room.width : room.height) / 2 - world(75);
-  const step = Math.min(world(88), Math.max(0, extent / 2));
-  const sequence = slot === 0 ? 0 : Math.ceil(slot / 2) * (slot % 2 ? -1 : 1);
-  const offset = Math.max(-extent, Math.min(extent, sequence * step));
-  const halfWidth = room.width / 2;
-  const halfHeight = room.height / 2;
-  if (room.shape === "capsule") {
-    const radius = Math.min(halfWidth, halfHeight);
-    const straight = Math.max(0, halfWidth - radius);
-    if (side === "E" || side === "W") {
-      const y = Math.max(-radius, Math.min(radius, offset));
-      const x = straight + Math.sqrt(Math.max(0, radius ** 2 - y ** 2));
-      return { x: room.x + (side === "E" ? x : -x), y: room.y + y };
-    }
-    const x = Math.max(-halfWidth, Math.min(halfWidth, offset));
-    const curveX = Math.max(0, Math.abs(x) - straight);
-    const y = Math.sqrt(Math.max(0, radius ** 2 - curveX ** 2));
-    return { x: room.x + x, y: room.y + (side === "S" ? y : -y) };
-  }
-  if (room.shape === "octagon") {
-    const cut = Math.min(room.width, room.height) * 0.18;
-    if (side === "E" || side === "W") {
-      const inset = Math.max(0, Math.abs(offset) - (halfHeight - cut));
-      const x = halfWidth - inset;
-      return { x: room.x + (side === "E" ? x : -x), y: room.y + offset };
-    }
-    const inset = Math.max(0, Math.abs(offset) - (halfWidth - cut));
-    const y = halfHeight - inset;
-    return { x: room.x + offset, y: room.y + (side === "S" ? y : -y) };
-  }
+export function doorCapacity(room: GraphNode, side: Direction): number {
+  return Math.max(1, sideSegmentCount(room, side) / 2 - 1);
+}
+
+function doorOffsetForSlot(room: GraphNode, side: Direction, slot: number): number {
+  if (slot < 0 || slot >= doorCapacity(room, side)) throw new Error(`Door slot ${slot} does not fit room ${room.id} ${side}`);
+  if (slot === 0) return 0;
+  const distance = Math.ceil(slot / 2) * SEGMENT_SIZE * 2;
+  return slot % 2 ? -distance : distance;
+}
+
+export function doorPositionForSlot(room: GraphNode, side: Direction, slot: number): Point {
+  const offset = doorOffsetForSlot(room, side, slot);
   switch (side) {
     case "N": return { x: room.x + offset, y: room.y - room.height / 2 };
     case "E": return { x: room.x + room.width / 2, y: room.y + offset };
@@ -138,7 +96,7 @@ function corridorIntersectsBounds(points: readonly Point[], bounds: Bounds): boo
   return false;
 }
 
-export function corridorIntersectsRoom(link: LayoutLink, room: GraphNode, margin = world(23)): boolean {
+export function corridorIntersectsRoom(link: LayoutLink, room: GraphNode, margin = WORLD_GEOMETRY.wallThickness): boolean {
   return corridorIntersectsBounds(link.points, roomBounds(room, room.x, room.y, margin));
 }
 
@@ -153,35 +111,8 @@ export function corridorLength(points: readonly Point[]): number {
 function routeIsClear(points: readonly Point[], rooms: readonly GraphNode[], sourceId: number, targetId: number): boolean {
   return rooms.every(room =>
     room.id === sourceId || room.id === targetId ||
-    !corridorIntersectsBounds(points, roomBounds(room, room.x, room.y, world(20)))
+    !corridorIntersectsBounds(points, roomBounds(room, room.x, room.y, WORLD_GEOMETRY.wallThickness))
   );
-}
-
-function corridorRoute(
-  start: Point,
-  end: Point,
-  direction: Direction,
-  rooms: readonly GraphNode[],
-  sourceId: number,
-  targetId: number,
-): Point[] | null {
-  const routes: Point[][] = [];
-  if (direction === "E" || direction === "W") {
-    if (Math.abs(start.y - end.y) < 1) routes.push([start, end]);
-    for (const fraction of [0.5, 0.33, 0.67]) {
-      const x = start.x + (end.x - start.x) * fraction;
-      routes.push([start, { x, y: start.y }, { x, y: end.y }, end]);
-    }
-  } else {
-    if (Math.abs(start.x - end.x) < 1) routes.push([start, end]);
-    for (const fraction of [0.5, 0.33, 0.67]) {
-      const y = start.y + (end.y - start.y) * fraction;
-      routes.push([start, { x: start.x, y }, { x: end.x, y }, end]);
-    }
-  }
-  return routes.find(points =>
-    corridorLength(points) <= WORLD_GEOMETRY.maxCorridorLength && routeIsClear(points, rooms, sourceId, targetId)
-  ) ?? null;
 }
 
 export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
@@ -218,35 +149,49 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
     for (const child of childrenByParent.get(node.id) ?? []) collectSubtreeHrefs(child, target);
   };
   const roomPlacementIsClear = (node: GraphNode, point: Point): boolean => {
-    const candidate = roomBounds(node, point.x, point.y, WORLD_GEOMETRY.roomCollisionMargin + world(70));
-    if (placed.some(other => boundsOverlap(candidate, roomBounds(other, other.x, other.y, WORLD_GEOMETRY.roomCollisionMargin + world(70))))) return false;
-    return links.every(link => !corridorIntersectsBounds(link.points, roomBounds(node, point.x, point.y, world(20))));
+    const candidate = roomBounds(node, point.x, point.y, WORLD_GEOMETRY.roomCollisionMargin);
+    if (placed.some(other => boundsOverlap(candidate, roomBounds(other, other.x, other.y, WORLD_GEOMETRY.roomCollisionMargin)))) return false;
+    return links.every(link => !corridorIntersectsBounds(link.points, candidate));
   };
 
   const tryPlace = (node: GraphNode, parent: GraphNode): LayoutLink | null => {
-    for (const point of placementCandidates(parent, node)) {
-      if (!roomPlacementIsClear(node, point)) continue;
-      node.x = point.x;
-      node.y = point.y;
-      const direction = directionForDelta(node.x - parent.x, node.y - parent.y);
-      const sideKey = `${parent.id}:${direction}`;
-      const slot = sideSlots.get(sideKey) ?? 0;
-      const start = pointOnSide(parent, direction, slot);
-      const end = pointOnSide(node, opposite(direction), 0);
-      const points = corridorRoute(start, end, direction, placed, parent.id, node.id);
-      if (!points) continue;
-      node.directionFromParent = direction;
-      node.parentSide = opposite(direction);
-      sideSlots.set(sideKey, slot + 1);
-      return {
-        id: `${parent.id}->${node.id}`,
-        source: parent,
-        target: node,
-        direction,
-        ownerRoomId: parent.id,
-        width: WORLD_GEOMETRY.corridorHalfWidth * 2,
-        points,
-      };
+    const rotation = node.lootSeed % CARDINALS.length;
+    const directions = CARDINALS.map((_, index) => CARDINALS[(index + rotation) % CARDINALS.length]!);
+    for (let gapSegments = 2; gapSegments <= 12; gapSegments += 1) {
+      for (const direction of directions) {
+        const sideKey = `${parent.id}:${direction}`;
+        const slot = sideSlots.get(sideKey) ?? 0;
+        if (slot >= doorCapacity(parent, direction)) continue;
+        const start = doorPositionForSlot(parent, direction, slot);
+        const horizontal = direction === "E" || direction === "W";
+        const distance = horizontal
+          ? (parent.width + node.width) / 2 + gapSegments * SEGMENT_SIZE
+          : (parent.height + node.height) / 2 + gapSegments * SEGMENT_SIZE;
+        const point = {
+          x: horizontal ? parent.x + (direction === "E" ? distance : -distance) : start.x,
+          y: horizontal ? start.y : parent.y + (direction === "S" ? distance : -distance),
+        };
+        if (!roomPlacementIsClear(node, point)) continue;
+        node.x = point.x;
+        node.y = point.y;
+        const targetSide = opposite(direction);
+        const end = doorPositionForSlot(node, targetSide, 0);
+        const points = [start, end];
+        if (corridorLength(points) > WORLD_GEOMETRY.maxCorridorLength || !routeIsClear(points, placed, parent.id, node.id)) continue;
+        node.directionFromParent = direction;
+        node.parentSide = targetSide;
+        sideSlots.set(sideKey, slot + 1);
+        sideSlots.set(`${node.id}:${targetSide}`, 1);
+        return {
+          id: `${parent.id}->${node.id}`,
+          source: parent,
+          target: node,
+          direction,
+          ownerRoomId: parent.id,
+          width: WORLD_GEOMETRY.corridorHalfWidth * 2,
+          points,
+        };
+      }
     }
     return null;
   };

@@ -21,7 +21,6 @@ import {
   MAX_REGULAR_MONSTER_RADIUS,
   MONSTER_SPAWN_PROFILES,
   MONSTER_VISUAL_DEFINITIONS,
-  OBSTACLE_DEFINITIONS,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   REGULAR_MONSTER_DEFINITIONS,
@@ -291,19 +290,12 @@ export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decorat
   const count = 2 + (seed % 2);
   return Array.from({ length: count }, (_, index) => {
     const itemSeed = stableHash(`${seed}|${index}`);
-    const obstacle = index === 0;
-    const obstacleLateral = Math.max(
-      world(26),
-      link.width / 2 - WORLD_GEOMETRY.wallThickness - DECORATION_DEFINITIONS.crateCargo.footprint - world(8),
-    );
     const position = pointAlongCorridor(
       link,
       index === 0 ? 0.5 : index === 1 ? 0.28 : 0.72,
-      (index % 2 ? 1 : -1) * (obstacle ? obstacleLateral : world(26)),
+      (index % 2 ? 1 : -1) * world(26),
     );
-    const definition = obstacle
-      ? OBSTACLE_DEFINITIONS[itemSeed % OBSTACLE_DEFINITIONS.length]!
-      : SCENERY_DEFINITIONS[itemSeed % SCENERY_DEFINITIONS.length]!;
+    const definition = SCENERY_DEFINITIONS[itemSeed % SCENERY_DEFINITIONS.length]!;
     const hp = definition.destructible ? 3 + (itemSeed % 3) + Math.floor(difficulty / 3) : 0;
     return {
       ...definition,
@@ -311,10 +303,10 @@ export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decorat
       roomId: link.ownerRoomId,
       ...position,
       visualVariant: itemSeed,
-      kind: obstacle ? "corridor-obstacle" : "corridor-prop",
-      obstacle,
+      kind: "corridor-prop",
+      obstacle: false,
       radius: definition.radius,
-      footprint: obstacle ? definition.footprint : 0,
+      footprint: 0,
       maxHp: hp,
       hp,
       destroyed: false,

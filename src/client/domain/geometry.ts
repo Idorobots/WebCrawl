@@ -21,37 +21,70 @@ export function pointInRoom(x: number, y: number, room: GraphNode, padding = PLA
 }
 
 export function pointInRoomFloor(x: number, y: number, room: GraphNode, radius = PLAYER_SPEC.radius): boolean {
-  return pointInRoom(x, y, room, radius);
+  const left = room.x - room.width / 2 + radius;
+  const right = room.x + room.width / 2 - radius;
+  const top = room.y - room.height / 2 + radius + WORLD_GEOMETRY.topWallCollisionDepth;
+  const bottom = room.y + room.height / 2 - radius;
+  return left <= right && top <= bottom && x >= left && x <= right && y >= top && y <= bottom;
 }
 
-function pointToSegmentDistance(point: Point, start: Point, end: Point): number {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const lengthSquared = dx * dx + dy * dy;
-  if (!lengthSquared) return Math.hypot(point.x - start.x, point.y - start.y);
-  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
-  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+function pointInAxisAlignedSegment(point: Point, start: Point, end: Point, halfWidth: number, includeEnds = true): boolean {
+  if (start.y === end.y) {
+    const min = Math.min(start.x, end.x);
+    const max = Math.max(start.x, end.x);
+    const along = includeEnds ? point.x >= min && point.x <= max : point.x > min && point.x < max;
+    return along && Math.abs(point.y - start.y) <= halfWidth;
+  }
+  const min = Math.min(start.y, end.y);
+  const max = Math.max(start.y, end.y);
+  const along = includeEnds ? point.y >= min && point.y <= max : point.y > min && point.y < max;
+  return along && Math.abs(point.x - start.x) <= halfWidth;
+}
+
+function pointInCorridorBody(point: Point, start: Point, end: Point, width: number, radius: number): boolean {
+  if (start.y === end.y) {
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const top = start.y - width / 2 + radius + WORLD_GEOMETRY.topWallCollisionDepth;
+    const bottom = start.y + width / 2 - radius;
+    return point.x > minX && point.x < maxX && point.y >= top && point.y <= bottom;
+  }
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+  const left = start.x - width / 2 + radius;
+  const right = start.x + width / 2 - radius;
+  return point.y > minY && point.y < maxY && point.x >= left && point.x <= right;
 }
 
 export function pointInCorridor(x: number, y: number, link: LayoutLink, radius = PLAYER_SPEC.radius): boolean {
-  const half = Math.max(
-    0,
-    (link.width || WORLD_GEOMETRY.corridorHalfWidth * 2) / 2 - radius,
-  );
+  const width = link.width || WORLD_GEOMETRY.corridorHalfWidth * 2;
   for (let index = 1; index < link.points.length; index += 1) {
     const originalStart = link.points[index - 1]!;
     const originalEnd = link.points[index]!;
     const dx = originalEnd.x - originalStart.x;
     const dy = originalEnd.y - originalStart.y;
     const length = Math.hypot(dx, dy);
-    const doorwayDepth = radius;
-    const start = index === 1 && length > 0
-      ? { x: originalStart.x - dx / length * doorwayDepth, y: originalStart.y - dy / length * doorwayDepth }
-      : originalStart;
-    const end = index === link.points.length - 1 && length > 0
-      ? { x: originalEnd.x + dx / length * doorwayDepth, y: originalEnd.y + dy / length * doorwayDepth }
-      : originalEnd;
-    if (pointToSegmentDistance({ x, y }, start, end) <= half) return true;
+    if (!length) continue;
+    const point = { x, y };
+    if (pointInCorridorBody(point, originalStart, originalEnd, width, radius)) return true;
+
+    const doorwayHalf = Math.max(0, WORLD_GEOMETRY.doorOpeningWidth / 2 - radius);
+    const sourceDoorwayDepth = radius + (link.direction === "N" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
+    const targetDoorwayDepth = radius + (link.direction === "S" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
+    if (index === 1) {
+      const insideStart = {
+        x: originalStart.x - dx / length * sourceDoorwayDepth,
+        y: originalStart.y - dy / length * sourceDoorwayDepth,
+      };
+      if (pointInAxisAlignedSegment(point, insideStart, originalStart, doorwayHalf)) return true;
+    }
+    if (index === link.points.length - 1) {
+      const insideEnd = {
+        x: originalEnd.x + dx / length * targetDoorwayDepth,
+        y: originalEnd.y + dy / length * targetDoorwayDepth,
+      };
+      if (pointInAxisAlignedSegment(point, originalEnd, insideEnd, doorwayHalf)) return true;
+    }
   }
   return false;
 }

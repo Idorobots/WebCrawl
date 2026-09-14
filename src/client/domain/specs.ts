@@ -2,6 +2,7 @@ import {
   ASSETS,
   BARREL_EXPLOSION_FRAMES,
   DEBRIS_ASSETS,
+  ENVIRONMENT_SEGMENT_SIZE,
   EFFECT_FRAMES,
   EXPLOSION_FRAMES,
   MONSTER_FRAMES,
@@ -46,10 +47,14 @@ const robotDebris = (sizeScale: number): readonly SpriteClip[] => [
 ];
 
 export const WORLD_GEOMETRY = {
-  tileSize: world(128),
+  segmentSize: ENVIRONMENT_SEGMENT_SIZE,
+  floorTileSize: world(64),
+  doorSpanSegments: 2,
+  doorOpeningWidth: ENVIRONMENT_SEGMENT_SIZE * 1.25,
+  topWallCollisionDepth: ENVIRONMENT_SEGMENT_SIZE / 2,
   wallThickness: world(64),
-  corridorHalfWidth: world(160),
-  maxCorridorLength: world(823),
+  corridorHalfWidth: ENVIRONMENT_SEGMENT_SIZE,
+  maxCorridorLength: ENVIRONMENT_SEGMENT_SIZE * 12,
   roomCollisionMargin: world(4),
   spatialCellSize: world(366),
   pathGridStep: world(13),
@@ -58,12 +63,12 @@ export const WORLD_GEOMETRY = {
 } as const;
 
 export const ROOM_DEFINITIONS: Record<RoomShape | "boss", { width: number; height: number }> = {
-  rectangle: { width: world(580), height: world(400) },
-  wide: { width: world(720), height: world(360) },
-  tall: { width: world(460), height: world(560) },
-  capsule: { width: world(640), height: world(380) },
-  octagon: { width: world(580), height: world(460) },
-  boss: { width: world(900), height: world(650) },
+  rectangle: { width: ENVIRONMENT_SEGMENT_SIZE * 4, height: ENVIRONMENT_SEGMENT_SIZE * 4 },
+  wide: { width: ENVIRONMENT_SEGMENT_SIZE * 8, height: ENVIRONMENT_SEGMENT_SIZE * 4 },
+  tall: { width: ENVIRONMENT_SEGMENT_SIZE * 4, height: ENVIRONMENT_SEGMENT_SIZE * 8 },
+  capsule: { width: ENVIRONMENT_SEGMENT_SIZE * 4, height: ENVIRONMENT_SEGMENT_SIZE * 4 },
+  octagon: { width: ENVIRONMENT_SEGMENT_SIZE * 4, height: ENVIRONMENT_SEGMENT_SIZE * 4 },
+  boss: { width: ENVIRONMENT_SEGMENT_SIZE * 8, height: ENVIRONMENT_SEGMENT_SIZE * 8 },
 };
 
 const PLAYER_ORIGIN = { x: 0.5, y: 0.90625 };

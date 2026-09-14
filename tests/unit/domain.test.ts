@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   EFFECT_FRAMES,
+  ENVIRONMENT_SEGMENT_SIZE,
   MONSTER_FRAMES,
   ROOM_HEIGHT,
   ROOM_WIDTH,
@@ -144,9 +145,11 @@ describe("layout and geometry", () => {
   const layout = layoutOrthogonal(graph);
 
   it("scales world definitions from authored dimensions", () => {
-    expect(ROOM_DEFINITIONS.rectangle).toEqual({ width: world(580), height: world(400) });
+    expect(ROOM_DEFINITIONS.rectangle).toEqual({ width: ENVIRONMENT_SEGMENT_SIZE * 4, height: ENVIRONMENT_SEGMENT_SIZE * 4 });
     expect(PLAYER_SPEC.radius).toBe(world(36));
-    expect(WORLD_GEOMETRY.tileSize).toBe(world(128));
+    expect(WORLD_GEOMETRY.segmentSize).toBe(world(128));
+    expect(WORLD_GEOMETRY.floorTileSize).toBe(world(64));
+    expect(Math.abs(WORLD_GEOMETRY.segmentSize - WORLD_GEOMETRY.floorTileSize * 2)).toBeLessThanOrEqual(1);
   });
 
   it("aligns visual content with collision centers and normalizes monster animations", () => {
@@ -191,15 +194,44 @@ describe("layout and geometry", () => {
     expect(distanceSquared({ x: 1, y: 2 }, { x: 4, y: 6 })).toBe(25);
   });
 
-  it("keeps floor tiles walkable while preventing travel beyond wall boundaries", () => {
+  it("blocks room walls halfway through their segment and admits only the middle of doors", () => {
     const room = layout.nodes[0]!;
-    const wallPoint = { x: room.x + room.width / 2 - WORLD_GEOMETRY.wallThickness / 2, y: room.y };
-    expect(pointInRoom(wallPoint.x, wallPoint.y, room, 0)).toBe(true);
-    expect(pointInRoomFloor(wallPoint.x, wallPoint.y, room, 0)).toBe(true);
+    const topWallEdge = room.y - room.height / 2 + WORLD_GEOMETRY.topWallCollisionDepth;
+    expect(pointInRoomFloor(room.x, topWallEdge, room, 0)).toBe(true);
+    expect(pointInRoomFloor(room.x, topWallEdge - 1, room, 0)).toBe(false);
+    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.radius, room, PLAYER_SPEC.radius)).toBe(true);
+    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.radius - 1, room, PLAYER_SPEC.radius)).toBe(false);
+    expect(pointInRoomFloor(room.x + room.width / 2, room.y, room, 0)).toBe(true);
+    expect(pointInRoomFloor(room.x, room.y + room.height / 2, room, 0)).toBe(true);
     expect(pointInRoomFloor(room.x + room.width / 2 + 1, room.y, room, 0)).toBe(false);
 
     const link = layout.links[0]!;
-    const midpoint = link.points[Math.floor(link.points.length / 2)]!;
+    const start = link.points[0]!;
+    const end = link.points[1]!;
+    const length = corridorLength(link.points);
+    const unit = { x: (end.x - start.x) / length, y: (end.y - start.y) / length };
+    const lateral = { x: -unit.y, y: unit.x };
+    const insideDoor = start;
+    expect(pointInCorridor(insideDoor.x, insideDoor.y, link, 0)).toBe(true);
+    expect(pointInCorridor(
+      insideDoor.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 + 1),
+      insideDoor.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 + 1),
+      link,
+      0,
+    )).toBe(false);
+    const playerInsideDoor = {
+      x: start.x - unit.x * PLAYER_SPEC.radius / 2,
+      y: start.y - unit.y * PLAYER_SPEC.radius / 2,
+    };
+    expect(pointInCorridor(playerInsideDoor.x, playerInsideDoor.y, link, PLAYER_SPEC.radius)).toBe(true);
+    expect(pointInCorridor(
+      playerInsideDoor.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
+      playerInsideDoor.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
+      link,
+      PLAYER_SPEC.radius,
+    )).toBe(false);
+
+    const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
     expect(pointInCorridor(midpoint.x, midpoint.y, link, PLAYER_SPEC.radius)).toBe(true);
     expect(pointInCorridor(
       midpoint.x,
@@ -207,6 +239,16 @@ describe("layout and geometry", () => {
       link,
       0,
     )).toBe(false);
+    if (start.y === end.y) {
+      const topWallEdge = midpoint.y - link.width / 2 + WORLD_GEOMETRY.topWallCollisionDepth;
+      expect(pointInCorridor(midpoint.x, topWallEdge, link, 0)).toBe(true);
+      expect(pointInCorridor(midpoint.x, topWallEdge - 1, link, 0)).toBe(false);
+      expect(pointInCorridor(midpoint.x, midpoint.y + link.width / 2, link, 0)).toBe(true);
+    } else {
+      expect(pointInCorridor(midpoint.x - link.width / 2, midpoint.y, link, 0)).toBe(true);
+      expect(pointInCorridor(midpoint.x - link.width / 2 - 1, midpoint.y, link, 0)).toBe(false);
+      expect(pointInCorridor(midpoint.x + link.width / 2, midpoint.y, link, 0)).toBe(true);
+    }
   });
 
   it("keeps widened doorways and corridor obstacles traversable by monsters", () => {
@@ -238,6 +280,38 @@ describe("layout and geometry", () => {
     }
   });
 
+  it("blocks every door edge across the combined room and corridor floor", () => {
+    const onFloor = (point: { x: number; y: number }, radius: number): boolean =>
+      layout.nodes.some(room => pointInRoomFloor(point.x, point.y, room, radius)) ||
+      layout.links.some(link => pointInCorridor(point.x, point.y, link, radius));
+
+    for (const link of layout.links) {
+      const start = link.points[0]!;
+      const end = link.points.at(-1)!;
+      const length = corridorLength(link.points);
+      const unit = { x: (end.x - start.x) / length, y: (end.y - start.y) / length };
+      const lateral = { x: -unit.y, y: unit.x };
+      const targetSide = ({ N: "S", E: "W", S: "N", W: "E" } as const)[link.direction];
+      const doors = [
+        { boundary: start, inward: { x: -unit.x, y: -unit.y }, side: link.direction },
+        { boundary: end, inward: unit, side: targetSide },
+      ];
+      for (const door of doors) {
+        const depth = PLAYER_SPEC.radius + (door.side === "N" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
+        const center = {
+          x: door.boundary.x + door.inward.x * depth / 2,
+          y: door.boundary.y + door.inward.y * depth / 2,
+        };
+        const blockedEdge = {
+          x: center.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
+          y: center.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
+        };
+        expect(onFloor(center, PLAYER_SPEC.radius)).toBe(true);
+        expect(onFloor(blockedEdge, PLAYER_SPEC.radius), `Expected blocked ${door.side} door edge`).toBe(false);
+      }
+    }
+  });
+
   it("finds paths only through revealed rooms", () => {
     expect(revealedRoomPath(layout, new Set([0, 1, 2]), 1, 2)).toEqual([1, 0, 2]);
     expect(revealedRoomPath(layout, new Set([0, 1]), 1, 2)).toBeNull();
@@ -248,10 +322,7 @@ describe("layout and geometry", () => {
     const decorations = decorationSpecsForCorridor(link);
     const monsters = monsterSpecsForCorridor(link, 3);
     expect(decorations).toEqual(decorationSpecsForCorridor(link));
-    expect(decorations.some(item => item.obstacle)).toBe(true);
-    expect(decorations.filter(item => item.obstacle).every(item =>
-      (item.footprint ?? item.radius) + MAX_REGULAR_MONSTER_RADIUS < link.width / 2
-    )).toBe(true);
+    expect(decorations.every(item => !item.obstacle && item.footprint === 0)).toBe(true);
     expect(monsters).toEqual(monsterSpecsForCorridor(link, 3));
     expect(monsters).toEqual([]);
     expect(decorations.every(item => item.roomId === link.source.id)).toBe(true);
@@ -277,14 +348,29 @@ describe("layout and geometry", () => {
     expect(denseLayout.nodes.length).toBeLessThan(nodes.length);
     expect(denseLayout.links).toHaveLength(denseLayout.nodes.length - 1);
     expect(denseLayout.hiddenCount).toBe(nodes.length - denseLayout.nodes.length);
-    expect(new Set(denseLayout.nodes.map(room => room.shape)).size).toBeGreaterThan(1);
+    expect(new Set(denseLayout.nodes.map(room => room.shape))).toEqual(new Set(["rectangle"]));
+    expect(new Set(denseLayout.nodes.map(room => `${room.width}x${room.height}`)).size).toBeGreaterThan(1);
+    const doorPositions = new Map<string, number[]>();
     for (const link of denseLayout.links) {
       expect(corridorLength(link.points)).toBeLessThanOrEqual(WORLD_GEOMETRY.maxCorridorLength);
+      expect(link.points).toHaveLength(2);
+      expect(corridorLength(link.points) % WORLD_GEOMETRY.segmentSize).toBe(0);
+      expect(link.points[0]!.x === link.points[1]!.x || link.points[0]!.y === link.points[1]!.y).toBe(true);
       expect(pointInRoom(link.points[0]!.x, link.points[0]!.y, link.source, 0)).toBe(true);
       expect(pointInRoom(link.points.at(-1)!.x, link.points.at(-1)!.y, link.target, 0)).toBe(true);
+      const axisPosition = link.direction === "N" || link.direction === "S" ? link.points[0]!.x : link.points[0]!.y;
+      const doorKey = `${link.source.id}:${link.direction}`;
+      doorPositions.set(doorKey, [...(doorPositions.get(doorKey) ?? []), axisPosition]);
       for (const room of denseLayout.nodes) {
         if (room.id === link.source.id || room.id === link.target.id) continue;
         expect(corridorIntersectsRoom(link, room)).toBe(false);
+      }
+    }
+    for (const positions of doorPositions.values()) {
+      for (let left = 0; left < positions.length; left += 1) {
+        for (let right = left + 1; right < positions.length; right += 1) {
+          expect(Math.abs(positions[left]! - positions[right]!)).toBeGreaterThanOrEqual(WORLD_GEOMETRY.segmentSize * 2);
+        }
       }
     }
   });
@@ -556,9 +642,9 @@ describe("deterministic room contents", () => {
     });
     const arena = bossLayout.nodes.find(room => room.tag === "script")!;
     expect(arena).toMatchObject({
-      shape: "octagon",
-      width: Math.round(900 * WORLD_SCALE),
-      height: Math.round(650 * WORLD_SCALE),
+      shape: "rectangle",
+      width: ROOM_DEFINITIONS.boss.width,
+      height: ROOM_DEFINITIONS.boss.height,
     });
 
     const floorOne = monsterSpecsForRoom(arena, 1);
@@ -923,7 +1009,7 @@ describe("deterministic room contents", () => {
     expect(floorOneCounts.every(count => count >= 0 && count <= 4)).toBe(true);
     expect(floorTenCounts.every(count => count >= 0 && count <= 4)).toBe(true);
     expect(floorOneCounts).toContain(0);
-    expect(floorTenCounts).toContain(4);
+    expect(Math.max(...floorTenCounts)).toBeGreaterThan(Math.max(...floorOneCounts));
     expect(floorOneCounts.filter(Boolean).length).toBeLessThan(combatRooms.length / 4);
     const totals = [floorOneCounts, floorFourCounts, floorSevenCounts, floorTenCounts]
       .map(counts => counts.reduce((sum, count) => sum + count, 0));

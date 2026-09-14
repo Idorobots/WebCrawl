@@ -13,8 +13,9 @@ export const MAX_CHILDREN_PER_ROOM = 10;
 
 export const WORLD_SCALE = 1.4;
 export const world = (value: number): number => Math.round(value * WORLD_SCALE);
-export const ROOM_WIDTH = world(600);
-export const ROOM_HEIGHT = world(400);
+export const ENVIRONMENT_SEGMENT_SIZE = world(128);
+export const ROOM_WIDTH = ENVIRONMENT_SEGMENT_SIZE * 4;
+export const ROOM_HEIGHT = ENVIRONMENT_SEGMENT_SIZE * 4;
 export const CAMERA_SCALE = 0.92;
 export const HIGH_SCORE_KEY = "alien-web-crawler-high-scores-v1";
 
@@ -48,14 +49,18 @@ export const ASSETS = {
   floorHatch: asset("environment/floor/floor_hatch.png"),
   floorTread: asset("environment/floor/floor_tread.png"),
   floorAsteroidDust: asset("environment/floor/floor_asteroid_dust.png"),
-  wallPlainHorizontal: asset("environment/walls/wall_plain_horizontal.png"),
-  wallPlainVertical: asset("environment/walls/wall_plain_vertical.png"),
-  wallBrokenHorizontal: asset("environment/walls/wall_broken_horizontal.png"),
-  wallCorner: asset("environment/walls/empty.png"), // FIXME
-  doorOpenHorizontal: asset("environment/doors/empty.png"), // FIXME
-  doorOpenVertical: asset("environment/doors/empty.png"), // FIXME
-  doorClosedHorizontal: asset("environment/doors/empty.png"), // FIXME
-  doorClosedVertical: asset("environment/doors/empty.png"), // FIXME
+  wallHorizontalTop: asset("environment/walls/wall_plain_horizontal_top.png"),
+  wallHorizontalBottom: asset("environment/walls/wall_plain_horizontal_bottom.png"),
+  wallVerticalLeft: asset("environment/walls/wall_plain_vertical_left.png"),
+  wallVerticalRight: asset("environment/walls/wall_plain_vertical_right.png"),
+  wallCornerTopLeft: asset("environment/walls/wall_corner_top_left.png"),
+  wallCornerTopRight: asset("environment/walls/wall_corner_top_right.png"),
+  wallCornerBottomLeft: asset("environment/walls/wall_corner_bottom_left.png"),
+  wallCornerBottomRight: asset("environment/walls/wall_corner_bottom_right.png"),
+  doorOpenTop: asset("environment/doors/door_plain_horizontal_open_top.png"),
+  doorOpenBottom: asset("environment/doors/door_plain_horizontal_open_bottom.png"),
+  doorOpenLeft: asset("environment/doors/door_plain_vertical_open_left.png"),
+  doorOpenRight: asset("environment/doors/door_plain_vertical_open_right.png"),
   pedestal: asset("scenery/pedestal.png"),
   lootCrystal: asset("pickups/crystal.png"),
   lootMedkit: asset("pickups/medkit.png"),
