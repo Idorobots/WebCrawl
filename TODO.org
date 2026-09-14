@@ -57,6 +57,10 @@ Allow enemies to shoot bullets.
 Each `script` should be a boss fight - there should be several types of bosses that have different semantics (some stationary, shooting lot's of bullets in various pattern, some spawning additional monsters, some large and slow, but having lot's of HP and dealing lot's of damage, etc.).
 
 * Crystals giving a temporary invulnerability
+Upon pickup the player becomes invulnerable for 10 seconds. That should be signified by changing the players sprite hue to have a green tint. When the effect is about to run out, the hue should blink between tinted and normal hue.
+
+When invulnerable, the player can not take damage even when hit by enemy attacks. Normal damage animations still should fire, but hitpoints should not be deducted from the player's total health.
+
 * More use of HTML elements in-game.
 - Show what each room is based on the element type, etc.
 - Scripts should be boss rooms with a larger, harder oponen.
@@ -234,7 +238,10 @@ We currently have different hard-coded shapes of rooms, but it would be nice to 
 `display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.
 There should be no doors generated leading to these hidden rooms, only walls with a passable section (essentially a "holographic" wall), to maintain the illusion of those rooms being hidden.
 
-* Camera work
+* DONE Camera work
+:LOGBOOK:
+- State "DONE"       from              [2026-09-14 Mon 12:17]
+:END:
 Make the camera dynamic, "following the player on a string".
 When entering a boss arena, the viewport should zoom out to encompass the entire boss room.
 

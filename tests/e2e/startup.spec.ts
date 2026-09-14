@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { PLAYER_SPEC, PORTAL_DEFINITION } from "../../src/client/domain/specs";
+import { CAMERA_SCALE } from "../../src/client/config";
+import { PLAYER_SPEC, PORTAL_DEFINITION, ROOM_DEFINITIONS } from "../../src/client/domain/specs";
 
 const PLAYER_SPEED = PLAYER_SPEC.speed;
 
@@ -31,6 +32,14 @@ async function playerPosition(page: Page): Promise<{ x: number; y: number }> {
     x: Number(await player.getAttribute("data-player-x")),
     y: Number(await player.getAttribute("data-player-y")),
   };
+}
+
+async function cameraState(page: Page): Promise<{ x: number; y: number; zoom: number; bossRoomId: number | null } | null> {
+  return page.evaluate(() =>
+    (window as Window & {
+      __webcrawlTest?: { camera: () => { x: number; y: number; zoom: number; bossRoomId: number | null } | null };
+    }).__webcrawlTest?.camera() ?? null
+  );
 }
 
 async function teleportPlayer(page: Page, target: { x: number; y: number }): Promise<void> {
@@ -219,12 +228,45 @@ test("keeps an active boss sized consistently while it follows the player out", 
   };
   expect(initialBossSize.width).toBeGreaterThan(0);
   expect(initialBossSize.height).toBe(initialBossSize.width);
+  await page.keyboard.down(exitKey);
+  await expect(game).toHaveAttribute("data-current-room-tag", "script", { timeout: 10_000 });
+  await page.keyboard.up(exitKey);
+  const arena = {
+    left: Number(await game.getAttribute("data-active-boss-arena-left")),
+    right: Number(await game.getAttribute("data-active-boss-arena-right")),
+    top: Number(await game.getAttribute("data-active-boss-arena-top")),
+    bottom: Number(await game.getAttribute("data-active-boss-arena-bottom")),
+  };
+  const arenaCenter = { x: (arena.left + arena.right) / 2, y: (arena.top + arena.bottom) / 2 };
+  const viewport = await page.locator("#gameViewport").boundingBox();
+  if (!viewport) throw new Error("Game viewport has no bounds");
+  await expect.poll(async () => {
+    const camera = await cameraState(page);
+    return camera && {
+      centered: Math.hypot(camera.x - arenaCenter.x, camera.y - arenaCenter.y) < 3,
+      fitsWidth: ROOM_DEFINITIONS.boss.width * camera.zoom <= viewport.width,
+      fitsHeight: ROOM_DEFINITIONS.boss.height * camera.zoom <= viewport.height,
+      bossRoom: camera.bossRoomId !== null,
+    };
+  }).toEqual({ centered: true, fitsWidth: true, fitsHeight: true, bossRoom: true });
+  await page.setViewportSize({ width: 390, height: 720 });
+  const mobileViewport = await page.locator("#gameViewport").boundingBox();
+  if (!mobileViewport) throw new Error("Mobile game viewport has no bounds");
+  await expect.poll(async () => {
+    const camera = await cameraState(page);
+    return camera && {
+      centered: Math.hypot(camera.x - arenaCenter.x, camera.y - arenaCenter.y) < 3,
+      fitsWidth: ROOM_DEFINITIONS.boss.width * camera.zoom <= mobileViewport.width,
+      fitsHeight: ROOM_DEFINITIONS.boss.height * camera.zoom <= mobileViewport.height,
+    };
+  }).toEqual({ centered: true, fitsWidth: true, fitsHeight: true });
   const initialBossPosition = {
     x: Number(await game.getAttribute("data-active-boss-x")),
     y: Number(await game.getAttribute("data-active-boss-y")),
   };
   await teleportPlayer(page, position);
   await expect(game).toHaveAttribute("data-current-room-tag", "body");
+  await expect.poll(async () => await cameraState(page)).toMatchObject({ zoom: CAMERA_SCALE, bossRoomId: null });
   await expect.poll(async () => {
     const x = Number(await game.getAttribute("data-active-boss-x"));
     const y = Number(await game.getAttribute("data-active-boss-y"));
@@ -262,22 +304,43 @@ test("moves continuously with WASD and arrow keys", async ({ page }) => {
   }
 });
 
+test("follows the player with Phaser lerp and a deadzone", async ({ page }) => {
+  await startGame(page);
+  await expect.poll(async () => await cameraState(page), { timeout: 15_000 }).not.toBeNull();
+  const initialCamera = (await cameraState(page))!;
+
+  await page.keyboard.down("ArrowRight");
+  await page.waitForTimeout(500);
+  await page.keyboard.up("ArrowRight");
+  await page.waitForTimeout(100);
+
+  const position = await playerPosition(page);
+  const camera = (await cameraState(page))!;
+  expect(position.x).toBeGreaterThan(initialCamera.x + 100);
+  expect(camera.x).toBeGreaterThan(initialCamera.x + 5);
+  expect(camera.x).toBeLessThan(position.x - 20);
+  expect(camera.zoom).toBeCloseTo(CAMERA_SCALE, 2);
+});
+
 test("displays every player walk frame", async ({ page }) => {
   await startGame(page);
   const game = page.locator("#gameCanvas");
-  const direction = await game.getAttribute("data-first-exit");
-  const key = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
   const seen = new Set<string>();
-  await page.keyboard.down(key);
+  await page.keyboard.down("ArrowRight");
   try {
-    for (let index = 0; index < 14; index += 1) {
-      await page.waitForTimeout(50);
+    for (let index = 0; index < 24; index += 1) {
+      if (index === 10) {
+        await page.keyboard.up("ArrowRight");
+        await page.keyboard.down("ArrowLeft");
+      }
+      await page.waitForTimeout(40);
       const asset = await game.getAttribute("data-player-asset") ?? "";
       const frame = asset.match(/walk_[A-Z]+_(\d{2})\.png$/)?.[1];
       if (frame) seen.add(frame);
     }
   } finally {
-    await page.keyboard.up(key);
+    await page.keyboard.up("ArrowRight");
+    await page.keyboard.up("ArrowLeft");
   }
   expect(seen).toEqual(new Set(["01", "02", "03", "04"]));
 });
@@ -314,7 +377,7 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
   await expect(page.locator("#statShots")).toHaveText(shotsAfterRelease ?? "");
 });
 
-test("does not pan or zoom the game viewport", async ({ page }) => {
+test("ignores manual pan and zoom gestures", async ({ page }) => {
   await startGame(page);
 
   const viewport = page.locator("#gameViewport");

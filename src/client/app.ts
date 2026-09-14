@@ -1,6 +1,5 @@
 import { fetchHtml, normalizeUrl } from "./api/fetch-html";
 import {
-  CAMERA_SCALE,
   LOOT_ASSETS,
   MAX_NODES,
   MAX_ROOMS_AFTER_COALESCE,
@@ -314,8 +313,8 @@ function updateCurrentRoom(): void {
   }
 }
 
-function centerCameraOnPlayer(): void {
-  renderer.centerCamera(player);
+function updateCameraForPlayer(immediate = false): void {
+  renderer.setCameraRoom(roomContainingPoint(player.x, player.y), immediate);
 }
 
 function minimapVisibleLayout(): Pick<DungeonLayout, "nodes" | "links"> {
@@ -1931,7 +1930,7 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
   updatePlayerVisual();
   revealRoomsFromCorridor(player.x, player.y);
   updateCurrentRoom();
-  centerCameraOnPlayer();
+  updateCameraForPlayer();
   checkLoot();
   if (checkStairs()) heldMovementKeys.clear();
 }
@@ -1942,7 +1941,7 @@ function teleportPlayerTo(x: number, y: number): void {
   updatePlayerVisual();
   revealRoomsFromCorridor(player.x, player.y);
   updateCurrentRoom();
-  centerCameraOnPlayer();
+  updateCameraForPlayer(true);
   checkLoot();
 }
 
@@ -1955,6 +1954,7 @@ function teleportPlayerTo(x: number, y: number): void {
     portalContacts: () => string[];
     loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>;
     lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null; placement: string | null } | null;
+    camera: () => { x: number; y: number; zoom: number; bossRoomId: number | null } | null;
   };
 }).__webcrawlTest = {
   teleportPlayerTo,
@@ -1969,6 +1969,7 @@ function teleportPlayerTo(x: number, y: number): void {
   },
   stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
   portalContacts: () => [...portalContacts],
+  camera: () => renderer.cameraState(),
   loot: () => currentLoot.map(item => ({
     id: item.id,
     kind: item.kind,
@@ -2010,10 +2011,11 @@ window.addEventListener("keyup", event => {
 });
 
 function updatePlayerAim(clientX: number, clientY: number): void {
-  const bounds = gameViewport.getBoundingClientRect();
-  const dx = clientX - (bounds.left + bounds.width / 2);
-  const dy = clientY - (bounds.top + bounds.height / 2) -
-    PLAYER_SPEC.visualCenterOffsetY * CAMERA_SCALE;
+  const target = renderer.worldPointAt(clientX, clientY);
+  if (!target) return;
+  const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+  const dx = target.x - center.x;
+  const dy = target.y - center.y;
   const magnitude = Math.hypot(dx, dy);
   if (magnitude < 1) return;
 
@@ -2175,7 +2177,7 @@ function renderGraph(
   renderInteractiveObjects();
   updatePlayerFacingAsset();
   revealRoomsFromCorridor(player.x, player.y);
-  centerCameraOnPlayer();
+  updateCameraForPlayer(true);
   updateHudPanels();
   startGameLoop();
 

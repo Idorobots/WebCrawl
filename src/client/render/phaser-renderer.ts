@@ -2,7 +2,12 @@ import Phaser from "phaser";
 import {
   ASSETS,
   BARREL_EXPLOSION_FRAMES,
+  CAMERA_BOSS_PADDING,
+  CAMERA_DEADZONE_HEIGHT,
+  CAMERA_DEADZONE_WIDTH,
+  CAMERA_FOLLOW_LERP,
   CAMERA_SCALE,
+  CAMERA_TRANSITION_MS,
   DEBRIS_ASSETS,
   EFFECT_FRAMES,
   EXPLOSION_FRAMES,
@@ -97,6 +102,8 @@ export class PhaserRenderer {
   private currentMonsters: readonly Monster[] = [];
   private currentBullets: readonly Bullet[] = [];
   private currentLootAssets: Partial<Record<LootKind, string>> = {};
+  private cameraRoom: GraphNode | null = null;
+  private cameraRoomId: number | null = null;
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -148,19 +155,22 @@ export class PhaserRenderer {
 
   private attach(scene: Phaser.Scene): void {
     this.scene = scene;
-    scene.cameras.main.setZoom(CAMERA_SCALE);
+    scene.scale.on(Phaser.Scale.Events.RESIZE, this.refreshCameraForResize, this);
     this.drawWorld();
     this.renderDecorations(this.currentDecorations, this.visited);
     this.renderObjects(this.currentStairs, this.currentLoot, this.visited, this.currentLootAssets);
     this.renderMonsters(this.currentMonsters);
     this.renderBullets(this.currentBullets);
     this.setPlayer(this.currentPlayer, this.currentPlayerHp, this.currentPlayerMaxHp, this.currentPlayerAsset);
-    this.centerCamera(this.currentPlayer);
+    this.applyCameraMode(true);
     this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
   }
 
   clear(): void {
     this.layout = null;
+    this.cameraRoom = null;
+    this.cameraRoomId = null;
+    this.scene?.cameras.main.stopFollow().setDeadzone().resetFX();
     this.background?.destroy();
     this.background = null;
     this.destroyStaticObjects();
@@ -965,10 +975,78 @@ export class PhaserRenderer {
     });
   }
 
-  centerCamera(position: Point): void {
-    this.currentPlayer.x = position.x;
-    this.currentPlayer.y = position.y;
-    this.scene?.cameras.main.centerOn(position.x, position.y);
+  setCameraRoom(room: GraphNode | null, immediate = false): void {
+    const bossRoom = room?.tag === "script" ? room : null;
+    const nextRoomId = bossRoom?.id ?? null;
+    this.cameraRoom = bossRoom;
+    if (!immediate && nextRoomId === this.cameraRoomId) return;
+    this.cameraRoomId = nextRoomId;
+    this.applyCameraMode(immediate);
+  }
+
+  private applyCameraMode(immediate: boolean): void {
+    const camera = this.scene?.cameras.main;
+    if (!camera || !this.player) return;
+    camera.resetFX();
+    if (this.cameraRoom) {
+      const zoom = this.bossRoomZoom(camera, this.cameraRoom);
+      camera.stopFollow().setDeadzone();
+      if (immediate) {
+        camera.setZoom(zoom).centerOn(this.cameraRoom.x, this.cameraRoom.y);
+      } else {
+        camera.pan(this.cameraRoom.x, this.cameraRoom.y, CAMERA_TRANSITION_MS, "Sine.easeInOut", true);
+        camera.zoomTo(zoom, CAMERA_TRANSITION_MS, "Sine.easeInOut", true);
+      }
+      return;
+    }
+
+    camera.startFollow(this.player, false, CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_LERP);
+    camera.setDeadzone(CAMERA_DEADZONE_WIDTH, CAMERA_DEADZONE_HEIGHT);
+    if (immediate) {
+      camera.setZoom(CAMERA_SCALE).centerOn(this.player.x, this.player.y);
+    } else {
+      camera.zoomTo(CAMERA_SCALE, CAMERA_TRANSITION_MS, "Sine.easeInOut", true);
+    }
+  }
+
+  private bossRoomZoom(camera: Phaser.Cameras.Scene2D.Camera, room: GraphNode): number {
+    return Math.min(
+      CAMERA_SCALE,
+      camera.width / (room.width + CAMERA_BOSS_PADDING * 2),
+      camera.height / (room.height + CAMERA_BOSS_PADDING * 2),
+    );
+  }
+
+  private refreshCameraForResize(): void {
+    if (!this.cameraRoom) return;
+    this.applyCameraMode(true);
+  }
+
+  worldPointAt(clientX: number, clientY: number): Point | null {
+    const bounds = this.host.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return null;
+    const camera = this.scene?.cameras.main;
+    if (!camera) {
+      return {
+        x: this.currentPlayer.x + (clientX - bounds.left - bounds.width / 2) / CAMERA_SCALE,
+        y: this.currentPlayer.y + (clientY - bounds.top - bounds.height / 2) / CAMERA_SCALE,
+      };
+    }
+    const x = (clientX - bounds.left) * camera.width / bounds.width;
+    const y = (clientY - bounds.top) * camera.height / bounds.height;
+    const point = camera.getWorldPoint(x, y);
+    return { x: point.x, y: point.y };
+  }
+
+  cameraState(): { x: number; y: number; zoom: number; bossRoomId: number | null } | null {
+    const camera = this.scene?.cameras.main;
+    if (!camera) return null;
+    return {
+      x: camera.midPoint.x,
+      y: camera.midPoint.y,
+      zoom: camera.zoom,
+      bossRoomId: this.cameraRoomId,
+    };
   }
 
   viewportSize(): { width: number; height: number } {

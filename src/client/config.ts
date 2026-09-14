@@ -17,6 +17,11 @@ export const ENVIRONMENT_SEGMENT_SIZE = world(128);
 export const ROOM_WIDTH = ENVIRONMENT_SEGMENT_SIZE * 4;
 export const ROOM_HEIGHT = ENVIRONMENT_SEGMENT_SIZE * 4;
 export const CAMERA_SCALE = 0.92;
+export const CAMERA_FOLLOW_LERP = 0.12;
+export const CAMERA_DEADZONE_WIDTH = 180;
+export const CAMERA_DEADZONE_HEIGHT = 120;
+export const CAMERA_TRANSITION_MS = 450;
+export const CAMERA_BOSS_PADDING = world(40);
 export const HIGH_SCORE_KEY = "alien-web-crawler-high-scores-v1";
 
 export const DIRECTIONS: Record<Direction, {
