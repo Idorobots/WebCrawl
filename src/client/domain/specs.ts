@@ -102,6 +102,9 @@ export const DEFAULT_BULLET_SPEC = {
   maxDistance: world(1_029),
 } as const;
 
+export const CRYSTAL_INVULNERABILITY_DURATION_MS = 10_000;
+export const CRYSTAL_INVULNERABILITY_BLINK_START_MS = 2_000;
+
 interface MonsterDefinition {
   kind: MonsterKind;
   visualKinds: readonly MonsterVisualKind[];

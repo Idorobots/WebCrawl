@@ -66,6 +66,32 @@ async function setPlayerInvulnerable(page: Page, enabled: boolean): Promise<void
   }, enabled);
 }
 
+async function grantCrystals(page: Page, count: number): Promise<void> {
+  await page.evaluate((nextCount) => {
+    (window as Window & {
+      __webcrawlTest?: { grantCrystals: (count: number) => void };
+    }).__webcrawlTest?.grantCrystals(nextCount);
+  }, count);
+}
+
+async function playerHp(page: Page): Promise<number> {
+  return page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: { playerHp: () => number } }).__webcrawlTest?.playerHp() ?? 0
+  );
+}
+
+async function damagePlayer(page: Page, amount: number): Promise<void> {
+  await page.evaluate((damage) => {
+    (window as Window & { __webcrawlTest?: { damagePlayer: (amount: number) => void } }).__webcrawlTest?.damagePlayer(damage);
+  }, amount);
+}
+
+async function expireCrystalShield(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as Window & { __webcrawlTest?: { expireCrystalShield: () => void } }).__webcrawlTest?.expireCrystalShield();
+  });
+}
+
 async function visibleLoot(page: Page): Promise<Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>> {
   return page.evaluate(() =>
     (window as Window & {
@@ -116,6 +142,35 @@ test("reports the configured collision-debug state", async ({ page }) => {
     "data-debug-hitboxes",
     process.env.VITE_DEBUG_HITBOXES === "true" ? "true" : "false",
   );
+});
+
+test("uses crystals for temporary invulnerability without counting supplies as score loot", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  await expect(page.locator("#creditCount")).toHaveText("0");
+  await expect(page.locator("#crystalCount")).toHaveText("0");
+  await expect(page.locator("#coreCount")).toHaveText("0");
+  await expect(page.locator("#medkitCount")).toHaveText("0");
+
+  await grantCrystals(page, 2);
+  await expect(page.locator("#crystalCount")).toHaveText("2");
+  await expect(game).toHaveAttribute("data-crystals", "2");
+
+  await page.keyboard.press("Space");
+  await expect(page.locator("#crystalCount")).toHaveText("1");
+  await expect(game).toHaveAttribute("data-player-invulnerable", "true");
+  await expect(game).toHaveAttribute("data-player-protection-tinted", "true");
+
+  const protectedHp = await playerHp(page);
+  await damagePlayer(page, 3);
+  expect(await playerHp(page)).toBe(protectedHp);
+
+  await page.keyboard.press("Space");
+  await expect(page.locator("#crystalCount")).toHaveText("0");
+  await expireCrystalShield(page);
+  await expect(game).toHaveAttribute("data-player-invulnerable", "false");
+  await damagePlayer(page, 3);
+  expect(await playerHp(page)).toBe(protectedHp - 3);
 });
 
 test("spawns on an enabled entry portal without immediately retriggering it", async ({ page }) => {
@@ -444,7 +499,7 @@ test("spawns multiple enemies once another room is revealed", async ({ page }) =
   expect(seen, `Page errors: ${pageErrors.join(" | ")}\nMonster asset samples: ${samples.join(" | ")}`).toEqual(new Set(["01", "02", "03", "04"]));
 });
 
-test("swaps temporary weapons, refills only from orbs, and falls back to pulse rifle", async ({ page }) => {
+test("swaps temporary weapons, refills only from ammo cores, and falls back to pulse rifle", async ({ page }) => {
   await page.route("**/api/fetch?**", route => route.fulfill({
     status: 200,
     contentType: "text/html",
@@ -536,7 +591,7 @@ test("swaps temporary weapons, refills only from orbs, and falls back to pulse r
   const lootKind = await game.getAttribute("data-first-loot-kind");
   await teleportPlayer(page, lootTarget);
   const replenishedAmmo = Number(await game.getAttribute("data-weapon-ammo"));
-  if (lootKind === "crystal" || lootKind === "core") {
+  if (lootKind === "core") {
     expect(replenishedAmmo).toBeGreaterThan(ammoBeforeOrb);
   } else {
     expect(replenishedAmmo).toBe(ammoBeforeOrb);

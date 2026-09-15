@@ -96,6 +96,14 @@
         </div>
       </section>
 
+      <section class="loot-status-card" aria-label="Loot inventory">
+        <span class="loot-label">LOOT</span>
+        <span class="loot-slot" title="Credits"><img src="assets/pickups/gold.png" alt="" /><strong id="creditCount">0</strong></span>
+        <span class="loot-slot" title="Invulnerability crystals"><img src="assets/pickups/crystal.png" alt="" /><strong id="crystalCount">0</strong></span>
+        <span class="loot-slot" title="Ammo cores"><img src="assets/pickups/ammo_energy.png" alt="" /><strong id="coreCount">0</strong></span>
+        <span class="loot-slot" title="Medkits"><img src="assets/pickups/medkit.png" alt="" /><strong id="medkitCount">0</strong></span>
+      </section>
+
       <section class="weapon-status-card">
         <span id="weaponName" class="weapon-name">PULSE RIFLE</span>
         <span id="ammoCount" class="ammo">∞</span>
@@ -118,9 +126,9 @@
           <div>Bosses: <strong id="deathBossKills">0</strong></div>
           <div>Shots fired: <strong id="deathShots">0</strong></div>
         </div>
-        <h3>High scores — loot recovered</h3>
+        <h3>High scores — score</h3>
         <table id="highScoreTable">
-          <thead><tr><th>#</th><th>Loot</th><th>Kills</th><th>Date</th></tr></thead>
+          <thead><tr><th>#</th><th>Score</th><th>Kills</th><th>Date</th></tr></thead>
           <tbody id="highScoreRows"></tbody>
         </table>
         <button id="restartButton" type="button">Restart expedition</button>

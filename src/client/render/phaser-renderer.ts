@@ -104,6 +104,8 @@ export class PhaserRenderer {
   private currentLootAssets: Partial<Record<LootKind, string>> = {};
   private cameraRoom: GraphNode | null = null;
   private cameraRoomId: number | null = null;
+  private playerProtectionActive = false;
+  private playerProtectionTintVisible = false;
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -898,7 +900,22 @@ export class PhaserRenderer {
     this.player.setPosition(position.x, position.y);
     if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
     this.applyClip(this.playerSprite!, clip, PLAYER_SPEC.spriteSize, 0, asset);
+    this.applyPlayerProtectionTint();
     this.renderDebugGeometry();
+  }
+
+  setPlayerProtection(active: boolean, tintVisible: boolean): void {
+    this.playerProtectionActive = active;
+    this.playerProtectionTintVisible = tintVisible;
+    this.setHostData("playerInvulnerable", String(active));
+    this.setHostData("playerProtectionTinted", String(active && tintVisible));
+    this.applyPlayerProtectionTint();
+  }
+
+  private applyPlayerProtectionTint(): void {
+    if (!this.playerSprite) return;
+    if (this.playerProtectionActive && this.playerProtectionTintVisible) this.playerSprite.setTint(0x78ff9b);
+    else this.playerSprite.clearTint();
   }
 
   private renderDebugGeometry(): void {
@@ -939,6 +956,7 @@ export class PhaserRenderer {
     if (this.playerSprite && this.scene?.textures.exists(textureKey(asset))) {
       this.playerSprite.setTexture(textureKey(asset));
       this.applyClip(this.playerSprite, this.playerClipForAsset(asset), PLAYER_SPEC.spriteSize, 0, asset);
+      this.applyPlayerProtectionTint();
     }
   }
 

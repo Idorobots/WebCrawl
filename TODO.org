@@ -56,10 +56,20 @@ Allow enemies to shoot bullets.
 :END:
 Each `script` should be a boss fight - there should be several types of bosses that have different semantics (some stationary, shooting lot's of bullets in various pattern, some spawning additional monsters, some large and slow, but having lot's of HP and dealing lot's of damage, etc.).
 
-* Crystals giving a temporary invulnerability
-Upon pickup the player becomes invulnerable for 10 seconds. That should be signified by changing the players sprite hue to have a green tint. When the effect is about to run out, the hue should blink between tinted and normal hue.
+* DONE Crystals giving a temporary invulnerability
+:LOGBOOK:
+- State "DONE"       from              [2026-09-14 Mon 13:04]
+:END:
+Upon pickup the crystal counter is incremented.
+
+The UI should be updated to show the number of different loot items collected, including crystals. Crystals are consumable, and using them decreases the counter (and therefore the final score). Ammo should not count towards loot collected, nor should the medkits.
+The loot counters should be displayed on a panel between the health bar and the currently carried weapon (see the webcrawl_mockup_06 for specifics).
+
+Whenever there are crystals available and the player presses spacebar, the player becomes invulnerable for 10 seconds. That should be signified by changing the player's sprite's hue to have a green tint. When the effect is about to run out, the hue should blink between tinted and normal hue.
 
 When invulnerable, the player can not take damage even when hit by enemy attacks. Normal damage animations still should fire, but hitpoints should not be deducted from the player's total health.
+
+The final game score should be built based on the types of loot collected and the enemies killed. Crystals available at the end of the game should count for a lot of points.
 
 * More use of HTML elements in-game.
 - Show what each room is based on the element type, etc.
@@ -253,3 +263,12 @@ When entering a boss arena, the viewport should zoom out to encompass the entire
 - Enemies still aim too high when shooting horizontally.
 - Boss footprint is displayed too low.
 - Heap Titan boss is way too easy to kill - make it shoot waves of bullets more often and from a greater distance to player.
+* Boss fights
+- Boss fight should begin when the player enters the boss arena.
+- Doors should shut behind the player once the arena is entered.
+- All enemies in the boss arena are invulnerable until the boss fight actually begins (player enters the room).
+- Camera should zoom out to show the entire boss arena at once when the fight begins.
+* Lighting
+Would be nice to include dynamic lighting in the game. Including bullets and room lighting.
+* Backup server API
+Ideally, this game would run without the current server API. Whenever a website cannot be fetched directly due to CORS, only then attempt to use the server API. If that API is not available, fall back on a public page fetching API.

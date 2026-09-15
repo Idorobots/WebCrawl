@@ -38,7 +38,10 @@ import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { aStarPath, monsterEscapeStep } from "./domain/pathfinding";
 import { updatePortalContacts } from "./domain/portals";
+import { scoreForRun, scoredLootCount, timedShieldState, type LootInventory } from "./domain/scoring";
 import {
+  CRYSTAL_INVULNERABILITY_BLINK_START_MS,
+  CRYSTAL_INVULNERABILITY_DURATION_MS,
   DEFAULT_BULLET_SPEC,
   HEAP_TITAN_WAVE,
   LOOT_DEFINITIONS,
@@ -130,6 +133,7 @@ let playerFacing: Point = { x: 0, y: -1 };
 let playerHp: number = PLAYER_SPEC.maxHp;
 let playerAlive = true;
 let playerInvulnerable = false;
+let crystalInvulnerableUntil = 0;
 let lastPlayerShotAt = -Infinity;
 let currentWeapon: WeaponSpec = { ...DEFAULT_WEAPON };
 let currentWeaponAmmo: number | null = null;
@@ -145,7 +149,7 @@ const temporarilyBlockedLoot = new Set<string>();
 let gameAnimationFrame: number | null = null;
 let lastGameTick: number | null = null;
 
-let lootScore = 0;
+const lootInventory: LootInventory = { credits: 0, crystals: 0, cores: 0, medkits: 0 };
 const collectedLoot = new Set<string>();
 let runStartedAt: number | null = null;
 
@@ -170,12 +174,13 @@ let portalTransitioning = false;
 const portalContacts = new Set<string>();
 const heldMovementKeys = new Set<string>();
 
-// These duplicate counters were removed from the bottom HUD in v19.
-// Keep guarded references because some legacy update paths still touch them.
-const lootCountEl = document.querySelector<HTMLElement>("#lootCount");
 const hpCountEl = requireElement<HTMLElement>("#hpCount");
 const killsCountEl = document.querySelector<HTMLElement>("#killsCount");
 const hudHealthFillEl = requireElement<HTMLElement>("#hudHealthFill");
+const creditCountEl = requireElement<HTMLElement>("#creditCount");
+const crystalCountEl = requireElement<HTMLElement>("#crystalCount");
+const coreCountEl = requireElement<HTMLElement>("#coreCount");
+const medkitCountEl = requireElement<HTMLElement>("#medkitCount");
 const weaponNameEl = requireElement<HTMLElement>("#weaponName");
 const ammoCountEl = requireElement<HTMLElement>("#ammoCount");
 
@@ -428,7 +433,7 @@ function updateHudPanels(): void {
   sideFloorLabelEl.textContent = `FLOOR ${floor}`;
   statRoomsEl.textContent = `${rooms} / ${MAX_ROOMS_AFTER_COALESCE}`;
   statFloorEl.textContent = String(floor);
-  statLootEl.textContent = String(lootScore);
+  statLootEl.textContent = String(scoredLootCount(lootInventory));
   statKillsEl.textContent = String(runStats.kills);
   statShotsEl.textContent = String(runStats.shotsFired);
   statTimeEl.textContent = formatRunTime();
@@ -468,6 +473,43 @@ function updateWeaponUi(): void {
   gameCanvasHost.dataset.weaponAmmo = currentWeaponAmmo === null ? "infinite" : String(currentWeaponAmmo);
 }
 
+function updateLootUi(): void {
+  creditCountEl.textContent = String(lootInventory.credits);
+  crystalCountEl.textContent = String(lootInventory.crystals);
+  coreCountEl.textContent = String(lootInventory.cores);
+  medkitCountEl.textContent = String(lootInventory.medkits);
+  gameCanvasHost.dataset.credits = String(lootInventory.credits);
+  gameCanvasHost.dataset.crystals = String(lootInventory.crystals);
+  gameCanvasHost.dataset.cores = String(lootInventory.cores);
+  gameCanvasHost.dataset.medkits = String(lootInventory.medkits);
+  updateHudPanels();
+}
+
+function isPlayerInvulnerable(now = performance.now()): boolean {
+  return playerInvulnerable || now < crystalInvulnerableUntil;
+}
+
+function updatePlayerProtectionVisual(now = performance.now()): void {
+  const timedShield = timedShieldState(
+    crystalInvulnerableUntil,
+    now,
+    CRYSTAL_INVULNERABILITY_BLINK_START_MS,
+  );
+  const active = playerInvulnerable || timedShield.active;
+  const tintVisible = playerInvulnerable || timedShield.tintVisible;
+  renderer.setPlayerProtection(active, tintVisible);
+}
+
+function activateCrystalInvulnerability(now = performance.now()): boolean {
+  if (!playerAlive || lootInventory.crystals <= 0) return false;
+  lootInventory.crystals -= 1;
+  crystalInvulnerableUntil = now + CRYSTAL_INVULNERABILITY_DURATION_MS;
+  updateLootUi();
+  updatePlayerProtectionVisual(now);
+  setStatus("Crystal shield active for 10 seconds.");
+  return true;
+}
+
 function equipWeapon(weapon: WeaponSpec): void {
   equipWeaponWithAmmo(weapon, weapon.maxAmmo);
 }
@@ -486,7 +528,7 @@ function equipDefaultWeapon(): void {
 }
 
 function lootReplenishesAmmo(item: LootItem): boolean {
-  return item.kind === "crystal" || item.kind === "core";
+  return item.kind === "core";
 }
 
 function extraLootForCurrentPage(): LootItem[] {
@@ -531,7 +573,7 @@ function persistDroppedWeapon(weapon: WeaponSpec, ammo: number, position: Point,
 
 function recordHighScore(): { scores: HighScore[]; rank: number | null } {
   const entry: HighScore = {
-    score: lootScore,
+    score: scoreForRun(lootInventory, runStats),
     kills: runStats.kills,
     fastKills: runStats.fastKills,
     slowKills: runStats.slowKills,
@@ -549,7 +591,7 @@ function recordHighScore(): { scores: HighScore[]; rank: number | null } {
 function showDeathModal(): void {
   const { scores, rank } = recordHighScore();
 
-  deathScoreEl.textContent = `Loot recovered: ${lootScore}`;
+  deathScoreEl.textContent = `Final score: ${scoreForRun(lootInventory, runStats)}`;
   deathKillsEl.textContent = String(runStats.kills);
   deathFastKillsEl.textContent = String(runStats.fastKills);
   deathSlowKillsEl.textContent = String(runStats.slowKills);
@@ -818,10 +860,7 @@ function updateMonsterPositions(): void {
 }
 
 function applyPlayerDamage(amount: number): void {
-  if (!playerAlive || playerInvulnerable) return;
-
-  playerHp = Math.max(0, playerHp - amount);
-  hpCountEl.textContent = String(playerHp);
+  if (!playerAlive) return;
 
   renderer.spawnEffect(
     PLAYER_SPEC.visual.effects?.damage,
@@ -829,6 +868,11 @@ function applyPlayerDamage(amount: number): void {
     player.y + PLAYER_SPEC.visualCenterOffsetY,
     PLAYER_SPEC.spriteSize,
   );
+
+  if (isPlayerInvulnerable()) return;
+
+  playerHp = Math.max(0, playerHp - amount);
+  hpCountEl.textContent = String(playerHp);
 
   updateHealthUi();
 
@@ -1403,6 +1447,7 @@ function gameTick(timestamp: number): void {
   const dt = Math.min(0.05, Math.max(0, (timestamp - lastGameTick) / 1000));
   lastGameTick = timestamp;
 
+  updatePlayerProtectionVisual(timestamp);
   updatePlayerMovement(dt, timestamp);
   if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
@@ -1676,6 +1721,7 @@ function renderInteractiveObjects(): void {
 
 function updatePlayerVisual(): void {
   renderer.setPlayer(player, playerHp, PLAYER_SPEC.maxHp, currentPlayerSpriteAsset);
+  updatePlayerProtectionVisual();
 }
 
 function checkLoot(): void {
@@ -1703,9 +1749,12 @@ function checkLoot(): void {
       !temporarilyBlockedLoot.has(item.id)
     ) {
       collectedLoot.add(item.id);
-      lootScore += 1;
-      if (lootCountEl) lootCountEl.textContent = String(lootScore);
-      updateHudPanels();
+
+      if (item.kind === "credit") lootInventory.credits += 1;
+      if (item.kind === "crystal") lootInventory.crystals += 1;
+      if (item.kind === "core") lootInventory.cores += 1;
+      if (item.kind === "medkit") lootInventory.medkits += 1;
+      updateLootUi();
 
       if (item.kind === "weapon" && item.weapon) {
         if (currentWeapon.maxAmmo !== null && currentWeaponAmmo !== null && currentWeaponAmmo > 0) {
@@ -1950,6 +1999,11 @@ function teleportPlayerTo(x: number, y: number): void {
     teleportPlayerTo: (x: number, y: number) => void;
     setWeaponAmmo: (ammo: number) => void;
     setPlayerInvulnerable: (enabled: boolean) => void;
+    grantCrystals: (count: number) => void;
+    useCrystal: () => boolean;
+    expireCrystalShield: () => void;
+    playerHp: () => number;
+    damagePlayer: (amount: number) => void;
     stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y">>;
     portalContacts: () => string[];
     loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>;
@@ -1966,7 +2020,19 @@ function teleportPlayerTo(x: number, y: number): void {
   },
   setPlayerInvulnerable(enabled: boolean): void {
     playerInvulnerable = enabled;
+    updatePlayerProtectionVisual();
   },
+  grantCrystals(count: number): void {
+    lootInventory.crystals = Math.max(0, lootInventory.crystals + count);
+    updateLootUi();
+  },
+  useCrystal: () => activateCrystalInvulnerability(),
+  expireCrystalShield(): void {
+    crystalInvulnerableUntil = 0;
+    updatePlayerProtectionVisual();
+  },
+  playerHp: () => playerHp,
+  damagePlayer: applyPlayerDamage,
   stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
   portalContacts: () => [...portalContacts],
   camera: () => renderer.cameraState(),
@@ -1993,6 +2059,11 @@ function teleportPlayerTo(x: number, y: number): void {
 };
 
 window.addEventListener("keydown", event => {
+  if (event.code === "Space") {
+    if (!gameUi.hidden) event.preventDefault();
+    activateCrystalInvulnerability();
+    return;
+  }
   if (!(event.code in movementDirections)) return;
   if (
     gameUi.hidden ||
@@ -2178,7 +2249,7 @@ function renderGraph(
   updatePlayerFacingAsset();
   revealRoomsFromCorridor(player.x, player.y);
   updateCameraForPlayer(true);
-  updateHudPanels();
+  updateLootUi();
   startGameLoop();
 
   setStatus(
