@@ -38,10 +38,10 @@ export function lootKindForSeed(seed: number): LootKind {
 }
 
 function lootKindForRoll(roll: number): LootKind {
-  if (roll < 35) return "core";
-  if (roll < 70) return "energy";
-  if (roll < 85) return "medkit";
-  if (roll < 93) return "credit";
+  if (roll < 30) return "credit";
+  if (roll < 60) return "energy";
+  if (roll < 80) return "core";
+  if (roll < 95) return "medkit";
   return "crystal";
 }
 
@@ -736,9 +736,10 @@ function safeMonsterPosition(
 
 export function lootCountForRoom(room: GraphNode): number {
   const seed = stableHash(`${room.lootSeed}|loot-count`);
-  if (room.tag === "img") return 3 + (seed % 3);
+  if (room.tag === "img") return 3 + (seed % 5);
   if (seed % 100 >= 60) return 0;
   return 1 + ((seed >>> 8) % 2);
+
 }
 
 export function lootPositions(room: GraphNode, count: number): Point[] {
@@ -771,57 +772,6 @@ export function staircasePositions(room: GraphNode, count: number, yOffset = 0):
       y: room.y - ((rows - 1) * verticalSpacing) / 2 + row * verticalSpacing + yOffset,
     };
   });
-}
-
-function corridorLootPositions(link: LayoutLink, count: number): Point[] {
-  const points = link.points;
-  if (points.length < 2) return [];
-  const segmentLengths: number[] = [];
-  let total = 0;
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const length = Math.hypot(points[index + 1]!.x - points[index]!.x, points[index + 1]!.y - points[index]!.y);
-    segmentLengths.push(length);
-    total += length;
-  }
-  if (total < 1) return [];
-  const at = (fraction: number): Point => {
-    let distance = fraction * total;
-    for (let index = 0; index < segmentLengths.length; index += 1) {
-      const length = segmentLengths[index]!;
-      if (distance <= length) {
-        const from = points[index]!;
-        const to = points[index + 1]!;
-        const t = distance / Math.max(1, length);
-        return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
-      }
-      distance -= length;
-    }
-    return { ...points[points.length - 1]! } as Point;
-  };
-  return Array.from({ length: count }, (_, index) => at((index + 1) / (count + 1)));
-}
-
-export function corridorLootForLink(
-  link: LayoutLink,
-  pageUrl: string,
-  collectedLoot: ReadonlySet<string>,
-): LootItem[] {
-  const seed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|loot`);
-  if (seed % 100 >= 40) return [];
-  const count = 1 + ((seed >>> 8) % 2);
-  const positions = corridorLootPositions(link, count);
-  const items: LootItem[] = [];
-  for (let index = 0; index < positions.length; index += 1) {
-    const id = `${pageUrl}::${link.id}::corridor-loot-${index}`;
-    if (collectedLoot.has(id)) continue;
-    items.push({
-      id,
-      roomId: link.ownerRoomId,
-      ...positions[index]!,
-      kind: lootKindForSeed(stableHash(`${seed}|${index}|kind`)),
-    });
-  }
-  return items;
 }
 
 export function buildInteractiveObjects(
@@ -879,9 +829,6 @@ export function buildInteractiveObjects(
     }
     const weaponLoot = weaponLootForRoom(room, pageUrl);
     if (weaponLoot && !collectedLoot.has(weaponLoot.id)) loot.push(weaponLoot);
-  }
-  for (const link of layout.links) {
-    loot.push(...corridorLootForLink(link, pageUrl, collectedLoot));
   }
   return { stairs, loot };
 }

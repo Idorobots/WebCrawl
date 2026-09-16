@@ -280,7 +280,11 @@ The player should have an energy bar that goes up to 10 point. Place the bar und
 
 The attack should not allow the player to move through walls. Walls block the player as normal.
 
-* Energy shield
+* CANCELLED Energy shield
+:LOGBOOK:
+- State "CANCELLED"  from              [2026-09-17 Thu 01:16] \\
+  Went with energy attacks.
+:END:
 When picking up the energy ammo instead of reloading the currently held weapon it should restore an energy shield. Player should start with a shield of 5 in addition to the 10 hitpoints.
 Change the current ammo asset to the ammo one and use the current energy ammo assent for the energy pickup.
 Update the loot counters with the new loot counter.
@@ -307,11 +311,10 @@ Instead of a loading screen show a holographic message from Samario, the CEO of 
 
 Names for various things (useful for the "how to play" screen):
 - RAM - Copyrighted Material
-- Med kits
+- Med kits- Doob Post
+- Energy Packs - Quota
 - Shield charges - Regulatory Capture
 - Crystals - Government bailouts
-
-The energy attack should be called "Doom Post".
 
 Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to tokens in AI.
 

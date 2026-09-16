@@ -1106,8 +1106,8 @@ body {
 }
 
 .loot-slot img {
-  width: 48px;
-  height: 48px;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 0 5px rgba(81,221,255,.34));
@@ -1194,7 +1194,7 @@ button {
   #topBar { grid-template-columns: 230px 1fr; }
   #bottomHud { grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.2fr) minmax(220px, 1fr); }
   .loot-status-card { gap: 9px; }
-  .loot-slot img { width: 38px; height: 38px; }
+  .loot-slot img { width: 57px; height: 57px; }
   .top-quote { display: none; }
   #bottomHud { grid-template-columns: 1fr 1fr; }
 }
@@ -1228,7 +1228,7 @@ button {
   }
   .loot-status-card { gap: 4px; }
   .loot-slot { gap: 2px; font-size: 16px; }
-  .loot-slot img { width: 30px; height: 30px; }
+  .loot-slot img { width: 45px; height: 45px; }
   #playerHudPortrait {
     width: 46px;
     height: 54px;

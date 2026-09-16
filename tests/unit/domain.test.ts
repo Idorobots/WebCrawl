@@ -196,21 +196,6 @@ describe("layout and geometry", () => {
     expect(distanceSquared({ x: 1, y: 2 }, { x: 4, y: 6 })).toBe(25);
   });
 
-  it("places deterministic loot along corridor interiors", () => {
-    const floorOne = buildInteractiveObjects(layout, "https://example.com/::floor-1", null, new Set());
-    const floorTwo = buildInteractiveObjects(layout, "https://example.com/::floor-1", null, new Set());
-    expect(floorOne.loot).toEqual(floorTwo.loot);
-    for (const item of floorOne.loot) {
-      const link = layout.links.find(candidate => item.id.includes(`::${candidate.id}::corridor-loot`));
-      if (!link) continue;
-      expect(pointInCorridor(item.x, item.y, link, 0)).toBe(true);
-      const start = link.points[0]!;
-      const end = link.points[link.points.length - 1]!;
-      expect(Math.hypot(item.x - start.x, item.y - start.y)).toBeGreaterThan(world(10));
-      expect(Math.hypot(item.x - end.x, item.y - end.y)).toBeGreaterThan(world(10));
-    }
-  });
-
   it("blocks room walls halfway through their segment and admits only the middle of doors", () => {
     const room = layout.nodes[0]!;
     const topWallEdge = room.y - room.height / 2 + WORLD_GEOMETRY.topWallCollisionDepth;
@@ -610,8 +595,7 @@ describe("deterministic room contents", () => {
     expect(floorFiveCounts.reduce((sum, count) => sum + count, 0)).toBeGreaterThan(
       floorOneCounts.reduce((sum, count) => sum + count, 0),
     );
-    expect(lootCounts.filter(count => count > 0).length).toBeGreaterThan(100);
-    expect(lootCounts.every(count => count >= 0 && count <= 2)).toBe(true);
+    expect(lootCounts.every(count => count === 0)).toBe(true);
   });
 
   it("scales monster stats and includes sentries on deeper floors", () => {
@@ -1113,8 +1097,16 @@ describe("deterministic room contents", () => {
   });
 
   it("namespaces collected loot to a specific floor instance", () => {
-    const floorOne = buildInteractiveObjects(layout, "https://example.com/::floor-1", null, new Set());
-    const floorTwo = buildInteractiveObjects(layout, "https://example.com/::floor-2", null, new Set());
+    const imageRoom = node(9_001, null, 0, {
+      x: 500,
+      y: 400,
+      tag: "img",
+      lootSeed: stableHash("img-namespace"),
+      isRoot: true,
+    });
+    const imageLayout = { nodes: [imageRoom], links: [], hiddenCount: 0 };
+    const floorOne = buildInteractiveObjects(imageLayout, "https://example.com/::floor-1", null, new Set());
+    const floorTwo = buildInteractiveObjects(imageLayout, "https://example.com/::floor-2", null, new Set());
     expect(floorOne.loot.length).toBeGreaterThan(0);
     expect(floorOne.loot.map(item => item.id)).not.toEqual(floorTwo.loot.map(item => item.id));
   });

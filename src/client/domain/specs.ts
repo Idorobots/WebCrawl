@@ -686,7 +686,7 @@ export const LOOT_DEFINITIONS: Record<Exclude<LootKind, "weapon">, LootDefinitio
     asset: ASSETS.lootCredit,
     frames: LOOT_RAM_FRAMES,
     frameDurationMs: 200,
-    size: world(75),
+    size: world(50),
     pickupRadius: world(33),
   },
   crystal: { asset: ASSETS.lootCrystal, size: world(63), pickupRadius: world(33) },
