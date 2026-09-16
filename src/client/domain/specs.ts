@@ -106,6 +106,11 @@ export const DEFAULT_BULLET_SPEC = {
 export const CRYSTAL_INVULNERABILITY_DURATION_MS = 10_000;
 export const CRYSTAL_INVULNERABILITY_BLINK_START_MS = 2_000;
 
+export const PLAYER_ENERGY_MAX = 5;
+export const ENERGY_DASH_RANGE = world(330);
+export const ENERGY_DASH_SPEED = world(1_300);
+export const ENERGY_DASH_DAMAGE = 23.5;
+
 interface MonsterDefinition {
   kind: MonsterKind;
   visualKinds: readonly MonsterVisualKind[];
@@ -686,6 +691,7 @@ export const LOOT_DEFINITIONS: Record<Exclude<LootKind, "weapon">, LootDefinitio
   },
   crystal: { asset: ASSETS.lootCrystal, size: world(63), pickupRadius: world(33) },
   core: { asset: ASSETS.lootCore, size: world(63), pickupRadius: world(33) },
+  energy: { asset: ASSETS.lootEnergy, size: world(63), pickupRadius: world(33) },
   medkit: { asset: ASSETS.lootMedkit, size: world(63), pickupRadius: world(33) },
 };
 

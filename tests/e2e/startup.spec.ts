@@ -74,6 +74,14 @@ async function grantCrystals(page: Page, count: number): Promise<void> {
   }, count);
 }
 
+async function grantEnergy(page: Page, count: number): Promise<void> {
+  await page.evaluate((nextCount) => {
+    (window as Window & {
+      __webcrawlTest?: { grantEnergy: (count: number) => void };
+    }).__webcrawlTest?.grantEnergy(nextCount);
+  }, count);
+}
+
 async function playerHp(page: Page): Promise<number> {
   return page.evaluate(() =>
     (window as Window & { __webcrawlTest?: { playerHp: () => number } }).__webcrawlTest?.playerHp() ?? 0
@@ -150,6 +158,8 @@ test("uses crystals for temporary invulnerability without counting supplies as s
   await expect(page.locator("#creditCount")).toHaveText("0");
   await expect(page.locator("#crystalCount")).toHaveText("0");
   await expect(page.locator("#coreCount")).toHaveText("0");
+  await expect(page.locator("#energyCount")).toHaveText("0");
+  await expect(page.locator("#energyLootCount")).toHaveText("0");
   await expect(page.locator("#medkitCount")).toHaveText("0");
 
   await grantCrystals(page, 2);
@@ -171,6 +181,34 @@ test("uses crystals for temporary invulnerability without counting supplies as s
   await expect(game).toHaveAttribute("data-player-invulnerable", "false");
   await damagePlayer(page, 3);
   expect(await playerHp(page)).toBe(protectedHp - 3);
+});
+
+test("charges energy and launches an invulnerable energy dash with right click", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  await grantEnergy(page, 5);
+  await expect(page.locator("#energyCount")).toHaveText("5");
+  await expect(page.locator("#energyLootCount")).toHaveText("5");
+  await expect(game).toHaveAttribute("data-energy", "5");
+
+  const before = await playerPosition(page);
+  const bounds = await page.locator("#gameViewport").boundingBox();
+  if (!bounds) throw new Error("Expected a visible game viewport");
+  await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.45);
+  await page.mouse.down({ button: "right" });
+  await expect.poll(async () => {
+    return await game.getAttribute("data-player-dashing") === "true"
+      && await game.getAttribute("data-player-invulnerable") === "true";
+  }, { timeout: 2_000, intervals: [25] }).toBe(true);
+  await page.mouse.up({ button: "right" });
+
+  await expect.poll(async () => game.getAttribute("data-player-dashing"), {
+    timeout: 5_000,
+    intervals: [50],
+  }).toBe("false");
+  expect(await playerPosition(page)).not.toEqual(before);
+  await expect(page.locator("#energyCount")).toHaveText("0");
+  await expect(game).toHaveAttribute("data-energy", "0");
 });
 
 test("spawns on an enabled entry portal without immediately retriggering it", async ({ page }) => {

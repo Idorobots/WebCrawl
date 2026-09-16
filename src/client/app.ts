@@ -43,9 +43,13 @@ import {
   CRYSTAL_INVULNERABILITY_BLINK_START_MS,
   CRYSTAL_INVULNERABILITY_DURATION_MS,
   DEFAULT_BULLET_SPEC,
+  ENERGY_DASH_DAMAGE,
+  ENERGY_DASH_RANGE,
+  ENERGY_DASH_SPEED,
   HEAP_TITAN_WAVE,
   LOOT_DEFINITIONS,
   monsterVisualCenterOffsetY,
+  PLAYER_ENERGY_MAX,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   WEAPON_PICKUP_DEFINITIONS,
@@ -134,6 +138,14 @@ let playerHp: number = PLAYER_SPEC.maxHp;
 let playerAlive = true;
 let playerInvulnerable = false;
 let crystalInvulnerableUntil = 0;
+let energyDash: {
+  dirX: number;
+  dirY: number;
+  traveled: number;
+  maxDistance: number;
+  hitTargets: Set<string>;
+  playerInvulnerableBefore: boolean;
+} | null = null;
 let lastPlayerShotAt = -Infinity;
 let currentWeapon: WeaponSpec = { ...DEFAULT_WEAPON };
 let currentWeaponAmmo: number | null = null;
@@ -149,7 +161,7 @@ const temporarilyBlockedLoot = new Set<string>();
 let gameAnimationFrame: number | null = null;
 let lastGameTick: number | null = null;
 
-const lootInventory: LootInventory = { credits: 0, crystals: 0, cores: 0, medkits: 0 };
+const lootInventory: LootInventory = { credits: 0, crystals: 0, cores: 0, energy: 0, medkits: 0 };
 const collectedLoot = new Set<string>();
 let runStartedAt: number | null = null;
 
@@ -180,7 +192,10 @@ const hudHealthFillEl = requireElement<HTMLElement>("#hudHealthFill");
 const creditCountEl = requireElement<HTMLElement>("#creditCount");
 const crystalCountEl = requireElement<HTMLElement>("#crystalCount");
 const coreCountEl = requireElement<HTMLElement>("#coreCount");
+const energyCountEl = requireElement<HTMLElement>("#energyCount");
+const energyLootCountEl = requireElement<HTMLElement>("#energyLootCount");
 const medkitCountEl = requireElement<HTMLElement>("#medkitCount");
+const hudEnergyFillEl = requireElement<HTMLElement>("#hudEnergyFill");
 const weaponNameEl = requireElement<HTMLElement>("#weaponName");
 const ammoCountEl = requireElement<HTMLElement>("#ammoCount");
 
@@ -477,12 +492,22 @@ function updateLootUi(): void {
   creditCountEl.textContent = String(lootInventory.credits);
   crystalCountEl.textContent = String(lootInventory.crystals);
   coreCountEl.textContent = String(lootInventory.cores);
+  energyCountEl.textContent = String(lootInventory.energy);
+  energyLootCountEl.textContent = String(lootInventory.energy);
   medkitCountEl.textContent = String(lootInventory.medkits);
   gameCanvasHost.dataset.credits = String(lootInventory.credits);
   gameCanvasHost.dataset.crystals = String(lootInventory.crystals);
   gameCanvasHost.dataset.cores = String(lootInventory.cores);
+  gameCanvasHost.dataset.energy = String(lootInventory.energy);
   gameCanvasHost.dataset.medkits = String(lootInventory.medkits);
+  updateEnergyUi();
   updateHudPanels();
+}
+
+function updateEnergyUi(): void {
+  energyCountEl.textContent = String(lootInventory.energy);
+  const fill = Math.min(PLAYER_ENERGY_MAX, lootInventory.energy);
+  hudEnergyFillEl.style.width = `${fill / PLAYER_ENERGY_MAX * 100}%`;
 }
 
 function isPlayerInvulnerable(now = performance.now()): boolean {
@@ -1448,7 +1473,7 @@ function gameTick(timestamp: number): void {
   lastGameTick = timestamp;
 
   updatePlayerProtectionVisual(timestamp);
-  updatePlayerMovement(dt, timestamp);
+  updateEnergyDash(dt, timestamp);
   if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
@@ -1754,6 +1779,7 @@ function checkLoot(): void {
       if (item.kind === "credit") lootInventory.credits += 1;
       if (item.kind === "crystal") lootInventory.crystals += 1;
       if (item.kind === "core") lootInventory.cores += 1;
+      if (item.kind === "energy") lootInventory.energy = Math.min(PLAYER_ENERGY_MAX, lootInventory.energy + 1);
       if (item.kind === "medkit") lootInventory.medkits += 1;
       updateLootUi();
 
@@ -1985,6 +2011,104 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
   if (checkStairs()) heldMovementKeys.clear();
 }
 
+function startEnergyDash(clientX: number, clientY: number): void {
+  if (!playerAlive || !currentLayout || energyDash || lootInventory.energy < PLAYER_ENERGY_MAX) return;
+  const target = renderer.worldPointAt(clientX, clientY);
+  if (!target) return;
+  const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+  const dx = target.x - center.x;
+  const dy = target.y - center.y;
+  const magnitude = Math.hypot(dx, dy);
+  if (magnitude < 1) return;
+  energyDash = {
+    dirX: dx / magnitude,
+    dirY: dy / magnitude,
+    traveled: 0,
+    maxDistance: ENERGY_DASH_RANGE,
+    hitTargets: new Set(),
+    playerInvulnerableBefore: playerInvulnerable,
+  };
+  playerInvulnerable = true;
+  renderer.setPlayerDashTint(true);
+  updatePlayerProtectionVisual();
+  setStatus("Energy surge!");
+}
+
+function endEnergyDash(): void {
+  const dash = energyDash;
+  if (!dash) return;
+  playerInvulnerable = dash.playerInvulnerableBefore;
+  energyDash = null;
+  renderer.setPlayerDashTint(false);
+  lootInventory.energy = 0;
+  updateLootUi();
+  updatePlayerProtectionVisual();
+}
+
+function applyEnergyDashDamage(): void {
+  const dash = energyDash;
+  if (!dash) return;
+  const center = playerCollisionCenter();
+  for (const monster of currentMonsters) {
+    if (!monster.active || monster.dead || dash.hitTargets.has(monster.id)) continue;
+    if (projectileHitsCircle(
+      { x: monster.x, y: monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind) },
+      monster.radius,
+      center,
+      PLAYER_SPEC.radius,
+    )) {
+      dash.hitTargets.add(monster.id);
+      damageMonster(monster, ENERGY_DASH_DAMAGE);
+    }
+  }
+  for (const item of damageableCells.get(spatialCellKey(player.x, player.y)) ?? []) {
+    if (!item.destructible || item.destroyed || dash.hitTargets.has(item.id)) continue;
+    if (projectileHitsDecoration(item, center, PLAYER_SPEC.radius)) {
+      dash.hitTargets.add(item.id);
+      damageObstacle(item, ENERGY_DASH_DAMAGE);
+    }
+  }
+}
+
+function updateEnergyDash(dt: number, timestamp: number): void {
+  const dash = energyDash;
+  if (!dash) {
+    updatePlayerMovement(dt, timestamp);
+    return;
+  }
+
+  const remaining = dash.maxDistance - dash.traveled;
+  const distance = Math.min(ENERGY_DASH_SPEED * dt, remaining);
+  if (distance > 0) {
+    const next = {
+      x: player.x + dash.dirX * distance,
+      y: player.y + dash.dirY * distance,
+    };
+    if (isWalkable(next.x, next.y)) {
+      player = next;
+      dash.traveled += distance;
+    } else {
+      dash.traveled = dash.maxDistance;
+    }
+  } else {
+    dash.traveled = dash.maxDistance;
+  }
+
+  applyEnergyDashDamage();
+
+  updatePlayerVisual();
+  revealRoomsFromCorridor(player.x, player.y);
+  updateCurrentRoom();
+  updateCameraForPlayer();
+  checkLoot();
+  if (checkStairs()) {
+    endEnergyDash();
+    return;
+  }
+
+  if (dash.traveled >= dash.maxDistance) endEnergyDash();
+}
+
 function teleportPlayerTo(x: number, y: number): void {
   if (!currentLayout || !isWalkable(x, y)) return;
   player = { x, y };
@@ -2001,6 +2125,9 @@ function teleportPlayerTo(x: number, y: number): void {
     setWeaponAmmo: (ammo: number) => void;
     setPlayerInvulnerable: (enabled: boolean) => void;
     grantCrystals: (count: number) => void;
+    grantEnergy: (count: number) => void;
+    energy: () => number;
+    dashing: () => boolean;
     useCrystal: () => boolean;
     expireCrystalShield: () => void;
     playerHp: () => number;
@@ -2027,6 +2154,12 @@ function teleportPlayerTo(x: number, y: number): void {
     lootInventory.crystals = Math.max(0, lootInventory.crystals + count);
     updateLootUi();
   },
+  grantEnergy(count: number): void {
+    lootInventory.energy = Math.min(PLAYER_ENERGY_MAX, Math.max(0, lootInventory.energy + count));
+    updateLootUi();
+  },
+  energy: () => lootInventory.energy,
+  dashing: () => energyDash !== null,
   useCrystal: () => activateCrystalInvulnerability(),
   expireCrystalShield(): void {
     crystalInvulnerableUntil = 0;
@@ -2117,11 +2250,19 @@ gameViewport.addEventListener("pointermove", event => {
 
 gameViewport.addEventListener("pointerdown", event => {
   if (
-    event.button !== 0 ||
     gameUi.hidden ||
     !currentLayout ||
     !playerAlive
   ) return;
+
+  if (event.button === 2) {
+    event.preventDefault();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    pointerInViewport = true;
+    startEnergyDash(event.clientX, event.clientY);
+    return;
+  }
+  if (event.button !== 0) return;
 
   event.preventDefault();
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -2129,6 +2270,10 @@ gameViewport.addEventListener("pointerdown", event => {
   primaryPointerDown = true;
   updatePlayerAim(event.clientX, event.clientY);
   shootBullet();
+});
+
+gameViewport.addEventListener("contextmenu", event => {
+  event.preventDefault();
 });
 
 gameViewport.addEventListener("pointerleave", () => {

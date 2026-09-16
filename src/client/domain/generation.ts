@@ -34,8 +34,15 @@ import {
 import { weaponForRoom, type WeaponSource } from "./weapons";
 
 export function lootKindForSeed(seed: number): LootKind {
-  const kinds: LootKind[] = ["credit", "crystal", "core", "medkit"];
-  return kinds[(seed >>> 3) % kinds.length] ?? "crystal";
+  return lootKindForRoll((seed >>> 3) % 100);
+}
+
+function lootKindForRoll(roll: number): LootKind {
+  if (roll < 35) return "core";
+  if (roll < 70) return "energy";
+  if (roll < 85) return "medkit";
+  if (roll < 93) return "credit";
+  return "crystal";
 }
 
 export function bossLootDrops(
@@ -106,13 +113,9 @@ export function weaponPedestalForRoom(room: GraphNode, pageUrl: string): Decorat
 }
 
 export function sceneryDropKindForSeed(seed: number): LootKind | null {
-  if (stableHash(`${seed}|drop`) % 100 >= 15) return null;
+  if (stableHash(`${seed}|drop`) % 100 >= 30) return null;
 
-  const kindRoll = stableHash(`${seed}|drop-kind`) % 100;
-  if (kindRoll < 30) return "medkit";
-
-  const kinds: LootKind[] = ["credit", "crystal", "core"];
-  return kinds[kindRoll % kinds.length] ?? "credit";
+  return lootKindForRoll(stableHash(`${seed}|drop-kind`) % 100);
 }
 
 const ROOM_SCENERY_THEME_IDS = Object.keys(ROOM_SCENERY_THEMES) as RoomSceneryTheme[];
@@ -551,7 +554,7 @@ function regularMonsterSpec(
     ),
     projectileSpeed,
     projectileRange,
-    dropsLoot: profile.dropsLoot && ((seed >>> 23) % 100) < 18,
+    dropsLoot: profile.dropsLoot && ((seed >>> 23) % 100) < 72,
     lastAttackAt: -Infinity,
     active: false,
     dead: false,
@@ -734,7 +737,7 @@ function safeMonsterPosition(
 export function lootCountForRoom(room: GraphNode): number {
   const seed = stableHash(`${room.lootSeed}|loot-count`);
   if (room.tag === "img") return 3 + (seed % 3);
-  if (seed % 100 >= 30) return 0;
+  if (seed % 100 >= 60) return 0;
   return 1 + ((seed >>> 8) % 2);
 }
 
@@ -768,6 +771,57 @@ export function staircasePositions(room: GraphNode, count: number, yOffset = 0):
       y: room.y - ((rows - 1) * verticalSpacing) / 2 + row * verticalSpacing + yOffset,
     };
   });
+}
+
+function corridorLootPositions(link: LayoutLink, count: number): Point[] {
+  const points = link.points;
+  if (points.length < 2) return [];
+  const segmentLengths: number[] = [];
+  let total = 0;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const length = Math.hypot(points[index + 1]!.x - points[index]!.x, points[index + 1]!.y - points[index]!.y);
+    segmentLengths.push(length);
+    total += length;
+  }
+  if (total < 1) return [];
+  const at = (fraction: number): Point => {
+    let distance = fraction * total;
+    for (let index = 0; index < segmentLengths.length; index += 1) {
+      const length = segmentLengths[index]!;
+      if (distance <= length) {
+        const from = points[index]!;
+        const to = points[index + 1]!;
+        const t = distance / Math.max(1, length);
+        return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+      }
+      distance -= length;
+    }
+    return { ...points[points.length - 1]! } as Point;
+  };
+  return Array.from({ length: count }, (_, index) => at((index + 1) / (count + 1)));
+}
+
+export function corridorLootForLink(
+  link: LayoutLink,
+  pageUrl: string,
+  collectedLoot: ReadonlySet<string>,
+): LootItem[] {
+  const seed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|loot`);
+  if (seed % 100 >= 40) return [];
+  const count = 1 + ((seed >>> 8) % 2);
+  const positions = corridorLootPositions(link, count);
+  const items: LootItem[] = [];
+  for (let index = 0; index < positions.length; index += 1) {
+    const id = `${pageUrl}::${link.id}::corridor-loot-${index}`;
+    if (collectedLoot.has(id)) continue;
+    items.push({
+      id,
+      roomId: link.ownerRoomId,
+      ...positions[index]!,
+      kind: lootKindForSeed(stableHash(`${seed}|${index}|kind`)),
+    });
+  }
+  return items;
 }
 
 export function buildInteractiveObjects(
@@ -825,6 +879,9 @@ export function buildInteractiveObjects(
     }
     const weaponLoot = weaponLootForRoom(room, pageUrl);
     if (weaponLoot && !collectedLoot.has(weaponLoot.id)) loot.push(weaponLoot);
+  }
+  for (const link of layout.links) {
+    loot.push(...corridorLootForLink(link, pageUrl, collectedLoot));
   }
   return { stairs, loot };
 }

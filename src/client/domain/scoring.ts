@@ -4,6 +4,7 @@ export interface LootInventory {
   credits: number;
   crystals: number;
   cores: number;
+  energy: number;
   medkits: number;
 }
 

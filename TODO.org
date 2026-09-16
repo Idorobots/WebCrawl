@@ -270,8 +270,18 @@ When entering a boss arena, the viewport should zoom out to encompass the entire
 - Camera should zoom out to show the entire boss arena at once when the fight begins.
 * Lighting
 Would be nice to include dynamic lighting in the game. Including bullets and room lighting.
+* DONE Energy attacks
+:LOGBOOK:
+- State "DONE"       from              [2026-09-16 Wed 22:57]
+:END:
+Let's add a concept of energy attacks to the game.
+Add a new pickup called energy that uses the current ammo icon (replace the current icon with the other ammo crate pickup icon).
+The player should have an energy bar that goes up to 10 point. Place the bar under the healthbar. When "charged" the player can use the right mouse button to launch an energy attack towards the cursor - the player avatar itself is launched towards the cursor (limit the max distance to some sane distance). During the attack the player is invulnerable, but their sprite is tinted blue. All enemies & scenery the player is moving through during the energy attack should take a massive amount of damage. Once the attack is over, the whole energy the player had is drained (the counter is set back to zero).
+
+The attack should not allow the player to move through walls. Walls block the player as normal.
+
 * Energy shield
-When picking up the energy ammo instead of reloading the currently held weapon it should restore an energy shield. Energy shield is 5 additional hitpoints that are preferentially deducted whenever the player takes damage. Player should start with a shield of 5 in addition to the 10 hitpoints. When spent, the usual hitpoints are deducted.
+When picking up the energy ammo instead of reloading the currently held weapon it should restore an energy shield. Player should start with a shield of 5 in addition to the 10 hitpoints.
 Change the current ammo asset to the ammo one and use the current energy ammo assent for the energy pickup.
 Update the loot counters with the new loot counter.
 
@@ -297,10 +307,12 @@ Instead of a loading screen show a holographic message from Samario, the CEO of 
 
 Names for various things (useful for the "how to play" screen):
 - RAM - Copyrighted Material
-- Med kits - Doom Blog Post
+- Med kits
 - Shield charges - Regulatory Capture
 - Crystals - Government bailouts
 
-Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.
+The energy attack should be called "Doom Post".
 
 Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to tokens in AI.
+
+Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.

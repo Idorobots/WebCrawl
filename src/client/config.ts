@@ -70,7 +70,8 @@ export const ASSETS = {
   lootCrystal: asset("pickups/crystal.png"),
   lootMedkit: asset("pickups/medkit.png"),
   lootCredit: asset("pickups/ram0.png"),
-  lootCore: asset("pickups/ammo_energy.png"),
+  lootCore: asset("pickups/ammo_ballistic.png"),
+  lootEnergy: asset("pickups/ammo_energy.png"),
 } as const;
 
 export const FLOOR_ASSETS = [
@@ -300,6 +301,7 @@ export const LOOT_ASSETS: Partial<Record<LootKind, string>> = {
   credit: ASSETS.lootCredit,
   crystal: ASSETS.lootCrystal,
   core: ASSETS.lootCore,
+  energy: ASSETS.lootEnergy,
   medkit: ASSETS.lootMedkit,
 };
 

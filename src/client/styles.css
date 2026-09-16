@@ -1013,7 +1013,7 @@ body {
   background: linear-gradient(180deg, rgba(7,22,34,.98), rgba(3,11,18,.98));
   display: flex;
   align-items: center;
-  padding: 9px 13px;
+  padding: 5px 13px;
   min-width: 0;
 }
 
@@ -1039,15 +1039,21 @@ body {
 }
 
 .hp-line {
-  margin: 4px 0 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 1px 0 3px;
   font-size: 18px;
   color: #f0f7fa;
+  min-width: 0;
 }
 
-.big-health-track {
-  height: 12px;
-  border: 1px solid #51677a;
-  background: #21090d;
+.health-track {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  border: 4px 10px solid transparent;
+  border-image: url("/assets/ui/health_bar_plain/source.png") 20 60 fill / 4px 10px stretch;
 }
 
 #hudHealthFill {
@@ -1055,6 +1061,34 @@ body {
   width: 100%;
   height: 100%;
   background: linear-gradient(90deg, #f3484e, #ff6b61);
+  transition: width 140ms linear;
+}
+
+.energy-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 11px;
+  color: #9dbed0;
+  min-width: 0;
+}
+
+.energy-track {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  border: 1px solid #31606e;
+  background: #060c14;
+  border-radius: 2px;
+}
+
+#hudEnergyFill {
+  display: block;
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #2f7fe0, #4db3ff);
+  border-radius: 2px;
   transition: width 140ms linear;
 }
 
@@ -1079,7 +1113,7 @@ body {
   filter: drop-shadow(0 0 5px rgba(81,221,255,.34));
 }
 
-.loot-slot:nth-of-type(3) img {
+.loot-slot:nth-of-type(4) img {
   filter: drop-shadow(0 0 6px rgba(104,255,165,.55));
 }
 
@@ -1136,12 +1170,6 @@ button {
   min-height: 38px;
   border-bottom: 0;
   background: url("/assets/ui/decorations/header.png") right center / 142px auto no-repeat;
-}
-
-.big-health-track {
-  height: 18px;
-  border: 4px 10px solid transparent;
-  border-image: url("/assets/ui/health_bar_plain/source.png") 20 60 fill / 4px 10px stretch;
 }
 
 /* Correct monster death positioning: animate the sprite, not the
@@ -1206,6 +1234,7 @@ button {
     height: 54px;
   }
   .hp-line,
+  .energy-line,
   .weapon-name {
     font-size: 12px;
   }

@@ -4,7 +4,7 @@ import { CRYSTAL_INVULNERABILITY_BLINK_START_MS } from "../../src/client/domain/
 
 describe("scoring and crystal shields", () => {
   it("scores only credits, remaining crystals, and kill types", () => {
-    const inventory = { credits: 3, crystals: 2, cores: 12, medkits: 4 };
+    const inventory = { credits: 3, crystals: 2, cores: 12, energy: 0, medkits: 4 };
     const stats = { kills: 9, fastKills: 2, slowKills: 3, sentryKills: 1, bossKills: 1, shotsFired: 20 };
 
     expect(scoredLootCount(inventory)).toBe(5);

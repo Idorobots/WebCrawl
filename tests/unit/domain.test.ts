@@ -196,6 +196,21 @@ describe("layout and geometry", () => {
     expect(distanceSquared({ x: 1, y: 2 }, { x: 4, y: 6 })).toBe(25);
   });
 
+  it("places deterministic loot along corridor interiors", () => {
+    const floorOne = buildInteractiveObjects(layout, "https://example.com/::floor-1", null, new Set());
+    const floorTwo = buildInteractiveObjects(layout, "https://example.com/::floor-1", null, new Set());
+    expect(floorOne.loot).toEqual(floorTwo.loot);
+    for (const item of floorOne.loot) {
+      const link = layout.links.find(candidate => item.id.includes(`::${candidate.id}::corridor-loot`));
+      if (!link) continue;
+      expect(pointInCorridor(item.x, item.y, link, 0)).toBe(true);
+      const start = link.points[0]!;
+      const end = link.points[link.points.length - 1]!;
+      expect(Math.hypot(item.x - start.x, item.y - start.y)).toBeGreaterThan(world(10));
+      expect(Math.hypot(item.x - end.x, item.y - end.y)).toBeGreaterThan(world(10));
+    }
+  });
+
   it("blocks room walls halfway through their segment and admits only the middle of doors", () => {
     const room = layout.nodes[0]!;
     const topWallEdge = room.y - room.height / 2 + WORLD_GEOMETRY.topWallCollisionDepth;
@@ -1104,13 +1119,13 @@ describe("deterministic room contents", () => {
     expect(floorOne.loot.map(item => item.id)).not.toEqual(floorTwo.loot.map(item => item.id));
   });
 
-  it("deterministically gives a small share of scenery loot and medkit drops", () => {
+  it("deterministically gives a moderate share of scenery loot and medkit drops", () => {
     const drops = Array.from({ length: 1_000 }, (_, index) =>
       sceneryDropKindForSeed(stableHash(`scenery-${index}`)),
     ).filter(kind => kind !== null);
 
-    expect(drops.length).toBeGreaterThan(100);
-    expect(drops.length).toBeLessThan(200);
+    expect(drops.length).toBeGreaterThan(200);
+    expect(drops.length).toBeLessThan(400);
     expect(drops).toContain("medkit");
     expect(drops.some(kind => kind !== "medkit")).toBe(true);
     expect(sceneryDropKindForSeed(12345)).toBe(sceneryDropKindForSeed(12345));

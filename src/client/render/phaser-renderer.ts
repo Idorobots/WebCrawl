@@ -109,6 +109,7 @@ export class PhaserRenderer {
   private cameraRoomId: number | null = null;
   private playerProtectionActive = false;
   private playerProtectionTintVisible = false;
+  private playerDashTintActive = false;
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -953,10 +954,21 @@ export class PhaserRenderer {
     this.applyPlayerProtectionTint();
   }
 
+  setPlayerDashTint(active: boolean): void {
+    this.playerDashTintActive = active;
+    this.setHostData("playerDashing", String(active));
+    this.applyPlayerProtectionTint();
+  }
+
   private applyPlayerProtectionTint(): void {
     if (!this.playerSprite) return;
-    if (this.playerProtectionActive && this.playerProtectionTintVisible) this.playerSprite.setTint(0x78ff9b);
-    else this.playerSprite.clearTint();
+    if (this.playerDashTintActive) {
+      this.playerSprite.setTint(0x4db3ff);
+    } else if (this.playerProtectionActive && this.playerProtectionTintVisible) {
+      this.playerSprite.setTint(0x78ff9b);
+    } else {
+      this.playerSprite.clearTint();
+    }
   }
 
   private renderDebugGeometry(): void {

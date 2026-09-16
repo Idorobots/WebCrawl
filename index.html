@@ -91,22 +91,27 @@
         <img id="playerHudPortrait" src="assets/player/idle/player_right.png" alt="Player" />
         <div class="player-status-main">
           <div class="status-label">OPERATIVE</div>
-          <div class="hp-line">HP <strong id="hpCount">10</strong> / 10</div>
-          <div class="big-health-track"><span id="hudHealthFill"></span></div>
+          <div class="hp-line">HP <strong id="hpCount">10</strong> / 10
+            <div class="health-track"><span id="hudHealthFill"></span></div>
+          </div>
+          <div class="energy-line">ENERGY <strong id="energyCount">0</strong> / 5
+            <div class="energy-track"><span id="hudEnergyFill"></span></div>
+          </div>
         </div>
       </section>
 
       <section class="loot-status-card" aria-label="Loot inventory">
         <span class="loot-slot" title="RAM"><img src="assets/pickups/ram0.png" alt="" /><strong id="creditCount">0</strong></span>
         <span class="loot-slot" title="Invulnerability crystals"><img src="assets/pickups/crystal.png" alt="" /><strong id="crystalCount">0</strong></span>
-        <span class="loot-slot" title="Ammo cores"><img src="assets/pickups/ammo_energy.png" alt="" /><strong id="coreCount">0</strong></span>
+        <span class="loot-slot" title="Ammo cores"><img src="assets/pickups/ammo_ballistic.png" alt="" /><strong id="coreCount">0</strong></span>
+        <span class="loot-slot" title="Energy cells"><img src="assets/pickups/ammo_energy.png" alt="" /><strong id="energyLootCount">0</strong></span>
         <span class="loot-slot" title="Medkits"><img src="assets/pickups/medkit.png" alt="" /><strong id="medkitCount">0</strong></span>
       </section>
 
       <section class="weapon-status-card">
         <span id="weaponName" class="weapon-name">PULSE RIFLE</span>
         <span id="ammoCount" class="ammo">∞</span>
-        <span class="controls">WASD / ARROWS MOVE · HOLD LEFT CLICK TO FIRE</span>
+        <span class="controls">WASD MOVE · LMB FIRE · RMB ENERGY DASH</span>
       </section>
     </footer>
 

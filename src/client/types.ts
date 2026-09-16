@@ -9,7 +9,7 @@ export type PlayerDirection =
   | "left"
   | "upLeft";
 export type PlayerAnimation = "normal" | "walk";
-export type LootKind = "credit" | "crystal" | "core" | "medkit" | "weapon";
+export type LootKind = "credit" | "crystal" | "core" | "medkit" | "energy" | "weapon";
 export type BossKind = "packet-storm" | "fork-bomb" | "heap-titan";
 export type MonsterKind = "slow" | "fast" | "sentry" | BossKind;
 export type MonsterVisualKind =
