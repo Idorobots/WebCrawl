@@ -12,6 +12,7 @@ import {
   EFFECT_FRAMES,
   EXPLOSION_FRAMES,
   FLOOR_ASSETS,
+  LOOT_RAM_FRAMES,
   MONSTER_FRAMES,
   PLAYER_DEFAULT_ASSETS,
   PLAYER_FRAMES,
@@ -34,6 +35,7 @@ import {
   WEAPON_VISUAL_DEFINITIONS,
   WORLD_GEOMETRY,
   weaponAsset,
+  type LootDefinition,
 } from "../domain/specs";
 import type {
   Bullet,
@@ -88,6 +90,7 @@ export class PhaserRenderer {
   private decorations: Phaser.GameObjects.Container[] = [];
   private decorationSprites = new Map<string, Phaser.GameObjects.Image>();
   private objects: Phaser.GameObjects.Container[] = [];
+  private lootSprites = new Map<string, Phaser.GameObjects.Image>();
   private portals = new Map<string, Phaser.GameObjects.Container>();
   private monsters = new Map<string, Phaser.GameObjects.Container>();
   private player: Phaser.GameObjects.Container | null = null;
@@ -126,6 +129,7 @@ export class PhaserRenderer {
           EFFECT_FRAMES,
           EXPLOSION_FRAMES,
           FLOOR_ASSETS,
+          LOOT_RAM_FRAMES,
           MONSTER_FRAMES,
           PLAYER_DEFAULT_ASSETS,
           PLAYER_FRAMES,
@@ -181,6 +185,7 @@ export class PhaserRenderer {
     this.destroyAll(this.decorations);
     this.decorationSprites.clear();
     this.destroyAll(this.objects);
+    this.lootSprites.clear();
     this.destroyPortalObjects();
     for (const object of this.monsters.values()) object.destroy(true);
     this.monsters.clear();
@@ -531,6 +536,21 @@ export class PhaserRenderer {
     return { clip: item.visual.normal, elapsed: 0 };
   }
 
+  private lootClip(item: LootItem, definition?: LootDefinition): SpriteClip | null {
+    if (item.kind === "weapon" || !definition?.frames?.length) return null;
+    return {
+      frames: definition.frames,
+      frameDurationMs: definition.frameDurationMs ?? 200,
+      sizeScale: 1,
+      origin: { x: 0.5, y: 0.5 },
+      loop: true,
+    };
+  }
+
+  private lootAnimationElapsed(clip: SpriteClip, now: number): number {
+    return now % (clip.frames.length * clip.frameDurationMs);
+  }
+
   renderDecorations(items: readonly Decoration[], visited: ReadonlySet<number>): void {
     this.currentDecorations = items;
     this.host.dataset.activeSpawners = String(items.filter(item =>
@@ -617,6 +637,7 @@ export class PhaserRenderer {
       delete this.host.dataset.firstLootKind;
     }
     this.destroyAll(this.objects);
+    this.lootSprites.clear();
     this.syncPortals(stairs, visited);
     const scene = this.scene;
     if (!scene) return;
@@ -637,8 +658,28 @@ export class PhaserRenderer {
       const definition = item.kind === "weapon" ? undefined : LOOT_DEFINITIONS[item.kind];
       const asset = definition?.asset ?? lootAssets[item.kind];
       if (!asset || !definition) continue;
+      const clip = this.lootClip(item, definition);
+      if (clip) {
+        const elapsed = this.lootAnimationElapsed(clip, performance.now());
+        const sprite = scene.add.image(0, 0, textureKey(this.clipAsset(clip, elapsed)));
+        this.applyClip(sprite, clip, definition.size, elapsed);
+        this.lootSprites.set(item.id, sprite);
+        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(25));
+        continue;
+      }
       const sprite = scene.add.image(0, 0, textureKey(asset)).setDisplaySize(definition.size, definition.size);
       this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(25));
+    }
+  }
+
+  updateLootAnimations(items: readonly LootItem[], now: number): void {
+    for (const item of items) {
+      const sprite = this.lootSprites.get(item.id);
+      if (!sprite) continue;
+      const definition = item.kind === "weapon" ? undefined : LOOT_DEFINITIONS[item.kind];
+      const clip = this.lootClip(item, definition);
+      if (!clip || !definition) continue;
+      this.applyClip(sprite, clip, definition.size, this.lootAnimationElapsed(clip, now));
     }
   }
 

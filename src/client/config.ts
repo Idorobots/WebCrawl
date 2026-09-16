@@ -16,7 +16,7 @@ export const world = (value: number): number => Math.round(value * WORLD_SCALE);
 export const ENVIRONMENT_SEGMENT_SIZE = world(128);
 export const ROOM_WIDTH = ENVIRONMENT_SEGMENT_SIZE * 4;
 export const ROOM_HEIGHT = ENVIRONMENT_SEGMENT_SIZE * 4;
-export const CAMERA_SCALE = 0.92;
+export const CAMERA_SCALE = 1.0;
 export const CAMERA_FOLLOW_LERP = 0.12;
 export const CAMERA_DEADZONE_WIDTH = 180;
 export const CAMERA_DEADZONE_HEIGHT = 120;
@@ -69,7 +69,7 @@ export const ASSETS = {
   pedestal: asset("scenery/pedestal.png"),
   lootCrystal: asset("pickups/crystal.png"),
   lootMedkit: asset("pickups/medkit.png"),
-  lootCredit: asset("pickups/gold.png"),
+  lootCredit: asset("pickups/ram0.png"),
   lootCore: asset("pickups/ammo_energy.png"),
 } as const;
 
@@ -302,3 +302,10 @@ export const LOOT_ASSETS: Partial<Record<LootKind, string>> = {
   core: ASSETS.lootCore,
   medkit: ASSETS.lootMedkit,
 };
+
+export const LOOT_RAM_FRAMES = [
+  asset("pickups/ram0.png"),
+  asset("pickups/ram1.png"),
+  asset("pickups/ram2.png"),
+  asset("pickups/ram3.png"),
+] as const;

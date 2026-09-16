@@ -5,6 +5,7 @@ import {
   ENVIRONMENT_SEGMENT_SIZE,
   EFFECT_FRAMES,
   EXPLOSION_FRAMES,
+  LOOT_RAM_FRAMES,
   MONSTER_FRAMES,
   PLAYER_FRAMES,
   PORTAL_FRAMES,
@@ -667,8 +668,22 @@ export const MAX_REGULAR_MONSTER_RADIUS = Math.max(
   ...Object.values(REGULAR_MONSTER_DEFINITIONS).map(definition => definition.radius),
 );
 
-export const LOOT_DEFINITIONS: Record<Exclude<LootKind, "weapon">, { asset: string; size: number; pickupRadius: number }> = {
-  credit: { asset: ASSETS.lootCredit, size: world(50), pickupRadius: world(33) },
+export interface LootDefinition {
+  asset: string;
+  size: number;
+  pickupRadius: number;
+  frames?: readonly string[];
+  frameDurationMs?: number;
+}
+
+export const LOOT_DEFINITIONS: Record<Exclude<LootKind, "weapon">, LootDefinition> = {
+  credit: {
+    asset: ASSETS.lootCredit,
+    frames: LOOT_RAM_FRAMES,
+    frameDurationMs: 200,
+    size: world(75),
+    pickupRadius: world(33),
+  },
   crystal: { asset: ASSETS.lootCrystal, size: world(63), pickupRadius: world(33) },
   core: { asset: ASSETS.lootCore, size: world(63), pickupRadius: world(33) },
   medkit: { asset: ASSETS.lootMedkit, size: world(63), pickupRadius: world(33) },

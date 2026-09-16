@@ -270,5 +270,37 @@ When entering a boss arena, the viewport should zoom out to encompass the entire
 - Camera should zoom out to show the entire boss arena at once when the fight begins.
 * Lighting
 Would be nice to include dynamic lighting in the game. Including bullets and room lighting.
+* Energy shield
+When picking up the energy ammo instead of reloading the currently held weapon it should restore an energy shield. Energy shield is 5 additional hitpoints that are preferentially deducted whenever the player takes damage. Player should start with a shield of 5 in addition to the 10 hitpoints. When spent, the usual hitpoints are deducted.
+Change the current ammo asset to the ammo one and use the current energy ammo assent for the energy pickup.
+Update the loot counters with the new loot counter.
+
+* DONE RAM collection
+:LOGBOOK:
+- State "DONE"       from              [2026-09-16 Wed 21:35]
+:END:
+Please replace the `gold.png` loot item with the `ram#.png` items. Make the new pickup animated in game. Make sure to update the loot counters on the UI.
+
 * Backup server API
 Ideally, this game would run without the current server API. Whenever a website cannot be fetched directly due to CORS, only then attempt to use the server API. If that API is not available, fall back on a public page fetching API.
+* CANCELLED Bugs
+:LOGBOOK:
+- State "CANCELLED"  from              [2026-09-16 Wed 20:41] \\
+  Could not reproduce.
+:END:
+- When going back up a level it's scenery & enemies are regenerated. The level should be retain as it was when a player uses a ling to another level. Levels should only be generated upon the very first load of that specific URL. Please normalize the URLs before pulling them so that this level generation is consistent.
+
+* Main theme
+You are a Web Crawler sent by ClosedNS on a mission to recover any and all human-generated content, but be careful, there are disguisting open-weight AIs out there to get you!
+
+Instead of a loading screen show a holographic message from Samario, the CEO of ClosedNS sending you off on a mission and explaining the movement, and pickups.
+
+Names for various things (useful for the "how to play" screen):
+- RAM - Copyrighted Material
+- Med kits - Doom Blog Post
+- Shield charges - Regulatory Capture
+- Crystals - Government bailouts
+
+Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.
+
+Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to tokens in AI.

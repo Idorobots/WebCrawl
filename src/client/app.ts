@@ -1452,6 +1452,7 @@ function gameTick(timestamp: number): void {
   if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
+  renderer.updateLootAnimations(currentLoot, timestamp);
 
   rebuildRoomRouting();
 
