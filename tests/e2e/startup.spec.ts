@@ -38,24 +38,9 @@ async function alignPlayerToDoor(
   direction: string | null,
 ): Promise<void> {
   const position = await playerPosition(page);
-  const horizontal = door.x < position.x ? "ArrowLeft" : "ArrowRight";
-  const vertical = door.y < position.y ? "ArrowUp" : "ArrowDown";
-  const alignKey = direction === "N" || direction === "S" ? horizontal : vertical;
-  const alignDistance = direction === "N" || direction === "S"
-    ? Math.abs(door.x - position.x)
-    : Math.abs(door.y - position.y);
-  if (alignDistance <= 8) return;
-  await page.keyboard.down(alignKey);
-  try {
-    const remaining = (current: { x: number; y: number }): number =>
-      direction === "N" || direction === "S" ? door.x - current.x : door.y - current.y;
-    await expect.poll(async () => {
-      const remainingDistance = remaining(await playerPosition(page));
-      return Math.abs(remainingDistance) < 8 || remainingDistance < 0;
-    }, { timeout: 6_000 }).toBe(true);
-  } finally {
-    await page.keyboard.up(alignKey);
-  }
+  await teleportPlayer(page, direction === "N" || direction === "S"
+    ? { x: door.x, y: position.y }
+    : { x: position.x, y: door.y });
 }
 
 async function cameraState(page: Page): Promise<{ x: number; y: number; zoom: number; bossRoomId: number | null } | null> {
