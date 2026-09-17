@@ -71,19 +71,20 @@ export function pointInCorridor(x: number, y: number, link: LayoutLink, radius =
     const doorwayHalf = Math.max(0, WORLD_GEOMETRY.doorOpeningWidth / 2 - radius);
     const sourceDoorwayDepth = radius + (link.direction === "N" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
     const targetDoorwayDepth = radius + (link.direction === "S" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
+    const verticalDoorOffset = originalStart.y === originalEnd.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
     if (index === 1) {
       const insideStart = {
         x: originalStart.x - dx / length * sourceDoorwayDepth,
-        y: originalStart.y - dy / length * sourceDoorwayDepth,
+        y: originalStart.y - dy / length * sourceDoorwayDepth + verticalDoorOffset,
       };
-      if (pointInAxisAlignedSegment(point, insideStart, originalStart, doorwayHalf)) return true;
+      if (pointInAxisAlignedSegment(point, insideStart, { x: originalStart.x, y: originalStart.y + verticalDoorOffset }, doorwayHalf)) return true;
     }
     if (index === link.points.length - 1) {
       const insideEnd = {
         x: originalEnd.x + dx / length * targetDoorwayDepth,
-        y: originalEnd.y + dy / length * targetDoorwayDepth,
+        y: originalEnd.y + dy / length * targetDoorwayDepth + verticalDoorOffset,
       };
-      if (pointInAxisAlignedSegment(point, originalEnd, insideEnd, doorwayHalf)) return true;
+      if (pointInAxisAlignedSegment(point, { x: originalEnd.x, y: originalEnd.y + verticalDoorOffset }, insideEnd, doorwayHalf)) return true;
     }
   }
   return false;

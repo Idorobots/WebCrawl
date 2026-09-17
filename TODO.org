@@ -325,8 +325,14 @@ Names for various things (useful for the "how to play" screen):
 Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to tokens in AI.
 
 Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.
-* Bugs
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-17 Thu 22:28]
+:END:
 - Walls should block bullets the same way a wall blocks a player.
 - When a player moves while shooting, the shots should still go towards the cursor.
 - Camera center point should be the midway between the player and the cursor.
 - When a player takes damage they should become invulnerable for a brief moment (200 ms) as not to take damage 10 separate times at once.
+
+* Bugs
+- It's possible to shoot through the doors when the player is standing right begind the blocked door area.

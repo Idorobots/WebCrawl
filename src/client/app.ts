@@ -51,6 +51,7 @@ import {
   HEAP_TITAN_WAVE,
   LOOT_DEFINITIONS,
   monsterVisualCenterOffsetY,
+  PLAYER_DAMAGE_INVULNERABILITY_MS,
   PLAYER_ENERGY_MAX,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
@@ -139,6 +140,7 @@ let playerHp: number = PLAYER_SPEC.maxHp;
 let playerAlive = true;
 let playerInvulnerable = false;
 let crystalInvulnerableUntil = 0;
+let playerDamageInvulnerableUntil = 0;
 let energyDash: {
   dirX: number;
   dirY: number;
@@ -182,6 +184,7 @@ let playerShooting = false;
 let currentPlayerSpriteAsset = PLAYER_DEFAULT_ASSETS.up;
 let primaryPointerDown = false;
 let pointerInViewport = false;
+let pointerClientPosition: Point | null = null;
 let portalTransitioning = false;
 const portalContacts = new Set<string>();
 const heldMovementKeys = new Set<string>();
@@ -333,6 +336,7 @@ function updateCurrentRoom(): void {
 }
 
 function updateCameraForPlayer(immediate = false): void {
+  if (immediate) renderer.setCameraTarget(player, true);
   renderer.setCameraRoom(roomContainingPoint(player.x, player.y), immediate);
 }
 
@@ -495,7 +499,7 @@ function updateEnergyUi(): void {
 }
 
 function isPlayerInvulnerable(now = performance.now()): boolean {
-  return playerInvulnerable || now < crystalInvulnerableUntil;
+  return playerInvulnerable || now < crystalInvulnerableUntil || now < playerDamageInvulnerableUntil;
 }
 
 function updatePlayerProtectionVisual(now = performance.now()): void {
@@ -881,6 +885,9 @@ function updateMonsterPositions(): void {
 function applyPlayerDamage(amount: number): void {
   if (!playerAlive) return;
 
+  const now = performance.now();
+  if (isPlayerInvulnerable(now)) return;
+
   renderer.spawnEffect(
     PLAYER_SPEC.visual.effects?.damage,
     player.x,
@@ -888,9 +895,8 @@ function applyPlayerDamage(amount: number): void {
     PLAYER_SPEC.spriteSize,
   );
 
-  if (isPlayerInvulnerable()) return;
-
   playerHp = Math.max(0, playerHp - amount);
+  playerDamageInvulnerableUntil = now + PLAYER_DAMAGE_INVULNERABILITY_MS;
 
   updateHealthUi();
 
@@ -1377,10 +1383,18 @@ function updateBullets(dt: number): void {
       bullet.traveled += Math.hypot(dx, dy);
       const bulletRadius = bullet.radius ?? DEFAULT_BULLET_SPEC.radius;
 
-      if (
-        bullet.traveled >= (bullet.maxDistance ?? DEFAULT_BULLET_SPEC.maxDistance) ||
-        !isGeometryWalkable(bullet.x, bullet.y, bulletRadius)
-      ) {
+      if (bullet.traveled >= (bullet.maxDistance ?? DEFAULT_BULLET_SPEC.maxDistance)) {
+        alive = false;
+        break;
+      }
+      const movementAlignedBulletY = bullet.y - PLAYER_SPEC.visualCenterOffsetY;
+      if (!isGeometryWalkable(bullet.x, movementAlignedBulletY, PLAYER_SPEC.radius)) {
+        renderer.spawnEffect(
+          PLAYER_SPEC.visual.effects?.damage,
+          bullet.x,
+          bullet.y,
+          PLAYER_SPEC.spriteSize,
+        );
         alive = false;
         break;
       }
@@ -1474,6 +1488,7 @@ function gameTick(timestamp: number): void {
 
   updatePlayerProtectionVisual(timestamp);
   updateEnergyDash(dt, timestamp);
+  updatePlayerAimFromPointer();
   if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
@@ -2139,6 +2154,7 @@ function teleportPlayerTo(x: number, y: number): void {
     useCrystal: () => boolean;
     expireCrystalShield: () => void;
     playerHp: () => number;
+    playerFacing: () => Point;
     damagePlayer: (amount: number) => void;
     stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y">>;
     portalContacts: () => string[];
@@ -2174,6 +2190,7 @@ function teleportPlayerTo(x: number, y: number): void {
     updatePlayerProtectionVisual();
   },
   playerHp: () => playerHp,
+  playerFacing: () => ({ ...playerFacing }),
   damagePlayer: applyPlayerDamage,
   stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
   portalContacts: () => [...portalContacts],
@@ -2223,10 +2240,18 @@ window.addEventListener("keyup", event => {
   heldMovementKeys.delete(event.code);
 });
 
-function updatePlayerAim(clientX: number, clientY: number): void {
-  const target = renderer.worldPointAt(clientX, clientY);
+function updatePlayerAimFromPointer(): void {
+  if (!pointerInViewport || !pointerClientPosition) {
+    renderer.setCameraTarget(player);
+    return;
+  }
+  const target = renderer.worldPointAt(pointerClientPosition.x, pointerClientPosition.y);
   if (!target) return;
   const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+  renderer.setCameraTarget({
+    x: player.x + (target.x - player.x) / 3,
+    y: player.y + (target.y - player.y) / 3,
+  });
   const dx = target.x - center.x;
   const dy = target.y - center.y;
   const magnitude = Math.hypot(dx, dy);
@@ -2236,9 +2261,15 @@ function updatePlayerAim(clientX: number, clientY: number): void {
   updatePlayerFacingAsset();
 }
 
+function updatePlayerAim(clientX: number, clientY: number): void {
+  pointerClientPosition = { x: clientX, y: clientY };
+  updatePlayerAimFromPointer();
+}
+
 function resetPlayerInput(): void {
   heldMovementKeys.clear();
   primaryPointerDown = false;
+  pointerClientPosition = null;
   playerSpriteAnimationToken += 1;
   playerShooting = false;
   setPlayerMoving(false, performance.now());
@@ -2263,10 +2294,12 @@ gameViewport.addEventListener("pointerdown", event => {
     !playerAlive
   ) return;
 
+  pointerInViewport = true;
+  updatePlayerAim(event.clientX, event.clientY);
+
   if (event.button === 2) {
     event.preventDefault();
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    pointerInViewport = true;
     startEnergyDash(event.clientX, event.clientY);
     return;
   }
@@ -2274,9 +2307,7 @@ gameViewport.addEventListener("pointerdown", event => {
 
   event.preventDefault();
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-  pointerInViewport = true;
   primaryPointerDown = true;
-  updatePlayerAim(event.clientX, event.clientY);
   shootBullet();
 });
 
@@ -2286,7 +2317,9 @@ gameViewport.addEventListener("contextmenu", event => {
 
 gameViewport.addEventListener("pointerleave", () => {
   pointerInViewport = false;
+  pointerClientPosition = null;
   primaryPointerDown = false;
+  renderer.setCameraTarget(player);
 });
 
 window.addEventListener("pointerup", event => {

@@ -3,8 +3,6 @@ import {
   ASSETS,
   BARREL_EXPLOSION_FRAMES,
   CAMERA_BOSS_PADDING,
-  CAMERA_DEADZONE_HEIGHT,
-  CAMERA_DEADZONE_WIDTH,
   CAMERA_FOLLOW_LERP,
   CAMERA_SCALE,
   CAMERA_TRANSITION_MS,
@@ -94,8 +92,10 @@ export class PhaserRenderer {
   private portals = new Map<string, Phaser.GameObjects.Container>();
   private monsters = new Map<string, Phaser.GameObjects.Container>();
   private player: Phaser.GameObjects.Container | null = null;
+  private cameraTarget: Phaser.GameObjects.Container | null = null;
   private playerSprite: Phaser.GameObjects.Image | null = null;
   private currentPlayer: Point = { x: 0, y: 0 };
+  private currentCameraTarget: Point = { x: 0, y: 0 };
   private currentPlayerHp = 10;
   private currentPlayerMaxHp = 10;
   private currentPlayerAsset: string = PLAYER_DEFAULT_ASSETS.right;
@@ -192,6 +192,8 @@ export class PhaserRenderer {
     this.monsters.clear();
     this.player?.destroy(true);
     this.player = null;
+    this.cameraTarget?.destroy(true);
+    this.cameraTarget = null;
     this.playerSprite = null;
     this.currentDecorations = [];
     this.currentStairs = [];
@@ -1059,6 +1061,14 @@ export class PhaserRenderer {
     this.applyCameraMode(immediate);
   }
 
+  setCameraTarget(position: Point, immediate = false): void {
+    this.currentCameraTarget = { ...position };
+    if (!this.scene) return;
+    this.cameraTarget ??= this.scene.add.container(position.x, position.y);
+    this.cameraTarget.setPosition(position.x, position.y);
+    if (immediate && !this.cameraRoom) this.scene.cameras.main.centerOn(position.x, position.y);
+  }
+
   private applyCameraMode(immediate: boolean): void {
     const camera = this.scene?.cameras.main;
     if (!camera || !this.player) return;
@@ -1075,10 +1085,11 @@ export class PhaserRenderer {
       return;
     }
 
-    camera.startFollow(this.player, false, CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_LERP);
-    camera.setDeadzone(CAMERA_DEADZONE_WIDTH, CAMERA_DEADZONE_HEIGHT);
+    this.setCameraTarget(this.currentCameraTarget);
+    camera.startFollow(this.cameraTarget!, false, CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_LERP);
+    camera.setDeadzone();
     if (immediate) {
-      camera.setZoom(CAMERA_SCALE).centerOn(this.player.x, this.player.y);
+      camera.setZoom(CAMERA_SCALE).centerOn(this.currentCameraTarget.x, this.currentCameraTarget.y);
     } else {
       camera.zoomTo(CAMERA_SCALE, CAMERA_TRANSITION_MS, "Sine.easeInOut", true);
     }

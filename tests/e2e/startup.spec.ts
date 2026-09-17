@@ -2,7 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { CAMERA_SCALE, world } from "../../src/client/config";
-import { PORTAL_DEFINITION, ROOM_DEFINITIONS } from "../../src/client/domain/specs";
+import {
+  PLAYER_DAMAGE_INVULNERABILITY_MS,
+  PLAYER_SPEC,
+  PORTAL_DEFINITION,
+  ROOM_DEFINITIONS,
+  WORLD_GEOMETRY,
+} from "../../src/client/domain/specs";
 
 async function startGame(page: Page): Promise<void> {
   const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
@@ -40,7 +46,7 @@ async function alignPlayerToDoor(
   const position = await playerPosition(page);
   await teleportPlayer(page, direction === "N" || direction === "S"
     ? { x: door.x, y: position.y }
-    : { x: position.x, y: door.y });
+    : { x: position.x, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY });
 }
 
 async function cameraState(page: Page): Promise<{ x: number; y: number; zoom: number; bossRoomId: number | null } | null> {
@@ -117,6 +123,14 @@ async function damagePlayer(page: Page, amount: number): Promise<void> {
   await page.evaluate((damage) => {
     (window as Window & { __webcrawlTest?: { damagePlayer: (amount: number) => void } }).__webcrawlTest?.damagePlayer(damage);
   }, amount);
+}
+
+async function playerFacing(page: Page): Promise<{ x: number; y: number }> {
+  return page.evaluate(() =>
+    (window as Window & {
+      __webcrawlTest?: { playerFacing: () => { x: number; y: number } };
+    }).__webcrawlTest?.playerFacing() ?? { x: 0, y: 0 }
+  );
 }
 
 async function expireCrystalShield(page: Page): Promise<void> {
@@ -206,6 +220,19 @@ test("uses crystals for temporary invulnerability without counting supplies as s
   await expect(game).toHaveAttribute("data-player-invulnerable", "false");
   await damagePlayer(page, 3);
   expect(await playerHp(page)).toBe(protectedHp - 3);
+});
+
+test("ignores repeated damage for 200ms after taking a hit", async ({ page }) => {
+  await startGame(page);
+  const initialHp = await playerHp(page);
+
+  await damagePlayer(page, 2);
+  await damagePlayer(page, 2);
+  expect(await playerHp(page)).toBe(initialHp - 2);
+
+  await page.waitForTimeout(PLAYER_DAMAGE_INVULNERABILITY_MS + 50);
+  await damagePlayer(page, 2);
+  expect(await playerHp(page)).toBe(initialHp - 4);
 });
 
 test("charges energy and launches an invulnerable energy dash with right click", async ({ page }) => {
@@ -414,22 +441,30 @@ test("moves continuously with WASD and arrow keys", async ({ page }) => {
   }
 });
 
-test("follows the player with Phaser lerp and a deadzone", async ({ page }) => {
+test("centers the camera one third of the way from the player to the cursor", async ({ page }) => {
   await startGame(page);
   await expect.poll(async () => await cameraState(page), { timeout: 15_000 }).not.toBeNull();
-  const initialCamera = (await cameraState(page))!;
+  const viewport = await page.locator("#gameViewport").boundingBox();
+  if (!viewport) throw new Error("Game viewport unavailable");
+  const cursor = {
+    x: viewport.x + viewport.width / 2 + 120,
+    y: viewport.y + viewport.height / 2 - 60,
+  };
+  await page.mouse.move(cursor.x, cursor.y);
 
-  await page.keyboard.down("ArrowRight");
-  await page.waitForTimeout(500);
-  await page.keyboard.up("ArrowRight");
-  await page.waitForTimeout(100);
-
-  const position = await playerPosition(page);
-  const camera = (await cameraState(page))!;
-  expect(position.x).toBeGreaterThan(initialCamera.x + 100);
-  expect(camera.x).toBeGreaterThan(initialCamera.x + 5);
-  expect(camera.x).toBeLessThan(position.x - 20);
-  expect(camera.zoom).toBeCloseTo(CAMERA_SCALE, 2);
+  await expect.poll(async () => {
+    const position = await playerPosition(page);
+    const camera = (await cameraState(page))!;
+    const cursorWorld = {
+      x: camera.x + (cursor.x - viewport.x - viewport.width / 2) / camera.zoom,
+      y: camera.y + (cursor.y - viewport.y - viewport.height / 2) / camera.zoom,
+    };
+    return Math.hypot(
+      camera.x - (position.x * 2 + cursorWorld.x) / 3,
+      camera.y - (position.y * 2 + cursorWorld.y) / 3,
+    );
+  }, { timeout: 5_000 }).toBeLessThan(4);
+  expect((await cameraState(page))!.zoom).toBeCloseTo(CAMERA_SCALE, 2);
 });
 
 test("displays every player walk frame", async ({ page }) => {
@@ -477,6 +512,19 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
   expect(moving.x).toBeLessThan(start.x - 20);
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", rightFacingAsset);
   await expect.poll(async () => Number(await page.locator("#gameCanvas").getAttribute("data-bullets"))).toBeGreaterThan(0);
+  const camera = (await cameraState(page))!;
+  const viewport = await page.locator("#gameViewport").boundingBox();
+  if (!viewport) throw new Error("Game viewport unavailable");
+  const cursorWorld = {
+    x: camera.x + (aim.x - viewport.x - viewport.width / 2) / camera.zoom,
+    y: camera.y + (aim.y - viewport.y - viewport.height / 2) / camera.zoom,
+  };
+  const center = { x: moving.x, y: moving.y + PLAYER_SPEC.visualCenterOffsetY };
+  const expectedMagnitude = Math.hypot(cursorWorld.x - center.x, cursorWorld.y - center.y);
+  const facing = await playerFacing(page);
+  const alignment = facing.x * (cursorWorld.x - center.x) / expectedMagnitude +
+    facing.y * (cursorWorld.y - center.y) / expectedMagnitude;
+  expect(alignment).toBeGreaterThan(0.995);
 
   await page.mouse.up();
   await page.keyboard.up("a");
@@ -561,9 +609,12 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
     y: Number(await game.getAttribute("data-first-door-y")),
   };
   const start = await playerPosition(page);
+  const direction = await game.getAttribute("data-first-exit");
   const target = {
     x: door.x + Math.sign(door.x - start.x || 1) * 32,
-    y: door.y + Math.sign(door.y - start.y || 1) * 32,
+    y: direction === "E" || direction === "W"
+      ? door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY
+      : door.y + Math.sign(door.y - start.y || 1) * 32,
   };
   await teleportPlayer(page, target);
   await expect.poll(async () => {

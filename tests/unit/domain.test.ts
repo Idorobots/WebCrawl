@@ -310,6 +310,7 @@ describe("layout and geometry", () => {
       const unit = { x: (end.x - start.x) / length, y: (end.y - start.y) / length };
       const lateral = { x: -unit.y, y: unit.x };
       const targetSide = ({ N: "S", E: "W", S: "N", W: "E" } as const)[link.direction];
+      const verticalShift = start.y === end.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
       const doors = [
         { boundary: start, inward: { x: -unit.x, y: -unit.y }, side: link.direction },
         { boundary: end, inward: unit, side: targetSide },
@@ -318,7 +319,7 @@ describe("layout and geometry", () => {
         const depth = PLAYER_SPEC.radius + (door.side === "N" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
         const center = {
           x: door.boundary.x + door.inward.x * depth / 2,
-          y: door.boundary.y + door.inward.y * depth / 2,
+          y: door.boundary.y + door.inward.y * depth / 2 + verticalShift,
         };
         const blockedEdge = {
           x: center.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),

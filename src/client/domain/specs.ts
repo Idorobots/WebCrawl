@@ -56,6 +56,7 @@ export const WORLD_GEOMETRY = {
   topWallCollisionDepth: ENVIRONMENT_SEGMENT_SIZE / 2,
   wallThickness: world(64),
   corridorHalfWidth: ENVIRONMENT_SEGMENT_SIZE,
+  verticalDoorPassableOffsetY: world(29),
   maxCorridorLength: ENVIRONMENT_SEGMENT_SIZE * 12,
   roomCollisionMargin: world(4),
   spatialCellSize: world(366),
@@ -106,6 +107,7 @@ export const DEFAULT_BULLET_SPEC = {
 
 export const CRYSTAL_INVULNERABILITY_DURATION_MS = 10_000;
 export const CRYSTAL_INVULNERABILITY_BLINK_START_MS = 2_000;
+export const PLAYER_DAMAGE_INVULNERABILITY_MS = 200;
 
 export const PLAYER_ENERGY_MAX = 5;
 export const ENERGY_DASH_RANGE = world(330);
