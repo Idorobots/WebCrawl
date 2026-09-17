@@ -187,7 +187,7 @@ const energyLootCountEl = requireElement<HTMLElement>("#energyLootCount");
 const medkitCountEl = requireElement<HTMLElement>("#medkitCount");
 const hudEnergyFillEl = requireElement<HTMLElement>("#hudEnergyFill");
 const weaponNameEl = requireElement<HTMLElement>("#weaponName");
-const ammoCountEl = requireElement<HTMLElement>("#ammoCount");
+const hudAmmoFillEl = requireElement<HTMLElement>("#hudAmmoFill");
 const weaponHudIconEl = requireElement<HTMLImageElement>("#weaponHudIcon");
 
 const deathModal = requireElement<HTMLDivElement>("#deathModal");
@@ -458,9 +458,10 @@ function updateHealthUi(): void {
 function updateWeaponUi(): void {
   weaponNameEl.textContent = currentWeapon.name;
   weaponHudIconEl.src = WEAPON_ASSETS[currentWeapon.kind];
-  ammoCountEl.textContent = currentWeaponAmmo === null
-    ? "∞"
-    : `${currentWeaponAmmo} / ${currentWeapon.maxAmmo}`;
+  const ammoRatio = currentWeaponAmmo === null
+    ? 1
+    : Math.max(0, Math.min(1, currentWeaponAmmo / Math.max(1, currentWeapon.maxAmmo ?? currentWeaponAmmo)));
+  hudAmmoFillEl.style.width = `${ammoRatio * 100}%`;
   gameCanvasHost.dataset.weaponKind = currentWeapon.kind;
   gameCanvasHost.dataset.weaponAmmo = currentWeaponAmmo === null ? "infinite" : String(currentWeaponAmmo);
 }

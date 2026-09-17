@@ -1121,9 +1121,18 @@ body {
   position: relative;
   overflow: hidden;
   padding: 0 13px;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 16px;
   flex-wrap: nowrap;
+}
+
+.weapon-status-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
 }
 
 .weapon-hud-icon {
@@ -1141,10 +1150,29 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
 }
 
-.ammo {
-  font-size: 30px;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+.ammo-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #9dbed0;
+  min-width: 0;
+}
+
+.ammo-track {
+  flex: 1;
+  min-width: 0;
+  height: 12px;
+  border: 4px 10px solid transparent;
+  border-image: url("/assets/ui/health_bar_plain/source.png") 20 60 fill / 4px 10px stretch;
+}
+
+#hudAmmoFill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #4c6b1f, #7ba33e);
+  transition: width 140ms linear;
 }
 
 .floor-status-card {
@@ -1241,11 +1269,9 @@ button {
   }
   .hp-line,
   .energy-line,
-  .weapon-name {
+  .weapon-name,
+  .ammo-line {
     font-size: 12px;
-  }
-  .ammo {
-    font-size: 22px;
   }
   .welcome-url-row {
     flex-direction: column;

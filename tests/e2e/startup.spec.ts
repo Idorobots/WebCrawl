@@ -625,7 +625,6 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   await teleportPlayer(page, { x: droppedWeapon!.x + 80, y: droppedWeapon!.y + 80 });
   await teleportPlayer(page, { x: droppedWeapon!.x, y: droppedWeapon!.y });
   await expect(game).toHaveAttribute("data-weapon-ammo", String(reducedAmmo));
-  await expect(page.locator("#ammoCount")).toContainText(`${reducedAmmo} / ${startingAmmo}`);
 
   const ammoBeforeOrb = Number(await game.getAttribute("data-weapon-ammo"));
   const lootTarget = {
