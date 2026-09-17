@@ -1036,12 +1036,6 @@ body {
   min-width: 0;
 }
 
-.status-label {
-  color: #86a8bf;
-  font-size: 10px;
-  letter-spacing: .12em;
-}
-
 .hp-line {
   display: flex;
   align-items: center;

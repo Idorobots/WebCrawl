@@ -183,7 +183,7 @@ test("uses crystals for temporary invulnerability without counting supplies as s
   await expect(page.locator("#creditCount")).toHaveText("0");
   await expect(page.locator("#crystalCount")).toHaveText("0");
   await expect(page.locator("#coreCount")).toHaveText("0");
-  await expect(page.locator("#energyCount")).toHaveText("0");
+  await expect(game).toHaveAttribute("data-energy", "0");
   await expect(page.locator("#energyLootCount")).toHaveText("0");
   await expect(page.locator("#medkitCount")).toHaveText("0");
 
@@ -212,9 +212,8 @@ test("charges energy and launches an invulnerable energy dash with right click",
   await startGame(page);
   const game = page.locator("#gameCanvas");
   await grantEnergy(page, 5);
-  await expect(page.locator("#energyCount")).toHaveText("5");
-  await expect(page.locator("#energyLootCount")).toHaveText("5");
   await expect(game).toHaveAttribute("data-energy", "5");
+  await expect(page.locator("#energyLootCount")).toHaveText("5");
 
   const before = await playerPosition(page);
   const aim = await screenPositionFor(page, { x: before.x + world(120), y: before.y });
@@ -234,7 +233,6 @@ test("charges energy and launches an invulnerable energy dash with right click",
     const position = await playerPosition(page);
     return position.x !== before.x || position.y !== before.y;
   }, { timeout: 5_000, intervals: [50] }).toBe(true);
-  await expect(page.locator("#energyCount")).toHaveText("0");
   await expect(page.locator("#energyLootCount")).toHaveText("0");
   await expect(game).toHaveAttribute("data-energy", "0");
 });

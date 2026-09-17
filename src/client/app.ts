@@ -96,7 +96,6 @@ const gameUi = requireElement<HTMLDivElement>("#gameUi");
 
 const sideMinimapCanvas = requireElement<HTMLCanvasElement>("#sideMinimapCanvas");
 const sideFloorLabelEl = requireElement<HTMLElement>("#sideFloorLabel");
-const playerHudPortraitEl = requireElement<HTMLImageElement>("#playerHudPortrait");
 
 let currentRequest = 0;
 let currentPageUrl: string | null = null;
@@ -179,13 +178,11 @@ let portalTransitioning = false;
 const portalContacts = new Set<string>();
 const heldMovementKeys = new Set<string>();
 
-const hpCountEl = requireElement<HTMLElement>("#hpCount");
 const killsCountEl = document.querySelector<HTMLElement>("#killsCount");
 const hudHealthFillEl = requireElement<HTMLElement>("#hudHealthFill");
 const creditCountEl = requireElement<HTMLElement>("#creditCount");
 const crystalCountEl = requireElement<HTMLElement>("#crystalCount");
 const coreCountEl = requireElement<HTMLElement>("#coreCount");
-const energyCountEl = requireElement<HTMLElement>("#energyCount");
 const energyLootCountEl = requireElement<HTMLElement>("#energyLootCount");
 const medkitCountEl = requireElement<HTMLElement>("#medkitCount");
 const hudEnergyFillEl = requireElement<HTMLElement>("#hudEnergyFill");
@@ -453,14 +450,9 @@ function floorIdentity(pageUrl: string): string {
 
 function updateHealthUi(): void {
   const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_SPEC.maxHp));
-  hpCountEl.textContent = String(playerHp);
   hudHealthFillEl.style.width = `${ratio * 100}%`;
 
   renderer.setPlayer(player, playerHp, PLAYER_SPEC.maxHp, currentPlayerSpriteAsset);
-
-  if (playerHudPortraitEl) {
-    playerHudPortraitEl.src = currentPlayerSpriteAsset;
-  }
 }
 
 function updateWeaponUi(): void {
@@ -477,7 +469,6 @@ function updateLootUi(): void {
   creditCountEl.textContent = String(lootInventory.credits);
   crystalCountEl.textContent = String(lootInventory.crystals);
   coreCountEl.textContent = String(lootInventory.cores);
-  energyCountEl.textContent = String(lootInventory.energy);
   energyLootCountEl.textContent = String(lootInventory.energy);
   medkitCountEl.textContent = String(lootInventory.medkits);
   gameCanvasHost.dataset.credits = String(lootInventory.credits);
@@ -490,7 +481,6 @@ function updateLootUi(): void {
 }
 
 function updateEnergyUi(): void {
-  energyCountEl.textContent = String(lootInventory.energy);
   const fill = Math.min(PLAYER_ENERGY_MAX, lootInventory.energy);
   hudEnergyFillEl.style.width = `${fill / PLAYER_ENERGY_MAX * 100}%`;
 }
@@ -882,7 +872,6 @@ function applyPlayerDamage(amount: number): void {
   if (isPlayerInvulnerable()) return;
 
   playerHp = Math.max(0, playerHp - amount);
-  hpCountEl.textContent = String(playerHp);
 
   updateHealthUi();
 
@@ -1849,10 +1838,6 @@ function playerAssetForDirection(direction: PlayerDirection = playerDirectionNam
 function setPlayerSpriteAsset(asset: string): void {
   currentPlayerSpriteAsset = asset;
   renderer.setPlayerAsset(asset);
-
-  if (playerHudPortraitEl) {
-    playerHudPortraitEl.src = asset;
-  }
 }
 
 function updatePlayerFacingAsset(): void {
@@ -2294,7 +2279,6 @@ function renderGraph(
 ): void {
   currentStateId = stateId ?? stateIdForPage(pageUrl);
   renderer.clear();
-  hpCountEl.textContent = String(playerHp);
   if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
   updateHealthUi();
   updateWeaponUi();
