@@ -68,7 +68,7 @@ import {
   monsterDisplaySize,
 } from "../../src/client/domain/specs";
 import { DEFAULT_WEAPON, projectilesForWeapon, replenishWeaponAmmo, weaponForRoom, weaponKinds } from "../../src/client/domain/weapons";
-import type { DungeonGraph, GraphNode, Stair } from "../../src/client/types";
+import type { DungeonGraph, GraphNode, LayoutLink, Stair } from "../../src/client/types";
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
   id,
@@ -597,6 +597,82 @@ describe("deterministic room contents", () => {
     );
     expect(lootCounts.filter(count => count > 0).length).toBeGreaterThan(100);
     expect(lootCounts.every(count => count >= 0 && count <= 2)).toBe(true);
+  });
+
+  it("scales room populations with room size at a constant density", () => {
+    const standard = node(0, null, 0, {
+      tag: "section",
+      lootSeed: stableHash("density-room"),
+      isRoot: false,
+    });
+    const large = node(1, null, 0, {
+      tag: "section",
+      lootSeed: stableHash("density-room"),
+      isRoot: false,
+      width: ROOM_WIDTH * 2,
+      height: ROOM_HEIGHT,
+    });
+    const huge = node(2, null, 0, {
+      tag: "section",
+      lootSeed: stableHash("density-room"),
+      isRoot: false,
+      width: ROOM_WIDTH * 2,
+      height: ROOM_HEIGHT * 2,
+    });
+
+    for (const floor of [1, 5]) {
+      const monsterCounts = [standard, large, huge].map(room => monsterSpecsForRoom(room, floor).length);
+      const decorationCounts = [standard, large, huge].map(room => decorationSpecsForRoom(room, floor).length);
+      expect(monsterCounts[1]!).toBeGreaterThan(monsterCounts[0]!);
+      expect(monsterCounts[2]!).toBeGreaterThan(monsterCounts[1]!);
+      expect(decorationCounts[1]!).toBeGreaterThan(decorationCounts[0]!);
+      expect(decorationCounts[2]!).toBeGreaterThan(decorationCounts[1]!);
+    }
+  });
+
+  it("hosts fewer enemies per segment in boss arenas but scenery as usual", () => {
+    const section = node(0, null, 0, {
+      tag: "section",
+      lootSeed: stableHash("arena-density"),
+      isRoot: false,
+      width: ROOM_DEFINITIONS.boss.width,
+      height: ROOM_DEFINITIONS.boss.height,
+    });
+    const script = node(1, null, 0, {
+      tag: "script",
+      lootSeed: stableHash("arena-density"),
+      isRoot: false,
+      width: ROOM_DEFINITIONS.boss.width,
+      height: ROOM_DEFINITIONS.boss.height,
+    });
+
+    const sectionRegular = monsterSpecsForRoom(section, 1).length;
+    const arena = monsterSpecsForRoom(script, 1);
+    const arenaRegular = arena.filter(monster => !monster.bossKind).length;
+    expect(arena).toHaveLength(arenaRegular + 1);
+    expect(arenaRegular).toBeLessThan(sectionRegular);
+    const sceneryFor = (room: GraphNode) => decorationSpecsForRoom(room, 1)
+      .map(item => ({ kind: item.kind, obstacle: item.obstacle, destructible: item.destructible, origin: item.origin }));
+    expect(sceneryFor(script)).toEqual(sceneryFor(section));
+  });
+
+  it("scales corridor populations with corridor length", () => {
+    const source = node(0, null, 0, { isRoot: false });
+    const target = node(1, 0, 1);
+    const corridor = (length: number, id: string): LayoutLink => ({
+      id,
+      source,
+      target,
+      direction: "S",
+      ownerRoomId: source.id,
+      width: WORLD_GEOMETRY.corridorHalfWidth * 2,
+      points: [{ x: 0, y: 0 }, { x: 0, y: length * ENVIRONMENT_SEGMENT_SIZE }],
+    });
+
+    const shortLink = corridor(4, "short");
+    const longLink = corridor(12, "long");
+    expect(monsterSpecsForCorridor(shortLink, 1).length).toBeLessThan(monsterSpecsForCorridor(longLink, 1).length);
+    expect(decorationSpecsForCorridor(shortLink, 1).length).toBeLessThan(decorationSpecsForCorridor(longLink, 1).length);
   });
 
   it("scales monster stats and includes sentries on deeper floors", () => {

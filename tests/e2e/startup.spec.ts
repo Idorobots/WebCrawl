@@ -2,9 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { CAMERA_SCALE } from "../../src/client/config";
-import { PLAYER_SPEC, PORTAL_DEFINITION, ROOM_DEFINITIONS } from "../../src/client/domain/specs";
-
-const PLAYER_SPEED = PLAYER_SPEC.speed;
+import { PORTAL_DEFINITION, ROOM_DEFINITIONS } from "../../src/client/domain/specs";
 
 async function startGame(page: Page): Promise<void> {
   const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
@@ -32,6 +30,32 @@ async function playerPosition(page: Page): Promise<{ x: number; y: number }> {
     x: Number(await player.getAttribute("data-player-x")),
     y: Number(await player.getAttribute("data-player-y")),
   };
+}
+
+async function alignPlayerToDoor(
+  page: Page,
+  door: { x: number; y: number },
+  direction: string | null,
+): Promise<void> {
+  const position = await playerPosition(page);
+  const horizontal = door.x < position.x ? "ArrowLeft" : "ArrowRight";
+  const vertical = door.y < position.y ? "ArrowUp" : "ArrowDown";
+  const alignKey = direction === "N" || direction === "S" ? horizontal : vertical;
+  const alignDistance = direction === "N" || direction === "S"
+    ? Math.abs(door.x - position.x)
+    : Math.abs(door.y - position.y);
+  if (alignDistance <= 8) return;
+  await page.keyboard.down(alignKey);
+  try {
+    const remaining = (current: { x: number; y: number }): number =>
+      direction === "N" || direction === "S" ? door.x - current.x : door.y - current.y;
+    await expect.poll(async () => {
+      const remainingDistance = remaining(await playerPosition(page));
+      return Math.abs(remainingDistance) < 8 || remainingDistance < 0;
+    }, { timeout: 6_000 }).toBe(true);
+  } finally {
+    await page.keyboard.up(alignKey);
+  }
 }
 
 async function cameraState(page: Page): Promise<{ x: number; y: number; zoom: number; bossRoomId: number | null } | null> {
@@ -294,17 +318,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
     y: Number(await game.getAttribute("data-first-door-y")),
   };
   const position = await playerPosition(page);
-  const horizontal = door.x < position.x ? "ArrowLeft" : "ArrowRight";
-  const vertical = door.y < position.y ? "ArrowUp" : "ArrowDown";
-  const alignKey = direction === "N" || direction === "S" ? horizontal : vertical;
-  const alignDistance = direction === "N" || direction === "S"
-    ? Math.abs(door.x - position.x)
-    : Math.abs(door.y - position.y);
-  if (alignDistance > 8) {
-    await page.keyboard.down(alignKey);
-    await page.waitForTimeout(alignDistance / PLAYER_SPEED * 1_000);
-    await page.keyboard.up(alignKey);
-  }
+  await alignPlayerToDoor(page, door, direction);
   const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
   await page.keyboard.down(exitKey);
   await expect.poll(async () => {
@@ -507,18 +521,7 @@ test("spawns multiple enemies once another room is revealed", async ({ page }) =
     x: Number(await game.getAttribute("data-first-door-x")),
     y: Number(await game.getAttribute("data-first-door-y")),
   };
-  const position = await playerPosition(page);
-  const horizontal = door.x < position.x ? "ArrowLeft" : "ArrowRight";
-  const vertical = door.y < position.y ? "ArrowUp" : "ArrowDown";
-  const alignKey = direction === "N" || direction === "S" ? horizontal : vertical;
-  const alignDistance = direction === "N" || direction === "S"
-    ? Math.abs(door.x - position.x)
-    : Math.abs(door.y - position.y);
-  if (alignDistance > 8) {
-    await page.keyboard.down(alignKey);
-    await page.waitForTimeout(alignDistance / PLAYER_SPEED * 1000);
-    await page.keyboard.up(alignKey);
-  }
+  await alignPlayerToDoor(page, door, direction);
   const key = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
   await page.keyboard.down(key);
   await expect.poll(async () => {

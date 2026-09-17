@@ -1,4 +1,4 @@
-import { world } from "../config";
+import { ENVIRONMENT_SEGMENT_SIZE, ROOM_HEIGHT, ROOM_WIDTH, world } from "../config";
 import type {
   Decoration,
   BossKind,
@@ -197,15 +197,20 @@ function decorationFits(
 export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[] {
   const seed = stableHash(`${room.lootSeed}|decor`);
   const difficulty = floorDifficulty(floor);
-  const count = 5 + (seed % 3) + Math.min(4, Math.floor(difficulty / 2));
+  const count = Math.max(5, Math.floor(roomSegmentArea(room) * sceneryDensityForFloor(floor))) + (seed % 3);
   const theme = ROOM_SCENERY_THEMES[roomSceneryThemeForRoom(room)];
   const slots = roomDecorationSlots(room, seed);
   const spawnerRate = Math.min(82, 12 + difficulty * 6);
   const spawnerRoomRoll = stableHash(`${room.lootSeed}|spawner-rate`) % 100;
-  const maxSpawnerCount = Math.min(4, 1 + Math.floor(difficulty / 3));
-  const requestedSpawnerCount = room.isRoot || room.tag === "img" || spawnerRoomRoll >= spawnerRate
-    ? 0
-    : 1 + (stableHash(`${room.lootSeed}|spawner-count`) % maxSpawnerCount);
+  const expectedSpawners = roomSegmentArea(room) * spawnerDensityForFloor(floor);
+  const minSpawnerCount = Math.max(0, Math.floor(expectedSpawners));
+  const maxSpawnerCount = Math.max(minSpawnerCount, Math.min(4, Math.ceil(expectedSpawners)));
+  let requestedSpawnerCount = 0;
+  if (!room.isRoot && room.tag !== "img" && spawnerRoomRoll < spawnerRate) {
+    requestedSpawnerCount = minSpawnerCount === maxSpawnerCount
+      ? Math.max(1, minSpawnerCount)
+      : minSpawnerCount + (stableHash(`${room.lootSeed}|spawner-count`) % (maxSpawnerCount - minSpawnerCount + 1));
+  }
   const spawners: Decoration[] = [];
   for (let index = 0; index < requestedSpawnerCount; index += 1) {
     const itemSeed = stableHash(`${room.lootSeed}|spawner|${index}|${floor}`);
@@ -290,7 +295,8 @@ function pointAlongCorridor(link: LayoutLink, fraction: number, lateral = 0): Po
 export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decoration[] {
   const seed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|decor`);
   const difficulty = floorDifficulty(floor);
-  const count = 2 + (seed % 2);
+  const expected = corridorSegmentLength(link) * sceneryDensityForFloor(floor);
+  const count = Math.max(2, Math.floor(expected)) + (seed % 2);
   return Array.from({ length: count }, (_, index) => {
     const itemSeed = stableHash(`${seed}|${index}`);
     const position = pointAlongCorridor(
@@ -425,16 +431,49 @@ export function buildSceneryDrops(
   });
 }
 
+const MONSTER_DENSITY_PER_SEGMENT = 0.16;
+const MONSTER_DENSITY_PER_FLOOR = 0.03;
+const SCENERY_DENSITY_PER_SEGMENT = 0.34;
+const SCENERY_DENSITY_PER_FLOOR = 0.03;
+const SPAWNER_DENSITY_PER_SEGMENT = 0.0625;
+const SPAWNER_DENSITY_PER_FLOOR = 0.015;
+const BOSS_ARENA_MONSTER_DENSITY_FACTOR = 0.6;
+
+function roomSegmentArea(room: GraphNode): number {
+  return room.width * room.height / (ENVIRONMENT_SEGMENT_SIZE * ENVIRONMENT_SEGMENT_SIZE);
+}
+
+function corridorSegmentLength(link: LayoutLink): number {
+  let total = 0;
+  for (let index = 1; index < link.points.length; index += 1) {
+    const start = link.points[index - 1]!;
+    const end = link.points[index]!;
+    total += Math.hypot(end.x - start.x, end.y - start.y);
+  }
+  return total / ENVIRONMENT_SEGMENT_SIZE;
+}
+
+function monsterDensityForFloor(floor: number): number {
+  return MONSTER_DENSITY_PER_SEGMENT + floorDifficulty(floor) * MONSTER_DENSITY_PER_FLOOR;
+}
+
+function sceneryDensityForFloor(floor: number): number {
+  return SCENERY_DENSITY_PER_SEGMENT + floorDifficulty(floor) * SCENERY_DENSITY_PER_FLOOR;
+}
+
+function spawnerDensityForFloor(floor: number): number {
+  return SPAWNER_DENSITY_PER_SEGMENT + floorDifficulty(floor) * SPAWNER_DENSITY_PER_FLOOR;
+}
+
 function floorDifficulty(floor: number): number {
   return Math.max(0, floor - 1);
 }
 
-function monsterCountForRoom(room: GraphNode, floor: number): number {
-  const difficulty = floorDifficulty(floor);
-  const min = Math.min(5, 2 + Math.floor(difficulty / 2));
-  const max = Math.min(5, min + 1);
+function monsterCountForRoom(room: GraphNode, floor: number, densityFactor = 1): number {
+  const expected = roomSegmentArea(room) * monsterDensityForFloor(floor) * densityFactor;
+  const minimum = Math.max(1, Math.floor(expected));
   const countSeed = stableHash(`${room.lootSeed}|monster-count|${floor}`);
-  return min + (countSeed % (max - min + 1));
+  return minimum + (countSeed % 2);
 }
 
 function monsterKindForSeed(seed: number, difficulty = 0): "slow" | "fast" | "sentry" {
@@ -571,7 +610,13 @@ function regularMonsterSpec(
 export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossKind): Monster[] {
   if (room.isRoot || room.tag === "img") return [];
   const roomSeed = stableHash(`${room.lootSeed}|monsters`);
-  const count = monsterCountForRoom(room, floor);
+  const count = monsterCountForRoom(
+    room,
+    floor,
+    room.tag === "script" ? BOSS_ARENA_MONSTER_DENSITY_FACTOR : 1,
+  );
+  const offsetScaleX = room.width / ROOM_WIDTH;
+  const offsetScaleY = room.height / ROOM_HEIGHT;
   const offsets: Array<[number, number]> = room.tag === "script"
     ? [
       [-world(250), -world(20)], [world(250), -world(20)],
@@ -583,12 +628,12 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossK
     ];
   const regularMonsters = Array.from({ length: count }, (_, index): Monster => {
     const seed = stableHash(`${roomSeed}|${floor}|${index}`);
-    const offset = offsets[index % offsets.length]!;
+    const [offsetX, offsetY] = offsets[index % offsets.length]!;
     return regularMonsterSpec(
       `${room.id}::monster-${index}`,
       seed,
       room.id,
-      { x: room.x + offset[0], y: room.y + offset[1] },
+      { x: room.x + offsetX * offsetScaleX, y: room.y + offsetY * offsetScaleY },
       floor,
       "room",
     );
@@ -601,7 +646,8 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossK
 export function monsterSpecsForCorridor(link: LayoutLink, floor = 1): Monster[] {
   if (link.source.isRoot) return [];
   const corridorSeed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|monsters`);
-  const count = corridorSeed % 3;
+  const expected = corridorSegmentLength(link) * monsterDensityForFloor(floor);
+  const count = Math.max(0, Math.floor(expected)) + (corridorSeed % 2);
   return Array.from({ length: count }, (_, index) => {
     const seed = stableHash(`${corridorSeed}|${floor}|${index}`);
     const position = pointAlongCorridor(link, (index + 1) / (count + 1), 0);
