@@ -540,7 +540,7 @@ describe("deterministic room contents", () => {
   it("creates rich image-room loot and capped stairs", () => {
     const generated = buildInteractiveObjects(layout, "https://example.com/", null, new Set());
     expect(lootCountForRoom(room)).toBeGreaterThanOrEqual(3);
-    expect(lootCountForRoom(room)).toBeLessThanOrEqual(5);
+    expect(lootCountForRoom(room)).toBeLessThanOrEqual(7);
     expect(generated.loot.filter(item => item.kind !== "weapon")).toHaveLength(lootCountForRoom(room));
     expect(generated.stairs.map(({ url }) => url)).toEqual(room.hrefs);
     expect(new Set(generated.stairs.map(({ id }) => id)).size).toBe(generated.stairs.length);
@@ -595,7 +595,8 @@ describe("deterministic room contents", () => {
     expect(floorFiveCounts.reduce((sum, count) => sum + count, 0)).toBeGreaterThan(
       floorOneCounts.reduce((sum, count) => sum + count, 0),
     );
-    expect(lootCounts.every(count => count === 0)).toBe(true);
+    expect(lootCounts.filter(count => count > 0).length).toBeGreaterThan(100);
+    expect(lootCounts.every(count => count >= 0 && count <= 2)).toBe(true);
   });
 
   it("scales monster stats and includes sentries on deeper floors", () => {

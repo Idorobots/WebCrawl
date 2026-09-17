@@ -5,6 +5,7 @@ import {
   MAX_ROOMS_AFTER_COALESCE,
   PLAYER_DEFAULT_ASSETS,
   PLAYER_FRAMES,
+  WEAPON_ASSETS,
   world,
 } from "./config";
 import {
@@ -198,6 +199,7 @@ const medkitCountEl = requireElement<HTMLElement>("#medkitCount");
 const hudEnergyFillEl = requireElement<HTMLElement>("#hudEnergyFill");
 const weaponNameEl = requireElement<HTMLElement>("#weaponName");
 const ammoCountEl = requireElement<HTMLElement>("#ammoCount");
+const weaponHudIconEl = requireElement<HTMLImageElement>("#weaponHudIcon");
 
 const deathModal = requireElement<HTMLDivElement>("#deathModal");
 const deathScoreEl = requireElement<HTMLElement>("#deathScore");
@@ -481,6 +483,7 @@ function updateHealthUi(): void {
 
 function updateWeaponUi(): void {
   weaponNameEl.textContent = currentWeapon.name;
+  weaponHudIconEl.src = WEAPON_ASSETS[currentWeapon.kind];
   ammoCountEl.textContent = currentWeaponAmmo === null
     ? "∞"
     : `${currentWeaponAmmo} / ${currentWeapon.maxAmmo}`;

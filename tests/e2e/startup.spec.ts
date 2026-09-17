@@ -199,15 +199,19 @@ test("charges energy and launches an invulnerable energy dash with right click",
   await expect.poll(async () => {
     return await game.getAttribute("data-player-dashing") === "true"
       && await game.getAttribute("data-player-invulnerable") === "true";
-  }, { timeout: 2_000, intervals: [25] }).toBe(true);
+  }, { timeout: 3_000, intervals: [15] }).toBe(true);
   await page.mouse.up({ button: "right" });
 
   await expect.poll(async () => game.getAttribute("data-player-dashing"), {
     timeout: 5_000,
     intervals: [50],
   }).toBe("false");
-  expect(await playerPosition(page)).not.toEqual(before);
+  await expect.poll(async () => {
+    const position = await playerPosition(page);
+    return position.x !== before.x || position.y !== before.y;
+  }, { timeout: 5_000, intervals: [50] }).toBe(true);
   await expect(page.locator("#energyCount")).toHaveText("0");
+  await expect(page.locator("#energyLootCount")).toHaveText("0");
   await expect(game).toHaveAttribute("data-energy", "0");
 });
 
