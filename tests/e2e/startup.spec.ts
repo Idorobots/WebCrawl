@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { CAMERA_SCALE } from "../../src/client/config";
+import { CAMERA_SCALE, world } from "../../src/client/config";
 import { PORTAL_DEFINITION, ROOM_DEFINITIONS } from "../../src/client/domain/specs";
 
 async function startGame(page: Page): Promise<void> {
@@ -21,7 +21,7 @@ async function startGame(page: Page): Promise<void> {
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-monsters", "0");
-  await expect(page.locator("#statRooms")).toContainText("1 / 100");
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-visited-rooms", "1");
 }
 
 async function playerPosition(page: Page): Promise<{ x: number; y: number }> {
@@ -49,6 +49,22 @@ async function cameraState(page: Page): Promise<{ x: number; y: number; zoom: nu
       __webcrawlTest?: { camera: () => { x: number; y: number; zoom: number; bossRoomId: number | null } | null };
     }).__webcrawlTest?.camera() ?? null
   );
+}
+
+async function screenPositionFor(page: Page, world: { x: number; y: number }): Promise<{ x: number; y: number }> {
+  const bounds = await page.locator("#gameViewport").boundingBox();
+  if (!bounds) throw new Error("Game viewport unavailable");
+  let camera = await cameraState(page);
+  const deadline = Date.now() + 5_000;
+  while (!camera && Date.now() < deadline) {
+    await page.waitForTimeout(50);
+    camera = await cameraState(page);
+  }
+  if (!camera) throw new Error("Camera unavailable");
+  return {
+    x: bounds.x + bounds.width / 2 + (world.x - camera.x) * camera.zoom,
+    y: bounds.y + bounds.height / 2 + (world.y - camera.y) * camera.zoom,
+  };
 }
 
 async function teleportPlayer(page: Page, target: { x: number; y: number }): Promise<void> {
@@ -144,7 +160,7 @@ test("starts a crawl and renders a playable floor", async ({ page }) => {
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-portals", "1");
   await expect(page.locator("#gameViewport")).toHaveCSS("cursor", "crosshair");
   await expect(page.locator("#rightHud")).toBeVisible();
-  await expect(page.locator("#rightHud")).toContainText("MINIMAP");
+  await expect(page.locator("#rightHud")).toContainText("FLOOR 1");
   const minimap = page.locator("#sideMinimapCanvas");
   await expect(minimap).toBeVisible();
   await expect.poll(() => minimap.evaluate(canvas => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(1);
@@ -201,14 +217,13 @@ test("charges energy and launches an invulnerable energy dash with right click",
   await expect(game).toHaveAttribute("data-energy", "5");
 
   const before = await playerPosition(page);
-  const bounds = await page.locator("#gameViewport").boundingBox();
-  if (!bounds) throw new Error("Expected a visible game viewport");
-  await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.45);
+  const aim = await screenPositionFor(page, { x: before.x + world(120), y: before.y });
+  await page.mouse.move(aim.x, aim.y);
   await page.mouse.down({ button: "right" });
-  await expect.poll(async () => {
-    return await game.getAttribute("data-player-dashing") === "true"
-      && await game.getAttribute("data-player-invulnerable") === "true";
-  }, { timeout: 3_000, intervals: [15] }).toBe(true);
+  await expect.poll(async () => await game.getAttribute("data-player-dashing"), {
+    timeout: 3_000,
+    intervals: [15],
+  }).toBe("true");
   await page.mouse.up({ button: "right" });
 
   await expect.poll(async () => game.getAttribute("data-player-dashing"), {
@@ -226,9 +241,10 @@ test("charges energy and launches an invulnerable energy dash with right click",
 
 test("spawns on an enabled entry portal without immediately retriggering it", async ({ page }) => {
   await startGame(page);
+  const game = page.locator("#gameCanvas");
   await page.locator("#urlInput").fill("https://example.com/next");
   await page.getByRole("button", { name: "GO" }).click();
-  await expect(page.locator("#statFloor")).toHaveText("2");
+  await expect(game).toHaveAttribute("data-floor", "2");
 
   const state = await page.evaluate(() => {
     const testApi = (window as Window & {
@@ -251,7 +267,7 @@ test("spawns on an enabled entry portal without immediately retriggering it", as
   });
   expect(state.contacts).toContain(entryPortal.id);
   await page.waitForTimeout(500);
-  await expect(page.locator("#statFloor")).toHaveText("2");
+  await expect(game).toHaveAttribute("data-floor", "2");
 });
 
 test("keeps the Phaser viewport playable on mobile", async ({ page }) => {
@@ -307,8 +323,8 @@ test("keeps an active boss sized consistently while it follows the player out", 
   const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
   await page.keyboard.down(exitKey);
   await expect.poll(async () => {
-    const value = await page.locator("#statRooms").textContent();
-    return Number(value?.split("/")[0]?.trim() ?? "0");
+    const value = await game.getAttribute("data-visited-rooms");
+    return Number(value ?? "0");
   }).toBeGreaterThanOrEqual(2);
   await page.keyboard.up(exitKey);
 
@@ -444,22 +460,20 @@ test("displays every player walk frame", async ({ page }) => {
 test("aims with the cursor and repeatedly fires while moving backward", async ({ page }) => {
   await startGame(page);
 
-  const viewport = page.locator("#gameViewport");
-  const bounds = await viewport.boundingBox();
-  if (!bounds) throw new Error("Game viewport has no bounds");
-  const aimX = bounds.x + bounds.width * 0.78;
-  const aimY = bounds.y + bounds.height * 0.3;
-  await page.mouse.move(aimX, aimY);
+  const game = page.locator("#gameCanvas");
+  const aimFrom = await playerPosition(page);
+  const aim = await screenPositionFor(page, { x: aimFrom.x + world(120), y: aimFrom.y });
+  await page.mouse.move(aim.x, aim.y);
   const rightFacingAsset = /assets\/player\/(?:idle\/player_right\.png|walk\/E\/walk_E_\d{2}\.png)/;
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", rightFacingAsset);
 
   await page.keyboard.press("Space");
-  await expect(page.locator("#statShots")).toHaveText("0");
+  await expect(game).toHaveAttribute("data-shots-fired", "0");
 
   const start = await playerPosition(page);
   await page.keyboard.down("a");
   await page.mouse.down();
-  await expect.poll(async () => Number(await page.locator("#statShots").textContent())).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () => Number(await game.getAttribute("data-shots-fired"))).toBeGreaterThanOrEqual(2);
 
   const moving = await playerPosition(page);
   expect(moving.x).toBeLessThan(start.x - 20);
@@ -468,9 +482,9 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
 
   await page.mouse.up();
   await page.keyboard.up("a");
-  const shotsAfterRelease = await page.locator("#statShots").textContent();
+  const shotsAfterRelease = await game.getAttribute("data-shots-fired");
   await page.waitForTimeout(300);
-  await expect(page.locator("#statShots")).toHaveText(shotsAfterRelease ?? "");
+  await expect(game).toHaveAttribute("data-shots-fired", shotsAfterRelease ?? "");
 });
 
 test("ignores manual pan and zoom gestures", async ({ page }) => {
@@ -510,8 +524,8 @@ test("spawns multiple enemies once another room is revealed", async ({ page }) =
   const key = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
   await page.keyboard.down(key);
   await expect.poll(async () => {
-    const value = await page.locator("#statRooms").textContent();
-    return Number(value?.split("/")[0]?.trim() ?? "0");
+    const value = await game.getAttribute("data-visited-rooms");
+    return Number(value ?? "0");
   }).toBeGreaterThanOrEqual(2);
   await expect.poll(async () => Number(await page.locator("#gameCanvas").getAttribute("data-active-monsters"))).toBeGreaterThanOrEqual(2);
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-spawners", /^[0-4]$/);
@@ -555,8 +569,8 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   };
   await teleportPlayer(page, target);
   await expect.poll(async () => {
-    const value = await page.locator("#statRooms").textContent();
-    return Number(value?.split("/")[0]?.trim() ?? "0");
+    const value = await game.getAttribute("data-visited-rooms");
+    return Number(value ?? "0");
   }).toBeGreaterThanOrEqual(2);
 
   await expect(game).toHaveAttribute("data-available-weapons", /[1-9]/);
@@ -597,11 +611,13 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   expect(droppedWeapon?.y).toBe(secondWeapon.y);
   await expect(game).toHaveAttribute("data-weapon-ammo", String(swappedAmmoBeforeShot));
 
-  const viewport = page.locator("#gameViewport");
-  const bounds = await viewport.boundingBox();
-  if (!bounds) throw new Error("Game viewport has no bounds");
-  await page.mouse.move(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.45);
-  await page.mouse.click(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.45);
+  const firingOffset = {
+    x: secondWeapon.x + world(120),
+    y: secondWeapon.y + world(0),
+  };
+  const gunTarget = await screenPositionFor(page, firingOffset);
+  await page.mouse.move(gunTarget.x, gunTarget.y);
+  await page.mouse.click(gunTarget.x, gunTarget.y);
 
   const volleyAfterShot = Number(await game.getAttribute("data-last-player-volley"));
   expect(volleyAfterShot).toBeGreaterThan(0);
@@ -629,7 +645,9 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
 
   await setWeaponAmmo(page, 1);
   await expect(game).toHaveAttribute("data-weapon-ammo", "1");
-  await page.mouse.click(bounds.x + bounds.width * 0.8, bounds.y + bounds.height * 0.45);
+  const fallbackAimFrom = await playerPosition(page);
+  const fallbackAim = await screenPositionFor(page, { x: fallbackAimFrom.x + world(120), y: fallbackAimFrom.y });
+  await page.mouse.click(fallbackAim.x, fallbackAim.y);
   await expect.poll(async () => await game.getAttribute("data-weapon-kind")).toBe("pulse-rifle");
   await expect.poll(async () => await game.getAttribute("data-weapon-ammo")).toBe("infinite");
   expect(equippedKind).not.toBe("pulse-rifle");

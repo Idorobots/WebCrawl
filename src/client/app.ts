@@ -2,7 +2,6 @@ import { fetchHtml, normalizeUrl } from "./api/fetch-html";
 import {
   LOOT_ASSETS,
   MAX_NODES,
-  MAX_ROOMS_AFTER_COALESCE,
   PLAYER_DEFAULT_ASSETS,
   PLAYER_FRAMES,
   WEAPON_ASSETS,
@@ -39,7 +38,7 @@ import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { aStarPath, monsterEscapeStep } from "./domain/pathfinding";
 import { updatePortalContacts } from "./domain/portals";
-import { scoreForRun, scoredLootCount, timedShieldState, type LootInventory } from "./domain/scoring";
+import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
 import {
   CRYSTAL_INVULNERABILITY_BLINK_START_MS,
   CRYSTAL_INVULNERABILITY_DURATION_MS,
@@ -97,12 +96,6 @@ const gameUi = requireElement<HTMLDivElement>("#gameUi");
 
 const sideMinimapCanvas = requireElement<HTMLCanvasElement>("#sideMinimapCanvas");
 const sideFloorLabelEl = requireElement<HTMLElement>("#sideFloorLabel");
-const statRoomsEl = requireElement<HTMLElement>("#statRooms");
-const statFloorEl = requireElement<HTMLElement>("#statFloor");
-const statLootEl = requireElement<HTMLElement>("#statLoot");
-const statKillsEl = requireElement<HTMLElement>("#statKills");
-const statShotsEl = requireElement<HTMLElement>("#statShots");
-const statTimeEl = requireElement<HTMLElement>("#statTime");
 const playerHudPortraitEl = requireElement<HTMLImageElement>("#playerHudPortrait");
 
 let currentRequest = 0;
@@ -164,7 +157,6 @@ let lastGameTick: number | null = null;
 
 const lootInventory: LootInventory = { credits: 0, crystals: 0, cores: 0, energy: 0, medkits: 0 };
 const collectedLoot = new Set<string>();
-let runStartedAt: number | null = null;
 
 const runStats: RunStats = {
   kills: 0,
@@ -435,25 +427,15 @@ function renderSideMinimap(): void {
   context.fill();
 }
 
-function formatRunTime(): string {
-  if (!runStartedAt) return "00:00";
-  const seconds = Math.max(0, Math.floor((performance.now() - runStartedAt) / 1000));
-  const mins = String(Math.floor(seconds / 60)).padStart(2, "0");
-  const secs = String(seconds % 60).padStart(2, "0");
-  return `${mins}:${secs}`;
-}
-
 function updateHudPanels(): void {
   const floor = navigationHistory.length + 1;
   const rooms = visitedRooms.size;
 
   sideFloorLabelEl.textContent = `FLOOR ${floor}`;
-  statRoomsEl.textContent = `${rooms} / ${MAX_ROOMS_AFTER_COALESCE}`;
-  statFloorEl.textContent = String(floor);
-  statLootEl.textContent = String(scoredLootCount(lootInventory));
-  statKillsEl.textContent = String(runStats.kills);
-  statShotsEl.textContent = String(runStats.shotsFired);
-  statTimeEl.textContent = formatRunTime();
+  gameCanvasHost.dataset.visitedRooms = String(rooms);
+  gameCanvasHost.dataset.floor = String(floor);
+  gameCanvasHost.dataset.kills = String(runStats.kills);
+  gameCanvasHost.dataset.shotsFired = String(runStats.shotsFired);
   renderSideMinimap();
 }
 
@@ -1317,7 +1299,7 @@ function shootBullet(): void {
   if (now - lastPlayerShotAt < currentWeapon.fireCooldownMs) return;
   lastPlayerShotAt = now;
   runStats.shotsFired += 1;
-  statShotsEl.textContent = String(runStats.shotsFired);
+  gameCanvasHost.dataset.shotsFired = String(runStats.shotsFired);
   playPlayerShootFrames();
 
   const projectiles = projectilesForWeapon(currentWeapon, playerFacing, weaponShotSequence);
@@ -2492,16 +2474,9 @@ welcomeForm.addEventListener("submit", (event) => {
   gameUi.hidden = false;
   welcomeScreen.hidden = true;
   renderer.start();
-  runStartedAt = performance.now();
   equipDefaultWeapon();
 
   urlInput.value = welcomeUrlInput.value;
   loadPage(welcomeUrlInput.value);
   updateHudPanels();
 });
-
-setInterval(() => {
-  if (!gameUi.hidden && playerAlive) {
-    statTimeEl.textContent = formatRunTime();
-  }
-}, 1000);
