@@ -48,5 +48,9 @@ WORKDIR /workspace
 # Copy the rest of the code
 COPY . /workspace
 
+# Initialize tokensave
+RUN tokensave init --git-hook
+RUN tokensave disable-upload-counter
+
 # Default shell
 CMD ["bash"]
