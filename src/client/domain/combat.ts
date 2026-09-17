@@ -1,4 +1,43 @@
-import type { Decoration, Monster, Point } from "../types";
+import type { Decoration, Monster, MonsterAttackPattern, Point } from "../types";
+
+export interface EnemyVolleyProjectile {
+  direction: Point;
+  lateralOffset: number;
+}
+
+export function monsterEngagementRange(
+  monster: Pick<Monster, "speed" | "attackRange" | "projectileRange">,
+): number {
+  return monster.speed === 0 ? monster.projectileRange : monster.attackRange;
+}
+
+export function enemyVolleyProjectiles(
+  direction: Point,
+  pattern: MonsterAttackPattern,
+  barrelOffset: number,
+): EnemyVolleyProjectile[] {
+  if (pattern === "melee") return [];
+  if (pattern === "double") {
+    return [
+      { direction, lateralOffset: -barrelOffset },
+      { direction, lateralOffset: barrelOffset },
+    ];
+  }
+  if (pattern === "scatter") {
+    return [-0.24, -0.12, 0, 0.12, 0.24].map((angle) => {
+      const cosine = Math.cos(angle);
+      const sine = Math.sin(angle);
+      return {
+        direction: {
+          x: direction.x * cosine - direction.y * sine,
+          y: direction.x * sine + direction.y * cosine,
+        },
+        lateralOffset: 0,
+      };
+    });
+  }
+  return [{ direction, lateralOffset: 0 }];
+}
 
 export function applyObstacleDamage(item: Decoration, damage: number): boolean {
   if (!item.destructible || item.destroyed || damage <= 0) return false;
@@ -28,12 +67,7 @@ export function projectileHitsCircle(
 }
 
 export function monsterAttackIsReady(monster: Monster, timestamp: number): boolean {
-  const animation = monster.attackKind ?? "melee";
-  const animationDuration = Math.max(0, ...Object.values(monster.visual.directions).map(direction => {
-    const clip = direction[animation];
-    return clip ? clip.frames.length * clip.frameDurationMs : 0;
-  }));
-  return timestamp - monster.lastAttackAt >= Math.max(monster.attackCooldownMs, animationDuration);
+  return timestamp - monster.lastAttackAt >= monster.attackCooldownMs;
 }
 
 export function actorProjectileOrigin(

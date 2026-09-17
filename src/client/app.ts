@@ -12,7 +12,9 @@ import {
   actorCollisionCenter,
   actorProjectileOrigin,
   applyObstacleDamage,
+  enemyVolleyProjectiles,
   monsterAttackIsReady,
+  monsterEngagementRange,
   projectileHitsCircle,
   projectileHitsDecoration,
 } from "./domain/combat";
@@ -55,7 +57,13 @@ import {
   WEAPON_PICKUP_DEFINITIONS,
   WORLD_GEOMETRY,
 } from "./domain/specs";
-import { DEFAULT_WEAPON, projectilesForWeapon, replenishWeaponAmmo } from "./domain/weapons";
+import {
+  DEFAULT_WEAPON,
+  monsterDropsWeapon,
+  projectilesForWeapon,
+  replenishWeaponAmmo,
+  weaponForMonster,
+} from "./domain/weapons";
 import { PhaserRenderer } from "./render/phaser-renderer";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
 import type {
@@ -733,7 +741,17 @@ function lootDropsForMonster(monster: Monster): LootItem[] {
   const y = monster.dropY ?? monster.y;
   if (!isBoss(monster)) {
     if (!monster.dropId || !monster.dropKind) return [];
-    return [{ id: monster.dropId, roomId: monster.roomId, x, y, kind: monster.dropKind }];
+    return [{
+      id: monster.dropId,
+      roomId: monster.roomId,
+      x,
+      y,
+      kind: monster.dropKind,
+      weapon: monster.dropKind === "weapon"
+        ? weaponForMonster(monster.kind, monster.seed)
+        : undefined,
+      weaponPlacement: monster.dropKind === "weapon" ? "floor" : undefined,
+    }];
   }
   return bossLootDrops(
     { ...monster, dropX: x, dropY: y },
@@ -887,14 +905,17 @@ function applyPlayerDamage(amount: number): void {
 }
 
 function monsterDrop(monster: Monster): void {
-  if (!currentPageUrl || !monster.dropsLoot || monster.droppedLoot) return;
+  if (!currentPageUrl || monster.droppedLoot) return;
+
+  const dropsWeapon = !isBoss(monster) && monsterDropsWeapon(monster.seed, monster.miniboss);
+  if (!monster.dropsLoot && !dropsWeapon) return;
 
   monster.droppedLoot = true;
   monster.dropX = monster.x;
   monster.dropY = monster.y;
   if (!isBoss(monster)) {
     monster.dropId = `${floorIdentity(currentPageUrl)}::${monster.id}::monster-drop`;
-    monster.dropKind = lootKindForSeed(monster.seed);
+    monster.dropKind = dropsWeapon ? "weapon" : lootKindForSeed(monster.seed);
   }
   currentLoot.push(...lootDropsForMonster(monster).filter(item => !collectedLoot.has(item.id)));
 }
@@ -913,10 +934,10 @@ function damageMonster(monster: Monster, amount: number): void {
     if (isBoss(monster)) {
       runStats.bossKills = (runStats.bossKills ?? 0) + 1;
       updateBossGates();
+    } else if (monster.speed === 0) {
+      runStats.sentryKills = (runStats.sentryKills ?? 0) + 1;
     } else if (monster.fast) {
       runStats.fastKills += 1;
-    } else if (monster.kind === "sentry") {
-      runStats.sentryKills = (runStats.sentryKills ?? 0) + 1;
     } else {
       runStats.slowKills += 1;
     }
@@ -954,12 +975,14 @@ function queueEnemyBullet(
     radius = DEFAULT_BULLET_SPEC.radius,
     maxDistance = monster.projectileRange,
     style = "enemy",
+    lateralOffset = 0,
   }: {
     speed?: number;
     damage?: number;
     radius?: number;
     maxDistance?: number;
     style?: BulletStyle;
+    lateralOffset?: number;
   } = {},
 ): void {
   const muzzleDistance = Math.max(monster.radius + radius + world(5), monster.size * 0.42);
@@ -968,6 +991,7 @@ function queueEnemyBullet(
     direction,
     monsterVisualCenterOffsetY(monster.size, monster.visualKind),
     muzzleDistance,
+    lateralOffset,
   );
   bullets.push({
     id: `${monster.id}-${performance.now()}-${bullets.length}`,
@@ -987,11 +1011,12 @@ function playerCollisionCenter(): Point {
   return actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
 }
 
-function shootEnemyBullet(monster: Monster, direction: Point): void {
-  const now = performance.now();
-  queueEnemyBullet(monster, direction);
+function shootEnemyVolley(monster: Monster, direction: Point, timestamp: number): void {
+  for (const projectile of enemyVolleyProjectiles(direction, monster.attackPattern, world(15))) {
+    queueEnemyBullet(monster, projectile.direction, { lateralOffset: projectile.lateralOffset });
+  }
   monster.attackKind = "ranged";
-  monster.lastAttackAt = now;
+  monster.lastAttackAt = timestamp;
   renderBullets();
 }
 
@@ -1106,7 +1131,7 @@ function monsterPathBounds(monster: Monster, target: Point): {
 }
 
 function updateMonsterPath(monster: Monster, target: Point, targetRoomId: number | null, timestamp: number): void {
-  if (monster.kind === "sentry") return;
+  if (monster.speed === 0) return;
   if (timestamp < (monster.nextPathRefreshAt ?? 0) && monster.path?.length) return;
 
   const start = { x: monster.x, y: monster.y };
@@ -1485,7 +1510,7 @@ function gameTick(timestamp: number): void {
 
     const targetRoomId = monster.roomId !== currentRoomId ? nextRoomId : currentRoomId;
 
-    if (monster.kind === "sentry") {
+    if (monster.speed === 0) {
       const target = playerCollisionCenter();
       const monsterCenter = actorCollisionCenter(
         monster,
@@ -1494,55 +1519,67 @@ function gameTick(timestamp: number): void {
       monster.moveDir = cardinalDirection(target.x - monsterCenter.x, target.y - monsterCenter.y);
       const playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
       if (
-        playerDistance <= monster.projectileRange &&
+        playerDistance <= monsterEngagementRange(monster) &&
         monsterAttackIsReady(monster, timestamp) &&
         hasLineOfSight(monster, target)
       ) {
-        shootEnemyBullet(monster, actorAimDirection(
+        shootEnemyVolley(monster, actorAimDirection(
           monster,
           monsterVisualCenterOffsetY(monster.size, monster.visualKind),
           target,
-        ));
+        ), timestamp);
       }
       continue;
     }
 
-    const targetPoint = { x: targetX, y: targetY };
-    const pathStale =
-      !monster.path?.length ||
-      monster.pathTargetRoomId !== targetRoomId ||
-      Math.hypot((monster.pathTargetX ?? targetX) - targetX, (monster.pathTargetY ?? targetY) - targetY) > 48;
-    if (pathStale) monster.nextPathRefreshAt = 0;
-    updateMonsterPath(monster, targetPoint, targetRoomId, timestamp);
-    moveMonsterTowards(monster, targetPoint, dt, timestamp);
-
     const target = playerCollisionCenter();
-    const monsterCenter = actorCollisionCenter(
+    let monsterCenter = actorCollisionCenter(
       monster,
       monsterVisualCenterOffsetY(monster.size, monster.visualKind),
     );
-    const playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
+    let playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
+    const rangedInPosition =
+      monster.attackPattern !== "melee" &&
+      monster.roomId === currentRoomId &&
+      playerDistance <= monsterEngagementRange(monster) &&
+      hasLineOfSight(monsterCenter, target);
+    const targetPoint = { x: targetX, y: targetY };
+    if (!rangedInPosition) {
+      const pathStale =
+        !monster.path?.length ||
+        monster.pathTargetRoomId !== targetRoomId ||
+        Math.hypot((monster.pathTargetX ?? targetX) - targetX, (monster.pathTargetY ?? targetY) - targetY) > 48;
+      if (pathStale) monster.nextPathRefreshAt = 0;
+      updateMonsterPath(monster, targetPoint, targetRoomId, timestamp);
+      moveMonsterTowards(monster, targetPoint, dt, timestamp);
+      monsterCenter = actorCollisionCenter(
+        monster,
+        monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+      );
+      playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
+    } else {
+      monster.moveDir = cardinalDirection(target.x - monsterCenter.x, target.y - monsterCenter.y);
+    }
 
     if (
-      playerDistance <= monster.attackRange &&
+      monster.attackPattern === "melee" &&
+      playerDistance <= monsterEngagementRange(monster) &&
       monsterAttackIsReady(monster, timestamp)
     ) {
       monster.attackKind = "melee";
       monster.lastAttackAt = timestamp;
       applyPlayerDamage(monster.attackDamage);
     } else if (
-      monster.projectileSpeed > 0 &&
-      playerDistance <= monster.projectileRange &&
+      monster.attackPattern !== "melee" &&
+      playerDistance <= monsterEngagementRange(monster) &&
       monsterAttackIsReady(monster, timestamp) &&
-        hasLineOfSight(monster, target)
+      hasLineOfSight(monsterCenter, target)
     ) {
-      shootEnemyBullet(monster, {
-        ...actorAimDirection(
-          monster,
-          monsterVisualCenterOffsetY(monster.size, monster.visualKind),
-          target,
-        ),
-      });
+      shootEnemyVolley(monster, actorAimDirection(
+        monster,
+        monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+        target,
+      ), timestamp);
     }
   }
 

@@ -11,7 +11,15 @@ export type PlayerDirection =
 export type PlayerAnimation = "normal" | "walk";
 export type LootKind = "credit" | "crystal" | "core" | "medkit" | "energy" | "weapon";
 export type BossKind = "packet-storm" | "fork-bomb" | "heap-titan";
-export type MonsterKind = "slow" | "fast" | "sentry" | BossKind;
+export type RegularMonsterKind =
+  | "melee-heavy"
+  | "melee-light"
+  | "shooter-light"
+  | "shooter-heavy"
+  | "sentry-light"
+  | "sentry-heavy"
+  | "sentry-scatter";
+export type MonsterKind = RegularMonsterKind | BossKind;
 export type MonsterVisualKind =
   | "scout"
   | "heavy"
@@ -41,6 +49,7 @@ export type RoomShape = "rectangle" | "wide" | "tall" | "capsule" | "octagon";
 export type SpriteDirection = "up" | "down" | "left" | "right";
 export type MonsterAnimation = "normal" | "walk" | "melee" | "ranged";
 export type MonsterAttackKind = "melee" | "ranged";
+export type MonsterAttackPattern = "melee" | "single" | "double" | "scatter";
 export type VisualEvent = "damage" | "destroy" | "spawn" | "healing" | "teleport";
 export type WeaponPlacement = "pedestal" | "floor";
 
@@ -212,6 +221,8 @@ export interface Monster extends Point {
   radius: number;
   size: number;
   bossKind?: BossKind;
+  miniboss: boolean;
+  attackPattern: MonsterAttackPattern;
   attackRange: number;
   attackDamage: number;
   attackCooldownMs: number;

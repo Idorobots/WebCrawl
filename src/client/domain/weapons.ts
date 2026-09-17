@@ -1,5 +1,6 @@
 import type {
   GraphNode,
+  MonsterKind,
   Point,
   WeaponKind,
   WeaponProjectile,
@@ -20,6 +21,16 @@ interface WeaponBase {
 }
 
 export type WeaponSource = "room" | "hidden" | "boss";
+
+export const REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K = 100;
+export const MINIBOSS_WEAPON_DROP_CHANCE_PER_10K = 5_000;
+
+export function monsterDropsWeapon(seed: number, miniboss: boolean): boolean {
+  const chance = miniboss
+    ? MINIBOSS_WEAPON_DROP_CHANCE_PER_10K
+    : REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K;
+  return stableHash(`${seed}|monster-weapon-drop`) % 10_000 < chance;
+}
 
 const EXTRA_WEAPONS: readonly WeaponBase[] = [
   { kind: "byte-repeater", label: "BYTE REPEATER", fireCooldownMs: 92, projectileSpeed: 650, projectileRange: 760, projectileRadius: 3, damage: 0.25, maxAmmo: 500 },
@@ -93,6 +104,10 @@ export function weaponForRoom(
     maxAmmo,
     ammoPerLoot: Math.max(1, Math.ceil(maxAmmo * 0.25)),
   };
+}
+
+export function weaponForMonster(kind: MonsterKind, seed: number): WeaponSpec {
+  return weaponForRoom({ tag: kind, title: `<${kind}>`, lootSeed: seed });
 }
 
 function rotate(direction: Point, angle: number): Point {

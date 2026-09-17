@@ -11,6 +11,7 @@ import type {
   MonsterState,
   ObstacleState,
   Point,
+  RegularMonsterKind,
   Stair,
 } from "../types";
 import { stableHash } from "./hash";
@@ -19,6 +20,10 @@ import {
   BOSS_DEFINITIONS,
   DECORATION_DEFINITIONS,
   MAX_REGULAR_MONSTER_RADIUS,
+  MINIBOSS_CHANCE_PERCENT,
+  MINIBOSS_DAMAGE_MULTIPLIER,
+  MINIBOSS_HP_MULTIPLIER,
+  MINIBOSS_SIZE_MULTIPLIER,
   MONSTER_SPAWN_PROFILES,
   MONSTER_VISUAL_DEFINITIONS,
   PLAYER_SPEC,
@@ -476,9 +481,20 @@ function monsterCountForRoom(room: GraphNode, floor: number, densityFactor = 1):
   return minimum + (countSeed % 2);
 }
 
-function monsterKindForSeed(seed: number, difficulty = 0): "slow" | "fast" | "sentry" {
-  if ((seed >>> 6) % 100 < Math.min(42, 20 + difficulty * 3)) return "sentry";
-  return ((seed >>> 7) % 100) < 38 ? "fast" : "slow";
+function monsterKindForSeed(seed: number, difficulty = 0): RegularMonsterKind {
+  const sentryChance = Math.min(42, 18 + difficulty * 3);
+  if ((seed >>> 6) % 100 < sentryChance) {
+    const sentryRoll = (seed >>> 16) % 100;
+    if (sentryRoll < 40) return "sentry-light";
+    if (sentryRoll < 75) return "sentry-heavy";
+    return "sentry-scatter";
+  }
+
+  const walkerRoll = (seed >>> 12) % 100;
+  if (walkerRoll < 28) return "melee-heavy";
+  if (walkerRoll < 55) return "melee-light";
+  if (walkerRoll < 80) return "shooter-light";
+  return "shooter-heavy";
 }
 
 const BOSS_KINDS: BossKind[] = ["packet-storm", "fork-bomb", "heap-titan"];
@@ -515,6 +531,8 @@ export function bossSpecForRoom(
     fast: false,
     radius: definition.radius,
     size: definition.size,
+    miniboss: false,
+    attackPattern: "single",
     attackRange: definition.attackRange,
     attackDamage: definition.attackDamage + Math.floor(difficulty / definition.attackDamageDifficultyDivisor),
     attackCooldownMs: Math.max(
@@ -567,6 +585,8 @@ function regularMonsterSpec(
     definition.maxProjectileRangeBonus,
     difficulty * definition.projectileRangePerDifficulty,
   );
+  const cooldownVariance = definition.attackCooldownVarianceMs ?? 140;
+  const cooldownJitter = cooldownVariance > 0 ? (seed >>> 15) % cooldownVariance : 0;
   return {
     id,
     seed,
@@ -582,12 +602,14 @@ function regularMonsterSpec(
     fast: definition.fast,
     radius: definition.radius,
     size: definition.size,
+    miniboss: false,
+    attackPattern: definition.attackPattern,
     attackRange: scaledPercent(attackRange, profile.rangePercent),
-    attackDamage: definition.attackDamage + (kind === "sentry" ? 0 : (seed >>> 19) % 2) + Math.min(3, Math.floor(difficulty / 3)),
+    attackDamage: definition.attackDamage + Math.min(2, Math.floor(difficulty / 4)),
     attackCooldownMs: Math.max(
       definition.minAttackCooldownMs,
       scaledPercent(
-        definition.attackCooldownMs - difficulty * definition.cooldownReductionPerDifficulty + (seed >>> 15) % 140,
+        definition.attackCooldownMs - difficulty * definition.cooldownReductionPerDifficulty + cooldownJitter,
         profile.cooldownPercent,
       ),
     ),
@@ -604,6 +626,16 @@ function regularMonsterSpec(
     pathTargetX: position.x,
     pathTargetY: position.y,
     nextPathRefreshAt: 0,
+  };
+}
+
+function promoteToMiniboss(monster: Monster): Monster {
+  return {
+    ...monster,
+    miniboss: true,
+    maxHp: Math.ceil(monster.maxHp * MINIBOSS_HP_MULTIPLIER),
+    attackDamage: Math.ceil(monster.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER),
+    size: monster.size * MINIBOSS_SIZE_MULTIPLIER,
   };
 }
 
@@ -626,7 +658,7 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossK
       [-world(90), -world(55)], [world(90), world(55)], [world(80), -world(65)],
       [-world(80), world(70)], [0, -world(92)],
     ];
-  const regularMonsters = Array.from({ length: count }, (_, index): Monster => {
+  let regularMonsters = Array.from({ length: count }, (_, index): Monster => {
     const seed = stableHash(`${roomSeed}|${floor}|${index}`);
     const [offsetX, offsetY] = offsets[index % offsets.length]!;
     return regularMonsterSpec(
@@ -638,6 +670,13 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossK
       "room",
     );
   });
+  const minibossSeed = stableHash(`${room.lootSeed}|miniboss`);
+  if (regularMonsters.length && minibossSeed % 100 < MINIBOSS_CHANCE_PERCENT) {
+    const minibossIndex = stableHash(`${room.lootSeed}|miniboss-slot`) % regularMonsters.length;
+    regularMonsters = regularMonsters.map((monster, index) => index === minibossIndex
+      ? promoteToMiniboss(monster)
+      : monster);
+  }
   return room.tag === "script"
     ? [bossSpecForRoom(room, floor, bossKind), ...regularMonsters]
     : regularMonsters;
@@ -692,7 +731,21 @@ export function buildMonsters(
   floor = 1,
   decorations: readonly Decoration[] = [],
 ): Monster[] {
-  const roomSpecs = layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor));
+  let roomSpecs = layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor));
+  if (!roomSpecs.some(monster => monster.miniboss)) {
+    const candidates = roomSpecs
+      .filter(monster => !monster.bossKind)
+      .sort((left, right) => left.id.localeCompare(right.id));
+    if (candidates.length) {
+      const floorSeed = stableHash([
+        floor,
+        "floor-miniboss",
+        ...layout.nodes.map(room => room.lootSeed).sort((left, right) => left - right),
+      ].join("|"));
+      const selectedId = candidates[floorSeed % candidates.length]!.id;
+      roomSpecs = roomSpecs.map(monster => monster.id === selectedId ? promoteToMiniboss(monster) : monster);
+    }
+  }
   const bossSummons = roomSpecs
     .filter(monster => monster.bossKind === "fork-bomb")
     .flatMap(boss => Array.from(

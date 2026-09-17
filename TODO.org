@@ -1,4 +1,7 @@
-* Redo UI to look more like the mockups
+* DONE Redo UI to look more like the mockups
+:LOGBOOK:
+- State "DONE"       from              [2026-09-17 Thu 15:59]
+:END:
 Minimap should convey the room shapes and place icons for most important stuff found in those rooms (for instance portals/staircases).
 Add loot counters next to the HP bar.
 Remove the "level stats" panel from the UI. It's not very useful.
@@ -222,7 +225,10 @@ More scenery items & enemies now have dedicated debris sprites. Please add them 
 
 There are several backgrounds now, these could be used as an alternative for the current dark "technology" background. Each URL visited should deterministically determine which background to use for those levels.
 
-* More enemy types
+* DONE More enemy types
+:LOGBOOK:
+- State "DONE"       from              [2026-09-17 Thu 21:22]
+:END:
 Add extra enemy types: shooting walkers, spray turrets, mini-boss type larger oponents. In general, there should be these types of enemies:
 - melee slow heavy walker - high HP high damage, but slow
 - melee fast light walker - low HP, low damage, fast
@@ -319,3 +325,8 @@ Names for various things (useful for the "how to play" screen):
 Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to tokens in AI.
 
 Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.
+* Bugs
+- Walls should block bullets the same way a wall blocks a player.
+- When a player moves while shooting, the shots should still go towards the cursor.
+- Camera center point should be the midway between the player and the cursor.
+- When a player takes damage they should become invulnerable for a brief moment (200 ms) as not to take damage 10 separate times at once.

@@ -13,7 +13,9 @@ import {
   actorAimDirection,
   actorCollisionCenter,
   actorProjectileOrigin,
+  enemyVolleyProjectiles,
   monsterAttackIsReady,
+  monsterEngagementRange,
   projectileHitsCircle,
   projectileHitsDecoration,
 } from "../../src/client/domain/combat";
@@ -55,6 +57,10 @@ import {
   DECORATION_DEFINITIONS,
   HEAP_TITAN_WAVE,
   MAX_REGULAR_MONSTER_RADIUS,
+  MINIBOSS_CHANCE_PERCENT,
+  MINIBOSS_DAMAGE_MULTIPLIER,
+  MINIBOSS_HP_MULTIPLIER,
+  MINIBOSS_SIZE_MULTIPLIER,
   MONSTER_VISUAL_DEFINITIONS,
   monsterHealthBarY,
   monsterVisualCenterOffsetY,
@@ -67,8 +73,18 @@ import {
   WORLD_GEOMETRY,
   monsterDisplaySize,
 } from "../../src/client/domain/specs";
-import { DEFAULT_WEAPON, projectilesForWeapon, replenishWeaponAmmo, weaponForRoom, weaponKinds } from "../../src/client/domain/weapons";
-import type { DungeonGraph, GraphNode, LayoutLink, Stair } from "../../src/client/types";
+import {
+  DEFAULT_WEAPON,
+  MINIBOSS_WEAPON_DROP_CHANCE_PER_10K,
+  monsterDropsWeapon,
+  projectilesForWeapon,
+  REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K,
+  replenishWeaponAmmo,
+  weaponForMonster,
+  weaponForRoom,
+  weaponKinds,
+} from "../../src/client/domain/weapons";
+import type { DungeonGraph, GraphNode, LayoutLink, RegularMonsterKind, Stair } from "../../src/client/types";
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
   id,
@@ -156,9 +172,9 @@ describe("layout and geometry", () => {
 
   it("aligns visual content with collision centers and normalizes monster animations", () => {
     expect(PLAYER_SPEC.visual.directions.down?.normal.origin).toEqual({ x: 0.5, y: 0.90625 });
-    expect(REGULAR_MONSTER_DEFINITIONS.fast.size).toBe(world(137 * 1.25));
-    expect(REGULAR_MONSTER_DEFINITIONS.slow.size).toBe(world(183 * 1.25));
-    expect(REGULAR_MONSTER_DEFINITIONS.sentry.size).toBe(world(160 * 1.25));
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].size).toBe(world(137 * 1.25));
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].size).toBe(world(183 * 1.25));
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].size).toBe(world(185));
     expect(monsterDisplaySize(200, "scout", "melee")).toBe(200);
     expect(monsterDisplaySize(200, "scout", "walk")).toBe(200);
     expect(MONSTER_VISUAL_DEFINITIONS.scout.directions.down?.melee?.origin.y).toBeCloseTo(0.90625);
@@ -684,25 +700,134 @@ describe("deterministic room contents", () => {
     const floorOne = rooms.flatMap(room => monsterSpecsForRoom(room, 1));
     const floorSeven = rooms.flatMap(room => monsterSpecsForRoom(room, 7));
 
-    const earlyCombatant = floorOne.find(monster => monster.kind !== "sentry");
-    const deepCombatant = floorSeven.find(monster => monster.kind === (earlyCombatant?.kind ?? "fast"));
+    const earlyCombatant = floorOne.find(monster => monster.speed > 0 && !monster.miniboss);
+    const deepCombatant = floorSeven.find(monster => monster.kind === earlyCombatant?.kind && !monster.miniboss);
     expect(earlyCombatant).toBeDefined();
     expect(deepCombatant).toBeDefined();
     expect((deepCombatant?.maxHp ?? 0)).toBeGreaterThanOrEqual(earlyCombatant?.maxHp ?? 0);
     expect((deepCombatant?.speed ?? 0)).toBeGreaterThanOrEqual(earlyCombatant?.speed ?? 0);
     expect((deepCombatant?.attackDamage ?? 0)).toBeGreaterThanOrEqual(earlyCombatant?.attackDamage ?? 0);
 
-    const sentry = floorSeven.find(monster => monster.kind === "sentry");
+    const sentry = floorSeven.find(monster => monster.kind.startsWith("sentry-") && !monster.miniboss);
     expect(sentry).toBeDefined();
     expect(sentry?.speed).toBe(0);
     expect(sentry?.projectileSpeed ?? 0).toBeGreaterThan(0);
     expect(sentry?.projectileRange ?? 0).toBeGreaterThan(0);
-    const scout = floorSeven.find(monster => monster.fast);
-    const heavy = floorSeven.find(monster => monster.kind === "slow");
+    const scout = floorSeven.find(monster => monster.fast && !monster.miniboss);
+    const heavy = floorSeven.find(monster => monster.kind.endsWith("heavy") && monster.speed > 0 && !monster.miniboss);
     expect(scout).toBeDefined();
     expect(heavy).toBeDefined();
     expect(scout!.size).toBeLessThan(heavy!.size);
     expect(scout!.radius).toBeLessThan(heavy!.radius);
+  });
+
+  it("generates all seven deterministic archetypes with distinct combat roles", () => {
+    const rooms = Array.from({ length: 600 }, (_, index) => node(index + 10_000, 0, 1, {
+      tag: "article",
+      lootSeed: stableHash(`archetype-room-${index}`),
+      isRoot: false,
+    }));
+    const monsters = rooms.flatMap(room => monsterSpecsForRoom(room, 4));
+    const expectedKinds = new Set<RegularMonsterKind>([
+      "melee-heavy",
+      "melee-light",
+      "shooter-light",
+      "shooter-heavy",
+      "sentry-light",
+      "sentry-heavy",
+      "sentry-scatter",
+    ]);
+
+    expect(new Set(monsters.map(monster => monster.kind))).toEqual(expectedKinds);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].baseHp)
+      .toBeGreaterThan(REGULAR_MONSTER_DEFINITIONS["melee-light"].baseHp);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].attackDamage)
+      .toBeGreaterThan(REGULAR_MONSTER_DEFINITIONS["melee-light"].attackDamage);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].speed)
+      .toBeLessThan(REGULAR_MONSTER_DEFINITIONS["melee-light"].speed);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].projectileSpeed).toBe(0);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].projectileSpeed).toBe(0);
+    expect(REGULAR_MONSTER_DEFINITIONS["shooter-light"].attackCooldownMs)
+      .toBeLessThan(REGULAR_MONSTER_DEFINITIONS["shooter-heavy"].attackCooldownMs);
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"]).toMatchObject({ speed: 0, attackPattern: "single" });
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-heavy"]).toMatchObject({ speed: 0, attackPattern: "double" });
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-scatter"]).toMatchObject({ speed: 0, attackPattern: "scatter" });
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-heavy"].attackCooldownMs)
+      .toBeGreaterThan(REGULAR_MONSTER_DEFINITIONS["shooter-light"].attackCooldownMs);
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].attackCooldownMs)
+      .toBe(400);
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].attackCooldownMs)
+      .toBeLessThan(REGULAR_MONSTER_DEFINITIONS["sentry-heavy"].attackCooldownMs);
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-scatter"].attackCooldownMs)
+      .toBeGreaterThan(REGULAR_MONSTER_DEFINITIONS["sentry-heavy"].attackCooldownMs);
+    expect(monsterEngagementRange(REGULAR_MONSTER_DEFINITIONS["sentry-light"]))
+      .toBe(REGULAR_MONSTER_DEFINITIONS["sentry-light"].projectileRange);
+    expect(monsterEngagementRange(REGULAR_MONSTER_DEFINITIONS["shooter-light"]))
+      .toBe(REGULAR_MONSTER_DEFINITIONS["shooter-light"].attackRange);
+    const lightSentry = monsters.find(monster => monster.kind === "sentry-light")!;
+    lightSentry.attackKind = "ranged";
+    lightSentry.lastAttackAt = 1_000;
+    expect(lightSentry.attackCooldownMs).toBe(400);
+    expect(lightSentry.visual.directions.down?.ranged?.frameDurationMs).toBe(125);
+    expect(monsterAttackIsReady(lightSentry, 1_399)).toBe(false);
+    expect(monsterAttackIsReady(lightSentry, 1_400)).toBe(true);
+  });
+
+  it("promotes at most one room enemy to a rare deterministic miniboss", () => {
+    const rooms = Array.from({ length: 4_000 }, (_, index) => node(index + 20_000, 0, 1, {
+      tag: "section",
+      lootSeed: stableHash(`miniboss-room-${index}`),
+      isRoot: false,
+    }));
+    const generated = rooms.map(room => monsterSpecsForRoom(room, 3));
+    const repeated = rooms.map(room => monsterSpecsForRoom(room, 3));
+    const minibosses = generated.flatMap(monsters => monsters.filter(monster => monster.miniboss));
+    const minibossRoomRate = generated.filter(monsters => monsters.some(monster => monster.miniboss)).length / rooms.length;
+
+    expect(repeated).toEqual(generated);
+    expect(generated.every(monsters => monsters.filter(monster => monster.miniboss).length <= 1)).toBe(true);
+    expect(minibossRoomRate).toBeGreaterThan((MINIBOSS_CHANCE_PERCENT - 2) / 100);
+    expect(minibossRoomRate).toBeLessThan((MINIBOSS_CHANCE_PERCENT + 2) / 100);
+    expect(new Set(minibosses.map(monster => monster.kind))).toEqual(
+      new Set(Object.keys(REGULAR_MONSTER_DEFINITIONS)),
+    );
+    for (const miniboss of minibosses) {
+      const definition = REGULAR_MONSTER_DEFINITIONS[miniboss.kind as RegularMonsterKind];
+      expect(miniboss.size).toBeCloseTo(definition.size * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.radius).toBe(definition.radius);
+      expect(miniboss.maxHp).toBeGreaterThanOrEqual(definition.baseHp * MINIBOSS_HP_MULTIPLIER);
+      expect(miniboss.attackDamage).toBeGreaterThanOrEqual(
+        Math.ceil(definition.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER),
+      );
+      expect(miniboss.attackPattern).toBe(definition.attackPattern);
+    }
+  });
+
+  it("guarantees a deterministic miniboss when every room misses its rarity roll", () => {
+    const rooms = Array.from({ length: 200 }, (_, index) => node(index + 30_000, 0, 1, {
+      tag: "section",
+      lootSeed: stableHash(`miniboss-fallback-room-${index}`),
+      isRoot: false,
+      x: index * ROOM_WIDTH * 2,
+    }))
+      .filter(room => monsterSpecsForRoom(room, 3).every(monster => !monster.miniboss))
+      .slice(0, 6);
+    expect(rooms).toHaveLength(6);
+
+    const layout = { nodes: rooms, links: [], hiddenCount: 0 };
+    const generated = buildMonsters(layout, new Map(), new Set(), 3);
+    const reordered = buildMonsters(
+      { ...layout, nodes: [...rooms].reverse() },
+      new Map(),
+      new Set(),
+      3,
+    );
+    const minibosses = generated.filter(monster => monster.miniboss);
+    const reorderedMinibosses = reordered.filter(monster => monster.miniboss);
+
+    expect(minibosses).toHaveLength(1);
+    expect(reorderedMinibosses).toHaveLength(1);
+    expect(reorderedMinibosses[0]?.id).toBe(minibosses[0]?.id);
   });
 
   it("turns every script room into a scaled boss arena without removing ambient threats", () => {
@@ -1006,8 +1131,48 @@ describe("deterministic room contents", () => {
       holdLast: true,
     });
     expect(DECORATION_DEFINITIONS.spawner.visual.animations?.spawn?.frames).toHaveLength(4);
-    expect(REGULAR_MONSTER_DEFINITIONS.slow.projectileSpeed).toBeGreaterThan(0);
-    expect(REGULAR_MONSTER_DEFINITIONS.fast.projectileSpeed).toBeGreaterThan(0);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].projectileSpeed).toBe(0);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].projectileSpeed).toBe(0);
+    expect(REGULAR_MONSTER_DEFINITIONS["shooter-heavy"].projectileSpeed).toBeGreaterThan(0);
+    expect(REGULAR_MONSTER_DEFINITIONS["shooter-light"].projectileSpeed).toBeGreaterThan(0);
+  });
+
+  it("emits single, twin-barrel, and scatter enemy volleys", () => {
+    expect(enemyVolleyProjectiles({ x: 1, y: 0 }, "melee", 15)).toEqual([]);
+    expect(enemyVolleyProjectiles({ x: 1, y: 0 }, "single", 15)).toEqual([
+      { direction: { x: 1, y: 0 }, lateralOffset: 0 },
+    ]);
+    expect(enemyVolleyProjectiles({ x: 1, y: 0 }, "double", 15)).toEqual([
+      { direction: { x: 1, y: 0 }, lateralOffset: -15 },
+      { direction: { x: 1, y: 0 }, lateralOffset: 15 },
+    ]);
+    const scatter = enemyVolleyProjectiles({ x: 1, y: 0 }, "scatter", 15);
+    expect(scatter).toHaveLength(5);
+    expect(scatter[2]).toEqual({ direction: { x: 1, y: 0 }, lateralOffset: 0 });
+    expect(scatter[0]!.direction.y).toBeLessThan(scatter[1]!.direction.y);
+    expect(scatter[3]!.direction.y).toBeLessThan(scatter[4]!.direction.y);
+    expect(scatter.every(projectile =>
+      Math.abs(Math.hypot(projectile.direction.x, projectile.direction.y) - 1) < 0.000_001
+    )).toBe(true);
+  });
+
+  it("makes regular weapon drops tiny and miniboss weapon drops common", () => {
+    const seeds = Array.from({ length: 20_000 }, (_, index) => stableHash(`monster-weapon-${index}`));
+    const regularDrops = seeds.filter(seed => monsterDropsWeapon(seed, false));
+    const minibossDrops = seeds.filter(seed => monsterDropsWeapon(seed, true));
+
+    expect(REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K).toBe(100);
+    expect(MINIBOSS_WEAPON_DROP_CHANCE_PER_10K).toBe(5_000);
+    expect(regularDrops.length).toBeGreaterThan(0);
+    expect(regularDrops.length / seeds.length).toBeGreaterThan(0.007);
+    expect(regularDrops.length / seeds.length).toBeLessThan(0.013);
+    expect(minibossDrops.length / seeds.length).toBeGreaterThan(0.47);
+    expect(minibossDrops.length / seeds.length).toBeLessThan(0.53);
+    expect(regularDrops.every(seed => monsterDropsWeapon(seed, true))).toBe(true);
+
+    const weapon = weaponForMonster("sentry-light", seeds[0]!);
+    expect(weapon).toEqual(weaponForMonster("sentry-light", seeds[0]!));
+    expect(weapon.maxAmmo).toBeGreaterThan(0);
   });
 
   it("preserves dropped weapon ammo inside weapon loot payloads", () => {
@@ -1141,8 +1306,8 @@ describe("deterministic room contents", () => {
     reinforcement.attackKind = "ranged";
     reinforcement.attackCooldownMs = 1;
     reinforcement.lastAttackAt = 1_000;
-    expect(monsterAttackIsReady(reinforcement, 1_499)).toBe(false);
-    expect(monsterAttackIsReady(reinforcement, 1_500)).toBe(true);
+    expect(monsterAttackIsReady(reinforcement, 1_000)).toBe(false);
+    expect(monsterAttackIsReady(reinforcement, 1_001)).toBe(true);
     const restoredMonsters = buildMonsters(combatLayout, new Map([[
       reinforcement.id,
       {

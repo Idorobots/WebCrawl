@@ -751,6 +751,7 @@ export class PhaserRenderer {
     this.currentMonsters = items;
     this.host.dataset.activeMonsters = String(items.filter(item => item.active && !item.dead).length);
     this.host.dataset.activeBosses = String(items.filter(item => item.active && item.bossKind && !item.dead).length);
+    this.host.dataset.activeMinibosses = String(items.filter(item => item.active && item.miniboss && !item.dead).length);
     const activeBoss = items.find(item => item.active && item.bossKind && !item.dead);
     if (activeBoss?.bossKind) {
       this.host.dataset.activeBossKind = activeBoss.bossKind;
@@ -801,7 +802,7 @@ export class PhaserRenderer {
         const sprite = scene.add.image(0, 0, assetKey)
           .setName("sprite");
         this.applyClip(sprite, frame.clip, item.size, frame.elapsed);
-        const barWidth = item.bossKind ? item.size * 0.68 : item.size * 0.6;
+        const barWidth = item.bossKind ? item.size * 0.68 : item.miniboss ? item.size * 0.72 : item.size * 0.6;
         const barY = monsterHealthBarY(item.size, item.visualKind);
         const children: Phaser.GameObjects.GameObject[] = [sprite];
         if (item.bossKind && !item.dead) {
@@ -816,8 +817,11 @@ export class PhaserRenderer {
             .setStrokeStyle(world(3), color, 0.8));
         }
         if (!item.dead) {
-          children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, item.bossKind ? world(9) : world(5), 0x071018).setOrigin(0, 0.5));
-          children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, item.bossKind ? world(7) : world(5), item.bossKind ? 0xf09cff : item.kind === "sentry" ? 0xc07cff : 0xff6b6b).setOrigin(0, 0.5).setName("hp"));
+          const barHeight = item.bossKind ? world(9) : item.miniboss ? world(7) : world(5);
+          const fillHeight = item.bossKind ? world(7) : item.miniboss ? world(6) : world(5);
+          const fillColor = item.bossKind ? 0xf09cff : item.miniboss ? 0xffc857 : item.speed === 0 ? 0xc07cff : 0xff6b6b;
+          children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, barHeight, 0x071018).setOrigin(0, 0.5));
+          children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, fillHeight, fillColor).setOrigin(0, 0.5).setName("hp"));
         }
         if (item.bossKind && !item.dead) {
           children.push(scene.add.text(0, barY - world(9), BOSS_DEFINITIONS[item.bossKind].label, {
