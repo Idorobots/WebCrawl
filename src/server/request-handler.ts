@@ -51,7 +51,7 @@ export function createRequestHandler(
     if (request.method === "GET" && url.pathname === "/api/fetch") {
       void handleFetch(url, response, config, dependencies);
     } else if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
-      serveIndex(response, config.clientDirectory);
+      serveIndex(response, config.clientDirectory, config.debug);
     } else if (
       request.method === "GET" && url.pathname.startsWith("/assets/")
     ) {

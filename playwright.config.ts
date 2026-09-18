@@ -10,8 +10,8 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: "npm run build && node dist/server/index.js",
+    command: "VITE_MAX_LIGHTS=4 npm run build && node dist/server/index.js",
     url: "http://127.0.0.1:3000",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
 });

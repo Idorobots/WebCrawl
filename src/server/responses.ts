@@ -50,17 +50,22 @@ export function serveAsset(requestPath: string, response: ServerResponse, client
   });
 }
 
-export function serveIndex(response: ServerResponse, clientDirectory: string): void {
+export function serveIndex(response: ServerResponse, clientDirectory: string, debug: boolean): void {
   fs.readFile(path.join(clientDirectory, "index.html"), (error, body) => {
     if (error) {
       sendJson(response, 500, { error: "Could not read index.html." });
       return;
     }
+    const runtimeConfig = `<script>window.__WEBCRAWL_RUNTIME_CONFIG__=${JSON.stringify({ debug })};</script>`;
+    const html = body.toString("utf8");
+    const rendered = Buffer.from(html.includes("</head>")
+      ? html.replace("</head>", `${runtimeConfig}</head>`)
+      : `${runtimeConfig}${html}`);
     response.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Length": body.length,
+      "Content-Length": rendered.length,
       "Cache-Control": "no-cache",
     });
-    response.end(body);
+    response.end(rendered);
   });
 }

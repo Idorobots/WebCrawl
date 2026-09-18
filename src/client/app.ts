@@ -91,8 +91,16 @@ import type {
 } from "./types";
 import { requireElement } from "./ui/elements";
 
+const runtimeConfig = (window as Window & {
+  __WEBCRAWL_RUNTIME_CONFIG__?: { debug?: boolean };
+}).__WEBCRAWL_RUNTIME_CONFIG__;
+const DEBUG_MODE = runtimeConfig?.debug === true;
+const PLAYER_MAX_HP = DEBUG_MODE ? 1_000 : PLAYER_SPEC.maxHp;
+
 const gameViewport = requireElement<HTMLElement>("#gameViewport");
 const gameCanvasHost = requireElement<HTMLElement>("#gameCanvas");
+gameCanvasHost.dataset.debugMode = String(DEBUG_MODE);
+gameCanvasHost.dataset.playerMaxHp = String(PLAYER_MAX_HP);
 const renderer = new PhaserRenderer(gameCanvasHost);
 const urlInput = requireElement<HTMLInputElement>("#urlInput");
 const form = requireElement<HTMLFormElement>("#urlForm");
@@ -136,7 +144,7 @@ const monsterStatesByPage = new Map<string, Map<string, MonsterState>>();
 let currentRoomId: number | null = null;
 let player: Point = { x: 0, y: 0 };
 let playerFacing: Point = { x: 0, y: -1 };
-let playerHp: number = PLAYER_SPEC.maxHp;
+let playerHp: number = PLAYER_MAX_HP;
 let playerAlive = true;
 let playerInvulnerable = false;
 let crystalInvulnerableUntil = 0;
@@ -461,10 +469,11 @@ function floorIdentity(pageUrl: string): string {
 }
 
 function updateHealthUi(): void {
-  const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_SPEC.maxHp));
+  const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_MAX_HP));
   hudHealthFillEl.style.width = `${ratio * 100}%`;
+  gameCanvasHost.dataset.playerHp = String(playerHp);
 
-  renderer.setPlayer(player, playerHp, PLAYER_SPEC.maxHp, currentPlayerSpriteAsset);
+  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
 }
 
 function updateWeaponUi(): void {
@@ -1766,14 +1775,14 @@ function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
 
 function renderInteractiveObjects(): void {
   renderer.renderObjects(currentStairs, currentLoot, visitedRooms, LOOT_ASSETS);
-  renderer.setPlayer(player, playerHp, PLAYER_SPEC.maxHp, currentPlayerSpriteAsset);
+  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
   updatePlayerVisual();
   updatePlayerAnimationClasses();
   updateHealthUi();
 }
 
 function updatePlayerVisual(): void {
-  renderer.setPlayer(player, playerHp, PLAYER_SPEC.maxHp, currentPlayerSpriteAsset);
+  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
   updatePlayerProtectionVisual();
 }
 
@@ -1825,7 +1834,7 @@ function checkLoot(): void {
       }
 
       if (item.kind === "medkit" && playerAlive) {
-        const restored = playerHp < PLAYER_SPEC.maxHp ? 1 : 0;
+        const restored = playerHp < PLAYER_MAX_HP ? 1 : 0;
 
         if (restored > 0) {
           playerHp += restored;
@@ -2156,6 +2165,7 @@ function teleportPlayerTo(x: number, y: number): void {
     playerHp: () => number;
     playerFacing: () => Point;
     damagePlayer: (amount: number) => void;
+    spawnHealingEffect: () => void;
     stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y">>;
     portalContacts: () => string[];
     loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>;
@@ -2192,6 +2202,9 @@ function teleportPlayerTo(x: number, y: number): void {
   playerHp: () => playerHp,
   playerFacing: () => ({ ...playerFacing }),
   damagePlayer: applyPlayerDamage,
+  spawnHealingEffect(): void {
+    renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize);
+  },
   stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
   portalContacts: () => [...portalContacts],
   camera: () => renderer.cameraState(),
@@ -2243,10 +2256,15 @@ window.addEventListener("keyup", event => {
 function updatePlayerAimFromPointer(): void {
   if (!pointerInViewport || !pointerClientPosition) {
     renderer.setCameraTarget(player);
+    renderer.setFlashlightTarget(null);
     return;
   }
   const target = renderer.worldPointAt(pointerClientPosition.x, pointerClientPosition.y);
-  if (!target) return;
+  if (!target) {
+    renderer.setFlashlightTarget(null);
+    return;
+  }
+  renderer.setFlashlightTarget(target);
   const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
   renderer.setCameraTarget({
     x: player.x + (target.x - player.x) / 3,
@@ -2272,6 +2290,7 @@ function resetPlayerInput(): void {
   pointerClientPosition = null;
   playerSpriteAnimationToken += 1;
   playerShooting = false;
+  renderer.setFlashlightTarget(null);
   setPlayerMoving(false, performance.now());
   updatePlayerFacingAsset();
 }
@@ -2320,6 +2339,7 @@ gameViewport.addEventListener("pointerleave", () => {
   pointerClientPosition = null;
   primaryPointerDown = false;
   renderer.setCameraTarget(player);
+  renderer.setFlashlightTarget(null);
 });
 
 window.addEventListener("pointerup", event => {

@@ -36,13 +36,17 @@ const clip = (
   sizeScale = 1,
   origin = { x: 0.5, y: 0.5 },
   frameDurationMs = 100,
-  options: Pick<SpriteClip, "loop" | "holdLast" | "eventFrame"> = {},
+  options: Pick<SpriteClip, "loop" | "holdLast" | "eventFrame" | "light"> = {},
 ): SpriteClip => ({ frames, sizeScale, origin, frameDurationMs, ...options });
 
 const damageEffect = (sizeScale = 0.4): SpriteClip =>
-  clip(EFFECT_FRAMES.damage, sizeScale, { x: 0.5, y: 0.5 });
+  clip(EFFECT_FRAMES.damage, sizeScale, { x: 0.5, y: 0.5 }, 100, {
+    light: { color: 0xff526b, radiusScale: 0.7, intensity: 1.15 },
+  });
 const explosionEffect = (sizeScale = 0.8): SpriteClip =>
-  clip(EXPLOSION_FRAMES, sizeScale, { x: 0.5, y: 0.5 }, 1_000 / 12);
+  clip(EXPLOSION_FRAMES, sizeScale, { x: 0.5, y: 0.5 }, 1_000 / 12, {
+    light: { color: 0xffa34d, radiusScale: 1.15, intensity: 1.5 },
+  });
 const robotDebris = (sizeScale: number): readonly SpriteClip[] => [
   clip([DEBRIS_ASSETS.robotTorso], sizeScale, { x: 0.5, y: 0.9375 }),
   clip([DEBRIS_ASSETS.robotLimbs], sizeScale, { x: 0.5, y: 0.9375 }),
@@ -84,9 +88,15 @@ const PLAYER_VISUAL: ActorVisualDefinition = {
     }]),
   ) as Record<PlayerDirection, ActorVisualDefinition["directions"][string]>,
   effects: {
-    damage: clip(EFFECT_FRAMES.damage, 72 / 190),
-    healing: clip(EFFECT_FRAMES.healing, 112 / 190),
-    teleport: clip(EFFECT_FRAMES.teleport, 150 / 190),
+    damage: clip(EFFECT_FRAMES.damage, 72 / 190, { x: 0.5, y: 0.5 }, 100, {
+      light: { color: 0xff526b, radiusScale: 0.7, intensity: 1.15 },
+    }),
+    healing: clip(EFFECT_FRAMES.healing, 112 / 190, { x: 0.5, y: 0.5 }, 100, {
+      light: { color: 0x70ffd2, radiusScale: 0.85, intensity: 1.2 },
+    }),
+    teleport: clip(EFFECT_FRAMES.teleport, 150 / 190, { x: 0.5, y: 0.5 }, 100, {
+      light: { color: 0x72d6ff, radiusScale: 1.05, intensity: 1.35 },
+    }),
   },
 };
 
@@ -572,8 +582,12 @@ const plantDebris = [
   DEBRIS_ASSETS.plantRoots,
 ] as const;
 const circuitDebris = [DEBRIS_ASSETS.genericCircuit, DEBRIS_ASSETS.genericMetal] as const;
-const plantBreak = clip(EFFECT_FRAMES.plantBreak, 1.45, { x: 0.5, y: 0.5 });
-const barrelExplosion = clip(BARREL_EXPLOSION_FRAMES, 2.8, { x: 0.5, y: 0.84375 }, 1_000 / 12);
+const plantBreak = clip(EFFECT_FRAMES.plantBreak, 1.45, { x: 0.5, y: 0.5 }, 100, {
+  light: { color: 0x65e6c4, radiusScale: 0.8, intensity: 0.8 },
+});
+const barrelExplosion = clip(BARREL_EXPLOSION_FRAMES, 2.8, { x: 0.5, y: 0.84375 }, 1_000 / 12, {
+  light: { color: 0xff8b3d, radiusScale: 1.35, intensity: 1.7 },
+});
 const objectExplosion = explosionEffect(1.5);
 const sceneryOrigin = { x: 0.5, y: 0.9375 };
 const blockingScenery = (id: string, asset: string, size = world(145), radius = world(28)): DecorationDefinition =>
@@ -648,7 +662,11 @@ export const DECORATION_DEFINITIONS = {
           SCENERY_ASSETS.spawnerCharging,
           SCENERY_ASSETS.spawnerDischarge,
           SCENERY_ASSETS.spawnerReady,
-        ], 1, { x: 0.5, y: 0.90625 }, 125, { holdLast: true, eventFrame: 2 }),
+        ], 1, { x: 0.5, y: 0.90625 }, 125, {
+          holdLast: true,
+          eventFrame: 2,
+          light: { color: 0xc07cff, radiusScale: 0.75, intensity: 0.85 },
+        }),
       },
     },
   },

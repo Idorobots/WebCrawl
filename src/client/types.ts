@@ -66,6 +66,11 @@ export interface SpriteClip {
   loop?: boolean;
   holdLast?: boolean;
   eventFrame?: number;
+  light?: {
+    color: number;
+    radiusScale: number;
+    intensity: number;
+  };
 }
 
 export interface DirectionalSpriteVisual {

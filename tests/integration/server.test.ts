@@ -5,7 +5,7 @@ import path from "node:path";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createWebCrawlServer } from "../../src/server/app";
-import type { ServerConfig } from "../../src/server/config";
+import { loadServerConfig, type ServerConfig } from "../../src/server/config";
 import type { RequestRemote } from "../../src/server/remote-fetch";
 
 let directory: string;
@@ -14,7 +14,7 @@ const servers: ReturnType<typeof createWebCrawlServer>[] = [];
 beforeEach(async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), "webcrawl-test-"));
   await fs.mkdir(path.join(directory, "assets"));
-  await fs.writeFile(path.join(directory, "index.html"), "<!doctype html><title>WebCrawl</title>");
+  await fs.writeFile(path.join(directory, "index.html"), "<!doctype html><html><head><title>WebCrawl</title></head></html>");
   await fs.writeFile(path.join(directory, "assets", "app.js"), "export {};\n");
   await fs.writeFile(path.join(directory, "assets", "sprite.png"), Buffer.from([137, 80, 78, 71]));
 });
@@ -24,11 +24,12 @@ afterEach(async () => {
   await fs.rm(directory, { recursive: true, force: true });
 });
 
-async function start(request?: RequestRemote): Promise<string> {
+async function start(request?: RequestRemote, debug = false): Promise<string> {
   const config: ServerConfig = {
     host: "127.0.0.1",
     port: 0,
     clientDirectory: directory,
+    debug,
     maxResponseBytes: 5 * 1024 * 1024,
     requestTimeoutMs: 12_000,
     maxRedirects: 5,
@@ -53,6 +54,16 @@ describe("WebCrawl server", () => {
     const sprite = await fetch(`${baseUrl}/assets/sprite.png`);
     expect(sprite.status).toBe(200);
     expect(sprite.headers.get("content-type")).toBe("image/png");
+  });
+
+  it("injects server debug mode into the client runtime config", async () => {
+    const normalHtml = await (await fetch(await start())).text();
+    expect(normalHtml).toContain('window.__WEBCRAWL_RUNTIME_CONFIG__={"debug":false}');
+
+    const debugHtml = await (await fetch(await start(undefined, true))).text();
+    expect(debugHtml).toContain('window.__WEBCRAWL_RUNTIME_CONFIG__={"debug":true}');
+    expect(loadServerConfig({ DEBUG: "true" })).toMatchObject({ debug: true });
+    expect(loadServerConfig({ DEBUG: "false" })).toMatchObject({ debug: false });
   });
 
   it("returns the remote HTML through the API", async () => {

@@ -10,6 +10,7 @@ const config = (overrides: Partial<ServerConfig> = {}): ServerConfig => ({
   host: "127.0.0.1",
   port: 0,
   clientDirectory: "dist/client",
+  debug: false,
   maxResponseBytes: 32,
   requestTimeoutMs: 50,
   maxRedirects: 2,

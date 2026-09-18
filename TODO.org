@@ -274,8 +274,51 @@ When entering a boss arena, the viewport should zoom out to encompass the entire
 - Doors should shut behind the player once the arena is entered.
 - All enemies in the boss arena are invulnerable until the boss fight actually begins (player enters the room).
 - Camera should zoom out to show the entire boss arena at once when the fight begins.
-* Lighting
-Would be nice to include dynamic lighting in the game. Including bullets and room lighting.
+* DONE Lighting
+:LOGBOOK:
+- State "DONE"       from              [2026-09-18 Fri 11:45]
+:END:
+Would be nice to include dynamic lighting in the game:
+- Scenery and monsters should have a shadow (going bottom right).
+- There should be ambient darkness with rooms lit up centrally (tinted light blue, like the lights on the assets).
+- The player should have a beam of light (a flashlight) aiming at the cursor that helps them see the contents of the rooms.
+- Bullets should light up and ideally leave a trace behind them.
+- All effects should light up while active (including damage and explosions).
+- Enemies should have a red "aura", but very subtle.
+- Pickups should have a slight light blue "aura" to indicate that they are active elements.
+
+All lights should be soft. The system should be performant even in the presence of numerous bullets.
+
+* DONE Lighting bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-18 Fri 17:13]
+:END:
+- The player light ellipsis should be twice as large.
+- The player avatar themselves should be slightly lit up.
+- The ambient dark is a tad too dark.
+- Room illumination should be varied - some can be lit up just like now, some more, some less. In some rooms the light should flicker randomly.
+- Corridors could use a similar illumination to the rooms.
+- "Auras" and bullets are displayed weird - they are just white circles instead of proper soft light. Auras should light up the surroundings. It should be a similar effect like the player "flashlight" ellipsis or the explosion/damage effect lights. Bullets can be treated specially for performance.
+
+* DONE More lighting bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-18 Fri 17:12]
+:END:
+- Healing effect doesn't show up anymore.
+- The flickering lights should be more aggressive - make the flicker faster and more decisive, flickering between ambient darknes and selected lighting level.
+- Player's flashlight light should be white without any tint.
+- Bullets should rather be a bar, not a dot with a bar.
+- Player's flashlight shape should be more circular when closer to the player.
+- Various lights turn off too aggressively - even when a player is in the same room as the pickups they are not displayed with an aura.
+
+* More lighting bugs
+- When teleporting, player's flashlight is not enabled until the cursor moves.
+- Healing effect should follow the players sprite.
+- Most rooms (including the initial level room) should be fully lit with only a portion of the rooms being dark with a poor lighting.
+- Boss arenas should be illuminated much more than usual rooms, with the illumination tinted red.
+- Player's flashlight area is a bit too large. Please make it 80% of the current size.
+- Flickering lights should most of the time remain on and occassionally flicker rapidly and randomly.
+
 * DONE Energy attacks
 :LOGBOOK:
 - State "DONE"       from              [2026-09-16 Wed 22:57]
@@ -336,3 +379,19 @@ Instead of the current boss names, use names of the most popular Open Weight AI 
 
 * Bugs
 - It's possible to shoot through the doors when the player is standing right begind the blocked door area.
+- When a player enters a portal, the game should be paused to load the next level.
+- Random errors when entering portals:
+```
+Uncaught TypeError: can't access property "sys", this.scene is undefined
+    setTexture http://127.0.0.1:8000/assets/index-CCnl2EYo.js:10
+    applyClip http://127.0.0.1:8000/assets/index-CCnl2EYo.js:166
+    callback http://127.0.0.1:8000/assets/index-CCnl2EYo.js:166
+    update http://127.0.0.1:8000/assets/index-CCnl2EYo.js:68
+    emit http://127.0.0.1:8000/assets/index-CCnl2EYo.js:3
+    step http://127.0.0.1:8000/assets/index-CCnl2EYo.js:66
+    update http://127.0.0.1:8000/assets/index-CCnl2EYo.js:65
+    step http://127.0.0.1:8000/assets/index-CCnl2EYo.js:3
+    step http://127.0.0.1:8000/assets/index-CCnl2EYo.js:3
+    t http://127.0.0.1:8000/assets/index-CCnl2EYo.js:5
+index-CCnl2EYo.js:10:28063
+```
