@@ -52,6 +52,14 @@ The production server accepts these optional environment variables:
 - `HOST`: listening address, default `127.0.0.1`
 - `CLIENT_DIR`: browser build directory, default `dist/client`
 
+## Deployment
+
+The client is deployed to GitHub Pages automatically. Every push to `main` (or a manual `workflow_dispatch` run) triggers the `Deploy to GitHub Pages` workflow (`.github/workflows/pages.yml`), which builds the client with Vite and publishes `dist/client` through the Pages artifact API — no branch or extra checkout needed.
+
+One-time setup: under **Settings → Pages**, set Source to **GitHub Actions**. The first deploy after that lands at `https://<owner>.github.io/WebCrawl/`.
+
+The workflow builds with `--base=/WebCrawl/` so the bundled asset URLs match the project Pages subpath. Drop that flag when hosting `dist/client` at a domain root instead.
+
 ## Quality Checks
 
 ```bash

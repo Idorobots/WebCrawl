@@ -355,8 +355,11 @@ Ideally, this game would run without the current server API.
 Whenever a website cannot be fetched directly due to CORS, only then attempt to use the server API. If that API is not available, fall back on a public page fetching API (find something that doesn't need an API key).
 The client now fetches directly first, falls back to the relay server, and finally tries keyless public proxies (default cors.io, configured in `PUBLIC_FETCH_PROXIES`). A modal reports total failure.
 
-* GitHub pages & workflow
-Add a GitHub Actions workflow that automatically builds and deploys the game in `gh-actions` branch.
+* DONE GitHub pages & workflow
+:LOGBOOK:
+- State "DONE"       from "TODO"       [2026-09-18 Fri 17:40]
+:END:
+Add a GitHub Actions workflow that automatically builds and deploys the game. It suffices to just deploy the client part.
 
 * CANCELLED Bugs
 :LOGBOOK:
