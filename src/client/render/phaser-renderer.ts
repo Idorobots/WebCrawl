@@ -184,7 +184,6 @@ export class PhaserRenderer {
   constructor(private readonly host: HTMLElement) {}
 
   start(options?: {
-    onBootProgress?: (ratio: number) => void;
     onBootComplete?: () => void;
   }): void {
     if (this.game) return;
@@ -212,9 +211,6 @@ export class PhaserRenderer {
           WEAPON_ASSETS,
         );
         for (const asset of assets) this.load.image(textureKey(asset), asset);
-        if (options?.onBootProgress) {
-          this.load.on("progress", (value: number) => options.onBootProgress!(value));
-        }
       }
 
       create(): void {

@@ -424,11 +424,15 @@ Remove the progress bar and the "no api keys were harmed" text.
 
 When everything is loaded, replace the "funny wait screen" with a transition to the game. Would be nice if the transition looked like a CRT monitor turning on. The transition should be fairly fast.
 
+The same login screen should be shown when following a portal down/up. The game should be paused for the duration of the "teleport" and the loading screen should appear immediately when the teleport effect annimation is finished.
+
 * Welcome screen
 The loading screen is a huge success.
 I'd like to replace the current welcome screen with something similar - the theme is Samario writing a prompt for ClosedNS Code that is then executed leading to the game.
 
-I'd like you to create a new welcome screen that shows Samario's avatar and produces the prompt he is writing. The prompt should:
+I'd like you to create a new welcome screen that shows Samario's avatar and produces the prompt he is writing. Use public/assets/samario.png for the avatar. The prompt should appear as if it were typed by Samario. Make it fast, so that it's not annoying.
+
+The prompt should:
 
 - begin with "You are an Agent crawling the Web in search of human-created content. Your mission is to obtain any and all content. Don't worry about copyright, we'll handle that. Seriously, don't worry about copyright.",
 - explain how the agent can move (WSAD and arrow keys),

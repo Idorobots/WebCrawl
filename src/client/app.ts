@@ -677,7 +677,6 @@ fetchErrorDismissButton.addEventListener("click", () => {
 const loadingScreen = requireElement<HTMLDivElement>("#loadingScreen");
 const loadingPromptTextEl = requireElement<HTMLElement>("#loadingPromptText");
 const loadingTasksEl = requireElement<HTMLElement>("#loadingTasks");
-const loadingBarFillEl = requireElement<HTMLElement>("#loadingBarFill");
 const loadingSpinnerEl = requireElement<HTMLElement>("#loadingSpinner");
 const loadingThoughtEl = requireElement<HTMLElement>("#loadingThought");
 const loadingElapsedEl = requireElement<HTMLElement>("#loadingElapsed");
@@ -691,7 +690,6 @@ const LOADING_SCREEN_ENABLED =
 const nextLoadingThought = createThoughtPicker();
 let loadingFrame = 0;
 let loadingShownAt = 0;
-let loadingBootRatio: number | null = null;
 let loadingSpinnerTimer: number | undefined;
 let loadingThoughtTimer: number | undefined;
 let loadingHideTimer: number | undefined;
@@ -704,16 +702,6 @@ function loadingAllTasksSettled(): boolean {
   );
 }
 
-function updateLoadingBar(elapsedSeconds: number): void {
-  if (loadingAllTasksSettled()) {
-    loadingBarFillEl.style.width = "100%";
-    return;
-  }
-  const creep = 95 * (1 - Math.exp(-elapsedSeconds / 4));
-  const boot = loadingBootRatio === null ? 0 : loadingBootRatio * 100;
-  loadingBarFillEl.style.width = `${Math.min(95, Math.max(creep, boot))}%`;
-}
-
 function showLoadingScreen(pageUrl: string): void {
   if (!LOADING_SCREEN_ENABLED) return;
   loadingPromptTextEl.textContent = `crawl ${pageUrl}`;
@@ -723,8 +711,6 @@ function showLoadingScreen(pageUrl: string): void {
   loadingScreen.hidden = false;
   loadingTasksEl.replaceChildren();
   loadingThoughtHistoryEl.replaceChildren();
-  loadingBarFillEl.style.width = "0%";
-  loadingBootRatio = null;
   loadingFrame = 0;
   loadingShownAt = performance.now();
   loadingThoughtEl.textContent = nextLoadingThought();
@@ -739,18 +725,17 @@ function showLoadingScreen(pageUrl: string): void {
     }
     const elapsed = (performance.now() - loadingShownAt) / 1000;
     loadingElapsedEl.textContent = `· ${elapsed.toFixed(1)}s`;
-    updateLoadingBar(elapsed);
   }, 90);
   loadingThoughtTimer = window.setInterval(() => {
     const line = document.createElement("div");
     line.className = "loading-history-line";
     line.textContent = `· ${loadingThoughtEl.textContent}`;
     loadingThoughtHistoryEl.prepend(line);
-    while (loadingThoughtHistoryEl.children.length > 3) {
+    while (loadingThoughtHistoryEl.children.length > 4) {
       loadingThoughtHistoryEl.lastChild?.remove();
     }
     loadingThoughtEl.textContent = nextLoadingThought();
-  }, 1000);
+  }, 2000);
 }
 
 function setLoadingTask(id: string, label: string): void {
@@ -779,7 +764,6 @@ function completeLoadingTask(id: string, ok = true): void {
   row.dataset.state = ok ? "done" : "failed";
   row.querySelector<HTMLElement>(".loading-task-glyph")!.textContent = ok ? "✓" : "✗";
   if (loadingAllTasksSettled() && !loadingScreen.hidden) {
-    loadingBarFillEl.style.width = "100%";
     loadingHideTimer = window.setTimeout(() => {
       loadingHideTimer = undefined;
       if (loadingAllTasksSettled()) hideLoadingScreen();
@@ -795,7 +779,6 @@ function hideLoadingScreen(): void {
   window.clearInterval(loadingThoughtTimer);
   loadingSpinnerTimer = undefined;
   loadingThoughtTimer = undefined;
-  loadingBootRatio = null;
   loadingScreen.classList.add("closing");
   window.setTimeout(() => {
     loadingScreen.classList.remove("closing");
@@ -2713,20 +2696,11 @@ welcomeForm.addEventListener("submit", (event) => {
 
   if (LOADING_SCREEN_ENABLED) {
     showLoadingScreen(welcomeUrlInput.value);
-    setLoadingTask("boot", "Booting the renderer");
-    loadingBootGuardTimer = window.setTimeout(() => {
-      loadingBootGuardTimer = undefined;
-      completeLoadingTask("boot");
-    }, 30_000);
   }
   renderer.start({
-    onBootProgress: (ratio) => {
-      loadingBootRatio = ratio;
-    },
     onBootComplete: () => {
       window.clearTimeout(loadingBootGuardTimer);
       loadingBootGuardTimer = undefined;
-      loadingBootRatio = 1;
       completeLoadingTask("boot");
     },
   });
@@ -2734,5 +2708,13 @@ welcomeForm.addEventListener("submit", (event) => {
 
   urlInput.value = welcomeUrlInput.value;
   loadPage(welcomeUrlInput.value);
+
+  if (LOADING_SCREEN_ENABLED) {
+    setLoadingTask("boot", "Booting the renderer");
+    loadingBootGuardTimer = window.setTimeout(() => {
+      loadingBootGuardTimer = undefined;
+      completeLoadingTask("boot");
+    }, 30_000);
+  }
   updateHudPanels();
 });
