@@ -854,15 +854,41 @@ test("loads a page directly when the site allows CORS, without hitting the relay
   expect(relayHits).toBe(0);
 });
 
+test("shows the ClosedNS Code loading session while fetching a page", async ({ page }) => {
+  const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
+  await page.route("https://example.com/**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await route.fulfill({
+      status: 200,
+      headers: { "access-control-allow-origin": "*" },
+      contentType: "text/html",
+      body: fixture,
+    });
+  });
+  await page.goto("/?loading-screen");
+  await page.locator("#welcomeUrlInput").fill("https://example.com/start");
+  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+
+  const loading = page.locator("#loadingScreen");
+  await expect(loading).toBeVisible();
+  await expect(page.locator("#loadingPromptText")).toContainText("crawl https://example.com/start");
+  await expect(page.locator("#loadingThought")).not.toBeEmpty();
+  await expect(page.locator("#loadingTasks .loading-task")).toHaveCount(2);
+
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
+  await expect(loading).not.toBeVisible({ timeout: 30_000 });
+});
+
 test("shows the could-not-load modal when every fetch route fails", async ({ page }) => {
   await page.route("https://example.com/**", route => route.abort());
   await page.route("**/api/fetch?**", route => route.abort());
   await page.route("https://cors.io/**", route => route.abort());
-  await page.goto("/");
+  await page.goto("/?loading-screen");
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
   await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
   const modal = page.locator("#fetchErrorModal");
   await expect(modal).toBeVisible();
+  await expect(page.locator("#loadingScreen")).not.toBeVisible();
   await expect(page.locator("#fetchErrorMessage")).toContainText("https://example.com/start");
   await page.getByRole("button", { name: "UNDERSTOOD" }).click();
   await expect(modal).not.toBeVisible();

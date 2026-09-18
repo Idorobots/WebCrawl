@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Share Tech Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/share-tech-mono.woff2") format("woff2");
+}
+
 :root {
   color-scheme: dark;
   --bg: #0b0d10;
@@ -395,6 +403,203 @@ button:hover { background: #242c37; }
   line-height: 1.5;
   color: #98a2ae;
   word-break: break-word;
+}
+
+#loadingScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  background:
+    repeating-linear-gradient(0deg, rgba(80, 150, 255, 0.045) 0 1px, transparent 1px 3px),
+    radial-gradient(circle at 50% 38%, rgba(50, 105, 200, 0.16), rgba(3, 9, 20, 0.92) 72%);
+  color: rgba(143, 215, 255, 0.87);
+  font-family: "Share Tech Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  opacity: 1;
+  transition: opacity 240ms ease;
+}
+
+#loadingScreen[hidden] {
+  display: none;
+}
+
+#loadingScreen.closing {
+  opacity: 0;
+}
+
+#loadingPanel {
+  width: min(680px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 20px 26px 16px;
+  text-shadow:
+    0 0 6px rgba(96, 180, 255, 0.55),
+    0 0 22px rgba(64, 140, 255, 0.3);
+}
+
+#loadingLogo {
+  margin: 0 0 10px;
+  font-size: clamp(6.5px, 2.05vw, 14px);
+  line-height: 1.06;
+  white-space: pre;
+  color: rgba(170, 224, 255, 0.92);
+  text-shadow:
+    0 0 10px rgba(110, 190, 255, 0.7),
+    0 0 30px rgba(70, 145, 255, 0.38);
+  animation: loadingGlow 2.6s ease-in-out infinite alternate;
+}
+
+@keyframes loadingGlow {
+  from { text-shadow: 0 0 8px rgba(110, 190, 255, 0.55), 0 0 22px rgba(70, 145, 255, 0.28); }
+  to { text-shadow: 0 0 14px rgba(130, 200, 255, 0.85), 0 0 38px rgba(80, 155, 255, 0.5); }
+}
+
+#loadingTagline {
+  margin: 0 0 18px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: rgba(143, 215, 255, 0.6);
+}
+
+#loadingPrompt {
+  margin: 0 0 14px;
+  font-size: 15px;
+  color: rgba(190, 233, 255, 0.92);
+  word-break: break-all;
+}
+
+.loading-caret {
+  display: inline-block;
+  width: 0.55em;
+  margin-left: 2px;
+  color: rgba(200, 235, 255, 0.95);
+  animation: loadingBlink 1.1s steps(2, start) infinite;
+}
+
+.loading-caret::before {
+  content: "▌";
+}
+
+@keyframes loadingBlink {
+  50% { opacity: 0; }
+}
+
+#loadingTasks {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.loading-task {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.loading-task-glyph {
+  flex: none;
+  min-width: 1.2em;
+  color: rgba(170, 224, 255, 0.9);
+}
+
+.loading-task[data-state="done"] .loading-task-glyph {
+  color: rgba(140, 235, 180, 0.95);
+}
+
+.loading-task[data-state="failed"] .loading-task-glyph {
+  color: rgba(255, 130, 140, 0.95);
+}
+
+.loading-task[data-state="done"],
+.loading-task[data-state="failed"] {
+  color: rgba(143, 215, 255, 0.55);
+}
+
+.loading-task-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#loadingBarTrack {
+  height: 10px;
+  margin: 0 0 16px;
+  border: 1px solid rgba(120, 190, 255, 0.45);
+  background: rgba(24, 56, 100, 0.3);
+  box-shadow: inset 0 0 8px rgba(70, 140, 255, 0.25);
+}
+
+#loadingBarFill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, rgba(90, 170, 255, 0.55), rgba(150, 215, 255, 0.95));
+  box-shadow: 0 0 10px rgba(110, 190, 255, 0.75);
+  transition: width 120ms linear;
+}
+
+#loadingThoughtLine {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 15px;
+  color: rgba(190, 233, 255, 0.92);
+}
+
+#loadingSpinner {
+  flex: none;
+  min-width: 1.2em;
+  color: rgba(210, 240, 255, 1);
+  animation: loadingGlow 1.6s ease-in-out infinite alternate;
+}
+
+#loadingThought {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#loadingElapsed {
+  flex: none;
+  color: rgba(143, 215, 255, 0.6);
+}
+
+#loadingThoughtHistory {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 14px;
+  font-size: 13px;
+}
+
+#loadingThoughtHistory .loading-history-line {
+  color: rgba(143, 215, 255, 0.42);
+}
+
+#loadingThoughtHistory .loading-history-line:nth-child(2) {
+  color: rgba(143, 215, 255, 0.28);
+}
+
+#loadingThoughtHistory .loading-history-line:nth-child(3) {
+  color: rgba(143, 215, 255, 0.16);
+}
+
+#loadingFooter {
+  margin-top: 6px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: rgba(143, 215, 255, 0.42);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #loadingScreen,
+  #loadingScreen * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 #deathScore {

@@ -90,6 +90,7 @@ import type {
   WeaponSpec,
 } from "./types";
 import { requireElement } from "./ui/elements";
+import { createThoughtPicker } from "./ui/loading-texts";
 
 const runtimeConfig = (window as Window & {
   __WEBCRAWL_RUNTIME_CONFIG__?: { debug?: boolean };
@@ -672,6 +673,135 @@ fetchErrorDismissButton.addEventListener("click", () => {
   fetchErrorModal.hidden = true;
   fetchErrorModal.classList.remove("open");
 });
+
+const loadingScreen = requireElement<HTMLDivElement>("#loadingScreen");
+const loadingPromptTextEl = requireElement<HTMLElement>("#loadingPromptText");
+const loadingTasksEl = requireElement<HTMLElement>("#loadingTasks");
+const loadingBarFillEl = requireElement<HTMLElement>("#loadingBarFill");
+const loadingSpinnerEl = requireElement<HTMLElement>("#loadingSpinner");
+const loadingThoughtEl = requireElement<HTMLElement>("#loadingThought");
+const loadingElapsedEl = requireElement<HTMLElement>("#loadingElapsed");
+const loadingThoughtHistoryEl = requireElement<HTMLElement>("#loadingThoughtHistory");
+
+const LOADING_SPINNER_FRAMES = ["✻", "✳", "✶", "✽", "✢", "∗", "·"];
+const LOADING_TASK_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const LOADING_SCREEN_ENABLED =
+  import.meta.env.VITE_LOADING_SCREEN !== "off" ||
+  new URLSearchParams(window.location.search).has("loading-screen");
+const nextLoadingThought = createThoughtPicker();
+let loadingFrame = 0;
+let loadingShownAt = 0;
+let loadingBootRatio: number | null = null;
+let loadingSpinnerTimer: number | undefined;
+let loadingThoughtTimer: number | undefined;
+let loadingHideTimer: number | undefined;
+let loadingBootGuardTimer: number | undefined;
+
+function loadingAllTasksSettled(): boolean {
+  const rows = loadingTasksEl.querySelectorAll<HTMLElement>(".loading-task");
+  return rows.length > 0 && Array.from(rows).every(
+    (row) => row.dataset.state === "done" || row.dataset.state === "failed",
+  );
+}
+
+function updateLoadingBar(elapsedSeconds: number): void {
+  if (loadingAllTasksSettled()) {
+    loadingBarFillEl.style.width = "100%";
+    return;
+  }
+  const creep = 95 * (1 - Math.exp(-elapsedSeconds / 4));
+  const boot = loadingBootRatio === null ? 0 : loadingBootRatio * 100;
+  loadingBarFillEl.style.width = `${Math.min(95, Math.max(creep, boot))}%`;
+}
+
+function showLoadingScreen(pageUrl: string): void {
+  if (!LOADING_SCREEN_ENABLED) return;
+  loadingPromptTextEl.textContent = `crawl ${pageUrl}`;
+  if (!loadingScreen.hidden) return;
+  window.clearTimeout(loadingHideTimer);
+  loadingHideTimer = undefined;
+  loadingScreen.hidden = false;
+  loadingTasksEl.replaceChildren();
+  loadingThoughtHistoryEl.replaceChildren();
+  loadingBarFillEl.style.width = "0%";
+  loadingBootRatio = null;
+  loadingFrame = 0;
+  loadingShownAt = performance.now();
+  loadingThoughtEl.textContent = nextLoadingThought();
+  loadingSpinnerEl.textContent = LOADING_SPINNER_FRAMES[0]!;
+  loadingSpinnerTimer = window.setInterval(() => {
+    loadingFrame += 1;
+    loadingSpinnerEl.textContent = LOADING_SPINNER_FRAMES[loadingFrame % LOADING_SPINNER_FRAMES.length]!;
+    for (const glyph of loadingTasksEl.querySelectorAll<HTMLElement>(".loading-task-glyph")) {
+      if (glyph.closest<HTMLElement>(".loading-task")?.dataset.state === "run") {
+        glyph.textContent = LOADING_TASK_FRAMES[loadingFrame % LOADING_TASK_FRAMES.length]!;
+      }
+    }
+    const elapsed = (performance.now() - loadingShownAt) / 1000;
+    loadingElapsedEl.textContent = `· ${elapsed.toFixed(1)}s`;
+    updateLoadingBar(elapsed);
+  }, 90);
+  loadingThoughtTimer = window.setInterval(() => {
+    const line = document.createElement("div");
+    line.className = "loading-history-line";
+    line.textContent = `· ${loadingThoughtEl.textContent}`;
+    loadingThoughtHistoryEl.prepend(line);
+    while (loadingThoughtHistoryEl.children.length > 3) {
+      loadingThoughtHistoryEl.lastChild?.remove();
+    }
+    loadingThoughtEl.textContent = nextLoadingThought();
+  }, 1000);
+}
+
+function setLoadingTask(id: string, label: string): void {
+  window.clearTimeout(loadingHideTimer);
+  loadingHideTimer = undefined;
+  let row = loadingTasksEl.querySelector<HTMLElement>(`.loading-task[data-task="${id}"]`);
+  if (!row) {
+    row = document.createElement("div");
+    row.className = "loading-task";
+    row.dataset.task = id;
+    const glyph = document.createElement("span");
+    glyph.className = "loading-task-glyph";
+    const text = document.createElement("span");
+    text.className = "loading-task-label";
+    row.append(glyph, text);
+    loadingTasksEl.append(row);
+  }
+  row.dataset.state = "run";
+  row.querySelector<HTMLElement>(".loading-task-glyph")!.textContent = LOADING_TASK_FRAMES[0]!;
+  row.querySelector<HTMLElement>(".loading-task-label")!.textContent = label;
+}
+
+function completeLoadingTask(id: string, ok = true): void {
+  const row = loadingTasksEl.querySelector<HTMLElement>(`.loading-task[data-task="${id}"]`);
+  if (!row || row.dataset.state !== "run") return;
+  row.dataset.state = ok ? "done" : "failed";
+  row.querySelector<HTMLElement>(".loading-task-glyph")!.textContent = ok ? "✓" : "✗";
+  if (loadingAllTasksSettled() && !loadingScreen.hidden) {
+    loadingBarFillEl.style.width = "100%";
+    loadingHideTimer = window.setTimeout(() => {
+      loadingHideTimer = undefined;
+      if (loadingAllTasksSettled()) hideLoadingScreen();
+    }, 400);
+  }
+}
+
+function hideLoadingScreen(): void {
+  if (loadingScreen.hidden) return;
+  window.clearTimeout(loadingHideTimer);
+  loadingHideTimer = undefined;
+  window.clearInterval(loadingSpinnerTimer);
+  window.clearInterval(loadingThoughtTimer);
+  loadingSpinnerTimer = undefined;
+  loadingThoughtTimer = undefined;
+  loadingBootRatio = null;
+  loadingScreen.classList.add("closing");
+  window.setTimeout(() => {
+    loadingScreen.classList.remove("closing");
+    loadingScreen.hidden = true;
+  }, 240);
+}
 
 function cardinalDirection(dx: number, dy: number): SpriteDirection {
   if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? "left" : "right";
@@ -2520,6 +2650,10 @@ async function loadPage(
 
   urlInput.value = url;
   setStatus("Fetching " + url + " …");
+  if (LOADING_SCREEN_ENABLED) {
+    showLoadingScreen(url);
+    setLoadingTask("fetch", "Fetching the page");
+  }
 
   try {
     const { html, via } = await fetchHtml(url);
@@ -2549,12 +2683,14 @@ async function loadPage(
       stateId: currentStateId,
       spawnPortalUrl: popBack ? departingPageUrl : null,
     });
+    completeLoadingTask("fetch");
     if (retainedPointerPosition && pointerInViewport) {
       pointerClientPosition = retainedPointerPosition;
       updatePlayerAimFromPointer();
     }
   } catch (err) {
     if (requestId !== currentRequest) return;
+    hideLoadingScreen();
     const message = err instanceof Error ? err.message : "Unknown error";
     setStatus(`Could not load ${url}: ${message}`, true);
     showFetchErrorModal(url, message);
@@ -2574,7 +2710,26 @@ welcomeForm.addEventListener("submit", (event) => {
   currentStateId = null;
   gameUi.hidden = false;
   welcomeScreen.hidden = true;
-  renderer.start();
+
+  if (LOADING_SCREEN_ENABLED) {
+    showLoadingScreen(welcomeUrlInput.value);
+    setLoadingTask("boot", "Booting the renderer");
+    loadingBootGuardTimer = window.setTimeout(() => {
+      loadingBootGuardTimer = undefined;
+      completeLoadingTask("boot");
+    }, 30_000);
+  }
+  renderer.start({
+    onBootProgress: (ratio) => {
+      loadingBootRatio = ratio;
+    },
+    onBootComplete: () => {
+      window.clearTimeout(loadingBootGuardTimer);
+      loadingBootGuardTimer = undefined;
+      loadingBootRatio = 1;
+      completeLoadingTask("boot");
+    },
+  });
   equipDefaultWeapon();
 
   urlInput.value = welcomeUrlInput.value;

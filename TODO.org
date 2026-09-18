@@ -368,21 +368,6 @@ Add a GitHub Actions workflow that automatically builds and deploys the game. It
 :END:
 - When going back up a level it's scenery & enemies are regenerated. The level should be retain as it was when a player uses a ling to another level. Levels should only be generated upon the very first load of that specific URL. Please normalize the URLs before pulling them so that this level generation is consistent.
 
-* Main theme
-You are a Web Crawler sent by ClosedNS on a mission to recover any and all human-generated content, but be careful, there are disguisting open-weight AIs out there to get you!
-
-Instead of a loading screen show a holographic message from Samario, the CEO of ClosedNS sending you off on a mission and explaining the movement, and pickups.
-
-Names for various things (useful for the "how to play" screen):
-- RAM - Copyrighted Material
-- Med kits- Doob Post
-- Energy Packs - Quota
-- Shield charges - Regulatory Capture
-- Crystals - Government bailouts
-
-Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to tokens in AI.
-
-Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.
 * DONE Bugs
 :LOGBOOK:
 - State "DONE"       from              [2026-09-17 Thu 22:28]
@@ -413,15 +398,54 @@ index-CCnl2EYo.js:10:28063
 - Boss healthbar & name is way too low
 - Spawner healthbar is way too high
 - Shdows should point away from the player.
-- Portal spright is translucent, but shouldn't.
+- Portal sprite is translucent, but shouldn't.
 
 * Extra lighting
 - Rooms need random wall lights in yellow, blue and red variants.
 - Sprites that have a light on them need lighting.
 
 * Asset changes
-- Change the RAM sticks to holographic RAMsticks
+- Change the RAM sticks to holographic, nonexistent RAM sticks
+- Instead of "operative" call the player "agent" in game.
+- Use broken floor tiles sparingly
 
 * Loading screen
-When the level loads, a loading indicator should be show.
-Make it look and feel much like the "thinking" indicators in the various AI coding harnesses.
+When the level loads, a loading indicator should be shown.
+Make it look and feel much like the "thinking" indicators in the various AI coding harnesses - text based, console-like spinner with immitation-TUI elements, and "funny" wait text.
+
+Rotate the funny text every 2 seconds.
+The ordering should be:
+- the logo,
+- Fetching the page
+- Booting renderer
+- Funny text lines - prealocate the space for the max number of lines (5 including the larger "current" line) so that the logo doesn't jump up.
+
+Remove the progress bar and the "no api keys were harmed" text.
+
+When everything is loaded, replace the "funny wait screen" with a transition to the game. Would be nice if the transition looked like a CRT monitor turning on. The transition should be fairly fast.
+
+* Welcome screen
+The loading screen is a huge success.
+I'd like to replace the current welcome screen with something similar - the theme is Samario writing a prompt for ClosedNS Code that is then executed leading to the game.
+
+I'd like you to create a new welcome screen that shows Samario's avatar and produces the prompt he is writing. The prompt should:
+
+- begin with "You are an Agent crawling the Web in search of human-created content. Your mission is to obtain any and all content. Don't worry about copyright, we'll handle that. Seriously, don't worry about copyright.",
+- explain how the agent can move (WSAD and arrow keys),
+- explain  how to shoot (left mouse button) and that different weapons exist (without naming them or listing them, just show three weapon icons side by side on a single line),
+- explain different pickups in game (show icons and descriptions for each, including the special "moves" for crystals and energy ammo),
+- explain that bad monsters exist that are "distilling the frontier" that the agent might need to kill.
+
+Names for various things to use in the prompt:
+- Ammo crate - Doom Post Ammo
+- Medkit - VC Investment
+- RAM - Precious Copyrighted Content (the "Copyrighted" should have a strikethrough)
+- Crystals - Endgame Crystals
+- Spending a crystal (space) - Government Bailout
+- Energy crate - AI Doomer Energy
+- Energy attack (right mouse click) - Regulatory Capture
+
+* Main theme
+Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to tokens in AI.
+
+Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.

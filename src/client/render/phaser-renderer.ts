@@ -183,7 +183,10 @@ export class PhaserRenderer {
 
   constructor(private readonly host: HTMLElement) {}
 
-  start(): void {
+  start(options?: {
+    onBootProgress?: (ratio: number) => void;
+    onBootComplete?: () => void;
+  }): void {
     if (this.game) return;
     this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
     const renderer = this;
@@ -209,10 +212,14 @@ export class PhaserRenderer {
           WEAPON_ASSETS,
         );
         for (const asset of assets) this.load.image(textureKey(asset), asset);
+        if (options?.onBootProgress) {
+          this.load.on("progress", (value: number) => options.onBootProgress!(value));
+        }
       }
 
       create(): void {
         renderer.attach(this);
+        options?.onBootComplete?.();
       }
 
       override update(time: number): void {

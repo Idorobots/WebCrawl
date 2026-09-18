@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: "VITE_MAX_LIGHTS=4 npm run build && node dist/server/index.js",
+    command: "VITE_MAX_LIGHTS=4 VITE_LOADING_SCREEN=off npm run build && node dist/server/index.js",
     url: "http://127.0.0.1:3000",
     reuseExistingServer: false,
   },
