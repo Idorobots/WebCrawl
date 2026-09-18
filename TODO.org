@@ -399,6 +399,7 @@ index-CCnl2EYo.js:10:28063
 - Spawner healthbar is way too high
 - Shdows should point away from the player.
 - Portal sprite is translucent, but shouldn't.
+- Player is not placed on the portal pedestal when starting the game.
 
 * Extra lighting
 - Rooms need random wall lights in yellow, blue and red variants.
@@ -406,7 +407,6 @@ index-CCnl2EYo.js:10:28063
 
 * Asset changes
 - Change the RAM sticks to holographic, nonexistent RAM sticks
-- Instead of "operative" call the player "agent" in game.
 - Use broken floor tiles sparingly
 
 * Loading screen
@@ -436,20 +436,22 @@ The prompt should:
 
 - begin with "You are an Agent crawling the Web in search of human-created content. Your mission is to obtain any and all content. Don't worry about copyright, we'll handle that. Seriously, don't worry about copyright.",
 - explain how the agent can move (WSAD and arrow keys),
-- explain  how to shoot (left mouse button) and that different weapons exist (without naming them or listing them, just show three weapon icons side by side on a single line),
+- explain how to shoot (left mouse button) and that different weapons exist (without naming them or listing them, just show three weapon icons side by side on a single line),
 - explain different pickups in game (show icons and descriptions for each, including the special "moves" for crystals and energy ammo),
-- explain that bad monsters exist that are "distilling the frontier" that the agent might need to kill.
+- explain that bad AIs that are "distilling the frontier" are lurking in the dark that the Agent might need to kill.
 
 Names for various things to use in the prompt:
 - Ammo crate - Doom Post Ammo
-- Medkit - VC Investment
-- RAM - Precious Copyrighted Content (the "Copyrighted" should have a strikethrough)
+- Medkit - VC Investment Kit
+- RAM - Precious Copyrighted Content (the "Copyrighted" word should have a strikethrough)
 - Crystals - Endgame Crystals
 - Spending a crystal (space) - Government Bailout
 - Energy crate - AI Doomer Energy
 - Energy attack (right mouse click) - Regulatory Capture
 
-* Main theme
+* AI theme
+Instead of Operative, the player should be referred to as Agent.
+
 Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to tokens in AI.
 
 Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.

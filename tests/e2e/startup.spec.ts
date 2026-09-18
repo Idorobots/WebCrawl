@@ -879,6 +879,31 @@ test("shows the ClosedNS Code loading session while fetching a page", async ({ p
   await expect(loading).not.toBeVisible({ timeout: 30_000 });
 });
 
+test("pauses the game while teleporting through a portal", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  await setPlayerInvulnerable(page, true);
+
+  const direction = await game.getAttribute("data-first-exit");
+  const door = {
+    x: Number(await game.getAttribute("data-first-door-x")),
+    y: Number(await game.getAttribute("data-first-door-y")),
+  };
+  await alignPlayerToDoor(page, door, direction);
+  const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
+  await page.keyboard.down(exitKey);
+
+  await expect.poll(async () => await game.getAttribute("data-game-paused")).toBe("true");
+  await page.keyboard.up(exitKey);
+  await expect.poll(
+    async () => await game.getAttribute("data-game-paused"),
+    { timeout: 15_000 },
+  ).toBe("false");
+  await expect.poll(async () => {
+    return Number(await game.getAttribute("data-visited-rooms"));
+  }).toBeGreaterThanOrEqual(2);
+});
+
 test("shows the could-not-load modal when every fetch route fails", async ({ page }) => {
   await page.route("https://example.com/**", route => route.abort());
   await page.route("**/api/fetch?**", route => route.abort());

@@ -195,7 +195,13 @@ let primaryPointerDown = false;
 let pointerInViewport = false;
 let pointerClientPosition: Point | null = null;
 let portalTransitioning = false;
+let teleportPauseActive = false;
 const portalContacts = new Set<string>();
+
+function setTeleportPaused(active: boolean): void {
+  teleportPauseActive = active;
+  gameCanvasHost.dataset.gamePaused = String(active);
+}
 const heldMovementKeys = new Set<string>();
 
 const killsCountEl = document.querySelector<HTMLElement>("#killsCount");
@@ -240,20 +246,20 @@ function hideLinkMenu(): void {
   linkMenu.replaceChildren();
 }
 
-function navigateTo(url: string, returnRoomId = currentRoomId): void {
+function navigateTo(url: string, returnRoomId = currentRoomId): Promise<void> {
   hideLinkMenu();
   urlInput.value = url;
   const nextStateId = stateIdForPage(url, floorNumber() + 1);
-  loadPage(url, {
+  return loadPage(url, {
     pushCurrent: true,
     returnRoomId,
     stateId: nextStateId,
   });
 }
 
-function goBack(): void {
+function goBack(): Promise<void> {
   const previous = navigationHistory[navigationHistory.length - 1];
-  if (!previous) return;
+  if (!previous) return Promise.resolve();
 
   const returnRoomId =
     navigationReturnRooms[navigationReturnRooms.length - 1] ?? null;
@@ -261,7 +267,7 @@ function goBack(): void {
   hideLinkMenu();
   urlInput.value = previous;
   const previousStateId = stateIdForPage(previous, Math.max(1, floorNumber() - 1));
-  loadPage(previous, {
+  return loadPage(previous, {
     popBack: true,
     spawnRoomId: returnRoomId,
     stateId: previousStateId,
@@ -1611,7 +1617,7 @@ function rebuildRoomRouting(): void {
 function gameTick(timestamp: number): void {
   gameAnimationFrame = requestAnimationFrame(gameTick);
 
-  if (!playerAlive || !currentLayout) {
+  if (teleportPauseActive || !playerAlive || !currentLayout) {
     lastGameTick = timestamp;
     setPlayerMoving(false, timestamp);
     return;
@@ -2013,11 +2019,16 @@ function checkStairs(): boolean {
   );
   if (!stair) return false;
   portalTransitioning = true;
+  setTeleportPaused(true);
   renderer.spawnEffect(PLAYER_SPEC.visual.effects?.teleport, player.x, player.y, PLAYER_SPEC.spriteSize);
   setTimeout(() => {
     portalTransitioning = false;
-    if (stair.type === "up") goBack();
-    else if (stair.url) navigateTo(stair.url, stair.roomId);
+    const navigation = stair.type === "up"
+      ? goBack()
+      : stair.url
+        ? navigateTo(stair.url, stair.roomId)
+        : null;
+    navigation?.finally(() => setTeleportPaused(false));
   }, 400);
   return true;
 }
@@ -2370,7 +2381,7 @@ function teleportPlayerTo(x: number, y: number): void {
 window.addEventListener("keydown", event => {
   if (event.code === "Space") {
     if (!gameUi.hidden) event.preventDefault();
-    activateCrystalInvulnerability();
+    if (!teleportPauseActive) activateCrystalInvulnerability();
     return;
   }
   if (!(event.code in movementDirections)) return;
@@ -2446,6 +2457,7 @@ gameViewport.addEventListener("pointermove", event => {
 gameViewport.addEventListener("pointerdown", event => {
   if (
     gameUi.hidden ||
+    teleportPauseActive ||
     !currentLayout ||
     !playerAlive
   ) return;
