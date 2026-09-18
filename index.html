@@ -4,36 +4,43 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>WebCrawl</title>
+  <link rel="preload" href="/fonts/share-tech-mono.woff2" as="font" type="font/woff2" crossorigin />
   <script type="module" src="/src/client/main.ts"></script>
 </head>
 <body>
   <div id="welcomeScreen">
-    <div class="welcome-visual"></div>
-    <section class="welcome-card">
-      <div class="welcome-mark">◈</div>
-      <h1>WEBCRAWL</h1>
-      <div class="welcome-tagline">EXPLORE <span>•</span> LOOT <span>•</span> SURVIVE</div>
-      
-      <p class="welcome-copy">
-        Strange pages. Hidden places. Every DOM is another alien deck waiting
-        to be mapped. Descend through links, recover what you can, and survive
-        whatever is crawling between the nodes.
-      </p>
-      <form id="welcomeForm">
-        <label for="welcomeUrlInput">ENTER A URL TO EXPLORE</label>
-        <div class="welcome-url-row">
-          <input
-            id="welcomeUrlInput"
-            type="url"
-            required
-            spellcheck="false"
-            value="https://blog.idorobots.org"
-          />
-          <button type="submit">BEGIN CRAWL</button>
-        </div>
-      </form>
-      <p class="welcome-quote">THE WEB IS DEEPER THAN YOU THINK...</p>
-    </section>
+    <div class="welcome-layout">
+      <figure class="welcome-visual">
+        <img src="assets/samario.png" alt="Samario, CEO of ClosedNS" />
+      </figure>
+      <section class="welcome-panel" aria-label="ClosedNS Code — new prompt">
+        <header class="welcome-panel-header">
+          <span class="welcome-header-dot" aria-hidden="true">●</span>
+          <span>ClosedNS Code</span>
+          <span class="welcome-header-dim">— agent-prompt.txt</span>
+          <span class="welcome-header-user">samario@closedns</span>
+        </header>
+        <div id="welcomePromptBody" class="welcome-prompt-body"></div>
+        <form id="welcomeForm">
+          <div class="welcome-url-line">
+            <span class="welcome-url-prefix">crawl </span><input
+              id="welcomeUrlInput"
+              type="url"
+              required
+              spellcheck="false"
+              autocomplete="off"
+              value="https://blog.idorobots.org"
+            /><span class="welcome-caret" aria-hidden="true"></span><span
+              class="welcome-url-mirror"
+              aria-hidden="true"
+            ></span>
+          </div>
+          <div class="welcome-actions">
+            <button type="submit">Go</button>
+          </div>
+        </form>
+      </section>
+    </div>
   </div>
 
   <div id="gameUi" hidden>

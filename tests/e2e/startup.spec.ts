@@ -42,7 +42,7 @@ async function startGame(page: Page, debug = false): Promise<void> {
 
   await expect(page.locator("#welcomeScreen")).toBeVisible({ timeout: 15_000 });
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
-  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  await page.getByRole("button", { name: "Go" }).click();
 
   await expect(page.locator("#gameUi")).toBeVisible();
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
@@ -436,7 +436,7 @@ test("keeps generated world coordinates independent of viewport size", async ({ 
   await page.setViewportSize({ width: 390, height: 720 });
   await page.goto("/");
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
-  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  await page.getByRole("button", { name: "Go" }).click();
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
 
   expect({
@@ -456,7 +456,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   }));
   await page.goto("/");
   await page.locator("#welcomeUrlInput").fill("https://example.com/boss");
-  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  await page.getByRole("button", { name: "Go" }).click();
   const game = page.locator("#gameCanvas");
   await setPlayerInvulnerable(page, true);
   await expect(game).toHaveAttribute("data-active-bosses", "0");
@@ -730,7 +730,7 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   }));
   await page.goto("/");
   await page.locator("#welcomeUrlInput").fill("https://example.com/weapons");
-  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  await page.getByRole("button", { name: "Go" }).click();
 
   const game = page.locator("#gameCanvas");
   await setPlayerInvulnerable(page, true);
@@ -849,7 +849,7 @@ test("loads a page directly when the site allows CORS, without hitting the relay
   });
   await page.goto("/");
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
-  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  await page.getByRole("button", { name: "Go" }).click();
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
   expect(relayHits).toBe(0);
 });
@@ -867,7 +867,7 @@ test("shows the ClosedNS Code loading session while fetching a page", async ({ p
   });
   await page.goto("/?loading-screen");
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
-  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  await page.getByRole("button", { name: "Go" }).click();
 
   const loading = page.locator("#loadingScreen");
   await expect(loading).toBeVisible();
@@ -910,7 +910,7 @@ test("shows the could-not-load modal when every fetch route fails", async ({ pag
   await page.route("https://cors.io/**", route => route.abort());
   await page.goto("/?loading-screen");
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
-  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  await page.getByRole("button", { name: "Go" }).click();
   const modal = page.locator("#fetchErrorModal");
   await expect(modal).toBeVisible();
   await expect(page.locator("#loadingScreen")).not.toBeVisible();

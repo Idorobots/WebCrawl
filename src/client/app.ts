@@ -91,6 +91,7 @@ import type {
 } from "./types";
 import { requireElement } from "./ui/elements";
 import { createThoughtPicker } from "./ui/loading-texts";
+import { setupWelcomePrompt } from "./ui/welcome-prompt";
 
 const runtimeConfig = (window as Window & {
   __WEBCRAWL_RUNTIME_CONFIG__?: { debug?: boolean };
@@ -110,7 +111,14 @@ const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
 const welcomeScreen = requireElement<HTMLDivElement>("#welcomeScreen");
 const welcomeForm = requireElement<HTMLFormElement>("#welcomeForm");
 const welcomeUrlInput = requireElement<HTMLInputElement>("#welcomeUrlInput");
+const welcomePromptBody = requireElement<HTMLElement>("#welcomePromptBody");
 const gameUi = requireElement<HTMLDivElement>("#gameUi");
+
+const welcomePrompt = setupWelcomePrompt({
+  promptHost: welcomePromptBody,
+  urlInput: welcomeUrlInput,
+  surface: welcomeScreen,
+});
 
 const sideMinimapCanvas = requireElement<HTMLCanvasElement>("#sideMinimapCanvas");
 const sideFloorLabelEl = requireElement<HTMLElement>("#sideFloorLabel");
@@ -2699,6 +2707,7 @@ form.addEventListener("submit", (event) => {
 
 welcomeForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  welcomePrompt.cancel();
 
   navigationHistory.length = 0;
   navigationReturnRooms.length = 0;

@@ -409,7 +409,10 @@ index-CCnl2EYo.js:10:28063
 - Change the RAM sticks to holographic, nonexistent RAM sticks
 - Use broken floor tiles sparingly
 
-* Loading screen
+* DONE Loading screen
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 00:20]
+:END:
 When the level loads, a loading indicator should be shown.
 Make it look and feel much like the "thinking" indicators in the various AI coding harnesses - text based, console-like spinner with immitation-TUI elements, and "funny" wait text.
 
@@ -439,6 +442,10 @@ The prompt should:
 - explain how to shoot (left mouse button) and that different weapons exist (without naming them or listing them, just show three weapon icons side by side on a single line),
 - explain different pickups in game (show icons and descriptions for each, including the special "moves" for crystals and energy ammo),
 - explain that bad AIs that are "distilling the frontier" are lurking in the dark that the Agent might need to kill.
+- end with "Make no mistakes."
+
+Afterwards the URL input should be placed two lines below with "crawl " as the prefix. The URL should be modifiable and populated with the default URL. There should be a blinking cursor that indicates to the user that the value can be changed. When the user types, the value in the prompt should update. Only the URL value should be modifiable. Pressing "enter" should start the game.
+There should be a button below the prompt stating "Go" that also starts the game.
 
 Names for various things to use in the prompt:
 - Ammo crate - Doom Post Ammo
@@ -449,9 +456,25 @@ Names for various things to use in the prompt:
 - Energy crate - AI Doomer Energy
 - Energy attack (right mouse click) - Regulatory Capture
 
+Replace "It all counts:" with "We need it all:" in the prompt.
+Say "Be careful! Evil open-weight AIs are lurking in the dark, distilling the frontier..." in the prompt.
+
+Make the weapon icons even larger in the promp and center them on the line. Also, make the pickup item icons larger as well - twice as large.
+
+The "crawl <URL>" should be larger - make the font size a bit larger for that part.
+
+The "GO" button should be centered. There should be an empty line separating it from the "crawl <URL>" line.
+
+The "crawl <URL>" and "GO" button should show up on the bottom of the prompt panel from the very start. Currently they are jumping down when the "invisible" content is populated.
+
+* UI update
+Update the UI to match the welcome & loading screen energy. We don't need the UI assets anymore, create new panels that look like holographic UIs matching the ClosedNS Code thingie.
+
+The top bar can be removed and only a small "ClosedNS" logo (assets/logo.png) and the game name "WebCrawl" should be displayed at the top left. The style should match the holographic UI design.
+
 * AI theme
 Instead of Operative, the player should be referred to as Agent.
 
-Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to tokens in AI.
+Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to AI, LLMs, coding agent harnesses, etc.
 
 Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.
