@@ -395,3 +395,6 @@ Uncaught TypeError: can't access property "sys", this.scene is undefined
     t http://127.0.0.1:8000/assets/index-CCnl2EYo.js:5
 index-CCnl2EYo.js:10:28063
 ```
+- Boss healthbar is way too low
+- Spawner healthbar is way too high
+- Shdows should point away from the player.

@@ -667,7 +667,8 @@ describe("deterministic room contents", () => {
     const arena = monsterSpecsForRoom(script, 1);
     const arenaRegular = arena.filter(monster => !monster.bossKind).length;
     expect(arena).toHaveLength(arenaRegular + 1);
-    expect(arenaRegular).toBeLessThan(sectionRegular);
+    expect(arenaRegular / sectionRegular).toBeGreaterThanOrEqual(0.25);
+    expect(arenaRegular / sectionRegular).toBeLessThanOrEqual(0.4);
     const sceneryFor = (room: GraphNode) => decorationSpecsForRoom(room, 1)
       .map(item => ({ kind: item.kind, obstacle: item.obstacle, destructible: item.destructible, origin: item.origin }));
     expect(sceneryFor(script)).toEqual(sceneryFor(section));

@@ -6,7 +6,6 @@ import {
   PLAYER_DAMAGE_INVULNERABILITY_MS,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
-  ROOM_DEFINITIONS,
   WORLD_GEOMETRY,
 } from "../../src/client/domain/specs";
 
@@ -234,7 +233,7 @@ test("renders ambient lighting and aims the elliptical flashlight at the cursor"
   expect(consoleErrors).toEqual([]);
   const game = page.locator("#gameCanvas");
   await expect(game).toHaveAttribute("data-lighting-mode", "webgl", { timeout: 15_000 });
-  await expect(game).toHaveAttribute("data-ambient-light", "10283a");
+  await expect(game).toHaveAttribute("data-ambient-light", "07121c");
   await expect(game).toHaveAttribute("data-aura-mode", "light2d");
   await expect(game).toHaveAttribute("data-aura-flicker", "false");
   await expect(game).toHaveAttribute("data-max-lights", "4");
@@ -242,13 +241,16 @@ test("renders ambient lighting and aims the elliptical flashlight at the cursor"
   await expect(game).toHaveAttribute("data-portal-up-aura-color", "4da6ff");
   await expect(game).toHaveAttribute("data-bullet-glow-mode", "batched-light2d");
   await expect(game).toHaveAttribute("data-bullet-shape", "bar");
-  await expect(game).toHaveAttribute("data-flicker-mode", "hard-60ms");
+  await expect(game).toHaveAttribute("data-flicker-mode", "occasional-burst-35ms");
   await expect(game).toHaveAttribute("data-flashlight-color", "ffffff");
+  await expect(game).toHaveAttribute("data-flashlight-radius-scale", "0.8");
   await expect(game).toHaveAttribute("data-player-light", "true");
   await expect.poll(async () => Number(await game.getAttribute("data-room-lights"))).toBeGreaterThanOrEqual(2);
   await expect.poll(async () => Number(await game.getAttribute("data-corridor-lights"))).toBeGreaterThan(0);
   const roomIntensities = (await game.getAttribute("data-room-light-intensities") ?? "").split(",");
   expect(new Set(roomIntensities).size).toBeGreaterThan(1);
+  expect(Number(await game.getAttribute("data-full-room-lights"))).toBeGreaterThanOrEqual(roomIntensities.length / 2);
+  expect(Number(await game.getAttribute("data-root-room-light-intensity"))).toBeGreaterThanOrEqual(0.8);
   const roomRadii = (await game.getAttribute("data-room-light-radii") ?? "").split(",").map(Number);
   expect(Math.max(...roomRadii) / Math.min(...roomRadii)).toBeGreaterThan(1.5);
   await expect.poll(async () => Number(await game.getAttribute("data-pickup-auras"))).toBeGreaterThan(0);
@@ -266,13 +268,33 @@ test("renders ambient lighting and aims the elliptical flashlight at the cursor"
   await page.mouse.move(viewport.x + viewport.width * 0.75, viewport.y + viewport.height * 0.4);
   await expect(game).toHaveAttribute("data-flashlight-active", "true");
   await expect.poll(async () => Number(await game.getAttribute("data-flashlight-target-x"))).toBeGreaterThan(position.x);
-  expect(Number(await game.getAttribute("data-flashlight-major-radius"))).toBeGreaterThan(world(240));
+  expect(Number(await game.getAttribute("data-flashlight-major-radius"))).toBeGreaterThan(world(190));
 
   await damagePlayer(page, 1);
   expect(Number(await game.getAttribute("data-effect-lights"))).toBeGreaterThan(0);
   await spawnHealingEffect(page);
   await expect(game).toHaveAttribute("data-last-effect", /effects\/healing\/frame_01\.png$/);
   await expect(game).toHaveAttribute("data-effect-sprite-mode", "emissive");
+  await expect(game).toHaveAttribute("data-following-effects", "1");
+  const movedEffect = await page.evaluate(() => {
+    const host = document.querySelector<HTMLElement>("#gameCanvas")!;
+    const api = (window as Window & {
+      __webcrawlTest?: { teleportPlayerTo: (x: number, y: number) => void };
+    }).__webcrawlTest;
+    const beforeX = Number(host.dataset.playerX);
+    const beforeY = Number(host.dataset.playerY);
+    api?.teleportPlayerTo(beforeX + 4, beforeY);
+    return {
+      beforeX,
+      playerX: Number(host.dataset.playerX),
+      playerY: Number(host.dataset.playerY),
+      effectX: Number(host.dataset.followingEffectX),
+      effectY: Number(host.dataset.followingEffectY),
+    };
+  });
+  expect(movedEffect.playerX).toBeGreaterThan(movedEffect.beforeX);
+  expect(movedEffect.effectX).toBe(movedEffect.playerX);
+  expect(movedEffect.effectY).toBe(movedEffect.playerY);
 });
 
 test("uses crystals for temporary invulnerability without counting supplies as score loot", async ({ page }) => {
@@ -352,8 +374,13 @@ test("spawns on an enabled entry portal without immediately retriggering it", as
   await startGame(page);
   const game = page.locator("#gameCanvas");
   await page.locator("#urlInput").fill("https://example.com/next");
-  await page.getByRole("button", { name: "GO" }).click();
+  const position = await playerPosition(page);
+  const aim = await screenPositionFor(page, { x: position.x + world(120), y: position.y });
+  await page.mouse.move(aim.x, aim.y);
+  await expect(game).toHaveAttribute("data-flashlight-active", "true");
+  await page.getByRole("button", { name: "GO" }).evaluate(button => (button as HTMLButtonElement).click());
   await expect(game).toHaveAttribute("data-floor", "2");
+  await expect(game).toHaveAttribute("data-flashlight-active", "true");
 
   const state = await page.evaluate(() => {
     const testApi = (window as Window & {
@@ -453,36 +480,22 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await expect(game).toHaveAttribute("data-current-room-tag", "script", { timeout: 10_000 });
   await expect(game).toHaveAttribute("data-boss-room-lights", "1");
   await expect(game).toHaveAttribute("data-boss-room-light-color", "ff3d42");
+  expect(Number(await game.getAttribute("data-boss-room-light-intensity"))).toBeGreaterThanOrEqual(1.3);
   await page.keyboard.up(exitKey);
-  const arena = {
-    left: Number(await game.getAttribute("data-active-boss-arena-left")),
-    right: Number(await game.getAttribute("data-active-boss-arena-right")),
-    top: Number(await game.getAttribute("data-active-boss-arena-top")),
-    bottom: Number(await game.getAttribute("data-active-boss-arena-bottom")),
-  };
-  const arenaCenter = { x: (arena.left + arena.right) / 2, y: (arena.top + arena.bottom) / 2 };
-  const viewport = await page.locator("#gameViewport").boundingBox();
-  if (!viewport) throw new Error("Game viewport has no bounds");
   await expect.poll(async () => {
     const camera = await cameraState(page);
     return camera && {
-      centered: Math.hypot(camera.x - arenaCenter.x, camera.y - arenaCenter.y) < 3,
-      fitsWidth: ROOM_DEFINITIONS.boss.width * camera.zoom <= viewport.width,
-      fitsHeight: ROOM_DEFINITIONS.boss.height * camera.zoom <= viewport.height,
+      zoomedOut: Math.abs(camera.zoom - 0.75) < 0.01,
       bossRoom: camera.bossRoomId !== null,
     };
-  }).toEqual({ centered: true, fitsWidth: true, fitsHeight: true, bossRoom: true });
+  }).toEqual({ zoomedOut: true, bossRoom: true });
   await page.setViewportSize({ width: 390, height: 720 });
-  const mobileViewport = await page.locator("#gameViewport").boundingBox();
-  if (!mobileViewport) throw new Error("Mobile game viewport has no bounds");
   await expect.poll(async () => {
     const camera = await cameraState(page);
     return camera && {
-      centered: Math.hypot(camera.x - arenaCenter.x, camera.y - arenaCenter.y) < 3,
-      fitsWidth: ROOM_DEFINITIONS.boss.width * camera.zoom <= mobileViewport.width,
-      fitsHeight: ROOM_DEFINITIONS.boss.height * camera.zoom <= mobileViewport.height,
+      zoomedOut: Math.abs(camera.zoom - 0.75) < 0.01,
     };
-  }).toEqual({ centered: true, fitsWidth: true, fitsHeight: true });
+  }).toEqual({ zoomedOut: true });
   const initialBossPosition = {
     x: Number(await game.getAttribute("data-active-boss-x")),
     y: Number(await game.getAttribute("data-active-boss-y")),

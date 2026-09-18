@@ -2,7 +2,6 @@ import Phaser from "phaser";
 import {
   ASSETS,
   BARREL_EXPLOSION_FRAMES,
-  CAMERA_BOSS_PADDING,
   CAMERA_FOLLOW_LERP,
   CAMERA_SCALE,
   CAMERA_TRANSITION_MS,
@@ -68,7 +67,7 @@ function supportedMaxLights(): number {
   if (!gl) return 128;
   const uniformVectors = Number(gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS));
   gl.getExtension("WEBGL_lose_context")?.loseContext();
-  const capacity = Math.max(4, Math.floor((uniformVectors - 24) / 4));
+  const capacity = Math.max(4, Math.floor((uniformVectors - 24) / 5));
   if (capacity >= 256) return 256;
   if (capacity >= 128) return 128;
   return capacity;
@@ -76,7 +75,7 @@ function supportedMaxLights(): number {
 
 const MAX_LIGHTS = supportedMaxLights();
 const MAX_BULLET_LIGHTS = Math.min(192, MAX_LIGHTS);
-const AMBIENT_LIGHT_COLOR = 0x10283a;
+const AMBIENT_LIGHT_COLOR = 0x07121c;
 const ENEMY_AURA_COLOR = 0xff344f;
 const PICKUP_AURA_COLOR = 0x6fe7ff;
 const PORTAL_DOWN_AURA_COLOR = 0xff4dff;
@@ -84,6 +83,10 @@ const PORTAL_UP_AURA_COLOR = 0x4da6ff;
 const SHADOW_OFFSET_X = world(8);
 const SHADOW_OFFSET_Y = world(10);
 const FLASHLIGHT_MAX_RANGE = world(720);
+const FLASHLIGHT_RADIUS_SCALE = 0.8;
+const BOSS_CAMERA_SCALE = 0.75;
+const FLICKER_BURST_INTERVAL_MS = 1_400;
+const FLICKER_STEP_MS = 35;
 const SHOW_DEBUG_GEOMETRY = import.meta.env.VITE_DEBUG_HITBOXES === "true";
 
 interface WorldLight {
@@ -91,6 +94,11 @@ interface WorldLight {
   baseIntensity: number;
   flickerAmount: number;
   flickerSeed: number;
+  fullyLit?: boolean;
+}
+
+interface AreaLight extends Phaser.GameObjects.Light {
+  areaSoftness?: number;
 }
 
 function seededUnit(seed: number): number {
@@ -98,6 +106,10 @@ function seededUnit(seed: number): number {
   value = Math.imul(value ^ value >>> 16, 0x45d9f3b);
   value = Math.imul(value ^ value >>> 16, 0x45d9f3b);
   return ((value ^ value >>> 16) >>> 0) / 0xffffffff;
+}
+
+function roomIsBright(room: GraphNode): boolean {
+  return room.isRoot || room.tag === "script" || Math.abs(room.id) % 2 === 0;
 }
 
 function assetPaths(...sources: unknown[]): string[] {
@@ -166,6 +178,7 @@ export class PhaserRenderer {
   private activeEffectLights = new Set<Phaser.GameObjects.Light>();
   private decorationEffectLights = new Map<string, Phaser.GameObjects.Light>();
   private activeEffects = new Set<Phaser.GameObjects.Image>();
+  private playerFollowingEffects = new Map<Phaser.GameObjects.Image, Phaser.GameObjects.Light | null>();
   private playerStateLight: Phaser.GameObjects.Light | null = null;
 
   constructor(private readonly host: HTMLElement) {}
@@ -244,8 +257,9 @@ export class PhaserRenderer {
       this.host.dataset.auraFlicker = "false";
       this.host.dataset.bulletGlowMode = "batched-light2d";
       this.host.dataset.bulletShape = "bar";
-      this.host.dataset.flickerMode = "hard-60ms";
+      this.host.dataset.flickerMode = "occasional-burst-35ms";
       this.host.dataset.flashlightColor = "ffffff";
+      this.host.dataset.flashlightRadiusScale = String(FLASHLIGHT_RADIUS_SCALE);
       this.host.dataset.maxLights = String(MAX_LIGHTS);
       this.host.dataset.portalDownAuraColor = PORTAL_DOWN_AURA_COLOR.toString(16).padStart(6, "0");
       this.host.dataset.portalUpAuraColor = PORTAL_UP_AURA_COLOR.toString(16).padStart(6, "0");
@@ -289,6 +303,7 @@ export class PhaserRenderer {
     this.decorationEffectLights.clear();
     for (const effect of this.activeEffects) effect.destroy();
     this.activeEffects.clear();
+    this.playerFollowingEffects.clear();
     this.playerStateLight?.setVisible(false);
     this.setHostData("playerLight", "false");
     for (const light of this.bulletLights) light.setVisible(false);
@@ -323,10 +338,16 @@ export class PhaserRenderer {
     delete this.host.dataset.flickeringLights;
     delete this.host.dataset.roomLightIntensities;
     delete this.host.dataset.roomLightRadii;
+    delete this.host.dataset.fullRoomLights;
+    delete this.host.dataset.rootRoomLightIntensity;
+    delete this.host.dataset.bossRoomLightIntensity;
     delete this.host.dataset.enemyAuras;
     delete this.host.dataset.pickupAuras;
     delete this.host.dataset.bulletGlows;
     delete this.host.dataset.effectLights;
+    delete this.host.dataset.followingEffects;
+    delete this.host.dataset.followingEffectX;
+    delete this.host.dataset.followingEffectY;
     delete this.host.dataset.sceneryShadows;
     delete this.host.dataset.monsterShadows;
   }
@@ -637,32 +658,47 @@ export class PhaserRenderer {
   private addRoomLight(room: GraphNode, visible: boolean): void {
     if (!this.lightingEnabled || !this.scene) return;
     const seed = room.lootSeed + room.id * 101;
-    const tier = Math.abs(room.id) % 3;
-    const intensities = [0.38, 0.72, 1.18] as const;
-    const radiusScales = [0.42, 0.55] as const;
-    const colors = [0x5ca6df, 0x73cfff, 0x91b8ff] as const;
     const bossArena = room.tag === "script";
-    const baseIntensity = bossArena ? 1.65 : intensities[tier]!;
+    const dimRoom = !roomIsBright(room);
+    const dimRoomColors = [0x7ec8ff, 0x8edaff, 0xa6c8ff] as const;
+    const roomRadius = Math.hypot(room.width, room.height) / 2;
+    const dimCoverage = 0.1 + seededUnit(seed + 43) * 0.2;
+    const brightCoverage = room.isRoot ? 0.9 : 0.6 + seededUnit(seed + 89) * 0.3;
+    const baseIntensity = bossArena
+      ? 1.35
+      : dimRoom
+        ? 0.3 + seededUnit(seed + 29) * 0.15
+        : 0.82 + seededUnit(seed + 29) * 0.16;
     const radius = bossArena
-      ? Math.max(room.width, room.height) * 0.82
-      : tier === 2
-        ? Math.max(room.width, room.height) * 1.05
-        : Math.min(room.width, room.height) * radiusScales[tier]!;
-    const color = bossArena ? 0xff3d42 : colors[tier]!;
-    const flickerAmount = bossArena
-      ? 0.08
-      : Math.abs(room.id) % 4 === 2
-        ? 0.16 + seededUnit(seed + 71) * 0.12
-        : 0;
-    const light = this.scene.lights.addLight(room.x, room.y, radius, color, baseIntensity);
+      ? roomRadius * 0.9
+      : dimRoom
+        ? roomRadius * dimCoverage
+        : roomRadius * brightCoverage;
+    const color = bossArena
+      ? 0xff3d42
+      : dimRoom
+        ? dimRoomColors[Math.abs(seed) % dimRoomColors.length]!
+        : 0xf4fbff;
+    const flickerAmount = !bossArena && Math.abs(room.id) % 4 === 2
+      ? 0.16 + seededUnit(seed + 71) * 0.12
+      : 0;
+    const light = this.scene.lights.addLight(room.x, room.y, radius, color, baseIntensity) as AreaLight;
+    light.areaSoftness = 1;
     light.setVisible(visible);
-    this.roomLights.set(room.id, { light, baseIntensity, flickerAmount, flickerSeed: seed });
+    this.roomLights.set(room.id, {
+      light,
+      baseIntensity,
+      flickerAmount,
+      flickerSeed: seed,
+      fullyLit: !dimRoom,
+    });
   }
 
   private addCorridorLights(link: DungeonLayout["links"][number], visible: boolean): void {
     if (!this.lightingEnabled || !this.scene) return;
     const profiles: WorldLight[] = [];
-    const bossAdjacent = link.source.tag === "script" || link.target.tag === "script";
+    const brightCorridor = roomIsBright(link.target);
+    const bossCorridor = link.target.tag === "script";
     for (let segment = 1; segment < link.points.length; segment += 1) {
       const start = link.points[segment - 1]!;
       const end = link.points[segment]!;
@@ -671,15 +707,21 @@ export class PhaserRenderer {
       for (let index = 0; index < count; index += 1) {
         const progress = (index + 0.5) / count;
         const seed = link.source.lootSeed + link.target.id * 131 + segment * 31 + index;
-        const baseIntensity = bossAdjacent ? 0.82 : 0.46 + seededUnit(seed) * 0.26;
-        const radius = Math.max(link.width * 0.95, length / count * 0.78);
+        const baseIntensity = brightCorridor
+          ? 0.68 + seededUnit(seed) * 0.16
+          : 0.18 + seededUnit(seed) * 0.12;
+        const radius = brightCorridor
+          ? Math.max(link.width * 1.15, length / count * 0.86)
+          : Math.max(link.width * 0.45, length / count * 0.3);
         const light = this.scene.lights.addLight(
           start.x + (end.x - start.x) * progress,
           start.y + (end.y - start.y) * progress,
           radius,
-          bossAdjacent ? 0xd94b52 : 0x5faed8,
+          bossCorridor ? 0xd94b52 : brightCorridor ? 0xeaf8ff : 0x5f8ca8,
           baseIntensity,
-        ).setVisible(visible);
+        ) as AreaLight;
+        light.areaSoftness = brightCorridor ? 0.8 : 0.45;
+        light.setVisible(visible);
         profiles.push({
           light,
           baseIntensity,
@@ -714,6 +756,12 @@ export class PhaserRenderer {
     this.setHostData("roomLightRadii", [...this.roomLights.values()]
       .map(profile => Math.round(profile.light.radius))
       .join(","));
+    this.setHostData("fullRoomLights", String([...this.roomLights.values()]
+      .filter(profile => profile.fullyLit).length));
+    const root = layout.nodes.find(room => room.isRoot);
+    const boss = layout.nodes.find(room => room.tag === "script");
+    if (root) this.setHostData("rootRoomLightIntensity", this.roomLights.get(root.id)!.baseIntensity.toFixed(2));
+    if (boss) this.setHostData("bossRoomLightIntensity", this.roomLights.get(boss.id)!.baseIntensity.toFixed(2));
     this.setHostData("bossRoomLightColor", "ff3d42");
   }
 
@@ -769,10 +817,15 @@ export class PhaserRenderer {
       ...this.roomLights.values(),
       ...[...this.corridorLights.values()].flat(),
     ];
-    const step = Math.floor(time / 60);
     for (const profile of profiles) {
       if (!profile.light.visible || profile.flickerAmount === 0) continue;
-      const illuminated = seededUnit(profile.flickerSeed + step) > 0.34;
+      const shiftedTime = time + seededUnit(profile.flickerSeed + 17) * FLICKER_BURST_INTERVAL_MS;
+      const burst = Math.floor(shiftedTime / FLICKER_BURST_INTERVAL_MS);
+      const burstElapsed = shiftedTime % FLICKER_BURST_INTERVAL_MS;
+      const burstDuration = 120 + seededUnit(profile.flickerSeed + burst * 977 + 31) * 160;
+      const burstActive = seededUnit(profile.flickerSeed + burst * 977) < 0.3 && burstElapsed < burstDuration;
+      const step = Math.floor(shiftedTime / FLICKER_STEP_MS);
+      const illuminated = !burstActive || seededUnit(profile.flickerSeed + step * 31) > 0.42;
       profile.light.setIntensity(illuminated ? profile.baseIntensity : 0);
     }
   }
@@ -1416,6 +1469,7 @@ export class PhaserRenderer {
       this.player = scene.add.container(position.x, position.y, [this.playerSprite]).setDepth(50);
     }
     this.player.setPosition(position.x, position.y);
+    this.syncPlayerFollowingEffects();
     if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
     this.applyClip(this.playerSprite!, clip, PLAYER_SPEC.spriteSize, 0, asset);
     this.applyPlayerProtectionTint();
@@ -1490,8 +1544,8 @@ export class PhaserRenderer {
       originY,
       targetX,
       targetY,
-      majorRadius: world(244) + world(156) * distanceRatio,
-      minorRadius: world(224) + world(4) * distanceRatio,
+      majorRadius: (world(244) + world(156) * distanceRatio) * FLASHLIGHT_RADIUS_SCALE,
+      minorRadius: (world(224) + world(4) * distanceRatio) * FLASHLIGHT_RADIUS_SCALE,
       intensity: 1.48 - 0.28 * distanceRatio,
     };
     this.setHostData("flashlightActive", "true");
@@ -1563,7 +1617,13 @@ export class PhaserRenderer {
     return PLAYER_SPEC.visual.directions.down!.normal;
   }
 
-  spawnEffect(clip: SpriteClip | undefined, x: number, y: number, baseSize: number): void {
+  spawnEffect(
+    clip: SpriteClip | undefined,
+    x: number,
+    y: number,
+    baseSize: number,
+    followPlayer = false,
+  ): void {
     const scene = this.scene;
     if (!scene || !clip?.frames.length) return;
     const effect = scene.add.image(x, y, textureKey(clip.frames[0]!))
@@ -1581,6 +1641,10 @@ export class PhaserRenderer {
       this.activeEffectLights.add(light);
       this.updateEffectLightDataset();
     }
+    if (followPlayer) {
+      this.playerFollowingEffects.set(effect, light);
+      this.syncPlayerFollowingEffects();
+    }
     let frameIndex = 0;
     scene.time.addEvent({
       delay: clip.frameDurationMs,
@@ -1589,6 +1653,8 @@ export class PhaserRenderer {
         if (frameIndex >= clip.frames.length - 1) {
           effect.destroy();
           this.activeEffects.delete(effect);
+          this.playerFollowingEffects.delete(effect);
+          this.syncPlayerFollowingEffects();
           if (light) {
             scene.lights.removeLight(light);
             this.activeEffectLights.delete(light);
@@ -1604,6 +1670,24 @@ export class PhaserRenderer {
         }
       },
     });
+  }
+
+  private syncPlayerFollowingEffects(): void {
+    for (const [effect, light] of this.playerFollowingEffects) {
+      effect.setPosition(this.currentPlayer.x, this.currentPlayer.y);
+      if (light) {
+        light.x = this.currentPlayer.x;
+        light.y = this.currentPlayer.y;
+      }
+    }
+    this.setHostData("followingEffects", String(this.playerFollowingEffects.size));
+    if (this.playerFollowingEffects.size === 0) {
+      delete this.host.dataset.followingEffectX;
+      delete this.host.dataset.followingEffectY;
+      return;
+    }
+    this.setHostData("followingEffectX", String(Math.round(this.currentPlayer.x)));
+    this.setHostData("followingEffectY", String(Math.round(this.currentPlayer.y)));
   }
 
   setCameraRoom(room: GraphNode | null, immediate = false): void {
@@ -1627,34 +1711,19 @@ export class PhaserRenderer {
     const camera = this.scene?.cameras.main;
     if (!camera || !this.player) return;
     camera.resetFX();
-    if (this.cameraRoom) {
-      const zoom = this.bossRoomZoom(camera, this.cameraRoom);
-      camera.stopFollow().setDeadzone();
-      if (immediate) {
-        camera.setZoom(zoom).centerOn(this.cameraRoom.x, this.cameraRoom.y);
-      } else {
-        camera.pan(this.cameraRoom.x, this.cameraRoom.y, CAMERA_TRANSITION_MS, "Sine.easeInOut", true);
-        camera.zoomTo(zoom, CAMERA_TRANSITION_MS, "Sine.easeInOut", true);
-      }
-      return;
-    }
-
     this.setCameraTarget(this.currentCameraTarget);
     camera.startFollow(this.cameraTarget!, false, CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_LERP);
     camera.setDeadzone();
-    if (immediate) {
-      camera.setZoom(CAMERA_SCALE).centerOn(this.currentCameraTarget.x, this.currentCameraTarget.y);
-    } else {
-      camera.zoomTo(CAMERA_SCALE, CAMERA_TRANSITION_MS, "Sine.easeInOut", true);
+    const zoom = this.cameraRoom ? BOSS_CAMERA_SCALE : CAMERA_SCALE;
+    if (this.cameraRoom) {
+      camera.setZoom(zoom);
+      return;
     }
-  }
-
-  private bossRoomZoom(camera: Phaser.Cameras.Scene2D.Camera, room: GraphNode): number {
-    return Math.min(
-      CAMERA_SCALE,
-      camera.width / (room.width + CAMERA_BOSS_PADDING * 2),
-      camera.height / (room.height + CAMERA_BOSS_PADDING * 2),
-    );
+    if (immediate) {
+      camera.setZoom(zoom).centerOn(this.currentCameraTarget.x, this.currentCameraTarget.y);
+    } else {
+      camera.zoomTo(zoom, CAMERA_TRANSITION_MS, "Sine.easeInOut", true);
+    }
   }
 
   private refreshCameraForResize(): void {

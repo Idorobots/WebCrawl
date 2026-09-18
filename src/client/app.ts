@@ -1838,7 +1838,13 @@ function checkLoot(): void {
 
         if (restored > 0) {
           playerHp += restored;
-          renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize);
+          renderer.spawnEffect(
+            PLAYER_SPEC.visual.effects?.healing,
+            player.x,
+            player.y,
+            PLAYER_SPEC.spriteSize,
+            true,
+          );
           updateHealthUi();
           setStatus(`Health pack restored 1 HP · ${currentPageUrl}`);
         }
@@ -2145,6 +2151,7 @@ function teleportPlayerTo(x: number, y: number): void {
   if (!currentLayout || !isWalkable(x, y)) return;
   player = { x, y };
   updatePlayerVisual();
+  updatePlayerAimFromPointer();
   revealRoomsFromCorridor(player.x, player.y);
   updateCurrentRoom();
   updateCameraForPlayer(true);
@@ -2203,7 +2210,7 @@ function teleportPlayerTo(x: number, y: number): void {
   playerFacing: () => ({ ...playerFacing }),
   damagePlayer: applyPlayerDamage,
   spawnHealingEffect(): void {
-    renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize);
+    renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize, true);
   },
   stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
   portalContacts: () => [...portalContacts],
@@ -2480,6 +2487,7 @@ async function loadPage(
     stateId = null
   }: LoadPageOptions = {},
 ): Promise<void> {
+  const retainedPointerPosition = pointerInViewport ? pointerClientPosition : null;
   resetPlayerInput();
   portalTransitioning = false;
   const requestId = ++currentRequest;
@@ -2524,6 +2532,10 @@ async function loadPage(
       stateId: currentStateId,
       spawnPortalUrl: popBack ? departingPageUrl : null,
     });
+    if (retainedPointerPosition && pointerInViewport) {
+      pointerClientPosition = retainedPointerPosition;
+      updatePlayerAimFromPointer();
+    }
   } catch (err) {
     if (requestId !== currentRequest) return;
     const message = err instanceof Error ? err.message : "Unknown error";

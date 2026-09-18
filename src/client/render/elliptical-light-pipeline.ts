@@ -12,6 +12,7 @@ struct Light
     vec3 color;
     float intensity;
     float radius;
+    float areaSoftness;
 };
 
 const int kMaxLights = %LIGHT_COUNT%;
@@ -63,12 +64,17 @@ void main ()
         if (index < uLightCount)
         {
             Light light = uLights[index];
-            vec3 lightDir = vec3((light.position.xy / res) - (gl_FragCoord.xy / res), 0.1);
+            vec2 planarDirection = (light.position.xy / res) - (gl_FragCoord.xy / res);
+            vec3 pointLightDir = vec3(planarDirection, 0.1);
+            vec3 lightDir = vec3(planarDirection, mix(0.1, 2.0, light.areaSoftness));
             vec3 lightNormal = normalize(lightDir);
-            float distToSurf = length(lightDir) * uCamera.w;
+            float distToSurf = length(pointLightDir) * uCamera.w;
+            float planarDistance = length(planarDirection) * uCamera.w;
             float diffuseFactor = max(dot(normal, lightNormal), 0.0);
             float radius = (light.radius / res.x * uCamera.w) * uCamera.w;
-            float attenuation = clamp(1.0 - distToSurf * distToSurf / (radius * radius), 0.0, 1.0);
+            float pointAttenuation = clamp(1.0 - distToSurf * distToSurf / (radius * radius), 0.0, 1.0);
+            float areaAttenuation = 1.0 - smoothstep(0.1, 1.0, planarDistance / max(radius, 0.0001));
+            float attenuation = mix(pointAttenuation, areaAttenuation, light.areaSoftness);
             finalColor += attenuation * light.color * diffuseFactor * light.intensity;
         }
     }
@@ -111,6 +117,14 @@ export interface FlashlightState {
   intensity: number;
 }
 
+interface AreaLight extends Phaser.GameObjects.Light {
+  areaSoftness?: number;
+}
+
+interface VisibleLight {
+  light: AreaLight;
+}
+
 export class EllipticalLightPipeline extends Phaser.Renderer.WebGL.Pipelines.LightPipeline {
   flashlight: FlashlightState = {
     active: false,
@@ -129,6 +143,11 @@ export class EllipticalLightPipeline extends Phaser.Renderer.WebGL.Pipelines.Lig
 
   override onRender(scene: Phaser.Scene, camera: Phaser.Cameras.Scene2D.Camera): void {
     super.onRender(scene, camera);
+
+    const visibleLights = scene.lights.getLights(camera) as unknown as VisibleLight[];
+    for (let index = 0; index < visibleLights.length; index += 1) {
+      this.set1f(`uLights[${index}].areaSoftness`, visibleLights[index]!.light.areaSoftness ?? 0);
+    }
 
     const flashlight = this.flashlight;
     this.set1f("uFlashlightActive", flashlight.active ? 1 : 0);
