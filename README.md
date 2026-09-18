@@ -4,6 +4,8 @@ WebCrawl turns a remote page's HTML structure into a deterministic sci-fi dungeo
 
 The game was AI generated with some (much needed) guidance to make it playable and, well, "fun" (spoiler alert, it's still not very fun). All game assets were also AI-generated and some needed a bit of retouching. Expect weird animations and disappearing or mutating limbs.
 
+[You can play the game here.](https://blog.idorobots.org/WebCrawl/)
+
 ![welcome page](./img/welcome.png)
 
 ![actual game](./img/we-have-a-game-at-home.png)
