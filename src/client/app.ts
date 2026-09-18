@@ -221,6 +221,11 @@ const deathShotsEl = requireElement<HTMLElement>("#deathShots");
 const highScoreRowsEl = requireElement<HTMLTableSectionElement>("#highScoreRows");
 const restartButton = requireElement<HTMLButtonElement>("#restartButton");
 
+const fetchErrorModal = requireElement<HTMLDivElement>("#fetchErrorModal");
+const fetchErrorMessageEl = requireElement<HTMLElement>("#fetchErrorMessage");
+const fetchErrorDetailEl = requireElement<HTMLElement>("#fetchErrorDetail");
+const fetchErrorDismissButton = requireElement<HTMLButtonElement>("#fetchErrorDismissButton");
+
 function setStatus(message: string, isError = false): void {
   if (isError) {
     console.error(`[WebCrawl] ${message}`);
@@ -655,6 +660,18 @@ function showDeathModal(): void {
 }
 
 restartButton.addEventListener("click", () => location.reload());
+
+function showFetchErrorModal(pageUrl: string, message: string): void {
+  fetchErrorMessageEl.textContent = `Could not load ${pageUrl}.`;
+  fetchErrorDetailEl.textContent = message;
+  fetchErrorModal.hidden = false;
+  fetchErrorModal.classList.add("open");
+}
+
+fetchErrorDismissButton.addEventListener("click", () => {
+  fetchErrorModal.hidden = true;
+  fetchErrorModal.classList.remove("open");
+});
 
 function cardinalDirection(dx: number, dy: number): SpriteDirection {
   if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? "left" : "right";
@@ -2505,10 +2522,10 @@ async function loadPage(
   setStatus("Fetching " + url + " …");
 
   try {
-    const html = await fetchHtml(url);
+    const { html, via } = await fetchHtml(url);
     if (requestId !== currentRequest) return;
 
-    setStatus("Parsing HTML …");
+    setStatus(`Fetched via ${via} · Parsing HTML …`);
     const graph = domToGraph(html, url);
     saveCurrentFloorState();
 
@@ -2539,11 +2556,8 @@ async function loadPage(
   } catch (err) {
     if (requestId !== currentRequest) return;
     const message = err instanceof Error ? err.message : "Unknown error";
-    setStatus(
-      `Could not load ${url}: ${message}. ` +
-      "The remote site may reject automated requests or the server may have blocked the target URL.",
-      true
-    );
+    setStatus(`Could not load ${url}: ${message}`, true);
+    showFetchErrorModal(url, message);
   }
 }
 

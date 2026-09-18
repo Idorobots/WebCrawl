@@ -9,6 +9,15 @@ import {
   WORLD_GEOMETRY,
 } from "../../src/client/domain/specs";
 
+async function stubRemoteFetchFallbacks(page: Page, body: string): Promise<void> {
+  await page.route("https://example.com/**", route => route.fulfill({
+    status: 200,
+    headers: { "access-control-allow-origin": "*" },
+    contentType: "text/html",
+    body,
+  }));
+}
+
 async function startGame(page: Page, debug = false): Promise<void> {
   const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
   if (debug) {
@@ -23,6 +32,7 @@ async function startGame(page: Page, debug = false): Promise<void> {
       body: debugIndex,
     }));
   }
+  await stubRemoteFetchFallbacks(page, fixture);
   await page.route("**/api/fetch?**", (route) => route.fulfill({
     status: 200,
     contentType: "text/html",
@@ -437,10 +447,12 @@ test("keeps generated world coordinates independent of viewport size", async ({ 
 });
 
 test("keeps an active boss sized consistently while it follows the player out", async ({ page }) => {
+  const bossFixture = "<!doctype html><html><body><script>const boss = true;</script><main><h1>Boss deck</h1></main></body></html>";
+  await stubRemoteFetchFallbacks(page, bossFixture);
   await page.route("**/api/fetch?**", route => route.fulfill({
     status: 200,
     contentType: "text/html",
-    body: "<!doctype html><html><body><script>const boss = true;</script><main><h1>Boss deck</h1></main></body></html>",
+    body: bossFixture,
   }));
   await page.goto("/");
   await page.locator("#welcomeUrlInput").fill("https://example.com/boss");
@@ -709,10 +721,12 @@ test("spawns multiple enemies once another room is revealed", async ({ page }) =
 });
 
 test("swaps temporary weapons, refills only from ammo cores, and falls back to pulse rifle", async ({ page }) => {
+  const weaponFixture = "<!doctype html><html><body><img style=\"display:none\" src=\"artifact.png\" alt=\"Secret armory\" /><section style=\"display:none\"><p>Backup cache</p></section><footer>fallback</footer></body></html>";
+  await stubRemoteFetchFallbacks(page, weaponFixture);
   await page.route("**/api/fetch?**", route => route.fulfill({
     status: 200,
     contentType: "text/html",
-    body: "<!doctype html><html><body><img style=\"display:none\" src=\"artifact.png\" alt=\"Secret armory\" /><section style=\"display:none\"><p>Backup cache</p></section><footer>fallback</footer></body></html>",
+    body: weaponFixture,
   }));
   await page.goto("/");
   await page.locator("#welcomeUrlInput").fill("https://example.com/weapons");
@@ -818,4 +832,38 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   await expect.poll(async () => await game.getAttribute("data-weapon-kind")).toBe("pulse-rifle");
   await expect.poll(async () => await game.getAttribute("data-weapon-ammo")).toBe("infinite");
   expect(equippedKind).not.toBe("pulse-rifle");
+});
+
+test("loads a page directly when the site allows CORS, without hitting the relay server", async ({ page }) => {
+  const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
+  await page.route("https://example.com/**", route => route.fulfill({
+    status: 200,
+    headers: { "access-control-allow-origin": "*" },
+    contentType: "text/html",
+    body: fixture,
+  }));
+  let relayHits = 0;
+  await page.route("**/api/fetch?**", route => {
+    relayHits += 1;
+    route.fulfill({ status: 200, contentType: "text/html", body: fixture });
+  });
+  await page.goto("/");
+  await page.locator("#welcomeUrlInput").fill("https://example.com/start");
+  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
+  expect(relayHits).toBe(0);
+});
+
+test("shows the could-not-load modal when every fetch route fails", async ({ page }) => {
+  await page.route("https://example.com/**", route => route.abort());
+  await page.route("**/api/fetch?**", route => route.abort());
+  await page.route("https://cors.io/**", route => route.abort());
+  await page.goto("/");
+  await page.locator("#welcomeUrlInput").fill("https://example.com/start");
+  await page.getByRole("button", { name: "BEGIN CRAWL" }).click();
+  const modal = page.locator("#fetchErrorModal");
+  await expect(modal).toBeVisible();
+  await expect(page.locator("#fetchErrorMessage")).toContainText("https://example.com/start");
+  await page.getByRole("button", { name: "UNDERSTOOD" }).click();
+  await expect(modal).not.toBeVisible();
 });

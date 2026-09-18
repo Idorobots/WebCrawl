@@ -11,6 +11,18 @@ export const MAX_NODES = 450;
 export const MAX_ROOMS_AFTER_COALESCE = 100;
 export const MAX_CHILDREN_PER_ROOM = 10;
 
+export interface PublicFetchProxy {
+  name: string;
+  url: string;
+  parse?: "raw" | "json";
+}
+
+export const FETCH_TIMEOUT_MS = 12_000;
+export const FETCH_MAX_BYTES = 5 * 1024 * 1024;
+export const PUBLIC_FETCH_PROXIES: readonly PublicFetchProxy[] = Object.freeze([
+  { name: "cors.io", url: "https://cors.io/?url={url}", parse: "json" },
+]);
+
 export const WORLD_SCALE = 1.4;
 export const world = (value: number): number => Math.round(value * WORLD_SCALE);
 export const ENVIRONMENT_SEGMENT_SIZE = world(128);

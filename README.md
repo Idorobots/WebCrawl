@@ -86,7 +86,7 @@ CHROMIUM_PATH=/path/to/chromium npm run test:e2e
 
 The browser application is composed from typed modules under `src/client`:
 
-- `api`: communication with the same-origin fetch endpoint
+- `api`: page fetching with a direct-then-relay-then-public-proxy fallback chain
 - `domain`: deterministic graph generation, layout, content generation, geometry, and pathfinding
 - `render`: the Phaser 3 world renderer for rooms, corridors, entities, effects, and camera tracking
 - `storage`: browser persistence adapters
@@ -111,6 +111,12 @@ Every retained `script` element becomes a large octagonal boss arena while keepi
 
 ## Remote Fetching
 
-The backend fetches remote HTML to avoid browser CORS restrictions. It rejects embedded credentials, localhost and internal hostnames, and private-network addresses. Redirect targets are validated independently. Responses are limited to 5 MB, requests time out after 12 seconds, and at most five redirects are followed.
+The game fetches a page through up to three fallback routes, using the first one that succeeds:
 
-Some sites block automated requests, require authentication, or only create useful DOM content after running JavaScript. WebCrawl currently maps the server-returned HTML and does not run remote scripts.
+1. **Direct browser fetch.** Used whenever the remote site allows cross-origin (CORS) requests. A blocked request fails fast and falls through.
+2. **Local relay server.** The bundled Node server's `/api/fetch` endpoint proxies the request (with SSRF validation, redirect handling, a 5 MB response cap, and a 12-second timeout). On static hosting this route is simply a 404.
+3. **Public fetch proxy.** A configurable list of keyless public services; the default is [cors.io](https://cors.io) (`https://cors.io/?url=<url>`), which returns the untouched HTML in a JSON envelope. Proxies die and change rate limits over time — the list lives in `PUBLIC_FETCH_PROXIES` in `src/client/config.ts` and can be overridden at runtime through `__WEBCRAWL_RUNTIME_CONFIG__.fetchProxies`.
+
+When every route fails, the game shows a brief error modal instead of a level. This means the built client also works on plain static hosting (GitHub Pages, Netlify, ...) for sites that allow CORS, and still degrades gracefully elsewhere.
+
+Some sites block automated requests, require authentication, or only create useful DOM content after running JavaScript. WebCrawl currently maps the fetched HTML and does not run remote scripts.

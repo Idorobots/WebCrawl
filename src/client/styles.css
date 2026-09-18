@@ -347,6 +347,56 @@ button:hover { background: #242c37; }
   text-transform: uppercase;
 }
 
+#fetchErrorModal {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 5, 9, 0.86);
+}
+
+#fetchErrorModal[hidden] {
+  display: none;
+}
+
+#fetchErrorModal.open {
+  display: grid;
+}
+
+#fetchErrorPanel {
+  width: min(560px, calc(100vw - 36px));
+  border: 1px solid #8a6a3f;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(56,36,14,.72), rgba(10,15,21,.96) 32%),
+    #0b1016;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  padding: 22px;
+}
+
+#fetchErrorPanel h2 {
+  margin: 0 0 12px;
+  color: #ffb454;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.fetch-error-message {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #d8dbe4;
+  word-break: break-all;
+}
+
+.fetch-error-detail {
+  margin: 0 0 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #98a2ae;
+  word-break: break-word;
+}
+
 #deathScore {
   font-size: 24px;
   margin: 10px 0 18px;
@@ -1187,7 +1237,8 @@ body {
 .welcome-card,
 .hud-panel,
 #bottomHud > section,
-#deathPanel {
+#deathPanel,
+#fetchErrorPanel {
   border: 8px solid transparent;
   border-image: url("/assets/ui/panel_plain/source.png") 52 fill / 8px stretch;
 }
