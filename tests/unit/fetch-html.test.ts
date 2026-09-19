@@ -7,11 +7,13 @@ interface MockResponseOptions {
   headers?: Record<string, string>;
   body?: string;
   json?: unknown;
+  url?: string;
 }
 
 interface MockResponse {
   ok: boolean;
   status: number;
+  url: string;
   headers: { get(name: string): string | null };
   body: null;
   text(): Promise<string>;
@@ -26,6 +28,7 @@ function mockResponse(options: MockResponseOptions = {}): MockResponse {
   return {
     ok: status >= 200 && status < 300,
     status,
+    url: options.url ?? "",
     headers: {
       get: (name: string) => headers.get(name.toLowerCase()) ?? null,
     },
@@ -76,16 +79,31 @@ describe("fetchHtml", () => {
   it("loads a page directly when the site allows CORS", async () => {
     handlers = [async () => htmlResponse("<body>direct</body>")];
     const outcome = await fetchHtml("https://example.com");
-    expect(outcome).toEqual({ html: "<body>direct</body>", via: "direct" });
+    expect(outcome).toEqual({ html: "<body>direct</body>", url: "https://example.com", via: "direct" });
     expect(requests.map((request) => request.input)).toEqual(["https://example.com"]);
   });
 
   it("falls back to the relay server when the direct fetch is CORS-blocked", async () => {
     handlers = [corsBlocked, async () => htmlResponse("<body>server</body>")];
     const outcome = await fetchHtml("https://example.com/start");
-    expect(outcome).toEqual({ html: "<body>server</body>", via: "server" });
+    expect(outcome).toEqual({ html: "<body>server</body>", url: "https://example.com/start", via: "server" });
     expect(requests[1]!.input).toContain("/api/fetch?url=");
     expect(requests[1]!.input).toContain("https%3A%2F%2Fexample.com%2Fstart");
+  });
+
+  it("uses the relay's final redirect URL", async () => {
+    handlers = [
+      corsBlocked,
+      async () => mockResponse({
+        headers: {
+          "content-type": "text/html",
+          "x-webcrawl-final-url": "https://example.com/article",
+        },
+        body: "<body>server</body>",
+      }),
+    ];
+    const outcome = await fetchHtml("https://example.com/start");
+    expect(outcome).toEqual({ html: "<body>server</body>", url: "https://example.com/article", via: "server" });
   });
 
   it("falls through a failed relay server to a public proxy envelope", async () => {
@@ -99,7 +117,7 @@ describe("fetchHtml", () => {
       async () => envelopeResponse("<body>proxied</body>"),
     ];
     const outcome = await fetchHtml("https://example.com");
-    expect(outcome).toEqual({ html: "<body>proxied</body>", via: "proxy" });
+    expect(outcome).toEqual({ html: "<body>proxied</body>", url: "https://example.com", via: "proxy" });
     expect(requests[2]!.input).toBe("https://cors.io/?url=https%3A%2F%2Fexample.com");
   });
 
@@ -118,7 +136,7 @@ describe("fetchHtml", () => {
       async () => htmlResponse("<body>server</body>"),
     ];
     const outcome = await fetchHtml("https://example.com");
-    expect(outcome).toEqual({ html: "<body>server</body>", via: "server" });
+    expect(outcome).toEqual({ html: "<body>server</body>", url: "https://example.com", via: "server" });
   });
 
   it("treats non-2xx direct responses as a failed route", async () => {
@@ -144,7 +162,7 @@ describe("fetchHtml", () => {
       async () => envelopeResponse("<body>proxied</body>"),
     ];
     const outcome = await fetchHtml("https://example.com");
-    expect(outcome).toEqual({ html: "<body>proxied</body>", via: "proxy" });
+    expect(outcome).toEqual({ html: "<body>proxied</body>", url: "https://example.com", via: "proxy" });
   });
 
   it("honors a mirrored target status from the public proxy envelope", async () => {
@@ -161,7 +179,7 @@ describe("fetchHtml", () => {
     };
     handlers = [corsBlocked, corsBlocked, async () => htmlResponse("<body>raw</body>")];
     const outcome = await fetchHtml("https://example.com");
-    expect(outcome).toEqual({ html: "<body>raw</body>", via: "proxy" });
+    expect(outcome).toEqual({ html: "<body>raw</body>", url: "https://example.com", via: "proxy" });
     expect(requests[2]!.input).toBe("https://raw.example/https%3A%2F%2Fexample.com");
   });
 

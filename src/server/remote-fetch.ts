@@ -10,6 +10,11 @@ export interface RemoteResponse {
   body: Buffer;
 }
 
+export interface RemotePage {
+  html: Buffer;
+  url: string;
+}
+
 export type RequestRemote = (url: URL) => Promise<RemoteResponse>;
 
 export function createRemoteRequester(config: ServerConfig): RequestRemote {
@@ -67,11 +72,11 @@ export interface RemoteFetchDependencies {
   request?: RequestRemote;
 }
 
-export async function fetchRemoteHtml(
+export async function fetchRemotePage(
   startUrl: string,
   config: ServerConfig,
   dependencies: RemoteFetchDependencies = {},
-): Promise<Buffer> {
+): Promise<RemotePage> {
   const request = dependencies.request ?? createRemoteRequester(config);
   let current = new URL(startUrl);
   for (let redirects = 0; redirects <= config.maxRedirects; redirects += 1) {
@@ -92,7 +97,15 @@ export async function fetchRemoteHtml(
         !contentType.includes("application/xhtml+xml")) {
       throw new Error(`Target did not return HTML (${contentType.split(";")[0]}).`);
     }
-    return response.body;
+    return { html: response.body, url: current.href };
   }
   throw new Error("Too many redirects.");
+}
+
+export async function fetchRemoteHtml(
+  startUrl: string,
+  config: ServerConfig,
+  dependencies: RemoteFetchDependencies = {},
+): Promise<Buffer> {
+  return (await fetchRemotePage(startUrl, config, dependencies)).html;
 }

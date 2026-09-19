@@ -203,6 +203,57 @@ test("shows a GitHub repository badge on the welcome screen", async ({ page }) =
   expect(bounds!.y).toBeLessThan(20);
 });
 
+test("starts a lucky crawl from Wikipedia's random page", async ({ page }) => {
+  const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
+  await page.addInitScript(() => {
+    Math.random = () => 0;
+  });
+  await page.route("https://en.wikipedia.org/**", route => route.abort());
+  await page.route("**/api/fetch?**", route => route.fulfill({
+    status: 200,
+    headers: { "x-webcrawl-final-url": "https://en.wikipedia.org/wiki/Example_article" },
+    contentType: "text/html",
+    body: fixture,
+  }));
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "I'm feeling lucky" }).click();
+
+  await expect(page.locator("#gameCanvas canvas")).toBeVisible();
+  await expect(page.locator("#urlBarText")).toHaveText("https://en.wikipedia.org/wiki/Example_article");
+});
+
+test("starts a lucky crawl from a Hacker News top story", async ({ page }) => {
+  const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
+  await page.addInitScript(() => {
+    Math.random = () => 0.75;
+  });
+  await page.route("https://hacker-news.firebaseio.com/v0/topstories.json", route => route.fulfill({
+    status: 200,
+    headers: { "access-control-allow-origin": "*" },
+    contentType: "application/json",
+    body: JSON.stringify([101, 202]),
+  }));
+  await page.route("https://hacker-news.firebaseio.com/v0/item/202.json", route => route.fulfill({
+    status: 200,
+    headers: { "access-control-allow-origin": "*" },
+    contentType: "application/json",
+    body: JSON.stringify({ url: "https://example.com/lucky" }),
+  }));
+  await page.route("https://example.com/lucky", route => route.fulfill({
+    status: 200,
+    headers: { "access-control-allow-origin": "*" },
+    contentType: "text/html",
+    body: fixture,
+  }));
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "I'm feeling lucky" }).click();
+
+  await expect(page.locator("#gameCanvas canvas")).toBeVisible();
+  await expect(page.locator("#urlBarText")).toHaveText("https://example.com/lucky");
+});
+
 test("starts a crawl and renders a playable floor", async ({ page }) => {
   const failedAssets: string[] = [];
   page.on("response", response => {

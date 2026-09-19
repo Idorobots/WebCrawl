@@ -66,15 +66,22 @@ describe("WebCrawl server", () => {
     expect(loadServerConfig({ DEBUG: "false" })).toMatchObject({ debug: false });
   });
 
-  it("returns the remote HTML through the API", async () => {
-    const request: RequestRemote = async () => ({
-      statusCode: 200,
-      headers: { "content-type": "text/html" },
-      body: Buffer.from("<body>remote</body>"),
-    });
+  it("returns remote HTML and its final redirect URL through the API", async () => {
+    const request: RequestRemote = async (url) => url.pathname === "/start"
+      ? {
+          statusCode: 302,
+          headers: { location: "/article" },
+          body: Buffer.alloc(0),
+        }
+      : {
+          statusCode: 200,
+          headers: { "content-type": "text/html" },
+          body: Buffer.from("<body>remote</body>"),
+        };
     const baseUrl = await start(request);
-    const response = await fetch(`${baseUrl}/api/fetch?url=${encodeURIComponent("https://example.com")}`);
+    const response = await fetch(`${baseUrl}/api/fetch?url=${encodeURIComponent("https://example.com/start")}`);
     expect(response.status).toBe(200);
+    expect(response.headers.get("x-webcrawl-final-url")).toBe("https://example.com/article");
     expect(await response.text()).toBe("<body>remote</body>");
   });
 

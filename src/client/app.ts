@@ -109,6 +109,7 @@ const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
 const welcomeScreen = requireElement<HTMLDivElement>("#welcomeScreen");
 const welcomeForm = requireElement<HTMLFormElement>("#welcomeForm");
 const welcomeUrlInput = requireElement<HTMLInputElement>("#welcomeUrlInput");
+const luckyButton = requireElement<HTMLButtonElement>("#luckyButton");
 const welcomePromptBody = requireElement<HTMLElement>("#welcomePromptBody");
 const gameUi = requireElement<HTMLDivElement>("#gameUi");
 
@@ -740,6 +741,10 @@ const LOADING_SCREEN_ENABLED =
   import.meta.env.VITE_LOADING_SCREEN !== "off" ||
   new URLSearchParams(window.location.search).has("loading-screen");
 const SCREEN_FADE_MS = 320;
+const LUCKY_REQUEST_TIMEOUT_MS = 5_000;
+const WIKIPEDIA_RANDOM_URL = "https://en.wikipedia.org/wiki/Special:Random";
+const HACKER_NEWS_TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json";
+const HACKER_NEWS_ITEM_URL = "https://hacker-news.firebaseio.com/v0/item";
 const nextLoadingThought = createThoughtPicker();
 let loadingFrame = 0;
 let loadingShownAt = 0;
@@ -2738,11 +2743,11 @@ async function loadPage(
   }
 
   try {
-    const { html, via } = await fetchHtml(url);
+    const { html, url: resolvedUrl, via } = await fetchHtml(url);
     if (requestId !== currentRequest) return;
 
     setStatus(`Fetched via ${via} · Parsing HTML …`);
-    const graph = domToGraph(html, url);
+    const graph = domToGraph(html, resolvedUrl);
     await rendererReady;
     if (requestId !== currentRequest) return;
     saveCurrentFloorState();
@@ -2754,16 +2759,16 @@ async function loadPage(
 
     if (
       popBack &&
-      navigationHistory[navigationHistory.length - 1] === url
+      navigationHistory[navigationHistory.length - 1] === resolvedUrl
     ) {
       navigationHistory.pop();
       navigationReturnRooms.pop();
     }
 
-    currentPageUrl = url;
+    currentPageUrl = resolvedUrl;
     updateUrlBar();
-    currentStateId = stateId ?? stateIdForPage(url);
-    renderGraph(graph, url, {
+    currentStateId = stateId ?? stateIdForPage(resolvedUrl);
+    renderGraph(graph, resolvedUrl, {
       spawnRoomId,
       stateId: currentStateId,
       spawnPortalUrl: popBack ? departingPageUrl : null,
@@ -2795,9 +2800,54 @@ async function loadRenderer(): Promise<void> {
   });
 }
 
-welcomeForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (welcomeTransitioning) return;
+async function fetchLuckyJson(url: string): Promise<unknown> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), LUCKY_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Hacker News returned HTTP ${response.status}.`);
+    return await response.json();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function externalStoryUrl(story: unknown): string | null {
+  if (typeof story !== "object" || story === null || !("url" in story)) return null;
+  const url = story.url;
+  if (typeof url !== "string") return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+async function luckyUrl(): Promise<string> {
+  if (Math.random() < 0.5) return WIKIPEDIA_RANDOM_URL;
+
+  try {
+    const storyIds = await fetchLuckyJson(HACKER_NEWS_TOP_STORIES_URL);
+    const ids = Array.isArray(storyIds)
+      ? storyIds.filter((id): id is number => typeof id === "number")
+      : [];
+    const id = ids[Math.floor(Math.random() * ids.length)];
+    if (id === undefined) throw new Error("Hacker News returned no top stories.");
+
+    const story = await fetchLuckyJson(`${HACKER_NEWS_ITEM_URL}/${id}.json`);
+    return externalStoryUrl(story) ?? `https://news.ycombinator.com/item?id=${id}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    setStatus(`Could not select a Hacker News story: ${message}. Using Wikipedia instead.`, true);
+    return WIKIPEDIA_RANDOM_URL;
+  }
+}
+
+function startWelcomeCrawl(rawUrl: string): void {
   welcomeTransitioning = true;
   welcomePrompt.cancel();
   welcomeScreen.classList.add("closing");
@@ -2812,7 +2862,7 @@ welcomeForm.addEventListener("submit", (event) => {
     gameUi.hidden = false;
 
     if (LOADING_SCREEN_ENABLED) {
-      showLoadingScreen(welcomeUrlInput.value);
+      showLoadingScreen(rawUrl);
       setLoadingTask("fetch", "Fetching the page");
       setLoadingTask("phaser", "Fetching Phaser");
     }
@@ -2825,7 +2875,7 @@ welcomeForm.addEventListener("submit", (event) => {
         throw error;
       },
     );
-    void loadPage(welcomeUrlInput.value, {}, rendererReady);
+    void loadPage(rawUrl, {}, rendererReady);
 
     if (LOADING_SCREEN_ENABLED) {
       setLoadingTask("boot", "Booting the renderer");
@@ -2836,4 +2886,21 @@ welcomeForm.addEventListener("submit", (event) => {
     }
     updateHudPanels();
   }, SCREEN_FADE_MS);
+}
+
+welcomeForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (welcomeTransitioning) return;
+  startWelcomeCrawl(welcomeUrlInput.value);
+});
+
+luckyButton.addEventListener("click", () => {
+  if (welcomeTransitioning) return;
+  welcomeTransitioning = true;
+  luckyButton.disabled = true;
+  luckyButton.setAttribute("aria-busy", "true");
+  void luckyUrl().then((url) => {
+    welcomeUrlInput.value = url;
+    startWelcomeCrawl(url);
+  });
 });

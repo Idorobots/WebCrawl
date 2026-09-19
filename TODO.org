@@ -585,3 +585,5 @@ Vite reports:
 
 What exactly is inflating the size so much?
 
+* Gameplay mechanics
+- Exploding barrels should damage objects around them.

@@ -1,6 +1,6 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 import type { ServerConfig } from "./config.js";
-import { fetchRemoteHtml, type RemoteFetchDependencies } from "./remote-fetch.js";
+import { fetchRemotePage, type RemoteFetchDependencies } from "./remote-fetch.js";
 import { sendJson, serveAsset, serveIndex } from "./responses.js";
 
 function requestUrl(request: IncomingMessage): URL | null {
@@ -24,13 +24,14 @@ async function handleFetch(
   }
   try {
     const parsed = new URL(target);
-    const html = await fetchRemoteHtml(parsed.href, config, dependencies);
+    const page = await fetchRemotePage(parsed.href, config, dependencies);
     response.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Length": html.length,
+      "Content-Length": page.html.length,
       "Cache-Control": "no-store",
+      "X-WebCrawl-Final-Url": page.url,
     });
-    response.end(html);
+    response.end(page.html);
   } catch (error) {
     sendJson(response, 502, {
       error: error instanceof Error ? error.message : "Could not fetch remote page.",

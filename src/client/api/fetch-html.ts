@@ -12,7 +12,13 @@ export type FetchRoute = "direct" | "server" | "proxy";
 
 export interface FetchOutcome {
   html: string;
+  url: string;
   via: FetchRoute;
+}
+
+interface FetchedHtml {
+  html: string;
+  url: string;
 }
 
 export function normalizeUrl(raw: string): string {
@@ -29,13 +35,13 @@ export async function fetchHtml(url: string): Promise<FetchOutcome> {
   };
 
   const direct = await tryRoute(() => fetchDirect(url), "direct browser fetch", record);
-  if (direct) return { html: direct, via: "direct" };
+  if (direct) return { ...direct, via: "direct" };
 
   const server = await tryRoute(() => fetchViaServer(url), "local relay server", record);
-  if (server) return { html: server, via: "server" };
+  if (server) return { ...server, via: "server" };
 
   const proxy = await fetchViaProxies(url, record);
-  if (proxy) return { html: proxy, via: "proxy" };
+  if (proxy) return { ...proxy, via: "proxy" };
 
   throw new Error(
     "The page could not be fetched from any route. " +
@@ -63,11 +69,11 @@ function proxyList(): readonly PublicFetchProxy[] {
   return proxies.length > 0 ? (proxies as PublicFetchProxy[]) : PUBLIC_FETCH_PROXIES;
 }
 
-async function tryRoute(
-  run: () => Promise<string>,
+async function tryRoute<T>(
+  run: () => Promise<T>,
   label: string,
   record: (label: string, error: unknown) => void,
-): Promise<string | null> {
+): Promise<T | null> {
   try {
     return await run();
   } catch (error) {
@@ -79,7 +85,7 @@ async function tryRoute(
 async function fetchViaProxies(
   url: string,
   record: (label: string, error: unknown) => void,
-): Promise<string | null> {
+): Promise<FetchedHtml | null> {
   for (const proxy of proxyList()) {
     const html = await tryRoute(
       () => fetchViaProxy(proxy, url),
@@ -91,7 +97,7 @@ async function fetchViaProxies(
   return null;
 }
 
-function fetchDirect(url: string): Promise<string> {
+function fetchDirect(url: string): Promise<FetchedHtml> {
   return withAttempt(async (controller) => {
     const response = await fetch(url, {
       mode: "cors",
@@ -100,11 +106,11 @@ function fetchDirect(url: string): Promise<string> {
     });
     assertHttpOk(response, "Remote server");
     assertHtmlContentType(response.headers.get("content-type"));
-    return await readBodyChecked(response, controller);
+    return { html: await readBodyChecked(response, controller), url: response.url || url };
   });
 }
 
-function fetchViaServer(url: string): Promise<string> {
+function fetchViaServer(url: string): Promise<FetchedHtml> {
   return withAttempt(async (controller) => {
     const response = await fetch(`/api/fetch?url=${encodeURIComponent(url)}`, {
       headers: { Accept: HTML_ACCEPT },
@@ -120,11 +126,14 @@ function fetchViaServer(url: string): Promise<string> {
       }
       throw new Error(message);
     }
-    return await readBodyChecked(response, controller);
+    return {
+      html: await readBodyChecked(response, controller),
+      url: response.headers.get("X-WebCrawl-Final-Url") || url,
+    };
   });
 }
 
-function fetchViaProxy(proxy: PublicFetchProxy, url: string): Promise<string> {
+function fetchViaProxy(proxy: PublicFetchProxy, url: string): Promise<FetchedHtml> {
   const target = proxy.url.replace("{url}", encodeURIComponent(url));
   return withAttempt(async (controller) => {
     const response = await fetch(target, {
@@ -132,9 +141,9 @@ function fetchViaProxy(proxy: PublicFetchProxy, url: string): Promise<string> {
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`Proxy answered HTTP ${response.status}.`);
-    if (proxy.parse === "json") return await readJsonEnvelope(response, controller);
+    if (proxy.parse === "json") return { html: await readJsonEnvelope(response, controller), url };
     assertHtmlContentType(response.headers.get("content-type"));
-    return await readBodyChecked(response, controller);
+    return { html: await readBodyChecked(response, controller), url };
   });
 }
 
