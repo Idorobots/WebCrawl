@@ -285,6 +285,8 @@ export interface Bullet extends Point {
   damage: number;
   vx: number;
   vy: number;
+  /** Offset from the bullet's visual center to its game-field depth anchor. */
+  depthOffsetY: number;
   traveled: number;
   radius?: number;
   maxDistance?: number;

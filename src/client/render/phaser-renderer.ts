@@ -198,7 +198,7 @@ export class PhaserRenderer {
   private staticObjects: Phaser.GameObjects.GameObject[] = [];
   private roomStatics = new Map<number, StaticObject[]>();
   private corridorStatics = new Map<string, StaticObject[]>();
-  private bulletsGraphics: Phaser.GameObjects.Graphics | null = null;
+  private bulletSprites = new Map<string, Phaser.GameObjects.Image>();
   private debugGraphics: Phaser.GameObjects.Graphics | null = null;
   private decorations: Phaser.GameObjects.Container[] = [];
   private decorationSprites = new Map<string, Phaser.GameObjects.Image>();
@@ -341,6 +341,7 @@ export class PhaserRenderer {
     this.setPlayer(this.currentPlayer, this.currentPlayerHp, this.currentPlayerMaxHp, this.currentPlayerAsset);
     this.applyCameraMode(true);
     this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
+    (window as unknown as { __webcrawlScene?: Phaser.Scene }).__webcrawlScene = scene;
   }
 
   clear(): void {
@@ -352,7 +353,8 @@ export class PhaserRenderer {
     this.background?.destroy();
     this.background = null;
     this.destroyStaticObjects();
-    this.bulletsGraphics?.clear();
+    for (const object of this.bulletSprites.values()) object.destroy(true);
+    this.bulletSprites.clear();
     this.debugGraphics?.clear();
     this.destroyAll(this.decorations);
     this.decorationSprites.clear();
@@ -1560,31 +1562,43 @@ export class PhaserRenderer {
   renderBullets(items: readonly Bullet[]): void {
     this.currentBullets = items;
     this.setHostData("bullets", String(items.length));
-    if (!this.scene) return;
-    this.bulletsGraphics ??= this.scene.add.graphics()
-      .setDepth(OVERHEAD_DEPTH)
-      .setBlendMode(Phaser.BlendModes.ADD);
-    this.bulletsGraphics.clear();
+    const scene = this.scene;
+    if (!scene) return;
+    const visibleIds = new Set(items.map(item => item.id));
+    for (const [id, object] of this.bulletSprites) {
+      if (!visibleIds.has(id)) {
+        object.destroy(true);
+        this.bulletSprites.delete(id);
+      }
+    }
     for (const bullet of items) {
-      const color = this.bulletColor(bullet);
-      const radius = bullet.radius ?? DEFAULT_BULLET_SPEC.radius;
-      const speed = Math.hypot(bullet.vx, bullet.vy);
-      const trailLength = Math.min(world(78), Math.max(world(18), speed * 0.045));
-      const tailX = bullet.x - bullet.vx / Math.max(1, speed) * trailLength;
-      const tailY = bullet.y - bullet.vy / Math.max(1, speed) * trailLength;
-      const headX = bullet.x + bullet.vx / Math.max(1, speed) * radius * 2;
-      const headY = bullet.y + bullet.vy / Math.max(1, speed) * radius * 2;
-      this.bulletsGraphics.lineStyle(Math.max(world(3), radius * 4.4), color, 0.08);
-      this.bulletsGraphics.lineBetween(tailX, tailY, headX, headY);
-      this.bulletsGraphics.lineStyle(Math.max(world(2), radius * 2.2), color, 0.3);
-      this.bulletsGraphics.lineBetween(tailX, tailY, headX, headY);
-      this.bulletsGraphics.lineStyle(Math.max(world(1), radius * 0.9), color, 1);
-      this.bulletsGraphics.lineBetween(tailX, tailY, headX, headY);
+      let sprite = this.bulletSprites.get(bullet.id);
+      if (!sprite) {
+        sprite = this.createBulletSprite(bullet);
+        this.bulletSprites.set(bullet.id, sprite);
+      }
+      sprite.setPosition(bullet.x, bullet.y).setDepth(yDepth(bullet.y + bullet.depthOffsetY));
+      this.applyBulletSprite(sprite, bullet);
     }
     this.syncBulletLights(items);
     this.setHostData("bulletGlows", String(items.length));
     this.setHostData("bulletShape", "bar");
     this.renderDebugGeometry();
+  }
+
+  private createBulletSprite(bullet: Bullet): Phaser.GameObjects.Image {
+    return this.scene!.add.image(bullet.x, bullet.y, textureKey(ASSETS.bullet))
+      .setBlendMode(Phaser.BlendModes.ADD);
+  }
+
+  private applyBulletSprite(sprite: Phaser.GameObjects.Image, bullet: Bullet): void {
+    const radius = bullet.radius ?? DEFAULT_BULLET_SPEC.radius;
+    const speed = Math.hypot(bullet.vx, bullet.vy);
+    const angle = speed > 0 ? Math.atan2(bullet.vy, bullet.vx) : 0;
+    const trailLength = Math.min(world(78), Math.max(world(18), speed * 0.045));
+    sprite.setTint(this.bulletColor(bullet));
+    sprite.setDisplaySize(Math.max(world(12), radius * 9.2), (trailLength + radius * 2) * 1.25);
+    sprite.setRotation(angle + Math.PI / 2);
   }
 
   bulletColor(bullet: Bullet): number {

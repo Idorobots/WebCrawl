@@ -52,6 +52,7 @@ const asset = (path: string): string => `assets/${path}`;
 
 export const ASSETS = {
   backgroundTechTile: asset("environment/backgrounds/background_tech_tile.png"),
+  bullet: asset("bullet.png"),
   floorPlain: asset("environment/floor/floor_plain_steel.png"),
   floorComposite: asset("environment/floor/floor_plain_composite.png"),
   floorWorn: asset("environment/floor/floor_worn_slabs.png"),

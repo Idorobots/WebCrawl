@@ -185,7 +185,10 @@ Don't show healthbars on scenery when they are full, damaged scenery should have
 Don't explode crates or plants, these should "break down".
 Barrels should be the only scenery item that blows up. When they do, they should deal 2 damage to all objects/enemies/players in their vicinity.
 
-* Scenery semantics
+* DONE Scenery semantics
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 18:28]
+:END:
 Scenery sprites' ordering should "be on top" of the characters when above the "midline" and under the characters otherwise. This can be achieved by ordering the sprites by their Y and X coordinates before displaying them. The same is true for walls.
 
 Broken walls and floor tiles should be used sparingly as a means to add flavour to the game.
@@ -197,6 +200,11 @@ Broken walls and floor tiles should be used sparingly as a means to add flavour 
 - Spawner shadow is messed up due to the translucent area on the sprite.
 - Spawner spawn animation should only be triggered when the spawner is actually spawning something.
 - Sprite shadows are too well-defined. They should be softer.
+- Shadows are too large in general, please make the "drop shadow" effect slightly less pronounced.
+
+- "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
+- "floor_hatch" tile should be considered decoration tile, not main floor tile
+
 
 * Wall & door refactor
 Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
@@ -618,3 +626,7 @@ The content point should be placed in the center of a room mapped to a DOM eleme
 The content box should be scrollable and use a "best effort" basis to display the content with formatting, etc.
 
 The content point should be destructible, so if it is destroyed before being enabled, it still breaks down and leaves loot behind. The loof of a content point should be a bunch of RAM sticks - 3-7 for each content point.
+* More varied weapons
+- Use different bullet types
+- Homing missles
+- Exploding granades
