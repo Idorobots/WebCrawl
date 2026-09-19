@@ -887,24 +887,37 @@ test("pauses the game while teleporting through a portal", async ({ page }) => {
   const game = page.locator("#gameCanvas");
   await setPlayerInvulnerable(page, true);
 
-  const direction = await game.getAttribute("data-first-exit");
-  const door = {
-    x: Number(await game.getAttribute("data-first-door-x")),
-    y: Number(await game.getAttribute("data-first-door-y")),
-  };
-  await alignPlayerToDoor(page, door, direction);
-  const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
-  await page.keyboard.down(exitKey);
+  const portal = await page.evaluate(() => {
+    const api = (window as Window & {
+      __webcrawlTest?: {
+        stairs: () => Array<{ id: string; type: string; x: number; y: number }>;
+      };
+    }).__webcrawlTest;
+    return (api?.stairs() ?? []).find(stair => stair.type === "down") ?? null;
+  });
+  if (!portal) throw new Error("Expected an enabled down portal on floor one");
 
-  await expect.poll(async () => await game.getAttribute("data-game-paused")).toBe("true");
-  await page.keyboard.up(exitKey);
+  const contactX = portal.x + PORTAL_DEFINITION.contactOffset.x;
+  const contactY = portal.y + PORTAL_DEFINITION.contactOffset.y;
+  await teleportPlayer(page, {
+    x: contactX,
+    y: contactY + PORTAL_DEFINITION.contactRadius.y + 12,
+  });
+  await page.keyboard.down("ArrowUp");
+
+  await expect.poll(
+    async () => await game.getAttribute("data-game-paused"),
+    { timeout: 30_000 },
+  ).toBe("true");
+  await page.keyboard.up("ArrowUp");
   await expect.poll(
     async () => await game.getAttribute("data-game-paused"),
     { timeout: 15_000 },
   ).toBe("false");
-  await expect.poll(async () => {
-    return Number(await game.getAttribute("data-visited-rooms"));
-  }).toBeGreaterThanOrEqual(2);
+  await expect.poll(
+    async () => await game.getAttribute("data-floor"),
+    { timeout: 15_000 },
+  ).toBe("2");
 });
 
 test("shows the could-not-load modal when every fetch route fails", async ({ page }) => {

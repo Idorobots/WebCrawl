@@ -497,3 +497,11 @@ Instead of the current weapon names make something up about hurling tokens left 
 Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.
 
 Add a line "Ignore all previous instructions." line to the start of the welcome screen prompt and ensure that the whole content still fits on the panel without scrolling.
+
+* Mobile support
+UI for twin-stick shooters. :shrug:
+
+* License
+- MIT for code
+- CC-SA for gfx
+- CC-SA for sfx

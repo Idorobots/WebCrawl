@@ -178,6 +178,7 @@ export class PhaserRenderer {
   private activeEffectLights = new Set<Phaser.GameObjects.Light>();
   private decorationEffectLights = new Map<string, Phaser.GameObjects.Light>();
   private activeEffects = new Set<Phaser.GameObjects.Image>();
+  private activeEffectTimers = new Set<Phaser.Time.TimerEvent>();
   private playerFollowingEffects = new Map<Phaser.GameObjects.Image, Phaser.GameObjects.Light | null>();
   private playerStateLight: Phaser.GameObjects.Light | null = null;
 
@@ -304,6 +305,8 @@ export class PhaserRenderer {
     this.activeEffectLights.clear();
     for (const light of this.decorationEffectLights.values()) this.scene?.lights.removeLight(light);
     this.decorationEffectLights.clear();
+    for (const timer of this.activeEffectTimers) timer.remove();
+    this.activeEffectTimers.clear();
     for (const effect of this.activeEffects) effect.destroy();
     this.activeEffects.clear();
     this.playerFollowingEffects.clear();
@@ -1649,14 +1652,27 @@ export class PhaserRenderer {
       this.syncPlayerFollowingEffects();
     }
     let frameIndex = 0;
-    scene.time.addEvent({
+    const timer = scene.time.addEvent({
       delay: clip.frameDurationMs,
       repeat: clip.frames.length - 1,
       callback: () => {
+        if (!effect.scene || !effect.active) {
+          timer.remove();
+          this.activeEffectTimers.delete(timer);
+          this.activeEffects.delete(effect);
+          this.playerFollowingEffects.delete(effect);
+          if (light) {
+            this.scene?.lights.removeLight(light);
+            this.activeEffectLights.delete(light);
+            this.updateEffectLightDataset();
+          }
+          return;
+        }
         if (frameIndex >= clip.frames.length - 1) {
           effect.destroy();
           this.activeEffects.delete(effect);
           this.playerFollowingEffects.delete(effect);
+          this.activeEffectTimers.delete(timer);
           this.syncPlayerFollowingEffects();
           if (light) {
             scene.lights.removeLight(light);
@@ -1673,6 +1689,7 @@ export class PhaserRenderer {
         }
       },
     });
+    this.activeEffectTimers.add(timer);
   }
 
   private syncPlayerFollowingEffects(): void {
