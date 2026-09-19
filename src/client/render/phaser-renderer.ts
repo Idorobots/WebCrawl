@@ -75,6 +75,7 @@ function supportedMaxLights(): number {
 
 const MAX_LIGHTS = supportedMaxLights();
 const MAX_BULLET_LIGHTS = Math.min(192, MAX_LIGHTS);
+const BULLET_LIGHTS_ENABLED = import.meta.env.VITE_BULLET_LIGHTS !== "off";
 const AMBIENT_LIGHT_COLOR = 0x07121c;
 const ENEMY_AURA_COLOR = 0xff344f;
 const PICKUP_AURA_COLOR = 0x6fe7ff;
@@ -259,7 +260,7 @@ export class PhaserRenderer {
       this.host.dataset.ambientLight = AMBIENT_LIGHT_COLOR.toString(16).padStart(6, "0");
       this.host.dataset.auraMode = "light2d";
       this.host.dataset.auraFlicker = "false";
-      this.host.dataset.bulletGlowMode = "batched-light2d";
+      this.host.dataset.bulletGlowMode = BULLET_LIGHTS_ENABLED ? "batched-light2d" : "off";
       this.host.dataset.bulletShape = "bar";
       this.host.dataset.flickerMode = "occasional-burst-35ms";
       this.host.dataset.flashlightColor = "ffffff";
@@ -1415,7 +1416,7 @@ export class PhaserRenderer {
   }
 
   private syncBulletLights(items: readonly Bullet[]): void {
-    if (!this.lightingEnabled || !this.scene) return;
+    if (!BULLET_LIGHTS_ENABLED || !this.lightingEnabled || !this.scene) return;
     const lightCount = Math.min(items.length, MAX_BULLET_LIGHTS);
     while (this.bulletLights.length < lightCount) {
       this.bulletLights.push(this.scene.lights.addLight(0, 0, world(72), 0xffffff, 0.7).setVisible(false));
