@@ -569,9 +569,12 @@ Keep the GitHub logo badge style-consistent with the holographic UI.
 - Use the footprints for enemy/scenery collision detection and blocking.
 
 * Welcome screen page randomization
-Add an "I'm feeling lucky" button next to the "Go" button that launches the game with a random URL. Use wikipedias random page and HackerNews' top articles for the URLs.
+Add an "I'm feeling lucky" button next to the "Go" button that launches the game with a random URL. Use wikipedia's random page and HackerNews' top articles for the URLs.
 
-* Huge files after minification
+* DONE Huge files after minification
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 14:50]
+:END:
 Vite reports:
 ```
 [WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:

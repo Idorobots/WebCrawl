@@ -4,6 +4,11 @@ export default defineConfig({
   build: {
     outDir: "dist/client",
     emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        manualChunks: (id) => id.includes("node_modules/phaser/") ? "phaser" : undefined,
+      },
+    },
   },
   server: {
     proxy: {

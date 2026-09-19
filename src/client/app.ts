@@ -65,7 +65,7 @@ import {
   replenishWeaponAmmo,
   weaponForMonster,
 } from "./domain/weapons";
-import { PhaserRenderer } from "./render/phaser-renderer";
+import type { PhaserRenderer } from "./render/phaser-renderer";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
 import type {
   Bullet,
@@ -103,7 +103,7 @@ const gameViewport = requireElement<HTMLElement>("#gameViewport");
 const gameCanvasHost = requireElement<HTMLElement>("#gameCanvas");
 gameCanvasHost.dataset.debugMode = String(DEBUG_MODE);
 gameCanvasHost.dataset.playerMaxHp = String(PLAYER_MAX_HP);
-const renderer = new PhaserRenderer(gameCanvasHost);
+let renderer!: PhaserRenderer;
 const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
 
 const welcomeScreen = requireElement<HTMLDivElement>("#welcomeScreen");
@@ -2524,9 +2524,9 @@ function resetPlayerInput(): void {
   lastAimCamera = null;
   playerSpriteAnimationToken += 1;
   playerShooting = false;
-  renderer.setFlashlightTarget(null);
+  renderer?.setFlashlightTarget(null);
   setPlayerMoving(false, performance.now());
-  updatePlayerFacingAsset();
+  if (renderer) updatePlayerFacingAsset();
 }
 
 gameViewport.addEventListener("pointerenter", event => {
@@ -2715,6 +2715,7 @@ async function loadPage(
     spawnRoomId = null,
     stateId = null
   }: LoadPageOptions = {},
+  rendererReady: Promise<void> = Promise.resolve(),
 ): Promise<void> {
   const retainedPointerPosition = pointerInViewport ? pointerClientPosition : null;
   resetPlayerInput();
@@ -2742,6 +2743,8 @@ async function loadPage(
 
     setStatus(`Fetched via ${via} · Parsing HTML …`);
     const graph = domToGraph(html, url);
+    await rendererReady;
+    if (requestId !== currentRequest) return;
     saveCurrentFloorState();
 
     if (pushCurrent && currentPageUrl) {
@@ -2779,6 +2782,19 @@ async function loadPage(
   }
 }
 
+async function loadRenderer(): Promise<void> {
+  const { PhaserRenderer } = await import("./render/phaser-renderer");
+  renderer = new PhaserRenderer(gameCanvasHost);
+  renderer.start({
+    onBootComplete: () => {
+      window.clearTimeout(loadingBootGuardTimer);
+      loadingBootGuardTimer = undefined;
+      completeLoadingTask("boot");
+      if (!LOADING_SCREEN_ENABLED) gameUi.classList.add("game-ui-ready");
+    },
+  });
+}
+
 welcomeForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (welcomeTransitioning) return;
@@ -2797,18 +2813,19 @@ welcomeForm.addEventListener("submit", (event) => {
 
     if (LOADING_SCREEN_ENABLED) {
       showLoadingScreen(welcomeUrlInput.value);
+      setLoadingTask("fetch", "Fetching the page");
+      setLoadingTask("phaser", "Fetching Phaser");
     }
-    renderer.start({
-      onBootComplete: () => {
-        window.clearTimeout(loadingBootGuardTimer);
-        loadingBootGuardTimer = undefined;
-        completeLoadingTask("boot");
-        if (!LOADING_SCREEN_ENABLED) gameUi.classList.add("game-ui-ready");
-      },
-    });
     equipDefaultWeapon();
 
-    loadPage(welcomeUrlInput.value);
+    const rendererReady = loadRenderer().then(
+      () => completeLoadingTask("phaser"),
+      (error: unknown) => {
+        completeLoadingTask("phaser", false);
+        throw error;
+      },
+    );
+    void loadPage(welcomeUrlInput.value, {}, rendererReady);
 
     if (LOADING_SCREEN_ENABLED) {
       setLoadingTask("boot", "Booting the renderer");

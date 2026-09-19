@@ -893,7 +893,12 @@ test("shows the ClosedNS Code loading session while fetching a page", async ({ p
   await expect(loading).toBeVisible();
   await expect(page.locator("#loadingPromptText")).toContainText("webcrawl https://example.com/start");
   await expect(page.locator("#loadingThought")).not.toBeEmpty();
-  await expect(page.locator("#loadingTasks .loading-task")).toHaveCount(2);
+  const tasks = page.locator("#loadingTasks .loading-task");
+  await expect(tasks).toHaveCount(3);
+  await expect(tasks.nth(0)).toHaveAttribute("data-task", "fetch");
+  await expect(tasks.nth(1)).toHaveAttribute("data-task", "phaser");
+  await expect(page.locator('[data-task="fetch"] .loading-task-label')).toHaveText("Fetching the page");
+  await expect(page.locator('[data-task="phaser"] .loading-task-label')).toHaveText("Fetching Phaser");
 
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
   await expect(loading).not.toBeVisible({ timeout: 30_000 });
