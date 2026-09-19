@@ -885,10 +885,10 @@ describe("deterministic room contents", () => {
       isRoot: false,
     }));
     expect(new Set(sampledScripts.map(bossKindForRoom))).toEqual(
-      new Set(["packet-storm", "fork-bomb", "heap-titan"]),
+      new Set(["packet-storm", "fork-bomb", "heap-titan", "kimi-swarm", "llama-herd"]),
     );
     const rosterRoot = node(5_000, null, 0, { lootSeed: stableHash("boss-roster-root") });
-    const rosterScripts = Array.from({ length: 6 }, (_, index) => node(5_001 + index, rosterRoot.id, 1, {
+    const rosterScripts = Array.from({ length: 20 }, (_, index) => node(5_001 + index, rosterRoot.id, 1, {
       tag: "script",
       lootSeed: stableHash(`roster-script-${index}`),
       isRoot: false,
@@ -901,7 +901,7 @@ describe("deterministic room contents", () => {
       1,
     ).filter(monster => monster.bossKind);
     expect(new Set(roster.map(monster => monster.bossKind))).toEqual(
-      new Set(["packet-storm", "fork-bomb", "heap-titan"]),
+      new Set(["packet-storm", "fork-bomb", "heap-titan", "kimi-swarm", "llama-herd"]),
     );
     const reorderedRoster = buildMonsters(
       { nodes: [rosterRoot, ...rosterScripts].reverse(), links: [], hiddenCount: 0 },

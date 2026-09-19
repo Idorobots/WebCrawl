@@ -480,7 +480,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await page.keyboard.up(exitKey);
 
   await expect(game).toHaveAttribute("data-active-bosses", "1");
-  await expect(game).toHaveAttribute("data-active-boss-kind", /^(packet-storm|fork-bomb|heap-titan)$/);
+  await expect(game).toHaveAttribute("data-active-boss-kind", /^(packet-storm|fork-bomb|heap-titan|kimi-swarm|llama-herd)$/);
   await expect.poll(
     async () => Number(await game.getAttribute("data-active-boss-display-width")),
     { timeout: 15_000 },
@@ -874,7 +874,7 @@ test("shows the ClosedNS Code loading session while fetching a page", async ({ p
 
   const loading = page.locator("#loadingScreen");
   await expect(loading).toBeVisible();
-  await expect(page.locator("#loadingPromptText")).toContainText("crawl https://example.com/start");
+  await expect(page.locator("#loadingPromptText")).toContainText("webcrawl https://example.com/start");
   await expect(page.locator("#loadingThought")).not.toBeEmpty();
   await expect(page.locator("#loadingTasks .loading-task")).toHaveCount(2);
 

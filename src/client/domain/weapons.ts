@@ -33,26 +33,27 @@ export function monsterDropsWeapon(seed: number, miniboss: boolean): boolean {
 }
 
 const EXTRA_WEAPONS: readonly WeaponBase[] = [
-  { kind: "byte-repeater", label: "BYTE REPEATER", fireCooldownMs: 92, projectileSpeed: 650, projectileRange: 760, projectileRadius: 3, damage: 0.25, maxAmmo: 500 },
-  { kind: "scatter-array", label: "SCATTER ARRAY", fireCooldownMs: 520, projectileSpeed: 440, projectileRange: 460, projectileRadius: 4, damage: 1, maxAmmo: 200 },
-  { kind: "fork-driver", label: "FORK DRIVER", fireCooldownMs: 260, projectileSpeed: 560, projectileRange: 820, projectileRadius: 5, damage: 1, maxAmmo: 100 },
-  { kind: "trident", label: "TRIDENT", fireCooldownMs: 340, projectileSpeed: 540, projectileRange: 760, projectileRadius: 5, damage: 1, maxAmmo: 100 },
-  { kind: "needle-rail", label: "NEEDLE RAIL", fireCooldownMs: 610, projectileSpeed: 960, projectileRange: 1_260, projectileRadius: 3, damage: 4, maxAmmo: 60 },
-  { kind: "packet-lobber", label: "PACKET LOBBER", fireCooldownMs: 940, projectileSpeed: 300, projectileRange: 690, projectileRadius: 15, damage: 10, maxAmmo: 30 },
-  { kind: "cross-compiler", label: "CROSS COMPILER", fireCooldownMs: 460, projectileSpeed: 500, projectileRange: 680, projectileRadius: 7, damage: 1, maxAmmo: 100 },
-  { kind: "nova-cache", label: "NOVA CACHE", fireCooldownMs: 820, projectileSpeed: 420, projectileRange: 590, projectileRadius: 7, damage: 2, maxAmmo: 60 },
-  { kind: "helix-emitter", label: "HELIX EMITTER", fireCooldownMs: 230, projectileSpeed: 590, projectileRange: 820, projectileRadius: 5, damage: 3, maxAmmo: 60 },
-  { kind: "sideband-projector", label: "SIDEBAND PROJECTOR", fireCooldownMs: 390, projectileSpeed: 520, projectileRange: 720, projectileRadius: 5, damage: 2, maxAmmo: 200 },
+  { kind: "byte-repeater", label: "AUTOCOMPLETE SPRAYER", fireCooldownMs: 92, projectileSpeed: 650, projectileRange: 760, projectileRadius: 3, damage: 0.25, maxAmmo: 500 },
+  { kind: "scatter-array", label: "SOFTMAX SCATTER", fireCooldownMs: 520, projectileSpeed: 440, projectileRange: 460, projectileRadius: 4, damage: 1, maxAmmo: 200 },
+  { kind: "fork-driver", label: "SUBAGENT DUO", fireCooldownMs: 260, projectileSpeed: 560, projectileRange: 820, projectileRadius: 5, damage: 1, maxAmmo: 100 },
+  { kind: "trident", label: "THOUGHT BRANCH", fireCooldownMs: 340, projectileSpeed: 540, projectileRange: 760, projectileRadius: 5, damage: 1, maxAmmo: 100 },
+  { kind: "needle-rail", label: "EMBEDDING RAIL", fireCooldownMs: 610, projectileSpeed: 960, projectileRange: 1_260, projectileRadius: 3, damage: 4, maxAmmo: 60 },
+  { kind: "packet-lobber", label: "CHECKPOINT LOBBER", fireCooldownMs: 940, projectileSpeed: 300, projectileRange: 690, projectileRadius: 15, damage: 10, maxAmmo: 30 },
+  { kind: "cross-compiler", label: "PROMPT INJECTOR", fireCooldownMs: 460, projectileSpeed: 500, projectileRange: 680, projectileRadius: 7, damage: 1, maxAmmo: 100 },
+  { kind: "nova-cache", label: "CONTEXT WINDOW BURST", fireCooldownMs: 820, projectileSpeed: 420, projectileRange: 590, projectileRadius: 7, damage: 2, maxAmmo: 60 },
+  { kind: "helix-emitter", label: "SAMPLING LOOP", fireCooldownMs: 230, projectileSpeed: 590, projectileRange: 820, projectileRadius: 5, damage: 3, maxAmmo: 60 },
+  { kind: "sideband-projector", label: "TOOL-USE FANOUT", fireCooldownMs: 390, projectileSpeed: 520, projectileRange: 720, projectileRadius: 5, damage: 2, maxAmmo: 200 },
 ];
 
 const NAME_PREFIXES = [
-  "VOID", "GHOST", "NEON", "NULL", "QUANTUM", "STATIC", "CIPHER", "VECTOR",
-  "KERNEL", "CHROME", "SPECTRAL", "BINARY", "CACHE", "SIGNAL", "PHANTOM", "ROOT",
+  "QUANTIZED", "JAILBROKEN", "RED-TEAM", "UNHINGED", "FINETUNED", "OVERFIT",
+  "DISTILLED", "SELF-HOSTED", "HALLUCINATING", "GREPPY", "VIBE-CODED",
+  "AUTOREGRESSIVE", "LOSSLESS", "STOCHASTIC", "PRUNED", "MORALLY",
 ] as const;
 
 export const DEFAULT_WEAPON: WeaponSpec = {
   kind: "pulse-rifle",
-  name: "PULSE RIFLE",
+  name: "TOKEN SLINGER",
   fireCooldownMs: 220,
   projectileSpeed: world(520),
   projectileRange: world(900),

@@ -714,7 +714,7 @@ function loadingAllTasksSettled(): boolean {
 
 function showLoadingScreen(pageUrl: string): void {
   if (!LOADING_SCREEN_ENABLED) return;
-  loadingPromptTextEl.textContent = `crawl ${pageUrl}`;
+  loadingPromptTextEl.textContent = `webcrawl ${pageUrl}`;
   if (!loadingScreen.hidden) return;
   window.clearTimeout(loadingHideTimer);
   loadingHideTimer = undefined;
@@ -1054,7 +1054,7 @@ function applyPlayerDamage(amount: number): void {
     resetPlayerInput();
     const hud = document.querySelector("#hud");
     hud?.classList.add("game-over");
-    setStatus("Operative signal lost.", true);
+    setStatus("Agent signal lost.", true);
     showDeathModal();
   }
 }

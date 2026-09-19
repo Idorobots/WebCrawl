@@ -497,7 +497,7 @@ function monsterKindForSeed(seed: number, difficulty = 0): RegularMonsterKind {
   return "shooter-heavy";
 }
 
-const BOSS_KINDS: BossKind[] = ["packet-storm", "fork-bomb", "heap-titan"];
+const BOSS_KINDS: BossKind[] = ["packet-storm", "fork-bomb", "heap-titan", "kimi-swarm", "llama-herd"];
 
 export function bossKindForRoom(room: GraphNode): BossKind {
   return BOSS_KINDS[stableHash(`${room.lootSeed}|boss-kind`) % BOSS_KINDS.length]!;

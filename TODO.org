@@ -411,6 +411,7 @@ index-CCnl2EYo.js:10:28063
 * Asset changes
 - Change the RAM sticks to holographic, nonexistent RAM sticks
 - Use broken floor tiles sparingly
+- Use the pistol as the default weapon
 
 * DONE Loading screen
 :LOGBOOK:
@@ -487,8 +488,13 @@ Loose the border on the floor indicator. It's enough to just show the text.
 
 Add the "ClosedNS WebCrawl" logo/title bundle to the welcome screen so that everybody knows what they are playing.
 
-* AI theme
+* DONE AI theme
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 11:32]
+:END:
 Instead of Operative, the player should be referred to as Agent in all places.
+
+Instead of "Signal lost - operative slain" use "You've hit your usage limit".
 
 Change the "crawl <url>" lines in the welcome and loading screens to say "webcrawl <URL>" instead.
 

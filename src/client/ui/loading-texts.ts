@@ -14,7 +14,7 @@ export const LOADING_THOUGHTS: readonly string[] = [
   "Rendering enough bullets…",
   "Negotiating with the robots…",
   "Rolling 1d20 for ambushes…",
-  "Sharpening the pulse rifle…",
+  "Sharpening the token slinger…",
   "Indexing the abyss…",
   "Compiling shaders and grudges…",
   "Counting pixels…",
