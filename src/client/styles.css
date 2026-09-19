@@ -6,6 +6,14 @@
   src: url("/fonts/share-tech-mono.woff2") format("woff2");
 }
 
+@font-face {
+  font-family: "Prefix";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/Prefix-2Oa8.ttf") format("truetype");
+}
+
 :root {
   color-scheme: dark;
   --bg: #0b0d10;
@@ -740,6 +748,64 @@ button:hover {
 #linkMenu button:hover {
   background: rgba(38, 150, 255, 0.18);
   box-shadow: inset 0 0 12px rgba(38, 150, 255, 0.15);
+}
+
+#contentBrowser {
+  position: fixed;
+  z-index: 40;
+  right: 24px;
+  bottom: 126px;
+  width: min(390px, calc(100vw - 48px));
+  max-height: min(48vh, 480px);
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid rgba(188, 224, 237, 0.58);
+  background:
+    repeating-linear-gradient(0deg, rgba(186, 222, 235, 0.045) 0 1px, transparent 1px 4px),
+    rgba(5, 16, 24, 0.82);
+  box-shadow: 0 0 24px rgba(176, 223, 240, 0.18), inset 0 0 28px rgba(180, 228, 244, 0.06);
+  color: #eef4ed;
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+  scrollbar-color: #91c8d8 rgba(8, 22, 31, 0.6);
+}
+
+#contentBrowser[hidden] { display: none; }
+
+#contentBrowser h2 {
+  margin: 0 0 10px;
+  color: #f0ece0;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.content-browser-body {
+  overflow-wrap: anywhere;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.48;
+}
+
+.content-browser-body :is(h1, h2, h3, h4, h5, h6) {
+  color: #d9f3ff;
+  font-family: "Share Tech Mono", ui-monospace, monospace;
+}
+
+.content-browser-body :is(pre, code) {
+  padding: 2px 4px;
+  background: rgba(151, 209, 230, 0.1);
+  color: #d8f4ff;
+  white-space: pre-wrap;
+}
+
+.content-browser-body a { color: #9eddf4; }
+
+.content-browser-body img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  margin: 10px auto;
+  object-fit: contain;
 }
 
 .legend {
@@ -1978,6 +2044,12 @@ body {
     top: 0;
     right: 0;
     bottom: 0;
+  }
+  #contentBrowser {
+    right: 8px;
+    bottom: 82px;
+    width: calc(100vw - 16px);
+    max-height: 38vh;
   }
   #bottomHud {
     left: 4px;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BASE_FLOOR_ASSETS,
   DAMAGED_FLOOR_ASSETS,
+  DEBRIS_ASSETS,
   EFFECT_FRAMES,
   ENVIRONMENT_SEGMENT_SIZE,
   FLOOR_ASSETS,
@@ -37,6 +38,7 @@ import {
   buildInteractiveObjects,
   buildMonsters,
   buildSceneryDrops,
+  contentBrowserForRoom,
   decorationSpecsForCorridor,
   decorationSpecsForRoom,
   lootCountForRoom,
@@ -99,7 +101,9 @@ const node = (id: number, parentId: number | null, depth: number, overrides: Par
   hrefs: [],
   coalescedCount: 0,
   label: `<div>#${id}`,
+  floorLabel: `<div>#${id}`,
   title: "<div>",
+  contentHtml: null,
   width: ROOM_WIDTH,
   height: ROOM_HEIGHT,
   lootSeed: id + 10,
@@ -141,6 +145,24 @@ describe("DOM graph generation", () => {
     const second = domToGraph(html, "https://example.net/two");
     expect(first.nodes.map(room => room.lootSeed)).toEqual(second.nodes.map(room => room.lootSeed));
     expect(first.nodes[2]?.lootSeed).not.toBe(first.nodes[3]?.lootSeed);
+  });
+
+  it("keeps safe rich room content and floor labels from DOM elements", () => {
+    const graph = domToGraph(`
+      <body><article id="story" class="feature primary"><h1>Hello</h1><p onclick="bad()">Safe <strong>markup</strong></p><img src="/cover.png" alt="Cover"><script>alert(1)</script><a href="javascript:bad()">Nope</a></article><section class="room-class"><aside>Fallback</aside></section></body>
+    `, "https://example.com/page");
+    const article = graph.nodes.find(room => room.tag === "article");
+    const section = graph.nodes.find(room => room.tag === "section");
+    const aside = graph.nodes.find(room => room.tag === "aside");
+
+    expect(article?.floorLabel).toBe("STORY");
+    expect(section?.floorLabel).toBe("ROOM-CLASS");
+    expect(aside?.floorLabel).toBe("ASIDE");
+    expect(article?.contentHtml).toContain("<h1>Hello</h1>");
+    expect(article?.contentHtml).toContain('src="https://example.com/cover.png"');
+    expect(article?.contentHtml).not.toContain("onclick");
+    expect(article?.contentHtml).not.toContain("script");
+    expect(article?.contentHtml).not.toContain("javascript:");
   });
 
   it("coalesces deepest leaves and promotes their links", () => {
@@ -1458,5 +1480,68 @@ describe("deterministic room contents", () => {
     }]);
     expect(buildSceneryDrops([droppingItem], "https://example.com/", new Set())).toEqual([]);
     expect(buildSceneryDrops([destroyedItem], "https://example.com/", new Set([drops[0]!.id]))).toEqual([]);
+  });
+
+  it("builds leaf-room content browsers beside portals and drops three to seven RAM sticks", () => {
+    const contentRoom = node(9_900, 0, 1, {
+      x: 500,
+      y: 400,
+      contentHtml: "<p>Recovered transmission</p><img src=\"https://example.com/image.png\">",
+      lootSeed: stableHash("content-browser"),
+    });
+    const browser = contentBrowserForRoom(contentRoom);
+    if (!browser) throw new Error("Expected a content browser");
+
+    expect(browser).toMatchObject({
+      id: `${contentRoom.id}::content-browser`,
+      contentPoint: true,
+      contentUnlocked: false,
+      contentEnabled: false,
+      destructible: true,
+      obstacle: false,
+      dropKind: "credit",
+    });
+    expect(browser.dropCount).toBeGreaterThanOrEqual(3);
+    expect(browser.dropCount).toBeLessThanOrEqual(7);
+    expect(DECORATION_DEFINITIONS.contentBrowser.visual.destroyed?.map(clip => clip.frames[0])).toEqual([
+      DEBRIS_ASSETS.genericCircuit,
+      DEBRIS_ASSETS.genericMetal,
+    ]);
+
+    expect(contentBrowserForRoom({ ...contentRoom, isRoot: true })).toBeNull();
+    expect(contentBrowserForRoom({ ...contentRoom, childCount: 1 })).toBeNull();
+
+    const portalRoom = {
+      ...contentRoom,
+      hrefs: ["https://example.com/next"],
+    };
+    const portalBrowser = contentBrowserForRoom(portalRoom)!;
+    const objects = buildInteractiveObjects(
+      { nodes: [portalRoom], links: [], hiddenCount: 0 },
+      "content-floor",
+      null,
+      new Set(),
+    );
+    expect(objects.stairs).toHaveLength(1);
+    expect(Math.hypot(
+      portalBrowser.x - objects.stairs[0]!.x,
+      portalBrowser.y - objects.stairs[0]!.y,
+    )).toBeGreaterThan(PORTAL_DEFINITION.size / 2 + portalBrowser.size / 2);
+
+    const restored = buildDecorations(
+      { nodes: [contentRoom], links: [], hiddenCount: 0 },
+      new Map([[browser.id, { hp: 0, destroyed: true, contentEnabled: true }]]),
+    ).find(item => item.id === browser.id)!;
+    expect(restored).toMatchObject({ destroyed: true, contentUnlocked: true, contentEnabled: false });
+
+    const drops = buildSceneryDrops([{ ...browser, hp: 0, destroyed: true }], "content-floor", new Set());
+    expect(drops).toHaveLength(browser.dropCount!);
+    expect(drops.every(drop => drop.kind === "credit")).toBe(true);
+    expect(new Set(drops.map(drop => drop.id)).size).toBe(drops.length);
+    expect(buildSceneryDrops(
+      [{ ...browser, hp: 0, destroyed: true }],
+      "content-floor",
+      new Set([drops[0]!.id]),
+    )).toHaveLength(drops.length - 1);
   });
 });

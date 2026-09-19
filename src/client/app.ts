@@ -103,8 +103,14 @@ const gameViewport = requireElement<HTMLElement>("#gameViewport");
 const gameCanvasHost = requireElement<HTMLElement>("#gameCanvas");
 gameCanvasHost.dataset.debugMode = String(DEBUG_MODE);
 gameCanvasHost.dataset.playerMaxHp = String(PLAYER_MAX_HP);
+// Start this while the welcome screen is visible so the first floor textures
+// are drawn with Prefix instead of being regenerated after a fallback render.
+const prefixFontReady = document.fonts?.load(`900 ${world(34)}px Prefix`).catch(() => undefined) ?? Promise.resolve();
 let renderer!: PhaserRenderer;
 const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
+const contentBrowserEl = requireElement<HTMLElement>("#contentBrowser");
+const CONTENT_BROWSER_RADIUS = world(112);
+let visibleContentPointId: string | null = null;
 
 const welcomeScreen = requireElement<HTMLDivElement>("#welcomeScreen");
 const welcomeForm = requireElement<HTMLFormElement>("#welcomeForm");
@@ -280,6 +286,39 @@ function updateUrlBar(): void {
 function hideLinkMenu(): void {
   linkMenu.hidden = true;
   linkMenu.replaceChildren();
+}
+
+function hideContentBrowser(): void {
+  contentBrowserEl.hidden = true;
+  visibleContentPointId = null;
+}
+
+function renderContentBrowser(): void {
+  const point = currentDecorations.find(item =>
+    item.contentPoint &&
+    item.contentEnabled &&
+    !item.destroyed &&
+    distanceSquared(player, item) <= CONTENT_BROWSER_RADIUS * CONTENT_BROWSER_RADIUS
+  );
+  const room = point ? currentRoomsById.get(point.roomId) : undefined;
+  if (!point || !room?.contentHtml) {
+    hideContentBrowser();
+    return;
+  }
+  if (visibleContentPointId === point.id) {
+    contentBrowserEl.hidden = false;
+    return;
+  }
+
+  const heading = document.createElement("h2");
+  heading.textContent = room.floorLabel;
+  const content = document.createElement("div");
+  content.className = "content-browser-body";
+  // contentHtml is reduced to a fixed allowlist while the fetched page is parsed.
+  content.innerHTML = room.contentHtml;
+  contentBrowserEl.replaceChildren(heading, content);
+  contentBrowserEl.hidden = false;
+  visibleContentPointId = point.id;
 }
 
 function navigateTo(url: string, returnRoomId = currentRoomId): Promise<void> {
@@ -874,6 +913,7 @@ function saveObstacleState(item: Decoration): void {
   obstacleStateMapForPage(currentPageUrl).set(item.id, {
     hp: item.hp,
     destroyed: item.destroyed,
+    contentUnlocked: item.contentUnlocked,
     spawnedCount: item.spawnedCount,
   });
 }
@@ -906,6 +946,7 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
       currentLoot.push(...drops);
       if (drops.length) renderInteractiveObjects();
     }
+    renderContentBrowser();
   } else {
     renderer.spawnEffect(
       item.visual.animations?.damage,
@@ -1171,6 +1212,7 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
     saveMonsterState(monster);
     renderMonsters();
     renderInteractiveObjects();
+    updateContentPoints(performance.now());
 
     setTimeout(() => {
       monster.deathAnimating = false;
@@ -1187,6 +1229,38 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
     saveMonsterState(monster);
     updateMonsterPositions();
   }
+}
+
+function updateContentPoints(timestamp: number): void {
+  let changed = false;
+  const occupiedRoomId = roomContainingPoint(player.x, player.y)?.id ?? null;
+  for (const item of currentDecorations) {
+    if (!item.contentPoint || item.destroyed) continue;
+    const activation = item.visual.animations?.spawn;
+    const duration = activation ? activation.frames.length * activation.frameDurationMs : 0;
+    const playerInRoom = occupiedRoomId === item.roomId;
+    if (
+      !item.contentUnlocked &&
+      playerInRoom &&
+      !currentMonsters.some(monster => !monster.dead && monster.spawnRoomId === item.roomId)
+    ) {
+      item.contentUnlocked = true;
+      saveObstacleState(item);
+    }
+    const enabled = Boolean(item.contentUnlocked && playerInRoom);
+    if (item.contentEnabled !== enabled) {
+      item.contentEnabled = enabled;
+      item.contentTurningOff = !enabled;
+      item.spawnAnimationStartedAt = timestamp;
+      changed = true;
+    } else if (enabled && item.spawnAnimationStartedAt === undefined) {
+      item.contentTurningOff = false;
+      item.spawnAnimationStartedAt = timestamp - duration;
+    }
+  }
+  if (changed) renderDecorations();
+  renderer.updateDecorationAnimations(currentDecorations, timestamp);
+  renderContentBrowser();
 }
 
 function queueEnemyBullet(
@@ -1717,6 +1791,7 @@ function gameTick(timestamp: number): void {
   if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
+  updateContentPoints(timestamp);
   renderer.updateShadowOffsets(currentDecorations, timestamp);
   renderer.updateLootAnimations(currentLoot, timestamp);
 
@@ -2627,6 +2702,7 @@ function renderGraph(
   updateWeaponUi();
   bullets = [];
   hideLinkMenu();
+  hideContentBrowser();
 
   const layout = layoutOrthogonal(graph);
   currentLayout = layout;
@@ -2696,6 +2772,7 @@ function renderGraph(
 
   renderMonsters();
   renderInteractiveObjects();
+  updateContentPoints(performance.now());
   updatePlayerFacingAsset();
   revealRoomsFromCorridor(player.x, player.y);
   updateCameraForPlayer(true);
@@ -2791,6 +2868,7 @@ async function loadPage(
 }
 
 async function loadRenderer(): Promise<void> {
+  await prefixFontReady;
   const { PhaserRenderer } = await import("./render/phaser-renderer");
   renderer = new PhaserRenderer(gameCanvasHost);
   renderer.start({

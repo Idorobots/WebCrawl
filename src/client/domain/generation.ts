@@ -117,6 +117,38 @@ export function weaponPedestalForRoom(room: GraphNode, pageUrl: string): Decorat
   };
 }
 
+function hasContentBrowser(room: Pick<GraphNode, "contentHtml" | "isRoot" | "childCount">): boolean {
+  return !room.isRoot && room.childCount === 0 && Boolean(room.contentHtml);
+}
+
+function portalCountForRoom(room: Pick<GraphNode, "hrefs" | "isRoot" | "contentHtml" | "childCount">): number {
+  const cap = room.isRoot ? 7 : hasContentBrowser(room) ? 7 : 8;
+  return Math.min(cap, room.hrefs.length);
+}
+
+export function contentBrowserForRoom(room: GraphNode): Decoration | null {
+  if (!hasContentBrowser(room)) return null;
+  const dropCount = 3 + stableHash(`${room.lootSeed}|content-browser-drops`) % 5;
+  const hp = 5 + stableHash(`${room.lootSeed}|content-browser-hp`) % 3;
+  const portalCount = portalCountForRoom(room);
+  const position = staircasePositions(room, portalCount + 1, 0, true)[portalCount] ?? room;
+  return {
+    ...DECORATION_DEFINITIONS.contentBrowser,
+    id: `${room.id}::content-browser`,
+    roomId: room.id,
+    ...position,
+    visualVariant: room.lootSeed,
+    maxHp: hp,
+    hp,
+    destroyed: false,
+    dropKind: "credit",
+    dropCount,
+    contentPoint: true,
+    contentUnlocked: false,
+    contentEnabled: false,
+  };
+}
+
 export function sceneryDropKindForSeed(seed: number): LootKind | null {
   if (stableHash(`${seed}|drop`) % 100 >= 30) return null;
 
@@ -180,8 +212,9 @@ function decorationFits(
     ...lootPositions(room, 5),
     ...staircasePositions(
       room,
-      room.hrefs.length + (room.isRoot ? 1 : 0),
+      portalCountForRoom(room) + (room.isRoot ? 1 : 0) + (hasContentBrowser(room) ? 1 : 0),
       room.tag === "script" ? room.height * 0.24 : 0,
+      hasContentBrowser(room),
     ),
   ];
   const leavesInteractionsClear = !definition.obstacle || interactionPoints.every(point =>
@@ -403,6 +436,10 @@ export function buildDecorations(
   ));
   return [
     ...roomItems,
+    ...layout.nodes.flatMap(room => {
+      const browser = contentBrowserForRoom(room);
+      return browser ? [browser] : [];
+    }),
     ...layout.links.flatMap(link => decorationSpecsForCorridor(link, floor)),
   ].map((item) => {
     const state = savedStates.get(item.id);
@@ -410,6 +447,8 @@ export function buildDecorations(
       ...item,
       hp: state?.hp ?? item.hp,
       destroyed: state?.destroyed ?? false,
+      contentUnlocked: state?.contentUnlocked ?? state?.contentEnabled ?? item.contentUnlocked,
+      contentEnabled: false,
       spawnedCount: state?.spawnedCount ?? item.spawnedCount,
     };
   });
@@ -424,15 +463,19 @@ export function buildSceneryDrops(
     if (!item.destroyed || !item.dropKind) return [];
 
     const id = `${pageUrl}::${item.id}::scenery-drop`;
-    if (collectedLoot.has(id)) return [];
-
-    return [{
-      id,
-      roomId: item.roomId,
-      x: item.x,
-      y: item.y,
-      kind: item.dropKind,
-    }];
+    const count = item.dropCount ?? 1;
+    return Array.from({ length: count }, (_, index) => {
+      const dropId = count === 1 ? id : `${id}-${index}`;
+      const angle = count === 1 ? 0 : index / count * Math.PI * 2;
+      const radius = count === 1 ? 0 : world(24 + index % 2 * 12);
+      return {
+        id: dropId,
+        roomId: item.roomId,
+        x: item.x + Math.cos(angle) * radius,
+        y: item.y + Math.sin(angle) * radius,
+        kind: item.dropKind!,
+      };
+    }).filter(drop => !collectedLoot.has(drop.id));
   });
 }
 
@@ -853,12 +896,17 @@ export function lootPositions(room: GraphNode, count: number): Point[] {
   });
 }
 
-export function staircasePositions(room: GraphNode, count: number, yOffset = 0): Point[] {
+export function staircasePositions(
+  room: GraphNode,
+  count: number,
+  yOffset = 0,
+  reserveContentBrowser = false,
+): Point[] {
   const capped = Math.min(8, Math.max(0, count));
   if (!capped) return [];
   const portalSize = PORTAL_DEFINITION.size;
-  const horizontalSpacing = world(135);
-  const verticalSpacing = world(115);
+  const horizontalSpacing = world(reserveContentBrowser ? 170 : 135);
+  const verticalSpacing = world(reserveContentBrowser ? 160 : 115);
   const fittingColumns = Math.max(1, Math.floor((room.width - portalSize) / horizontalSpacing) + 1);
   const columns = Math.min(5, capped, fittingColumns);
   const rows = Math.ceil(capped / columns);
@@ -883,11 +931,12 @@ export function buildInteractiveObjects(
   const loot: LootItem[] = [];
 
   for (const room of layout.nodes) {
-    const hrefs = room.hrefs.slice(0, room.isRoot ? 7 : 8);
+    const hrefs = room.hrefs.slice(0, portalCountForRoom(room));
     const positions = staircasePositions(
       room,
-      hrefs.length + (room.isRoot ? 1 : 0),
+      hrefs.length + (room.isRoot ? 1 : 0) + (hasContentBrowser(room) ? 1 : 0),
       room.tag === "script" ? room.height * 0.24 : 0,
+      hasContentBrowser(room),
     );
     let positionIndex = 0;
     if (room.isRoot) {

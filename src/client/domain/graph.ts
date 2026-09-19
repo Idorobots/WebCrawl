@@ -8,6 +8,62 @@ import {
 import type { DungeonGraph, GraphNode } from "../types";
 import { stableHash } from "./hash";
 
+const MAX_ROOM_CONTENT_LENGTH = 48_000;
+const CONTENT_TAGS = new Set([
+  "a", "article", "aside", "b", "blockquote", "br", "code", "div", "em", "figcaption",
+  "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "i", "img", "li",
+  "main", "ol", "p", "pre", "section", "span", "strong", "table", "tbody", "td", "tfoot",
+  "th", "thead", "tr", "u", "ul",
+]);
+const CONTENT_OMIT_TAGS = new Set(["script", "style", "noscript", "template"]);
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'\"]/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    "\"": "&quot;",
+  })[char]!);
+}
+
+function safeUrl(rawUrl: string | null, pageUrl: string): string | null {
+  if (!rawUrl) return null;
+  try {
+    const url = new URL(rawUrl, pageUrl);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function contentMarkup(node: Node, pageUrl: string): string {
+  if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.textContent || "");
+  if (!(node instanceof Element)) return "";
+
+  const tag = node.tagName.toLowerCase();
+  if (CONTENT_OMIT_TAGS.has(tag)) return "";
+  const children = Array.from(node.childNodes).map(child => contentMarkup(child, pageUrl)).join("");
+  if (!CONTENT_TAGS.has(tag)) return children;
+  if (tag === "br") return "<br>";
+  if (tag === "img") {
+    const src = safeUrl(node.getAttribute("src"), pageUrl);
+    return src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(node.getAttribute("alt") || "")}">` : "";
+  }
+  if (tag === "a") {
+    const href = safeUrl(node.getAttribute("href"), pageUrl);
+    return href
+      ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${children}</a>`
+      : `<span>${children}</span>`;
+  }
+  return `<${tag}>${children}</${tag}>`;
+}
+
+function roomContent(element: Element, pageUrl: string): string | null {
+  const markup = contentMarkup(element, pageUrl).slice(0, MAX_ROOM_CONTENT_LENGTH);
+  return markup.replace(/<[^>]+>/g, "").trim() || /<img\b/i.test(markup) ? markup : null;
+}
+
 function nodeLootSeed(element: Element, text: string, structuralPath: string): number {
   return stableHash([
     structuralPath,
@@ -44,6 +100,13 @@ function makeLabel(element: Element, text: string): string {
 
   const label = `<${tag}>${extra}`;
   return label.length > 24 ? `${label.slice(0, 23)}…` : label;
+}
+
+function makeFloorLabel(element: Element): string {
+  const tag = element.tagName.toLowerCase();
+  const identity = element.id || element.classList[0] || tag;
+  const label = identity.toUpperCase();
+  return label.length > 48 ? `${label.slice(0, 47)}…` : label;
 }
 
 function makeTitle(element: Element, text: string, href: string | null): string {
@@ -83,7 +146,9 @@ export function domToGraph(html: string, pageUrl: string): DungeonGraph {
       hrefs,
       coalescedCount: 0,
       label: makeLabel(element, text),
+      floorLabel: makeFloorLabel(element),
       title: makeTitle(element, text, hrefs[0] ?? null),
+      contentHtml: roomContent(element, pageUrl),
       width: ROOM_WIDTH,
       height: ROOM_HEIGHT,
       lootSeed: nodeLootSeed(element, text, structuralPath),

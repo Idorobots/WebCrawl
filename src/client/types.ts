@@ -100,7 +100,9 @@ export interface GraphNode extends Point {
   hrefs: string[];
   coalescedCount: number;
   label: string;
+  floorLabel: string;
   title: string;
+  contentHtml: string | null;
   width: number;
   height: number;
   lootSeed: number;
@@ -199,6 +201,11 @@ export interface Decoration extends Point {
   hp: number;
   destroyed: boolean;
   dropKind: LootKind | null;
+  dropCount?: number;
+  contentPoint?: boolean;
+  contentUnlocked?: boolean;
+  contentEnabled?: boolean;
+  contentTurningOff?: boolean;
   spawner?: boolean;
   spawnIntervalMs?: number;
   spawnLimit?: number;
@@ -210,6 +217,8 @@ export interface Decoration extends Point {
 export interface ObstacleState {
   hp: number;
   destroyed: boolean;
+  contentUnlocked?: boolean;
+  contentEnabled?: boolean;
   spawnedCount?: number;
 }
 

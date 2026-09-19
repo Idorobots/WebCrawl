@@ -750,6 +750,28 @@ export const DECORATION_DEFINITIONS = {
       },
     },
   },
+  contentBrowser: {
+    ...decoration("content-browser", "content-browser", SCENERY_ASSETS.contentBrowserOff, world(135), {
+      radius: world(28),
+      obstacle: false,
+      origin: { x: 0.5, y: 0.90625 },
+      hitOffsetY: -world(38),
+      debris: circuitDebris,
+      destroy: explosionEffect(0.72),
+    }),
+    visual: {
+      normal: clip([SCENERY_ASSETS.contentBrowserOff], 1, { x: 0.5, y: 0.90625 }),
+      destroyed: circuitDebris.map(asset => clip([asset], 0.8, sceneryOrigin)),
+      animations: {
+        damage: damageEffect(0.4),
+        destroy: explosionEffect(0.72),
+        spawn: clip([
+          SCENERY_ASSETS.contentBrowserTurning,
+          SCENERY_ASSETS.contentBrowserOn,
+        ], 1, { x: 0.5, y: 0.90625 }, 180, { holdLast: true }),
+      },
+    },
+  },
   debrisCircuit: decoration("debris-circuit", "debris", DEBRIS_ASSETS.genericCircuit, world(90), { origin: sceneryOrigin }),
   debrisMetal: decoration("debris-metal", "debris", DEBRIS_ASSETS.genericMetal, world(90), { origin: sceneryOrigin }),
   pedestal: decoration("weapon-pedestal", "weapon-pedestal", ASSETS.pedestal, world(108), { origin: { x: 0.5, y: 0.898 } }),

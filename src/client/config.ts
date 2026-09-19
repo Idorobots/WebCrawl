@@ -156,6 +156,9 @@ export const SCENERY_ASSETS = {
   spawnerCharging: asset("scenery/spawner/charging.png"),
   spawnerDischarge: asset("scenery/spawner/discharge.png"),
   spawnerReady: asset("scenery/spawner/ready.png"),
+  contentBrowserOff: asset("scenery/content/hologram_table_off.png"),
+  contentBrowserTurning: asset("scenery/content/hologram_table_turning.png"),
+  contentBrowserOn: asset("scenery/content/hologram_table_on.png"),
 } as const;
 
 export const DEBRIS_ASSETS = {

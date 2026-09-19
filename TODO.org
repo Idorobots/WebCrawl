@@ -193,19 +193,6 @@ Scenery sprites' ordering should "be on top" of the characters when above the "m
 
 Broken walls and floor tiles should be used sparingly as a means to add flavour to the game.
 
-* Visual bugs
-- Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
-- Move the portal active area and footprint by the same amount as down as the player spawn point.
-
-- Spawner shadow is messed up due to the translucent area on the sprite.
-- Spawner spawn animation should only be triggered when the spawner is actually spawning something.
-- Sprite shadows are too well-defined. They should be softer.
-- Shadows are too large in general, please make the "drop shadow" effect slightly less pronounced.
-
-- "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
-- "floor_hatch" tile should be considered decoration tile, not main floor tile
-
-
 * Wall & door refactor
 Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
 * Enemy refactor
@@ -235,13 +222,6 @@ It's OK if the specs are not entirely static - it's perfectly fine to have a fun
 
 The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
-* Additional scenery
-There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
-
-More scenery items & enemies now have dedicated debris sprites. Please add them to the game.
-
-There are several backgrounds now, these could be used as an alternative for the current dark "technology" background. Each URL visited should deterministically determine which background to use for those levels.
-
 * DONE More enemy types
 :LOGBOOK:
 - State "DONE"       from              [2026-09-17 Thu 21:22]
@@ -256,17 +236,15 @@ Add extra enemy types: shooting walkers, spray turrets, mini-boss type larger op
 - scatter sentry - medium HP, medium damage, stationary, shoots bullets in a scatter pattern.
 Each one of these can come in a "miniboss" variant - it should be larger, higher damage and higher HP, but otherwise "look and feel" the same. Minibosses should be fairly rare and generated deterministically based on the room seed.
 
-* Level generator/renderer refactor
+* DONE Level generator/renderer refactor
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 21:32]
+:END:
 The level generation should be carried out entirely on the client side. The server component should just serve the assets and download the desired URL returning the HTML contents.
 
 The client-side generator should first traverse the returned DOM and bulid a graph of rooms and corridors, which is then laid out to form the level map. Then for each of generated room and corridor, the level generator should deterministically generate themed scenery and enemies and their loot. That generated level should be a large data structure that serves the purpose of the game state.
 
 The client-side level renderer should take the large data structure and render the level using datastructure-stored layout, scenery, enemies and loot. It is OK to limit the rendered level to just the "visible" rooms - the rooms that the player's viewport is currently showing.
-
-Update the loading screen with an additional task that fires after fetching the page - call it "Generating level". The order should be as follows:
-- "Fetching page"
-- "Generating level"
-- "Booting renderer"
 
 * Room layout
 We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
@@ -607,7 +585,10 @@ What exactly is inflating the size so much?
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
 
-* More use of HTML contents in-game.
+* DONE More use of HTML contents in-game.
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 21:30]
+:END:
 The game should leverage the HTML contents some more.
 
 I'd like to achive this in several ways:
@@ -625,8 +606,56 @@ For the in-game content browser point let's add a new scenery item. The assets f
 The content point should be placed in the center of a room mapped to a DOM element that has textual content within it (for example paragraph, etc). The content point should be off by default (use the "off" sprite for that). Whenever the room is cleared from enemies (no enemies spawned in that room remain alive), the content point should turn on (go through "turning" sprite to "on" sprite). When on and the player walks up to it to be within it's direct vicinity, a small translucent box should be displayed containing all the content (text and images) in that room. The box should disappear when the player walks away or destroys the content browser point.
 The content box should be scrollable and use a "best effort" basis to display the content with formatting, etc.
 
-The content point should be destructible, so if it is destroyed before being enabled, it still breaks down and leaves loot behind. The loof of a content point should be a bunch of RAM sticks - 3-7 for each content point.
+The content point should be destructible, so if it is destroyed before being enabled, it still breaks down and leaves loot behind. The loot of a content point should be a bunch of RAM sticks - 3-7 for each content point.
+
+On the room & corridor floor: Let's only render the id or the first class name or the element type (no angle brackets) if no id or class is provided, without the preceeding dot. Make the strings uppercase (but preserve hyphenation). Make the text larger and bold, very bold. The text should be translucent, so that the underlying texture is slightly visible Use a more futuristic font such as the Prefix font in the assets/fonts directory. The west corridor signs should be of the form "< ROOM-CLASS". The east corridor signs should be of the form "ROOM-CLASS >". The north and south corridors should be rotated by 90 degrees and be of the same form as the west and east corridor signs. The initial room should not have a content display, only leaf rooms should have them and only limitted to the subset of the page represented by that room. When there are portals and content browsers in the same room, they should not overlap, but be shown side-by-side (like multiple portals).
+
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 21:49]
+:END:
+Use debris spites for the destroyed content browser, not the signal lost one.
+The content browser should turn off when the player leaves the room, and turn back on when they enter the room.
+
+The floor signage must be rendered as additional textures on the floor tiles so that it participates in the lighting.
+
+When the content browser is turning off, it should animate using the "turning" frame as well. Essentially, it's the same animation as turning on, except in reverse.
+
+The font is not shown on the the very first load of a room, only after going down a level and back up the font is rendered correctly.
+
 * More varied weapons
 - Use different bullet types
 - Homing missles
 - Exploding granades
+* Level generation overhaul
+We limit the number of DOM elements usable for level rendering because of the four corridor limitation. Additionally, the layout algoritm removes some of the rooms due to lack of space. I'd like to relax these constraints by allowing longer corridors.
+It's also OK for the corridors to fork.
+
+There should be a limit to the number of forks a corridor can have, but it should be possible to handle `<li>` elements with multiple subelements - create a one large corridor with turns and attach each room to those sub-corridors. For signage - when a corridor has forks, the entrence should show just the arrow and each sub-corridor should have a specific sign on it at the fork.
+
+Let's not spawn any enemies in the corridors as longer corridors will be hard to play.
+
+Update the loading screen with an additional task that fires after fetching the page - call it "Generating level". The order should be as follows:
+- "Fetching page"
+- "Fetching Phaser"
+- "Generating level"
+- "Booting renderer"
+
+* Visual bugs
+- Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
+- Move the portal active area and footprint by the same amount as down as the player spawn point.
+
+- Spawner shadow is messed up due to the translucent area on the sprite.
+- Spawner spawn animation should only be triggered when the spawner is actually spawning something.
+- Sprite shadows are too well-defined. They should be softer.
+- Shadows are too large in general, please make the "drop shadow" effect slightly less pronounced.
+
+- "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
+- "floor_hatch" tile should be considered decoration tile, not main floor tile
+* Additional scenery
+There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
+
+More scenery items & enemies now have dedicated debris sprites. Please add them to the game.
+
+There are several backgrounds now, these could be used as an alternative for the current dark "technology" background. Each URL visited should deterministically determine which background to use for those levels.
+

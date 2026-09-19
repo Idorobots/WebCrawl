@@ -62,7 +62,12 @@ const FLOOR_TILE_SCALE = FLOOR_TILE_SIZE / 128;
 const HIDDEN_WORLD_ALPHA = 0.24;
 const FLOOR_DAMAGE_CHANCE_PERCENT = 12;
 
-type StaticObject = Phaser.GameObjects.Image | Phaser.GameObjects.TileSprite | Phaser.GameObjects.Container;
+type StaticObject =
+  | Phaser.GameObjects.Image
+  | Phaser.GameObjects.TileSprite
+  | Phaser.GameObjects.Container
+  | Phaser.GameObjects.Graphics
+  | Phaser.GameObjects.Text;
 
 const ROOM_FLOOR_DEPTH = -2;
 const CORRIDOR_FLOOR_DEPTH = -4;
@@ -232,6 +237,8 @@ export class PhaserRenderer {
   private roomLights = new Map<number, WorldLight>();
   private corridorLights = new Map<string, WorldLight[]>();
   private lightProfiles: WorldLight[] = [];
+  private floorMarkingTextures = new Set<string>();
+  private floorMarkingTextureSerial = 0;
   private lastFlickerUpdate = -Infinity;
   private corridorBounds = new Map<string, WorldBounds>();
   private staticVisibility = new Map<StaticObject, boolean>();
@@ -333,6 +340,7 @@ export class PhaserRenderer {
       this.host.dataset.portalUpAuraColor = PORTAL_UP_AURA_COLOR.toString(16).padStart(6, "0");
     }
     scene.scale.on(Phaser.Scale.Events.RESIZE, this.refreshCameraForResize, this);
+    this.refreshFloorMarkingsAfterFontLoad();
     this.drawWorld();
     this.renderDecorations(this.currentDecorations, this.visited);
     this.renderObjects(this.currentStairs, this.currentLoot, this.visited, this.currentLootAssets);
@@ -342,6 +350,15 @@ export class PhaserRenderer {
     this.applyCameraMode(true);
     this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
     (window as unknown as { __webcrawlScene?: Phaser.Scene }).__webcrawlScene = scene;
+  }
+
+  private refreshFloorMarkingsAfterFontLoad(): void {
+    if (typeof document === "undefined" || !document.fonts) return;
+    void document.fonts.load(`900 ${world(34)}px Prefix`).then(() => {
+      // The first map can render while Prefix is still loading. Rebuild just
+      // the static world so its canvas-backed floor textures use the real face.
+      if (this.scene && this.layout) this.drawWorld();
+    }).catch(() => undefined);
   }
 
   clear(): void {
@@ -571,6 +588,7 @@ export class PhaserRenderer {
       .setTileScale(FLOOR_TILE_SCALE);
     this.illuminate(floor);
     floorContainer.add(floor);
+    this.addRoomFloorMarking(floorContainer, room);
     this.addRoomFloorDetails(floorContainer, room);
     const statics: StaticObject[] = [floorContainer];
     const doors = this.roomDoors(room);
@@ -610,6 +628,7 @@ export class PhaserRenderer {
         statics.push(this.rememberStatic(wall.setAlpha(alpha)));
       }
     }
+    this.addCorridorMarking(floorContainer, link);
     this.corridorStatics.set(link.id, statics);
   }
 
@@ -649,6 +668,69 @@ export class PhaserRenderer {
       this.illuminate(detail);
       container.add(detail);
     }
+  }
+
+  private addRoomFloorMarking(container: Phaser.GameObjects.Container, room: GraphNode): void {
+    const label = this.createFloorMarking(
+      room.x,
+      room.y - room.height * 0.23,
+      room.floorLabel,
+      world(34),
+    );
+    const maxWidth = room.width - world(96);
+    if (label.displayWidth > maxWidth) label.setScale(maxWidth / label.displayWidth);
+    container.add(label);
+  }
+
+  private addCorridorMarking(
+    container: Phaser.GameObjects.Container,
+    link: DungeonLayout["links"][number],
+  ): void {
+    const start = link.points[0]!;
+    const end = link.points[link.points.length - 1]!;
+    const x = (start.x + end.x) / 2;
+    const y = (start.y + end.y) / 2;
+    const vertical = link.direction === "N" || link.direction === "S";
+    const pointsTowardStart = link.direction === "W" || link.direction === "S";
+    const text = pointsTowardStart
+      ? `< ${link.target.floorLabel}`
+      : `${link.target.floorLabel} >`;
+    const label = this.createFloorMarking(x, y, text, world(25), vertical ? -Math.PI / 2 : 0);
+    const maxWidth = Math.max(world(72), link.width - world(20));
+    if (label.displayWidth > maxWidth) label.setScale(maxWidth / label.displayWidth);
+    container.add(label);
+  }
+
+  private createFloorMarking(
+    x: number,
+    y: number,
+    text: string,
+    fontSize: number,
+    rotation = 0,
+  ): Phaser.GameObjects.Image {
+    const measureCanvas = document.createElement("canvas");
+    const measureContext = measureCanvas.getContext("2d");
+    if (!measureContext) throw new Error("Unable to create floor-marking texture.");
+    const font = `900 ${fontSize}px Prefix, monospace`;
+    measureContext.font = font;
+    const padding = world(12);
+    const width = Math.ceil(measureContext.measureText(text).width + padding * 2);
+    const height = Math.ceil(fontSize * 1.45 + padding * 2);
+    const key = `floor-marking:${this.floorMarkingTextureSerial++}`;
+    const texture = this.scene!.textures.createCanvas(key, width, height);
+    if (!texture) throw new Error("Unable to allocate floor-marking texture.");
+    const context = texture.context;
+    context.clearRect(0, 0, width, height);
+    context.font = font;
+    context.fillStyle = "rgba(236, 232, 219, 0.46)";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(text, width / 2, height / 2);
+    texture.refresh();
+    this.floorMarkingTextures.add(key);
+    return this.illuminate(this.scene!.add.image(x, y, key))
+      .setOrigin(0.5)
+      .setRotation(rotation);
   }
 
   private corridorSegmentParts(
@@ -794,6 +876,8 @@ export class PhaserRenderer {
   private destroyStaticObjects(): void {
     for (const object of this.staticObjects) object.destroy();
     this.staticObjects.length = 0;
+    for (const key of this.floorMarkingTextures) this.scene?.textures.remove(key);
+    this.floorMarkingTextures.clear();
     for (const profile of this.roomLights.values()) this.scene?.lights.removeLight(profile.light);
     this.roomLights.clear();
     for (const profiles of this.corridorLights.values()) {
@@ -1061,6 +1145,18 @@ export class PhaserRenderer {
     }
     const spawn = item.visual.animations?.spawn;
     if (spawn && item.spawnAnimationStartedAt !== undefined) {
+      if (item.contentTurningOff) {
+        return {
+          clip: {
+            ...spawn,
+            // The on frame is already visible before shutdown begins; reverse the
+            // transition itself, then settle into the normal off frame.
+            frames: [...spawn.frames.slice(0, -1)].reverse().concat(item.visual.normal.frames[0]!),
+            holdLast: true,
+          },
+          elapsed: Math.max(0, now - item.spawnAnimationStartedAt),
+        };
+      }
       return { clip: spawn, elapsed: Math.max(0, now - item.spawnAnimationStartedAt) };
     }
     return { clip: item.visual.normal, elapsed: 0 };
