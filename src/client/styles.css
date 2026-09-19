@@ -1049,13 +1049,14 @@ body {
 
 #welcomeScreen[hidden] { display: none; }
 
-#welcomeScreen:not(.welcome-ready) :is(.welcome-panel, .welcome-titlebar, .welcome-visual) {
+#welcomeScreen:not(.welcome-ready) :is(.welcome-panel, .welcome-titlebar, .welcome-visual, .welcome-github) {
   pointer-events: none;
 }
 
 .welcome-panel,
 .welcome-titlebar,
-.welcome-visual {
+.welcome-visual,
+.welcome-github {
   opacity: 0;
   transition:
     opacity 620ms ease,
@@ -1074,7 +1075,7 @@ body {
   transition-delay: 260ms;
 }
 
-#welcomeScreen.welcome-ready :is(.welcome-panel, .welcome-titlebar, .welcome-visual) {
+#welcomeScreen.welcome-ready :is(.welcome-panel, .welcome-titlebar, .welcome-visual, .welcome-github) {
   opacity: 1;
   transform: none;
 }
@@ -1083,7 +1084,7 @@ body {
   pointer-events: none;
 }
 
-#welcomeScreen.closing :is(.welcome-panel, .welcome-titlebar, .welcome-visual) {
+#welcomeScreen.closing :is(.welcome-panel, .welcome-titlebar, .welcome-visual, .welcome-github) {
   opacity: 0;
   transition-delay: 0ms;
   transition-duration: 320ms;
@@ -1092,6 +1093,52 @@ body {
 #welcomeScreen.closing .welcome-titlebar { transform: translateY(-12px); }
 #welcomeScreen.closing .welcome-visual { transform: translateX(32px); }
 #welcomeScreen.closing .welcome-panel { transform: translateY(12px); }
+#welcomeScreen.closing .welcome-github { transform: translateY(-12px); }
+
+.welcome-github {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  color: rgba(184, 229, 255, 0.68);
+  transform: translateY(-12px);
+  text-decoration: none;
+  transition:
+    opacity 620ms ease,
+    transform 620ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    color 160ms ease;
+}
+
+.welcome-github svg {
+  width: 30px;
+  height: 30px;
+  fill: currentColor;
+  opacity: 0.65;
+  filter: drop-shadow(0 0 6px rgba(110, 200, 255, 0.35));
+  transition: opacity 160ms ease, filter 160ms ease;
+}
+
+.welcome-github:hover,
+.welcome-github:focus-visible {
+  color: #e5f8ff;
+}
+
+.welcome-github:hover svg,
+.welcome-github:focus-visible svg {
+  opacity: 1;
+  filter: drop-shadow(0 0 10px rgba(72, 183, 255, 0.6));
+}
+
+.welcome-github:focus-visible {
+  outline: 2px solid rgba(190, 235, 255, 0.95);
+  outline-offset: 3px;
+}
+
+.welcome-github:active svg { opacity: 0.75; }
 
 .welcome-layout {
   display: flex;
@@ -1379,6 +1426,18 @@ body {
 }
 
 @media (max-width: 900px) {
+  .welcome-github {
+    top: 10px;
+    right: 10px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .welcome-github svg {
+    width: 24px;
+    height: 24px;
+  }
+
   .welcome-layout {
     flex-direction: column;
     gap: 14px;
@@ -1397,7 +1456,8 @@ body {
 
   .welcome-panel,
   .welcome-titlebar,
-  .welcome-visual {
+  .welcome-visual,
+  .welcome-github {
     transition: none;
     transform: none;
   }

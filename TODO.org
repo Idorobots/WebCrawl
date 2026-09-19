@@ -545,3 +545,20 @@ UI for twin-stick shooters. :shrug:
 * Performance optimization
 - Looks like the flashlight is very heavy on the graphics card. Can that be optimized?
 - The game is heavy on the CPU even when the player is idling in the initial room. There are no enemies or bullets. Why is that? Can that be optimised?
+* DONE GitHub badge
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 13:53]
+:END:
+Add a GitHub logo badge to the top right corner of the welcome screen. When clicked, it should take the user to the WebCrawl repository on GitHub: github.com/Idorobots/WebCrawl
+Keep the GitHub logo badge style-consistent with the holographic UI.
+* Collision detection
+- Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
+- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
+- Use hitboxes for player/bullet collision detection and damage calcualation.
+- Use hitboxes for enemy/bullet collision detection and damage calcualation.
+- Use hitboxes for player/pickup collision detection.
+- Use the footprints for player/scenery collision detection and blocking.
+- Use the footprints for enemy/scenery collision detection and blocking.
+
+* Welcome screen page randomization
+Add a "regen" icon at the end of the "webcrawl <URL>" line that automatically randomizes the URL. Use wikipedias random page and HackerNews' top articles for the URLs.

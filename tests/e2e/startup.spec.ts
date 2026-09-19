@@ -186,6 +186,23 @@ async function lastDroppedWeapon(page: Page): Promise<{ id: string; x: number; y
   );
 }
 
+test("shows a GitHub repository badge on the welcome screen", async ({ page }) => {
+  await page.goto("/");
+
+  const badge = page.getByRole("link", { name: /view webcrawl on github/i });
+  await expect(badge).toBeVisible({ timeout: 15_000 });
+  await expect(badge).toHaveAttribute("href", "https://github.com/Idorobots/WebCrawl");
+  await expect(badge).toHaveAttribute("target", "_blank");
+  await expect(badge).toHaveAttribute("rel", "noopener noreferrer");
+
+  const bounds = await badge.boundingBox();
+  const viewport = page.viewportSize();
+  expect(bounds).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(bounds!.x + bounds!.width).toBeGreaterThan(viewport!.width - 80);
+  expect(bounds!.y).toBeLessThan(20);
+});
+
 test("starts a crawl and renders a playable floor", async ({ page }) => {
   const failedAssets: string[] = [];
   page.on("response", response => {
