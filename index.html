@@ -34,7 +34,7 @@
               spellcheck="false"
               autocomplete="off"
               value="https://blog.idorobots.org"
-            /><span class="welcome-caret" aria-hidden="true"></span><span
+            /><span class="welcome-caret welcome-url-caret" aria-hidden="true"></span><span
               class="welcome-url-mirror"
               aria-hidden="true"
             ></span>
@@ -54,6 +54,10 @@
         <div class="brand-name">WEBCRAWL</div>
       </div>
     </header>
+
+    <div id="urlBar" class="url-bar" hidden>
+      <span id="urlBarText"></span>
+    </div>
 
     <main id="gameViewport">
       <div id="gameCanvas" role="img" aria-label="WebCrawl dungeon"></div>
@@ -114,6 +118,13 @@
           <div>Sentries: <strong id="deathSentryKills">0</strong></div>
           <div>Bosses: <strong id="deathBossKills">0</strong></div>
           <div>Shots fired: <strong id="deathShots">0</strong></div>
+        </div>
+        <div class="death-loot" aria-label="Loot haul">
+          <div class="death-loot-row"><img src="assets/pickups/ram0.png" alt="" /><span>Precious Content</span><strong id="deathLootCredits">0</strong></div>
+          <div class="death-loot-row"><img src="assets/pickups/crystal.png" alt="" /><span>Endgame Crystals</span><strong id="deathLootCrystals">0</strong></div>
+          <div class="death-loot-row"><img src="assets/pickups/ammo_ballistic.png" alt="" /><span>Doom Post Ammo</span><strong id="deathLootCores">0</strong></div>
+          <div class="death-loot-row"><img src="assets/pickups/ammo_energy.png" alt="" /><span>AI Doomer Energy</span><strong id="deathLootEnergy">0</strong></div>
+          <div class="death-loot-row"><img src="assets/pickups/medkit.png" alt="" /><span>VC Investment Kit</span><strong id="deathLootMedkits">0</strong></div>
         </div>
         <h3>High scores — score</h3>
         <table id="highScoreTable">

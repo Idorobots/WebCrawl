@@ -1255,6 +1255,12 @@ body {
   text-shadow: inherit;
 }
 
+.welcome-url-caret {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-55%);
+}
+
 .welcome-url-mirror {
   position: absolute;
   visibility: hidden;
@@ -1404,7 +1410,7 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 102px;
+  bottom: 0;
   background: radial-gradient(circle at center, rgba(7,19,29,.2), rgba(2,5,8,.72) 72%);
   overflow: hidden;
   cursor: crosshair;
@@ -1467,7 +1473,7 @@ body {
   min-height: 0;
   display: block;
   margin-top: 6px;
-  background: #030a10;
+  background: rgba(3, 10, 16, 0.55);
 }
 
 #bottomHud {
@@ -1680,6 +1686,81 @@ body {
     0 0 24px rgba(64, 140, 255, 0.26);
 }
 
+.hud-panel,
+#bottomHud > section {
+  background:
+    repeating-linear-gradient(0deg, rgba(80, 150, 255, 0.03) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(6, 18, 30, 0.55), rgba(2, 8, 14, 0.66));
+  box-shadow:
+    0 0 14px rgba(38, 150, 255, 0.12),
+    inset 0 0 18px rgba(31, 127, 178, 0.08);
+}
+
+.url-bar {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: min(46vw, 640px);
+  padding: 7px 16px;
+  border: 1px solid rgba(38, 159, 255, 0.4);
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(0deg, rgba(80, 150, 255, 0.035) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(6, 18, 30, 0.55), rgba(2, 8, 14, 0.66));
+  box-shadow:
+    0 0 14px rgba(38, 150, 255, 0.14),
+    inset 0 0 14px rgba(31, 127, 178, 0.1);
+  color: rgba(150, 215, 255, 0.8);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 7px rgba(96, 180, 255, 0.4);
+}
+
+#urlBar[hidden] { display: none; }
+
+.url-bar span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.death-loot {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  margin: 0 0 8px;
+  color: #c8d1dc;
+}
+
+.death-loot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.death-loot-row img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex: none;
+}
+
+.death-loot-row span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.death-loot-row strong {
+  color: #e6f6ff;
+}
+
 /* Correct monster death positioning: animate the sprite, not the
    translated world-position group. */
 .monster.dying {
@@ -1718,13 +1799,19 @@ body {
   .brand-name {
     font-size: 16px;
   }
+  .url-bar {
+    left: auto;
+    right: 8px;
+    transform: none;
+    max-width: calc(100vw - 240px);
+  }
   #rightHud {
     display: none;
   }
   #gameViewport {
     top: 0;
     right: 0;
-    bottom: 82px;
+    bottom: 0;
   }
   #bottomHud {
     left: 4px;

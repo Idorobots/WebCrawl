@@ -231,8 +231,16 @@ const deathSlowKillsEl = requireElement<HTMLElement>("#deathSlowKills");
 const deathSentryKillsEl = requireElement<HTMLElement>("#deathSentryKills");
 const deathBossKillsEl = requireElement<HTMLElement>("#deathBossKills");
 const deathShotsEl = requireElement<HTMLElement>("#deathShots");
+const deathLootCreditsEl = requireElement<HTMLElement>("#deathLootCredits");
+const deathLootCrystalsEl = requireElement<HTMLElement>("#deathLootCrystals");
+const deathLootCoresEl = requireElement<HTMLElement>("#deathLootCores");
+const deathLootEnergyEl = requireElement<HTMLElement>("#deathLootEnergy");
+const deathLootMedkitsEl = requireElement<HTMLElement>("#deathLootMedkits");
 const highScoreRowsEl = requireElement<HTMLTableSectionElement>("#highScoreRows");
 const restartButton = requireElement<HTMLButtonElement>("#restartButton");
+
+const urlBar = requireElement<HTMLDivElement>("#urlBar");
+const urlBarText = requireElement<HTMLElement>("#urlBarText");
 
 const fetchErrorModal = requireElement<HTMLDivElement>("#fetchErrorModal");
 const fetchErrorMessageEl = requireElement<HTMLElement>("#fetchErrorMessage");
@@ -245,6 +253,22 @@ function setStatus(message: string, isError = false): void {
   } else {
     console.log(`[WebCrawl] ${message}`);
   }
+}
+
+const URL_BAR_MAX_LENGTH = 64;
+
+function elideUrl(url: string): string {
+  if (url.length <= URL_BAR_MAX_LENGTH) return url;
+  const head = Math.ceil((URL_BAR_MAX_LENGTH - 1) / 2);
+  const tail = Math.floor((URL_BAR_MAX_LENGTH - 1) / 2);
+  return `${url.slice(0, head)}…${url.slice(url.length - tail)}`;
+}
+
+function updateUrlBar(): void {
+  if (!currentPageUrl) return;
+  urlBar.hidden = false;
+  urlBarText.textContent = elideUrl(currentPageUrl);
+  urlBar.title = currentPageUrl;
 }
 
 function hideLinkMenu(): void {
@@ -394,7 +418,7 @@ function renderSideMinimap(): void {
   if (!context) return;
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, width, height);
-  context.fillStyle = "#071018";
+  context.fillStyle = "rgba(7, 16, 24, 0.6)";
   context.fillRect(0, 0, width, height);
   if (!nodes.length) return;
 
@@ -636,6 +660,11 @@ function showDeathModal(): void {
   deathSentryKillsEl.textContent = String(runStats.sentryKills ?? 0);
   deathBossKillsEl.textContent = String(runStats.bossKills ?? 0);
   deathShotsEl.textContent = String(runStats.shotsFired);
+  deathLootCreditsEl.textContent = String(lootInventory.credits);
+  deathLootCrystalsEl.textContent = String(lootInventory.crystals);
+  deathLootCoresEl.textContent = String(lootInventory.cores);
+  deathLootEnergyEl.textContent = String(lootInventory.energy);
+  deathLootMedkitsEl.textContent = String(lootInventory.medkits);
 
   newHighScoreEl.textContent =
     rank === 1
@@ -2677,6 +2706,7 @@ async function loadPage(
     }
 
     currentPageUrl = url;
+    updateUrlBar();
     currentStateId = stateId ?? stateIdForPage(url);
     renderGraph(graph, url, {
       spawnRoomId,

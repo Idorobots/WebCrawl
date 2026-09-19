@@ -80,7 +80,11 @@ The final game score should be built based on the types of loot collected and th
 - Use shorter text contents as signage on rooms' floor (use a modern font for the rendering).
 - Data Terminals - when a room has text contents (`p` etc) place a data-terminal in the room allowing the player to read the contents in a modal popover visible whenever the player character is over the terminal.
 
-* Procedurally generated names
+* CANCELLED Procedurally generated names
+:LOGBOOK:
+- State "CANCELLED"  from              [2026-09-19 Sat 12:34] \\
+  Wouldn't fit the theme of the game.
+:END:
 Boss, monster, item and weapon names should be procedurally generated based on the DOM contents.
 * Game sounds
 * DONE Bugs
@@ -240,12 +244,16 @@ Add extra enemy types: shooting walkers, spray turrets, mini-boss type larger op
 Each one of these can come in a "miniboss" variant - it should be larger, higher damage and higher HP, but otherwise "look and feel" the same. Minibosses should be fairly rare and generated deterministically based on the room seed.
 
 * Level generator/renderer refactor
-The level regenation sholud be carried out entirely on the client side. The server component should just serve the assets and download the desired URL returning the HTML contents.
+The level generation should be carried out entirely on the client side. The server component should just serve the assets and download the desired URL returning the HTML contents.
 
 The client-side generator should first traverse the returned DOM and bulid a graph of rooms and corridors, which is then laid out to form the level map. Then for each of generated room and corridor, the level generator should deterministically generate themed scenery and enemies and their loot. That generated level should be a large data structure that serves the purpose of the game state.
 
 The client-side level renderer should take the large data structure and render the level using datastructure-stored layout, scenery, enemies and loot. It is OK to limit the rendered level to just the "visible" rooms - the rooms that the player's viewport is currently showing.
-The player character should be rendered onto the level and the viewport camera should be focused on the player.
+
+Update the loading screen with an additional task that fires after fetching the page - call it "Generating level". The order should be as follows:
+- "Fetching page"
+- "Generating level"
+- "Booting renderer"
 
 * Room layout
 We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
@@ -270,7 +278,7 @@ When entering a boss arena, the viewport should zoom out to encompass the entire
 - Boss footprint is displayed too low.
 - Heap Titan boss is way too easy to kill - make it shoot waves of bullets more often and from a greater distance to player.
 * Boss fights
-- Boss fight should begin when the player enters the boss arena.
+- Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
 - Doors should shut behind the player once the arena is entered.
 - All enemies in the boss arena are invulnerable until the boss fight actually begins (player enters the room).
 - Camera should zoom out to show the entire boss arena at once when the fight begins.
@@ -399,6 +407,18 @@ index-CCnl2EYo.js:10:28063
 - Loading screen on teleport should show the actual URL of the target site.
 - When a player enters a portal, the game should be paused to load the next level.
 
+* DONE UI Bugs & improvements
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 12:33]
+:END:
+- The cursor on the prompt "webcrawl <URL>" line moves fine when deleting the existing url, except it stops at some point while the content is still removed. It should be possible to delete the entire url and the cursor should move to the beginning of the line right after "webcrawl". Furthermore, the editing of that URL is blocked until the whole content is loaded, please make it editable immediately. Also, pressing enter/go button should register immediately, even if not the whole prompt content is populated.
+
+- It would be nice to show the currently browsed URL in the game UI somewhere. Perhaps a small translucent panel at the top of the screen that just shows the current URL ellided to a specific max lenght (show the whole URL on hover).
+
+- The minimap and the bottom panels should be translucent as well.
+
+- Add loot breakdown in final score screen.
+
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Boss healthbar & name is way too low
@@ -422,6 +442,7 @@ index-CCnl2EYo.js:10:28063
 - LLaMa boss is too easy to kill - it should always walk towards the player and attempt a heavy melee attack.
 - Walking shooters should have a much lower fire rate, they are basically better sentries right now. Their bullet range should also be reduced.
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
+- Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
 
 * DONE Loading screen
 :LOGBOOK:

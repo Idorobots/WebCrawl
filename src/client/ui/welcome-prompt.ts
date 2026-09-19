@@ -111,7 +111,6 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
 
 const CHARS_PER_SECOND = 270;
 const ICON_COST = 3;
-const MIN_URL_INPUT_WIDTH = 120;
 
 interface CharStep {
   kind: "char";
@@ -235,14 +234,21 @@ export function setupWelcomePrompt(options: {
 
   function sizeUrlInput(): void {
     urlMirror.textContent = urlInput.value;
-    const available =
-      urlLine.clientWidth - urlPrefix.offsetWidth - urlCaret.offsetWidth;
+    const available = urlLine.clientWidth - urlPrefix.offsetWidth;
     const desired = urlMirror.offsetWidth + 1;
-    const width = Math.max(
-      MIN_URL_INPUT_WIDTH,
-      Math.min(desired, Math.max(available, MIN_URL_INPUT_WIDTH)),
-    );
+    const width = Math.min(Math.max(desired, 2), Math.max(available, 2));
     urlInput.style.width = `${width}px`;
+  }
+
+  function positionUrlCaret(): void {
+    const selection = urlInput.selectionStart ?? urlInput.value.length;
+    urlMirror.textContent = urlInput.value.slice(0, selection);
+    urlCaret.style.left = `${urlPrefix.offsetWidth + urlMirror.offsetWidth}px`;
+  }
+
+  function syncUrlInput(): void {
+    sizeUrlInput();
+    positionUrlCaret();
   }
 
   function positionCaretAt(el: Element): void {
@@ -319,6 +325,7 @@ export function setupWelcomePrompt(options: {
   }
 
   function onKeyDown(event: KeyboardEvent): void {
+    if (surface.hidden) return;
     skip();
     const editable =
       event.key.length === 1 ||
@@ -330,16 +337,27 @@ export function setupWelcomePrompt(options: {
   }
 
   function onPointerDown(): void {
+    if (surface.hidden) return;
     skip();
   }
 
+  function onUrlLinePointerDown(): void {
+    if (document.activeElement !== urlInput) urlInput.focus();
+  }
+
   sizeUrlInput();
-  urlInput.addEventListener("input", sizeUrlInput);
-  window.addEventListener("resize", sizeUrlInput);
-  surface.addEventListener("keydown", onKeyDown);
-  surface.addEventListener("pointerdown", onPointerDown);
+  positionUrlCaret();
+  urlInput.addEventListener("input", syncUrlInput);
+  urlInput.addEventListener("keyup", positionUrlCaret);
+  urlInput.addEventListener("click", positionUrlCaret);
+  urlInput.addEventListener("focus", positionUrlCaret);
+  urlInput.addEventListener("select", positionUrlCaret);
+  urlLine.addEventListener("pointerdown", onUrlLinePointerDown);
+  window.addEventListener("resize", syncUrlInput);
+  document.addEventListener("keydown", onKeyDown);
+  document.addEventListener("pointerdown", onPointerDown);
   void document.fonts?.ready.then(() => {
-    if (!cancelled) sizeUrlInput();
+    if (!cancelled) syncUrlInput();
   });
 
   const imagesReady = Promise.all(
@@ -368,15 +386,21 @@ export function setupWelcomePrompt(options: {
   } else {
     rafId = window.requestAnimationFrame(tick);
   }
+  focusUrlInput();
 
   return {
     skip,
     cancel() {
       cancel();
-      urlInput.removeEventListener("input", sizeUrlInput);
-      window.removeEventListener("resize", sizeUrlInput);
-      surface.removeEventListener("keydown", onKeyDown);
-      surface.removeEventListener("pointerdown", onPointerDown);
+      urlInput.removeEventListener("input", syncUrlInput);
+      urlInput.removeEventListener("keyup", positionUrlCaret);
+      urlInput.removeEventListener("click", positionUrlCaret);
+      urlInput.removeEventListener("focus", positionUrlCaret);
+      urlInput.removeEventListener("select", positionUrlCaret);
+      urlLine.removeEventListener("pointerdown", onUrlLinePointerDown);
+      window.removeEventListener("resize", syncUrlInput);
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
     },
   };
 }
