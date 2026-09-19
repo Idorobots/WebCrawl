@@ -479,10 +479,10 @@ test("spawns on an enabled entry portal without immediately retriggering it", as
   if (!entryPortal) throw new Error("Expected an up portal on floor two");
 
   expect(await playerPosition(page)).toEqual({
-    x: Math.round(entryPortal.x + PORTAL_DEFINITION.contactOffset.x),
-    y: Math.round(entryPortal.y + PORTAL_DEFINITION.contactOffset.y),
+    x: Math.round(entryPortal.x),
+    y: Math.round(entryPortal.y),
   });
-  expect(state.contacts).toContain(entryPortal.id);
+  expect(state.contacts).not.toContain(entryPortal.id);
   await page.waitForTimeout(500);
   await expect(game).toHaveAttribute("data-floor", "2");
 });
@@ -529,6 +529,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await page.locator("#welcomeUrlInput").fill("https://example.com/boss");
   await page.getByRole("button", { name: "Go" }).click();
   const game = page.locator("#gameCanvas");
+  await expect(page.locator("#gameCanvas canvas")).toBeVisible();
   await setPlayerInvulnerable(page, true);
   await expect(game).toHaveAttribute("data-active-bosses", "0");
 
@@ -804,6 +805,7 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   await page.getByRole("button", { name: "Go" }).click();
 
   const game = page.locator("#gameCanvas");
+  await expect(page.locator("#gameCanvas canvas")).toBeVisible();
   await setPlayerInvulnerable(page, true);
   await expect(game).toHaveAttribute("data-weapon-kind", "pulse-rifle");
   await expect(game).toHaveAttribute("data-weapon-ammo", "infinite");

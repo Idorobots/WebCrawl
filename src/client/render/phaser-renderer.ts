@@ -26,6 +26,7 @@ import {
   LOOT_DEFINITIONS,
   monsterHealthBarY,
   monsterVisualCenterOffsetY,
+  monsterWalkElapsed,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   WEAPON_PICKUP_DEFINITIONS,
@@ -83,6 +84,10 @@ const PORTAL_DOWN_AURA_COLOR = 0xff4dff;
 const PORTAL_UP_AURA_COLOR = 0x4da6ff;
 const SHADOW_OFFSET_X = world(8);
 const SHADOW_OFFSET_Y = world(10);
+const SHADOW_DISTANCE_SCALE = 0.09;
+const SHADOW_MIN_DISTANCE = world(6);
+const SHADOW_MAX_DISTANCE = world(26);
+const EFFECT_LIGHT_FALLBACK = { color: 0x8bdfff, radiusScale: 0.8, intensity: 0.9 };
 const FLASHLIGHT_MAX_RANGE = world(720);
 const FLASHLIGHT_RADIUS_SCALE = 0.8;
 const BOSS_CAMERA_SCALE = 0.75;
@@ -107,6 +112,15 @@ interface WorldBounds {
 
 interface AreaLight extends Phaser.GameObjects.Light {
   areaSoftness?: number;
+}
+
+type EffectLightProfile = NonNullable<SpriteClip["light"]>;
+
+interface KeyedEffect {
+  effect: Phaser.GameObjects.Image;
+  light: Phaser.GameObjects.Light | null;
+  timer: Phaser.Time.TimerEvent | null;
+  followPlayer: boolean;
 }
 
 function seededUnit(seed: number): number {
@@ -195,6 +209,8 @@ export class PhaserRenderer {
   private playerStateLight: Phaser.GameObjects.Light | null = null;
   private lastLootAnimationUpdate = -Infinity;
   private lastDecorationAnimationUpdate = -Infinity;
+  private lastShadowOffsetUpdate = -Infinity;
+  private keyedEffects = new Map<string, KeyedEffect>();
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -319,6 +335,7 @@ export class PhaserRenderer {
     this.activeEffectTimers.clear();
     for (const effect of this.activeEffects) effect.destroy();
     this.activeEffects.clear();
+    this.keyedEffects.clear();
     this.playerFollowingEffects.clear();
     this.playerStateLight?.setVisible(false);
     this.setHostData("playerLight", "false");
@@ -942,10 +959,22 @@ export class PhaserRenderer {
   }
 
   private createShadow(asset: string): Phaser.GameObjects.Image {
-    return this.scene!.add.image(SHADOW_OFFSET_X, SHADOW_OFFSET_Y, textureKey(asset))
+    return this.scene!.add.image(0, 0, textureKey(asset))
       .setName("shadow")
       .setTintFill(0x000000)
       .setAlpha(0.3);
+  }
+
+  private applyShadowOffset(shadow: Phaser.GameObjects.Image, x: number, y: number, size: number): void {
+    const dx = x - this.currentPlayer.x;
+    const dy = y - this.currentPlayer.y;
+    const length = Math.hypot(dx, dy);
+    if (length < world(1)) {
+      shadow.setPosition(SHADOW_OFFSET_X, SHADOW_OFFSET_Y);
+      return;
+    }
+    const distance = Math.min(SHADOW_MAX_DISTANCE, Math.max(SHADOW_MIN_DISTANCE, size * SHADOW_DISTANCE_SCALE));
+    shadow.setPosition(dx / length * distance, dy / length * distance);
   }
 
   private createAuraLight(
@@ -1014,13 +1043,14 @@ export class PhaserRenderer {
       const shadow = this.createShadow(asset);
       this.applyClip(sprite, state.clip, item.size, state.elapsed);
       this.applyClip(shadow, state.clip, item.size, state.elapsed);
+      this.applyShadowOffset(shadow, item.x, item.y, item.size);
       const container = scene.add.container(item.x, item.y, [shadow, sprite]).setDepth(item.destroyed ? 18 : 20);
       this.decorationSprites.set(item.id, sprite);
       this.decorationShadows.set(item.id, shadow);
       this.syncDecorationEffectLight(item, state);
       if (item.destructible && !item.destroyed && item.hp != item.maxHp) {
-        const barWidth = Math.max(world(44), item.size * 0.62);
-        const barY = -item.size * state.clip.origin.y - world(8);
+        const barWidth = world(44);
+        const barY = -item.size * state.clip.origin.y + (item.healthBarTop ?? 0) * item.size - world(8);
         const bg = scene.add.rectangle(-barWidth / 2, barY, barWidth, world(5), 0x071018).setOrigin(0, 0.5);
         const hp = scene.add.rectangle(
           -barWidth / 2,
@@ -1050,6 +1080,15 @@ export class PhaserRenderer {
       const shadow = this.decorationShadows.get(item.id);
       if (shadow) this.applyClip(shadow, state.clip, item.size, state.elapsed);
       this.syncDecorationEffectLight(item, state);
+    }
+  }
+
+  updateShadowOffsets(items: readonly Decoration[], now: number): void {
+    if (now - this.lastShadowOffsetUpdate < 50) return;
+    this.lastShadowOffsetUpdate = now;
+    for (const item of items) {
+      const shadow = this.decorationShadows.get(item.id);
+      if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
     }
   }
 
@@ -1242,7 +1281,6 @@ export class PhaserRenderer {
     const token = Number(container.getData("animationToken") ?? 0) + 1;
     container.setData("animationToken", token);
     container.setData("enabled", enabled);
-    container.setAlpha(enabled ? 1 : 0.78);
     if (initial && !enabled) {
       sprite.setTexture(textureKey(frames[0]))
         .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
@@ -1322,7 +1360,8 @@ export class PhaserRenderer {
         const shadow = this.createShadow(frame.asset);
         this.applyClip(sprite, frame.clip, item.size, frame.elapsed);
         this.applyClip(shadow, frame.clip, item.size, frame.elapsed);
-        const barWidth = item.bossKind ? item.size * 0.68 : item.miniboss ? item.size * 0.72 : item.size * 0.6;
+        this.applyShadowOffset(shadow, item.x, item.y, item.size);
+        const barWidth = item.bossKind ? item.size * 0.68 : item.miniboss ? item.size * 0.72 : world(44);
         const barY = monsterHealthBarY(item.size, item.visualKind);
         const children: Phaser.GameObjects.GameObject[] = [shadow, sprite];
         if (item.bossKind && !item.dead) {
@@ -1397,6 +1436,8 @@ export class PhaserRenderer {
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
       const previousAsset = sprite.texture.key;
       this.applyMonsterFrame(container, item, now);
+      const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
+      if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
       assetChanged ||= previousAsset !== sprite.texture.key;
       const aura = this.monsterAuras.get(item.id);
       if (aura) {
@@ -1446,7 +1487,8 @@ export class PhaserRenderer {
       return { asset: this.clipAsset(attackClip, attackElapsed), animation: attackAnimation, clip: attackClip, elapsed: attackElapsed };
     }
     if (item.moving && visual.walk) {
-      return { asset: this.clipAsset(visual.walk, now), animation: "walk", clip: visual.walk, elapsed: now };
+      const elapsed = monsterWalkElapsed(visual.walk, now, item.seed, item.speed);
+      return { asset: this.clipAsset(visual.walk, elapsed), animation: "walk", clip: visual.walk, elapsed };
     }
     return { asset: visual.normal.frames[0]!, animation: "normal", clip: visual.normal, elapsed: 0 };
   }
@@ -1481,7 +1523,7 @@ export class PhaserRenderer {
     this.renderDebugGeometry();
   }
 
-  private bulletColor(bullet: Bullet): number {
+  bulletColor(bullet: Bullet): number {
     if (bullet.style === "shockwave") return 0xffa34d;
     if (bullet.style === "boss") return 0xee78ff;
     if (bullet.owner === "enemy") return 0xff596e;
@@ -1707,10 +1749,19 @@ export class PhaserRenderer {
     x: number,
     y: number,
     baseSize: number,
-    followPlayer = false,
+    options: { key?: string; lightColor?: number; followPlayer?: boolean } = {},
   ): void {
     const scene = this.scene;
     if (!scene || !clip?.frames.length) return;
+    const profile = clip.light ?? EFFECT_LIGHT_FALLBACK;
+    const lightColor = options.lightColor ?? profile.color;
+    const followPlayer = options.followPlayer ?? false;
+    const key = options.key;
+    const existing = key ? this.keyedEffects.get(key) : undefined;
+    if (key && existing) {
+      this.resetKeyedEffect(existing, clip, x, y, baseSize, profile, lightColor, followPlayer, key);
+      return;
+    }
     const effect = scene.add.image(x, y, textureKey(clip.frames[0]!))
       .setDepth(55)
       .setBlendMode(Phaser.BlendModes.ADD);
@@ -1718,9 +1769,8 @@ export class PhaserRenderer {
     this.setHostData("lastEffect", clip.frames[0]!);
     this.setHostData("effectSpriteMode", "emissive");
     this.applyClip(effect, clip, baseSize);
-    const profile = clip.light ?? { color: 0x8bdfff, radiusScale: 0.8, intensity: 0.9 };
     const light = this.lightingEnabled
-      ? scene.lights.addLight(x, y, Math.max(world(52), baseSize * profile.radiusScale), profile.color, profile.intensity)
+      ? scene.lights.addLight(x, y, Math.max(world(52), baseSize * profile.radiusScale), lightColor, profile.intensity)
       : null;
     if (light) {
       this.activeEffectLights.add(light);
@@ -1730,34 +1780,67 @@ export class PhaserRenderer {
       this.playerFollowingEffects.set(effect, light);
       this.syncPlayerFollowingEffects();
     }
+    const timer = this.startEffectAnimation(effect, clip, baseSize, profile, light, key);
+    if (key) {
+      this.keyedEffects.set(key, { effect, light, timer, followPlayer });
+    }
+  }
+
+  private resetKeyedEffect(
+    record: KeyedEffect,
+    clip: SpriteClip,
+    x: number,
+    y: number,
+    baseSize: number,
+    profile: EffectLightProfile,
+    lightColor: number,
+    followPlayer: boolean,
+    key: string,
+  ): void {
+    record.followPlayer = followPlayer;
+    record.effect.setPosition(x, y);
+    this.applyClip(record.effect, clip, baseSize);
+    if (record.light) {
+      record.light.x = x;
+      record.light.y = y;
+      record.light.setColor(lightColor);
+      record.light.setRadius(Math.max(world(52), baseSize * profile.radiusScale));
+      record.light.setIntensity(profile.intensity);
+    }
+    if (followPlayer) {
+      this.playerFollowingEffects.set(record.effect, record.light);
+      this.syncPlayerFollowingEffects();
+    } else {
+      this.playerFollowingEffects.delete(record.effect);
+    }
+    if (record.timer) {
+      record.timer.remove();
+      this.activeEffectTimers.delete(record.timer);
+    }
+    record.timer = this.startEffectAnimation(record.effect, clip, baseSize, profile, record.light, key);
+  }
+
+  private startEffectAnimation(
+    effect: Phaser.GameObjects.Image,
+    clip: SpriteClip,
+    baseSize: number,
+    profile: EffectLightProfile,
+    light: Phaser.GameObjects.Light | null,
+    key?: string,
+  ): Phaser.Time.TimerEvent {
+    const scene = this.scene!;
     let frameIndex = 0;
     const timer = scene.time.addEvent({
       delay: clip.frameDurationMs,
       repeat: clip.frames.length - 1,
       callback: () => {
         if (!effect.scene || !effect.active) {
-          timer.remove();
-          this.activeEffectTimers.delete(timer);
-          this.activeEffects.delete(effect);
-          this.playerFollowingEffects.delete(effect);
-          if (light) {
-            this.scene?.lights.removeLight(light);
-            this.activeEffectLights.delete(light);
-            this.updateEffectLightDataset();
-          }
+          this.finishEffect(timer, effect, light, key);
           return;
         }
         if (frameIndex >= clip.frames.length - 1) {
           effect.destroy();
-          this.activeEffects.delete(effect);
-          this.playerFollowingEffects.delete(effect);
-          this.activeEffectTimers.delete(timer);
-          this.syncPlayerFollowingEffects();
-          if (light) {
-            scene.lights.removeLight(light);
-            this.activeEffectLights.delete(light);
-            this.updateEffectLightDataset();
-          }
+          this.finishEffect(timer, effect, light, key);
           return;
         }
         frameIndex += 1;
@@ -1769,6 +1852,26 @@ export class PhaserRenderer {
       },
     });
     this.activeEffectTimers.add(timer);
+    return timer;
+  }
+
+  private finishEffect(
+    timer: Phaser.Time.TimerEvent,
+    effect: Phaser.GameObjects.Image,
+    light: Phaser.GameObjects.Light | null,
+    key?: string,
+  ): void {
+    timer.remove();
+    this.activeEffectTimers.delete(timer);
+    this.activeEffects.delete(effect);
+    this.playerFollowingEffects.delete(effect);
+    if (key) this.keyedEffects.delete(key);
+    this.syncPlayerFollowingEffects();
+    if (light) {
+      this.scene?.lights.removeLight(light);
+      this.activeEffectLights.delete(light);
+      this.updateEffectLightDataset();
+    }
   }
 
   private syncPlayerFollowingEffects(): void {

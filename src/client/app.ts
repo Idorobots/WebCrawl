@@ -39,7 +39,7 @@ import {
 import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { aStarPath, monsterEscapeStep } from "./domain/pathfinding";
-import { updatePortalContacts } from "./domain/portals";
+import { entryPortalFor, initialPlayerPosition, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
 import {
   CRYSTAL_INVULNERABILITY_BLINK_START_MS,
@@ -893,7 +893,7 @@ function renderDecorations(): void {
   renderer.renderDecorations(currentDecorations, visitedRooms);
 }
 
-function damageObstacle(item: Decoration, amount: number): void {
+function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void {
   if (!applyObstacleDamage(item, amount)) return;
 
   if (item.hp <= 0) {
@@ -907,7 +907,13 @@ function damageObstacle(item: Decoration, amount: number): void {
       if (drops.length) renderInteractiveObjects();
     }
   } else {
-    renderer.spawnEffect(item.visual.animations?.damage, item.x, item.y + item.hitOffsetY, item.size);
+    renderer.spawnEffect(
+      item.visual.animations?.damage,
+      item.x,
+      item.y + item.hitOffsetY,
+      item.size,
+      { key: `decoration:${item.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
+    );
     saveObstacleState(item);
     renderDecorations();
   }
@@ -1091,7 +1097,7 @@ function updateMonsterPositions(): void {
   renderer.updateMonsterPositions(currentMonsters);
 }
 
-function applyPlayerDamage(amount: number): void {
+function applyPlayerDamage(amount: number, bullet?: Bullet): void {
   if (!playerAlive) return;
 
   const now = performance.now();
@@ -1102,6 +1108,7 @@ function applyPlayerDamage(amount: number): void {
     player.x,
     player.y + PLAYER_SPEC.visualCenterOffsetY,
     PLAYER_SPEC.spriteSize,
+    { key: "player", lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
   );
 
   playerHp = Math.max(0, playerHp - amount);
@@ -1135,7 +1142,7 @@ function monsterDrop(monster: Monster): void {
   currentLoot.push(...lootDropsForMonster(monster).filter(item => !collectedLoot.has(item.id)));
 }
 
-function damageMonster(monster: Monster, amount: number): void {
+function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void {
   if (monster.dead) return;
 
   monster.hp = Math.max(0, monster.hp - amount);
@@ -1175,6 +1182,7 @@ function damageMonster(monster: Monster, amount: number): void {
       monster.x,
       monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind),
       monster.size,
+      { key: `monster:${monster.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
     );
     saveMonsterState(monster);
     updateMonsterPositions();
@@ -1603,6 +1611,7 @@ function updateBullets(dt: number): void {
           bullet.x,
           bullet.y,
           PLAYER_SPEC.spriteSize,
+          { lightColor: renderer.bulletColor(bullet) },
         );
         alive = false;
         break;
@@ -1618,7 +1627,7 @@ function updateBullets(dt: number): void {
             bullet,
             bulletRadius,
           )) {
-            damageMonster(monster, bullet.damage);
+            damageMonster(monster, bullet.damage, bullet);
             alive = false;
             break;
           }
@@ -1629,7 +1638,7 @@ function updateBullets(dt: number): void {
 
       if (bullet.owner === "enemy") {
         if (projectileHitsCircle(playerCollisionCenter(), PLAYER_SPEC.radius, bullet, bulletRadius)) {
-          applyPlayerDamage(bullet.damage);
+          applyPlayerDamage(bullet.damage, bullet);
           alive = false;
           break;
         }
@@ -1639,7 +1648,7 @@ function updateBullets(dt: number): void {
         if (!item.destructible || item.destroyed) continue;
 
         if (projectileHitsDecoration(item, bullet, bulletRadius)) {
-          damageObstacle(item, bullet.damage);
+          damageObstacle(item, bullet.damage, bullet);
           alive = false;
           break;
         }
@@ -1706,6 +1715,7 @@ function gameTick(timestamp: number): void {
   if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
+  renderer.updateShadowOffsets(currentDecorations, timestamp);
   renderer.updateLootAnimations(currentLoot, timestamp);
 
   rebuildRoomRouting();
@@ -2047,7 +2057,7 @@ function checkLoot(): void {
             player.x,
             player.y,
             PLAYER_SPEC.spriteSize,
-            true,
+            { followPlayer: true },
           );
           updateHealthUi();
           setStatus(`Health pack restored 1 HP · ${currentPageUrl}`);
@@ -2421,7 +2431,7 @@ function teleportPlayerTo(x: number, y: number): void {
   playerFacing: () => ({ ...playerFacing }),
   damagePlayer: applyPlayerDamage,
   spawnHealingEffect(): void {
-    renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize, true);
+    renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize, { followPlayer: true });
   },
   stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
   portalContacts: () => [...portalContacts],
@@ -2652,17 +2662,8 @@ function renderGraph(
 
   if (spawnRoom) {
     const roomStairs = currentStairs.filter(stair => stair.roomId === spawnRoom.id);
-    const entryPortal =
-      (spawnPortalUrl
-        ? roomStairs.find(stair => stair.url === spawnPortalUrl)
-        : null) ||
-      roomStairs.find(stair => stair.type === "up");
-    player = entryPortal
-      ? {
-          x: entryPortal.x + PORTAL_DEFINITION.contactOffset.x,
-          y: entryPortal.y + PORTAL_DEFINITION.contactOffset.y,
-        }
-      : { x: spawnRoom.x, y: spawnRoom.y };
+    const entryPortal = entryPortalFor(roomStairs, spawnPortalUrl);
+    player = initialPlayerPosition(entryPortal, spawnRoom);
 
     currentRoomId = spawnRoom.id;
     gameCanvasHost.dataset.currentRoomTag = spawnRoom.tag;

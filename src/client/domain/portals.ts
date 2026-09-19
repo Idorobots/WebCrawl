@@ -1,5 +1,23 @@
 import type { Point, Stair } from "../types";
 
+export function entryPortalFor(
+  roomStairs: readonly Stair[],
+  spawnPortalUrl?: string | null,
+): Stair | null {
+  return (
+    (spawnPortalUrl
+      ? roomStairs.find(stair => stair.url === spawnPortalUrl)
+      : null) ||
+    roomStairs.find(stair => stair.type === "up") ||
+    roomStairs[0] ||
+    null
+  );
+}
+
+export function initialPlayerPosition(portal: Stair | null, fallback: Point): Point {
+  return portal ? { x: portal.x, y: portal.y } : { x: fallback.x, y: fallback.y };
+}
+
 export function updatePortalContacts(
   portals: readonly Stair[],
   position: Point,

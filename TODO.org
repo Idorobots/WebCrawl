@@ -183,12 +183,15 @@ It's OK if the specs are not entirely static - it's perfectly fine to have a fun
 
 The goal is to be able to generate a room with all its scenery objects that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
-* Scenery semantics
+* DONE Scenery semantics
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 15:51]
+:END:
 Don't show healthbars on scenery when they are full, damaged scenery should have a health bar displayed over it.
 Don't explode crates or plants, these should "break down".
 Barrels should be the only scenery item that blows up. When they do, they should deal 2 damage to all objects/enemies/players in their vicinity.
-There likelyhood of there being obstackles in corridors should be much lowered.
 
+* Scenery semantics
 Scenario sprites ordering should "be on top" of the characters when above the "midline" and under the characters otherwise. This can be achieved by ordering the sprites by their Y and X coordinates before displaying them. The same is true for walls.
 
 Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
@@ -439,7 +442,7 @@ index-CCnl2EYo.js:10:28063
 * Asset changes
 - Change the RAM sticks to holographic, nonexistent RAM sticks
 - Use broken floor tiles sparingly
-- Use the pistol as the default weapon
+- Use the pistol graphic as the default weapon
 
 * Enemy rebalance
 - LLaMa boss is too easy to kill - it should always walk towards the player and attempt a heavy melee attack.
@@ -568,7 +571,10 @@ Keep the GitHub logo badge style-consistent with the holographic UI.
 - Use the footprints for player/scenery collision detection and blocking.
 - Use the footprints for enemy/scenery collision detection and blocking.
 
-* Welcome screen page randomization
+* DONE Welcome screen page randomization
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 15:35]
+:END:
 Add an "I'm feeling lucky" button next to the "Go" button that launches the game with a random URL. Use wikipedia's random page and HackerNews' top articles for the URLs.
 
 * DONE Huge files after minification

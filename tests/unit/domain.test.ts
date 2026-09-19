@@ -52,7 +52,7 @@ import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, monsterEscapeStep, revealedRoomPath } from "../../src/client/domain/pathfinding";
-import { updatePortalContacts } from "../../src/client/domain/portals";
+import { entryPortalFor, initialPlayerPosition, updatePortalContacts } from "../../src/client/domain/portals";
 import {
   DECORATION_DEFINITIONS,
   HEAP_TITAN_WAVE,
@@ -62,7 +62,9 @@ import {
   MINIBOSS_HP_MULTIPLIER,
   MINIBOSS_SIZE_MULTIPLIER,
   MONSTER_VISUAL_DEFINITIONS,
+  MONSTER_WALK_REFERENCE_SPEED,
   monsterHealthBarY,
+  monsterWalkElapsed,
   monsterVisualCenterOffsetY,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
@@ -84,7 +86,7 @@ import {
   weaponForRoom,
   weaponKinds,
 } from "../../src/client/domain/weapons";
-import type { DungeonGraph, GraphNode, LayoutLink, RegularMonsterKind, Stair } from "../../src/client/types";
+import type { DungeonGraph, GraphNode, LayoutLink, MonsterVisualKind, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
   id,
@@ -474,6 +476,63 @@ describe("portal entry", () => {
     )).toEqual(portal);
     contacts.clear();
     expect(updatePortalContacts([portal], portal, contactRadius, contacts, contactOffset)).toBeNull();
+  });
+
+  it("selects the entry portal by explicit url, then the up portal, then the first room stair", () => {
+    const up: Stair = { ...portal, id: "room-1::portal-up-0", type: "up", url: null };
+    const matchingDown: Stair = { ...portal, id: "room-1::portal-down-1" };
+    expect(entryPortalFor([up, matchingDown], "https://example.com/next")).toEqual(matchingDown);
+    expect(entryPortalFor([up, matchingDown], null)).toEqual(up);
+    expect(entryPortalFor([matchingDown], null)).toEqual(matchingDown);
+    expect(entryPortalFor([], null)).toBeNull();
+  });
+
+  it("places the player on the portal pedestal when spawning", () => {
+    expect(initialPlayerPosition(portal, { x: 500, y: 500 })).toEqual({ x: portal.x, y: portal.y });
+    expect(initialPlayerPosition(null, { x: 500, y: 500 })).toEqual({ x: 500, y: 500 });
+  });
+});
+
+describe("monster animation pacing", () => {
+  const walk: SpriteClip = {
+    frames: ["a", "b", "c", "d"],
+    frameDurationMs: 125,
+    sizeScale: 1,
+    origin: { x: 0.5, y: 0.90625 },
+    loop: true,
+  };
+
+  it("offsets walk cycles per monster seed so equally fast enemies desynchronize", () => {
+    const first = monsterWalkElapsed(walk, 1_000, 1, world(120));
+    const second = monsterWalkElapsed(walk, 1_000, 2, world(120));
+    expect(first).not.toBe(second);
+    expect(monsterWalkElapsed(walk, 1_000, 1, world(120))).toBe(first);
+  });
+
+  it("scales walk playback rate with monster speed and clamps extremes", () => {
+    expect(MONSTER_WALK_REFERENCE_SPEED).toBe(world(120));
+    expect(monsterWalkElapsed(walk, 1_000, 0, 0)).toBe(500);
+    expect(monsterWalkElapsed(walk, 1_000, 0, world(600))).toBe(2_000);
+    expect(monsterWalkElapsed(walk, 1_000, 0, world(120))).toBe(1_000);
+    expect(monsterWalkElapsed(walk, 1_000, 0, world(60))).toBe(500);
+  });
+});
+
+describe("health bar geometry", () => {
+  it("raises boss bars above the sprite body and keeps tuned regular bar positions", () => {
+    for (const kind of ["boss-arc", "boss-missile", "boss-fortress", "boss-laser", "boss-siege"] as MonsterVisualKind[]) {
+      expect(MONSTER_VISUAL_DEFINITIONS[kind].healthBarHeight, kind).toBeCloseTo(0.84375, 5);
+    }
+    expect(MONSTER_VISUAL_DEFINITIONS.scout.healthBarHeight).toBe(0.42);
+    expect(MONSTER_VISUAL_DEFINITIONS.heavy.healthBarHeight).toBe(0.42);
+    expect(monsterHealthBarY(400, "boss-arc")).toBeCloseTo(-400 * 0.84375 - world(8), 5);
+    expect(monsterHealthBarY(200, "scout")).toBeLessThan(-80);
+  });
+
+  it("aligns decoration bars with measured sprite content", () => {
+    expect(DECORATION_DEFINITIONS.spawner.healthBarTop).toBeCloseTo(0.5273, 2);
+    expect(DECORATION_DEFINITIONS.barricade.healthBarTop).toBeCloseTo(0.5508, 2);
+    expect(DECORATION_DEFINITIONS.terminal.healthBarTop).toBeUndefined();
   });
 });
 

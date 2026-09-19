@@ -542,12 +542,26 @@ export const MONSTER_VISUAL_DEFINITIONS: Record<MonsterVisualKind, MonsterVisual
   "sentry-ballistic": monsterVisual(MONSTER_FRAMES.sentryBallistic, 1.42, { x: 0.5, y: 0.90625 }, 0.44),
   "sentry-twin": monsterVisual(MONSTER_FRAMES.sentryTwin, 1.34, { x: 0.5, y: 0.90625 }, 0.35),
   "sentry-energy": monsterVisual(MONSTER_FRAMES.sentryEnergy, 1.2, { x: 0.5, y: 0.90625 }, 0.44),
-  "boss-arc": monsterVisual(MONSTER_FRAMES.bossArc, 1, { x: 0.5, y: 0.90625 }, 0.36, 0.5),
-  "boss-missile": monsterVisual(MONSTER_FRAMES.bossMissile, 1, { x: 0.5, y: 0.90625 }, 0.38, 0.5),
-  "boss-fortress": monsterVisual(MONSTER_FRAMES.bossFortress, 1, { x: 0.5, y: 0.90625 }, 0.38, 0.45),
-  "boss-laser": monsterVisual(MONSTER_FRAMES.bossLaser, 1, { x: 0.5, y: 0.90625 }, 0.36, 0.5),
-  "boss-siege": monsterVisual(MONSTER_FRAMES.bossSiege, 1, { x: 0.5, y: 0.90625 }, 0.36, 0.5),
+  "boss-arc": monsterVisual(MONSTER_FRAMES.bossArc, 1, { x: 0.5, y: 0.90625 }, 0.36, 0.5, 0.84375),
+  "boss-missile": monsterVisual(MONSTER_FRAMES.bossMissile, 1, { x: 0.5, y: 0.90625 }, 0.38, 0.5, 0.84375),
+  "boss-fortress": monsterVisual(MONSTER_FRAMES.bossFortress, 1, { x: 0.5, y: 0.90625 }, 0.38, 0.45, 0.84375),
+  "boss-laser": monsterVisual(MONSTER_FRAMES.bossLaser, 1, { x: 0.5, y: 0.90625 }, 0.36, 0.5, 0.84375),
+  "boss-siege": monsterVisual(MONSTER_FRAMES.bossSiege, 1, { x: 0.5, y: 0.90625 }, 0.36, 0.5, 0.84375),
 };
+
+export const MONSTER_WALK_REFERENCE_SPEED = world(120);
+
+export function monsterWalkElapsed(
+  walk: SpriteClip,
+  now: number,
+  seed: number,
+  speed: number,
+): number {
+  const cycle = walk.frames.length * walk.frameDurationMs;
+  const phase = ((seed % cycle) + cycle) % cycle;
+  const rate = Math.min(2, Math.max(0.5, speed / MONSTER_WALK_REFERENCE_SPEED));
+  return phase + now * rate;
+}
 
 export function monsterDisplaySize(
   size: number,
@@ -577,6 +591,8 @@ export interface DecorationDefinition {
   footprint: number;
   size: number;
   origin: { x: number; y: number };
+  /** Fraction of the sprite height where opaque content starts; aligns health bars with the visible body. */
+  healthBarTop?: number;
 }
 
 const decoration = (
@@ -589,6 +605,7 @@ const decoration = (
     footprint = 0,
     obstacle = footprint > 0,
     origin = { x: 0.5, y: 0.9375 },
+    healthBarTop,
     hitOffsetY = -size * 0.4,
     debris = [],
     destroy,
@@ -597,6 +614,7 @@ const decoration = (
     footprint?: number;
     obstacle?: boolean;
     origin?: { x: number; y: number };
+    healthBarTop?: number;
     hitOffsetY?: number;
     debris?: readonly string[];
     destroy?: SpriteClip;
@@ -618,6 +636,7 @@ const decoration = (
     footprint,
     size,
     origin,
+    healthBarTop,
   };
 };
 
@@ -636,20 +655,34 @@ const barrelExplosion = clip(BARREL_EXPLOSION_FRAMES, 2.8, { x: 0.5, y: 0.84375 
 });
 const objectExplosion = explosionEffect(1.5);
 const sceneryOrigin = { x: 0.5, y: 0.9375 };
-const blockingScenery = (id: string, asset: string, size = world(145), radius = world(28)): DecorationDefinition =>
+const blockingScenery = (
+  id: string,
+  asset: string,
+  size = world(145),
+  radius = world(28),
+  healthBarTop?: number,
+): DecorationDefinition =>
   decoration(id, "machinery", asset, size, {
     radius,
     footprint: radius * 0.72,
     debris: circuitDebris,
     destroy: objectExplosion,
+    healthBarTop,
   });
-const lowScenery = (id: string, asset: string, size = world(105), radius = world(24)): DecorationDefinition =>
+const lowScenery = (
+  id: string,
+  asset: string,
+  size = world(105),
+  radius = world(24),
+  healthBarTop?: number,
+): DecorationDefinition =>
   decoration(id, "scenery", asset, size, {
     radius,
     hitOffsetY: -size * 0.25,
     obstacle: false,
     debris: circuitDebris,
     destroy: objectExplosion,
+    healthBarTop,
   });
 
 export const DECORATION_DEFINITIONS = {
@@ -667,36 +700,37 @@ export const DECORATION_DEFINITIONS = {
   crateMedical: decoration("crate-medical", "crate", SCENERY_ASSETS.crateMedical, world(70), { radius: world(14), footprint: world(10), debris: [DEBRIS_ASSETS.crateMedical], destroy: objectExplosion }),
   terminal: decoration("terminal", "terminal", SCENERY_ASSETS.terminal, world(93), { radius: world(16), footprint: world(9), origin: { x: 0.5, y: 0.967 }, debris: circuitDebris, destroy: objectExplosion }),
   specimenTank: blockingScenery("specimen-tank", SCENERY_ASSETS.specimenTank, world(155), world(28)),
-  researchBench: blockingScenery("research-bench", SCENERY_ASSETS.researchBench, world(135), world(35)),
+  researchBench: blockingScenery("research-bench", SCENERY_ASSETS.researchBench, world(135), world(35), 0.2305),
   analyzer: blockingScenery("analyzer", SCENERY_ASSETS.analyzer, world(145), world(31)),
-  reagentRack: lowScenery("reagent-rack", SCENERY_ASSETS.reagentRack),
+  reagentRack: lowScenery("reagent-rack", SCENERY_ASSETS.reagentRack, world(105), world(24), 0.4609),
   refrigerator: blockingScenery("refrigerator", SCENERY_ASSETS.refrigerator, world(145), world(27)),
   roboticManipulator: blockingScenery("robotic-manipulator", SCENERY_ASSETS.roboticManipulator, world(145), world(31)),
-  pipeValve: lowScenery("pipe-valve", SCENERY_ASSETS.pipeValve, world(95)),
-  pipeElbow: lowScenery("pipe-elbow", SCENERY_ASSETS.pipeElbow, world(115)),
-  coiledCables: lowScenery("coiled-cables", SCENERY_ASSETS.coiledCables, world(90)),
-  monitorBank: blockingScenery("monitor-bank", SCENERY_ASSETS.monitorBank, world(125), world(33)),
+  pipeValve: lowScenery("pipe-valve", SCENERY_ASSETS.pipeValve, world(95), world(24), 0.5742),
+  pipeElbow: lowScenery("pipe-elbow", SCENERY_ASSETS.pipeElbow, world(115), world(24), 0.1367),
+  coiledCables: lowScenery("coiled-cables", SCENERY_ASSETS.coiledCables, world(90), world(24), 0.3867),
+  monitorBank: blockingScenery("monitor-bank", SCENERY_ASSETS.monitorBank, world(125), world(33), 0.3945),
   serverRack: blockingScenery("server-rack", SCENERY_ASSETS.serverRack, world(145), world(26)),
-  radarDisplay: blockingScenery("radar-display", SCENERY_ASSETS.radarDisplay, world(130), world(31)),
-  operatorTerminal: blockingScenery("operator-terminal", SCENERY_ASSETS.operatorTerminal, world(140), world(31)),
+  radarDisplay: blockingScenery("radar-display", SCENERY_ASSETS.radarDisplay, world(130), world(31), 0.3125),
+  operatorTerminal: blockingScenery("operator-terminal", SCENERY_ASSETS.operatorTerminal, world(140), world(31), 0.1367),
   communicationsCabinet: blockingScenery("communications-cabinet", SCENERY_ASSETS.communicationsCabinet, world(145), world(26)),
-  hologramTable: blockingScenery("hologram-table", SCENERY_ASSETS.hologramTable, world(125), world(34)),
-  conduitJunction: lowScenery("conduit-junction", SCENERY_ASSETS.conduitJunction, world(82)),
+  hologramTable: blockingScenery("hologram-table", SCENERY_ASSETS.hologramTable, world(125), world(34), 0.4102),
+  conduitJunction: lowScenery("conduit-junction", SCENERY_ASSETS.conduitJunction, world(82), world(24), 0.6602),
   powerCabinet: blockingScenery("power-cabinet", SCENERY_ASSETS.powerCabinet, world(145), world(29)),
-  floorCables: lowScenery("floor-cables", SCENERY_ASSETS.floorCables, world(78)),
+  floorCables: lowScenery("floor-cables", SCENERY_ASSETS.floorCables, world(78), world(24), 0.6992),
   reactorPylon: blockingScenery("reactor-pylon", SCENERY_ASSETS.reactorPylon, world(165), world(32)),
-  coolantPump: blockingScenery("coolant-pump", SCENERY_ASSETS.coolantPump, world(130), world(34)),
+  coolantPump: blockingScenery("coolant-pump", SCENERY_ASSETS.coolantPump, world(130), world(34), 0.3242),
   energyCapacitor: blockingScenery("energy-capacitor", SCENERY_ASSETS.energyCapacitor, world(155), world(30)),
-  barricade: blockingScenery("barricade", SCENERY_ASSETS.barricade, world(105), world(36)),
-  maintenanceRack: blockingScenery("maintenance-rack", SCENERY_ASSETS.maintenanceRack, world(125), world(33)),
+  barricade: blockingScenery("barricade", SCENERY_ASSETS.barricade, world(105), world(36), 0.5508),
+  maintenanceRack: blockingScenery("maintenance-rack", SCENERY_ASSETS.maintenanceRack, world(125), world(33), 0.3359),
   hydraulicSupport: blockingScenery("hydraulic-support", SCENERY_ASSETS.hydraulicSupport, world(150), world(31)),
-  pipeManifold: lowScenery("pipe-manifold", SCENERY_ASSETS.pipeManifold, world(95)),
-  damagedFuseCabinet: blockingScenery("damaged-fuse-cabinet", SCENERY_ASSETS.damagedFuseCabinet, world(120), world(31)),
-  cableTrunk: lowScenery("cable-trunk", SCENERY_ASSETS.cableTrunk, world(85)),
+  pipeManifold: lowScenery("pipe-manifold", SCENERY_ASSETS.pipeManifold, world(95), world(24), 0.5781),
+  damagedFuseCabinet: blockingScenery("damaged-fuse-cabinet", SCENERY_ASSETS.damagedFuseCabinet, world(120), world(31), 0.3711),
+  cableTrunk: lowScenery("cable-trunk", SCENERY_ASSETS.cableTrunk, world(85), world(24), 0.6445),
   spawner: {
     ...blockingScenery("monster-spawner", SCENERY_ASSETS.spawnerDormant, world(205), world(34)),
     kind: "monster-spawner",
     hitOffsetY: -world(40),
+    healthBarTop: 0.5273,
     visual: {
       normal: clip([SCENERY_ASSETS.spawnerDormant], 1, { x: 0.5, y: 0.90625 }),
       destroyed: circuitDebris.map(asset => clip([asset], 0.68, sceneryOrigin)),

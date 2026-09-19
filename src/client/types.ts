@@ -192,6 +192,8 @@ export interface Decoration extends Point {
   hitOffsetY: number;
   size: number;
   origin: { x: number; y: number };
+  /** Fraction of the sprite height where opaque content starts; aligns health bars with the visible body. */
+  healthBarTop?: number;
   footprint?: number;
   maxHp: number;
   hp: number;
