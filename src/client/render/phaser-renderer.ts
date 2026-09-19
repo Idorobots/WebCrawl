@@ -98,6 +98,13 @@ interface WorldLight {
   fullyLit?: boolean;
 }
 
+interface WorldBounds {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
 interface AreaLight extends Phaser.GameObjects.Light {
   areaSoftness?: number;
 }
@@ -172,6 +179,10 @@ export class PhaserRenderer {
   private lightPipeline: EllipticalLightPipeline | null = null;
   private roomLights = new Map<number, WorldLight>();
   private corridorLights = new Map<string, WorldLight[]>();
+  private lightProfiles: WorldLight[] = [];
+  private lastFlickerUpdate = -Infinity;
+  private corridorBounds = new Map<string, WorldBounds>();
+  private staticVisibility = new Map<Phaser.GameObjects.Container, boolean>();
   private bulletLights: Phaser.GameObjects.Light[] = [];
   private monsterAuras = new Map<string, Phaser.GameObjects.Light>();
   private lootAuras = new Map<string, Phaser.GameObjects.Light>();
@@ -182,6 +193,8 @@ export class PhaserRenderer {
   private activeEffectTimers = new Set<Phaser.Time.TimerEvent>();
   private playerFollowingEffects = new Map<Phaser.GameObjects.Image, Phaser.GameObjects.Light | null>();
   private playerStateLight: Phaser.GameObjects.Light | null = null;
+  private lastLootAnimationUpdate = -Infinity;
+  private lastDecorationAnimationUpdate = -Infinity;
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -218,10 +231,6 @@ export class PhaserRenderer {
       create(): void {
         renderer.attach(this);
         options?.onBootComplete?.();
-      }
-
-      override update(time: number): void {
-        renderer.updateLighting(time);
       }
     }
 
@@ -446,6 +455,50 @@ export class PhaserRenderer {
       this.corridorLayers.get(link.id)?.setAlpha(visible ? 1 : HIDDEN_WORLD_ALPHA);
     }
     this.refreshLocalLightVisibility(true);
+    this.updateStaticWorldVisibility();
+  }
+
+  private updateStaticWorldVisibility(): void {
+    const camera = this.scene?.cameras.main;
+    const layout = this.layout;
+    if (!camera || !layout) return;
+
+    const view = camera.worldView;
+    const padding = world(128);
+    const bounds: WorldBounds = {
+      left: view.x - padding,
+      right: view.x + view.width + padding,
+      top: view.y - padding,
+      bottom: view.y + view.height + padding,
+    };
+    const intersects = (candidate: WorldBounds): boolean =>
+      candidate.right >= bounds.left &&
+      candidate.left <= bounds.right &&
+      candidate.bottom >= bounds.top &&
+      candidate.top <= bounds.bottom;
+
+    for (const room of layout.nodes) {
+      this.setStaticVisible(this.roomLayers.get(room.id), intersects({
+        left: room.x - room.width / 2,
+        right: room.x + room.width / 2,
+        top: room.y - room.height / 2,
+        bottom: room.y + room.height / 2,
+      }));
+    }
+    for (const link of layout.links) {
+      this.setStaticVisible(this.corridorLayers.get(link.id), intersects(this.corridorBounds.get(link.id) ?? {
+        left: Infinity,
+        right: -Infinity,
+        top: Infinity,
+        bottom: -Infinity,
+      }));
+    }
+  }
+
+  private setStaticVisible(object: Phaser.GameObjects.Container | undefined, visible: boolean): void {
+    if (!object || this.staticVisibility.get(object) === visible) return;
+    object.setVisible(visible);
+    this.staticVisibility.set(object, visible);
   }
 
   private renderRoom(room: GraphNode, alpha: number): void {
@@ -471,6 +524,17 @@ export class PhaserRenderer {
     if (!scene) return;
     const container = this.rememberStatic(scene.add.container(0, 0).setDepth(-4).setAlpha(alpha));
     this.corridorLayers.set(link.id, container);
+    this.corridorBounds.set(link.id, link.points.reduce<WorldBounds>((bounds, point) => ({
+      left: Math.min(bounds.left, point.x - link.width / 2),
+      right: Math.max(bounds.right, point.x + link.width / 2),
+      top: Math.min(bounds.top, point.y - link.width / 2),
+      bottom: Math.max(bounds.bottom, point.y + link.width / 2),
+    }), {
+      left: Infinity,
+      right: -Infinity,
+      top: Infinity,
+      bottom: -Infinity,
+    }));
     for (let index = 1; index < link.points.length; index += 1) {
       const start = link.points[index - 1]!;
       const end = link.points[index]!;
@@ -658,6 +722,9 @@ export class PhaserRenderer {
       for (const profile of profiles) this.scene?.lights.removeLight(profile.light);
     }
     this.corridorLights.clear();
+    this.lightProfiles.length = 0;
+    this.corridorBounds.clear();
+    this.staticVisibility.clear();
     this.roomLayers.clear();
     this.corridorLayers.clear();
   }
@@ -692,13 +759,15 @@ export class PhaserRenderer {
     const light = this.scene.lights.addLight(room.x, room.y, radius, color, baseIntensity) as AreaLight;
     light.areaSoftness = 1;
     light.setVisible(visible);
-    this.roomLights.set(room.id, {
+    const profile = {
       light,
       baseIntensity,
       flickerAmount,
       flickerSeed: seed,
       fullyLit: !dimRoom,
-    });
+    };
+    this.roomLights.set(room.id, profile);
+    this.lightProfiles.push(profile);
   }
 
   private addCorridorLights(link: DungeonLayout["links"][number], visible: boolean): void {
@@ -729,12 +798,14 @@ export class PhaserRenderer {
         ) as AreaLight;
         light.areaSoftness = brightCorridor ? 0.8 : 0.45;
         light.setVisible(visible);
-        profiles.push({
+        const profile = {
           light,
           baseIntensity,
           flickerAmount: seededUnit(seed + 53) < 0.22 ? 0.12 : 0,
           flickerSeed: seed,
-        });
+        };
+        profiles.push(profile);
+        this.lightProfiles.push(profile);
       }
     }
     this.corridorLights.set(link.id, profiles);
@@ -820,11 +891,10 @@ export class PhaserRenderer {
   }
 
   updateLighting(time: number): void {
-    const profiles = [
-      ...this.roomLights.values(),
-      ...[...this.corridorLights.values()].flat(),
-    ];
-    for (const profile of profiles) {
+    this.updateStaticWorldVisibility();
+    if (time - this.lastFlickerUpdate < FLICKER_STEP_MS) return;
+    this.lastFlickerUpdate = time;
+    for (const profile of this.lightProfiles) {
       if (!profile.light.visible || profile.flickerAmount === 0) continue;
       const shiftedTime = time + seededUnit(profile.flickerSeed + 17) * FLICKER_BURST_INTERVAL_MS;
       const burst = Math.floor(shiftedTime / FLICKER_BURST_INTERVAL_MS);
@@ -872,12 +942,10 @@ export class PhaserRenderer {
   }
 
   private createShadow(asset: string): Phaser.GameObjects.Image {
-    return this.illuminate(
-      this.scene!.add.image(SHADOW_OFFSET_X, SHADOW_OFFSET_Y, textureKey(asset))
-        .setName("shadow")
-        .setTintFill(0x000000)
-        .setAlpha(0.3),
-    );
+    return this.scene!.add.image(SHADOW_OFFSET_X, SHADOW_OFFSET_Y, textureKey(asset))
+      .setName("shadow")
+      .setTintFill(0x000000)
+      .setAlpha(0.3);
   }
 
   private createAuraLight(
@@ -971,6 +1039,8 @@ export class PhaserRenderer {
   }
 
   updateDecorationAnimations(items: readonly Decoration[], now: number): void {
+    if (now - this.lastDecorationAnimationUpdate < 50) return;
+    this.lastDecorationAnimationUpdate = now;
     for (const item of items) {
       if (item.spawnAnimationStartedAt === undefined) continue;
       const sprite = this.decorationSprites.get(item.id);
@@ -1098,6 +1168,8 @@ export class PhaserRenderer {
   }
 
   updateLootAnimations(items: readonly LootItem[], now: number): void {
+    if (now - this.lastLootAnimationUpdate < 100) return;
+    this.lastLootAnimationUpdate = now;
     for (const item of items) {
       const sprite = this.lootSprites.get(item.id);
       if (!sprite) continue;
@@ -1315,6 +1387,7 @@ export class PhaserRenderer {
   }
 
   updateMonsterPositions(items: readonly Monster[]): void {
+    if (this.monsters.size === 0) return;
     let assetChanged = false;
     const now = performance.now();
     for (const item of items) {
@@ -1486,6 +1559,7 @@ export class PhaserRenderer {
   }
 
   setPlayerProtection(active: boolean, tintVisible: boolean): void {
+    if (this.playerProtectionActive === active && this.playerProtectionTintVisible === tintVisible) return;
     this.playerProtectionActive = active;
     this.playerProtectionTintVisible = tintVisible;
     this.setHostData("playerInvulnerable", String(active));
@@ -1495,6 +1569,7 @@ export class PhaserRenderer {
   }
 
   setPlayerDashTint(active: boolean): void {
+    if (this.playerDashTintActive === active) return;
     this.playerDashTintActive = active;
     this.setHostData("playerDashing", String(active));
     this.applyPlayerProtectionTint();
@@ -1551,6 +1626,8 @@ export class PhaserRenderer {
       originY,
       targetX,
       targetY,
+      axisX: dx / rawDistance,
+      axisY: dy / rawDistance,
       majorRadius: (world(244) + world(156) * distanceRatio) * FLASHLIGHT_RADIUS_SCALE,
       minorRadius: (world(224) + world(4) * distanceRatio) * FLASHLIGHT_RADIUS_SCALE,
       intensity: 1.48 - 0.28 * distanceRatio,
@@ -1595,6 +1672,7 @@ export class PhaserRenderer {
   }
 
   setPlayerAsset(asset: string): void {
+    if (this.currentPlayerAsset === asset) return;
     this.currentPlayerAsset = asset;
     this.setHostData("playerAsset", asset);
     if (this.playerSprite && this.scene?.textures.exists(textureKey(asset))) {
@@ -1721,6 +1799,12 @@ export class PhaserRenderer {
   }
 
   setCameraTarget(position: Point, immediate = false): void {
+    if (
+      !immediate &&
+      this.cameraTarget &&
+      this.currentCameraTarget.x === position.x &&
+      this.currentCameraTarget.y === position.y
+    ) return;
     this.currentCameraTarget = { ...position };
     if (!this.scene) return;
     this.cameraTarget ??= this.scene.add.container(position.x, position.y);

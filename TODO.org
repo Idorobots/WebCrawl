@@ -419,8 +419,7 @@ index-CCnl2EYo.js:10:28063
 
 - Add loot breakdown in final score screen.
 
-* Bugs
-- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+* Graphical bugs
 - Boss healthbar & name is way too low
 - Health bars on various things are way too large. Let's make all healthbars uniform in size (with the exception of boss and miniboss healthbars).
 - Spawner healthbar is way too high above the spawner sprite..
@@ -428,6 +427,10 @@ index-CCnl2EYo.js:10:28063
 - Portal sprite is translucent, but shouldn't be.
 - Player is not placed on the portal pedestal when starting the game.
 - Enemy annimations speed should depend on the enemy speed. Otherwise these look very synchronized.
+- Damage effect light should be colored the same as the bullet that caused it, not statically red. When the same object takes damage again, reset the effect (animation and light) with new parameters to save on GPU cycles.
+
+* Bugs
+- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 
 * Extra lighting
 - Rooms need random wall lights in yellow, blue and red variants.
@@ -542,16 +545,21 @@ UI for twin-stick shooters. :shrug:
 - MIT for code
 - CC-SA for gfx
 - CC-SA for sfx
-* Performance optimization
+* DONE Performance optimization
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 14:39]
+:END:
 - Looks like the flashlight is very heavy on the graphics card. Can that be optimized?
 - The game is heavy on the CPU even when the player is idling in the initial room. There are no enemies or bullets. Why is that? Can that be optimised?
+
 * DONE GitHub badge
 :LOGBOOK:
 - State "DONE"       from              [2026-09-19 Sat 13:53]
 :END:
 Add a GitHub logo badge to the top right corner of the welcome screen. When clicked, it should take the user to the WebCrawl repository on GitHub: github.com/Idorobots/WebCrawl
 Keep the GitHub logo badge style-consistent with the holographic UI.
-* Collision detection
+
+* Consistent collision detection
 - Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
 - Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
 - Use hitboxes for player/bullet collision detection and damage calcualation.
@@ -561,4 +569,16 @@ Keep the GitHub logo badge style-consistent with the holographic UI.
 - Use the footprints for enemy/scenery collision detection and blocking.
 
 * Welcome screen page randomization
-Add a "regen" icon at the end of the "webcrawl <URL>" line that automatically randomizes the URL. Use wikipedias random page and HackerNews' top articles for the URLs.
+Add an "I'm feeling lucky" button next to the "Go" button that launches the game with a random URL. Use wikipedias random page and HackerNews' top articles for the URLs.
+
+* Huge files after minification
+Vite reports:
+```
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+```
+
+What exactly is inflating the size so much?
+

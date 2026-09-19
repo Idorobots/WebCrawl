@@ -28,7 +28,8 @@ uniform mat3 uInverseRotationMatrix;
 uniform float uFlashlightActive;
 uniform vec2 uFlashlightOrigin;
 uniform vec2 uFlashlightTarget;
-uniform vec2 uFlashlightRadii;
+uniform vec2 uFlashlightAxis;
+uniform vec2 uFlashlightInverseRadii;
 uniform vec3 uFlashlightColor;
 uniform float uFlashlightIntensity;
 uniform float uFlashlightSoftness;
@@ -55,50 +56,57 @@ void main ()
         color = texel;
     }
 
-    vec3 normalMap = texture2D(uNormSampler, outTexCoord).rgb;
-    vec3 normal = normalize(uInverseRotationMatrix * vec3(normalMap * 2.0 - 1.0));
-    vec2 res = vec2(min(uResolution.x, uResolution.y)) * uCamera.w;
-
-    for (int index = 0; index < kMaxLights; ++index)
-    {
-        if (index < uLightCount)
-        {
-            Light light = uLights[index];
-            vec2 planarDirection = (light.position.xy / res) - (gl_FragCoord.xy / res);
-            vec3 pointLightDir = vec3(planarDirection, 0.1);
-            vec3 lightDir = vec3(planarDirection, mix(0.1, 2.0, light.areaSoftness));
-            vec3 lightNormal = normalize(lightDir);
-            float distToSurf = length(pointLightDir) * uCamera.w;
-            float planarDistance = length(planarDirection) * uCamera.w;
-            float diffuseFactor = max(dot(normal, lightNormal), 0.0);
-            float radius = (light.radius / res.x * uCamera.w) * uCamera.w;
-            float pointAttenuation = clamp(1.0 - distToSurf * distToSurf / (radius * radius), 0.0, 1.0);
-            float areaAttenuation = 1.0 - smoothstep(0.1, 1.0, planarDistance / max(radius, 0.0001));
-            float attenuation = mix(pointAttenuation, areaAttenuation, light.areaSoftness);
-            finalColor += attenuation * light.color * diffuseFactor * light.intensity;
-        }
-    }
+    float flashlightAttenuation = 0.0;
 
     if (uFlashlightActive > 0.5)
     {
-        vec2 rawAxis = uFlashlightTarget - uFlashlightOrigin;
-        vec2 axis = normalize(rawAxis + vec2(0.0001, 0.0));
-        vec2 perpendicular = vec2(-axis.y, axis.x);
+        vec2 perpendicular = vec2(-uFlashlightAxis.y, uFlashlightAxis.x);
         vec2 fromTarget = gl_FragCoord.xy - uFlashlightTarget;
         vec2 ellipse = vec2(
-            dot(fromTarget, axis) / max(uFlashlightRadii.x, 1.0),
-            dot(fromTarget, perpendicular) / max(uFlashlightRadii.y, 1.0)
+            dot(fromTarget, uFlashlightAxis) * uFlashlightInverseRadii.x,
+            dot(fromTarget, perpendicular) * uFlashlightInverseRadii.y
         );
         float ellipticalDistance = length(ellipse);
         float featherStart = clamp(1.0 - uFlashlightSoftness, 0.0, 0.98);
-        float attenuation = 1.0 - smoothstep(featherStart, 1.0, ellipticalDistance);
-        float minimumDimension = min(uResolution.x, uResolution.y);
-        vec3 lightDirection = normalize(vec3(
-            (uFlashlightOrigin - gl_FragCoord.xy) / minimumDimension,
-            uFlashlightHeight / minimumDimension
-        ));
-        float diffuseFactor = max(dot(normal, lightDirection), 0.0);
-        finalColor += attenuation * uFlashlightColor * diffuseFactor * uFlashlightIntensity;
+        flashlightAttenuation = 1.0 - smoothstep(featherStart, 1.0, ellipticalDistance);
+    }
+
+    if (uLightCount > 0 || flashlightAttenuation > 0.0)
+    {
+        vec3 normalMap = texture2D(uNormSampler, outTexCoord).rgb;
+        vec3 normal = normalize(uInverseRotationMatrix * vec3(normalMap * 2.0 - 1.0));
+        vec2 res = vec2(min(uResolution.x, uResolution.y)) * uCamera.w;
+
+        for (int index = 0; index < kMaxLights; ++index)
+        {
+            if (index < uLightCount)
+            {
+                Light light = uLights[index];
+                vec2 planarDirection = (light.position.xy / res) - (gl_FragCoord.xy / res);
+                vec3 pointLightDir = vec3(planarDirection, 0.1);
+                vec3 lightDir = vec3(planarDirection, mix(0.1, 2.0, light.areaSoftness));
+                vec3 lightNormal = normalize(lightDir);
+                float distToSurf = length(pointLightDir) * uCamera.w;
+                float planarDistance = length(planarDirection) * uCamera.w;
+                float diffuseFactor = max(dot(normal, lightNormal), 0.0);
+                float radius = (light.radius / res.x * uCamera.w) * uCamera.w;
+                float pointAttenuation = clamp(1.0 - distToSurf * distToSurf / (radius * radius), 0.0, 1.0);
+                float areaAttenuation = 1.0 - smoothstep(0.1, 1.0, planarDistance / max(radius, 0.0001));
+                float attenuation = mix(pointAttenuation, areaAttenuation, light.areaSoftness);
+                finalColor += attenuation * light.color * diffuseFactor * light.intensity;
+            }
+        }
+
+        if (flashlightAttenuation > 0.0)
+        {
+            float minimumDimension = min(uResolution.x, uResolution.y);
+            vec3 lightDirection = normalize(vec3(
+                (uFlashlightOrigin - gl_FragCoord.xy) / minimumDimension,
+                uFlashlightHeight / minimumDimension
+            ));
+            float diffuseFactor = max(dot(normal, lightDirection), 0.0);
+            finalColor += flashlightAttenuation * uFlashlightColor * diffuseFactor * uFlashlightIntensity;
+        }
     }
 
     vec4 lightColor = vec4(uAmbientLightColor + finalColor, 1.0);
@@ -112,6 +120,8 @@ export interface FlashlightState {
   originY: number;
   targetX: number;
   targetY: number;
+  axisX: number;
+  axisY: number;
   majorRadius: number;
   minorRadius: number;
   intensity: number;
@@ -132,6 +142,8 @@ export class EllipticalLightPipeline extends Phaser.Renderer.WebGL.Pipelines.Lig
     originY: 0,
     targetX: 0,
     targetY: 0,
+    axisX: 1,
+    axisY: 0,
     majorRadius: 1,
     minorRadius: 1,
     intensity: 0,
@@ -162,10 +174,11 @@ export class EllipticalLightPipeline extends Phaser.Renderer.WebGL.Pipelines.Lig
 
     this.set2f("uFlashlightOrigin", originX, originY);
     this.set2f("uFlashlightTarget", targetX, targetY);
+    this.set2f("uFlashlightAxis", flashlight.axisX, -flashlight.axisY);
     this.set2f(
-      "uFlashlightRadii",
-      flashlight.majorRadius * zoom,
-      flashlight.minorRadius * zoom,
+      "uFlashlightInverseRadii",
+      1 / Math.max(flashlight.majorRadius * zoom, 1),
+      1 / Math.max(flashlight.minorRadius * zoom, 1),
     );
     this.set3f("uFlashlightColor", 1, 1, 1);
     this.set1f("uFlashlightIntensity", flashlight.intensity);

@@ -133,6 +133,7 @@ let currentStairs: Stair[] = [];
 let currentLoot: LootItem[] = [];
 let currentMonsters: Monster[] = [];
 let currentDecorations: Decoration[] = [];
+let currentSpawners: Decoration[] = [];
 const destroyedObstaclesByPage = new Map<string, Map<string, ObstacleState>>();
 let visitedRooms = new Set<number>();
 let roomRoutingDirty = true;
@@ -176,8 +177,10 @@ let lastDroppedWeapon: LootItem | null = null;
 let queuedLootDrops: LootItem[] = [];
 const temporarilyBlockedLoot = new Set<string>();
 
+const GAME_TICK_INTERVAL_MS = 1_000 / 60;
 let gameAnimationFrame: number | null = null;
 let lastGameTick: number | null = null;
+let nextGameTick: number | null = null;
 
 const lootInventory: LootInventory = { credits: 0, crystals: 0, cores: 0, energy: 0, medkits: 0 };
 const collectedLoot = new Set<string>();
@@ -200,6 +203,8 @@ let currentPlayerSpriteAsset = PLAYER_DEFAULT_ASSETS.up;
 let primaryPointerDown = false;
 let pointerInViewport = false;
 let pointerClientPosition: Point | null = null;
+let playerAimDirty = false;
+let lastAimCamera: Point | null = null;
 let portalTransitioning = false;
 let teleportPauseActive = false;
 const portalContacts = new Set<string>();
@@ -1016,7 +1021,8 @@ function activateMonstersInRoom(roomId: number): void {
 
 function updateMonsterSpawners(timestamp: number): void {
   let spawned = false;
-  for (const spawner of currentDecorations) {
+  let animationActive = false;
+  for (const spawner of currentSpawners) {
     if (
       !spawner.spawner ||
       spawner.destroyed ||
@@ -1033,6 +1039,10 @@ function updateMonsterSpawners(timestamp: number): void {
     const animationStartAt = spawner.nextSpawnAt - eventDelay;
     if (timestamp >= animationStartAt && (spawner.spawnAnimationStartedAt ?? -Infinity) < animationStartAt) {
       spawner.spawnAnimationStartedAt = animationStartAt;
+    }
+    if (spawner.spawnAnimationStartedAt !== undefined && spawnClip) {
+      const duration = spawnClip.frames.length * spawnClip.frameDurationMs;
+      animationActive ||= timestamp <= spawner.spawnAnimationStartedAt + duration + 50;
     }
     if (timestamp < spawner.nextSpawnAt) continue;
 
@@ -1064,7 +1074,7 @@ function updateMonsterSpawners(timestamp: number): void {
     renderer.spawnEffect(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
     spawned = true;
   }
-  renderer.updateDecorationAnimations(currentDecorations, timestamp);
+  if (animationActive) renderer.updateDecorationAnimations(currentSpawners, timestamp);
   if (spawned) renderMonsters();
 }
 
@@ -1665,6 +1675,11 @@ function rebuildRoomRouting(): void {
 
 function gameTick(timestamp: number): void {
   gameAnimationFrame = requestAnimationFrame(gameTick);
+  if (nextGameTick !== null && timestamp + 0.25 < nextGameTick) return;
+  nextGameTick = nextGameTick === null
+    ? timestamp + GAME_TICK_INTERVAL_MS
+    : Math.max(timestamp + GAME_TICK_INTERVAL_MS, nextGameTick + GAME_TICK_INTERVAL_MS);
+  renderer.updateLighting(timestamp);
 
   if (teleportPauseActive || !playerAlive || !currentLayout) {
     lastGameTick = timestamp;
@@ -1682,7 +1697,7 @@ function gameTick(timestamp: number): void {
 
   updatePlayerProtectionVisual(timestamp);
   updateEnergyDash(dt, timestamp);
-  updatePlayerAimFromPointer();
+  if (playerAimNeedsUpdate()) updatePlayerAimFromPointer();
   if (primaryPointerDown && pointerInViewport) shootBullet();
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
@@ -1796,11 +1811,10 @@ function gameTick(timestamp: number): void {
 }
 
 function startGameLoop(): void {
-  if (gameAnimationFrame !== null) {
-    cancelAnimationFrame(gameAnimationFrame);
-  }
-
+  if (gameAnimationFrame !== null) cancelAnimationFrame(gameAnimationFrame);
   lastGameTick = null;
+  nextGameTick = null;
+  playerAimDirty = true;
   gameAnimationFrame = requestAnimationFrame(gameTick);
 }
 
@@ -2231,6 +2245,7 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
   setPlayerMoving(moved, timestamp);
   if (!moved) return;
 
+  playerAimDirty = true;
   updatePlayerVisual();
   revealRoomsFromCorridor(player.x, player.y);
   updateCurrentRoom();
@@ -2456,11 +2471,14 @@ function updatePlayerAimFromPointer(): void {
   if (!pointerInViewport || !pointerClientPosition) {
     renderer.setCameraTarget(player);
     renderer.setFlashlightTarget(null);
+    playerAimDirty = false;
+    lastAimCamera = null;
     return;
   }
   const target = renderer.worldPointAt(pointerClientPosition.x, pointerClientPosition.y);
   if (!target) {
     renderer.setFlashlightTarget(null);
+    playerAimDirty = false;
     return;
   }
   renderer.setFlashlightTarget(target);
@@ -2472,14 +2490,29 @@ function updatePlayerAimFromPointer(): void {
   const dx = target.x - center.x;
   const dy = target.y - center.y;
   const magnitude = Math.hypot(dx, dy);
-  if (magnitude < 1) return;
+  if (magnitude < 1) {
+    playerAimDirty = false;
+    return;
+  }
 
   playerFacing = { x: dx / magnitude, y: dy / magnitude };
   updatePlayerFacingAsset();
+  const camera = renderer.cameraState();
+  lastAimCamera = camera ? { x: camera.x, y: camera.y } : null;
+  playerAimDirty = false;
+}
+
+function playerAimNeedsUpdate(): boolean {
+  if (playerAimDirty) return true;
+  if (!pointerInViewport || !pointerClientPosition) return false;
+  const camera = renderer.cameraState();
+  if (!camera || !lastAimCamera) return true;
+  return Math.abs(camera.x - lastAimCamera.x) > 0.1 || Math.abs(camera.y - lastAimCamera.y) > 0.1;
 }
 
 function updatePlayerAim(clientX: number, clientY: number): void {
   pointerClientPosition = { x: clientX, y: clientY };
+  playerAimDirty = true;
   updatePlayerAimFromPointer();
 }
 
@@ -2487,6 +2520,8 @@ function resetPlayerInput(): void {
   heldMovementKeys.clear();
   primaryPointerDown = false;
   pointerClientPosition = null;
+  playerAimDirty = true;
+  lastAimCamera = null;
   playerSpriteAnimationToken += 1;
   playerShooting = false;
   renderer.setFlashlightTarget(null);
@@ -2593,6 +2628,7 @@ function renderGraph(
   currentStairs = objects.stairs;
   currentLoot = objects.loot;
   currentDecorations = buildDecorations(layout, pageUrl);
+  currentSpawners = currentDecorations.filter(item => item.spawner);
   rebuildSpatialIndexes();
   currentLoot.push(...createSceneryDrops(currentDecorations, floorIdentity(pageUrl), collectedLoot));
 
