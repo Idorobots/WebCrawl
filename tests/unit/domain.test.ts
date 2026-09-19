@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  BASE_FLOOR_ASSETS,
+  DAMAGED_FLOOR_ASSETS,
   EFFECT_FRAMES,
   ENVIRONMENT_SEGMENT_SIZE,
+  FLOOR_ASSETS,
   MONSTER_FRAMES,
   ROOM_HEIGHT,
   ROOM_WIDTH,
@@ -170,6 +173,16 @@ describe("layout and geometry", () => {
     expect(WORLD_GEOMETRY.segmentSize).toBe(world(128));
     expect(WORLD_GEOMETRY.floorTileSize).toBe(world(64));
     expect(Math.abs(WORLD_GEOMETRY.segmentSize - WORLD_GEOMETRY.floorTileSize * 2)).toBeLessThanOrEqual(1);
+  });
+
+  it("reserves damaged floor tiles for sparse flavour instead of base floors", () => {
+    const base = new Set<string>(BASE_FLOOR_ASSETS);
+    expect(base.size).toBeGreaterThanOrEqual(4);
+    for (const asset of DAMAGED_FLOOR_ASSETS) {
+      expect(base.has(asset), `${asset} must not be a base floor`).toBe(false);
+      expect(FLOOR_ASSETS).toContain(asset);
+    }
+    expect(FLOOR_ASSETS).toHaveLength(BASE_FLOOR_ASSETS.length + DAMAGED_FLOOR_ASSETS.length);
   });
 
   it("aligns visual content with collision centers and normalizes monster animations", () => {

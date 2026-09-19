@@ -6,6 +6,8 @@ import {
   CAMERA_SCALE,
   CAMERA_TRANSITION_MS,
   DEBRIS_ASSETS,
+  BASE_FLOOR_ASSETS,
+  DAMAGED_FLOOR_ASSETS,
   EFFECT_FRAMES,
   EXPLOSION_FRAMES,
   FLOOR_ASSETS,
@@ -58,6 +60,42 @@ const SEGMENT_SIZE = WORLD_GEOMETRY.segmentSize;
 const FLOOR_TILE_SIZE = WORLD_GEOMETRY.floorTileSize;
 const FLOOR_TILE_SCALE = FLOOR_TILE_SIZE / 128;
 const HIDDEN_WORLD_ALPHA = 0.24;
+const FLOOR_DAMAGE_CHANCE_PERCENT = 12;
+
+type StaticObject = Phaser.GameObjects.Image | Phaser.GameObjects.TileSprite | Phaser.GameObjects.Container;
+
+const ROOM_FLOOR_DEPTH = -2;
+const CORRIDOR_FLOOR_DEPTH = -4;
+const DEBRIS_DEPTH = -1.5;
+const Y_DEPTH_OFFSET = 4_000_000;
+const SIDE_WALL_DEPTH = 7_000_000;
+const OVERHEAD_DEPTH = 8_000_000;
+const DEBUG_DEPTH = 12_000_000;
+const yDepth = (y: number, bias = 0): number => Y_DEPTH_OFFSET + y + bias;
+
+/**
+ * Depth anchor per wall module:
+ * - E/W walls always draw above actors.
+ * - N walls anchor at their top edge so anything south of them draws in front.
+ * - S walls anchor at their bottom edge (+1 to win boundary ties) so they stay in front.
+ */
+function wallDepth(asset: string, y: number): number {
+  if (asset === ASSETS.wallVerticalLeft || asset === ASSETS.wallVerticalRight) return SIDE_WALL_DEPTH;
+  if (asset === ASSETS.wallHorizontalTop || asset === ASSETS.wallCornerTopLeft || asset === ASSETS.wallCornerTopRight) {
+    return yDepth(y - SEGMENT_SIZE / 2);
+  }
+  return yDepth(y + SEGMENT_SIZE / 2, 1);
+}
+
+/**
+ * Doors follow their wall's anchor: E/W always draw above actors, N doors
+ * anchor at the module top edge, S doors at the bottom edge (+1 tie bias).
+ */
+function doorDepth(side: "N" | "E" | "S" | "W", y: number): number {
+  if (side === "E" || side === "W") return SIDE_WALL_DEPTH;
+  if (side === "N") return yDepth(y - SEGMENT_SIZE / 2);
+  return yDepth(y + SEGMENT_SIZE / 2, 1);
+}
 const PORTAL_FRAME_MS = 125;
 function supportedMaxLights(): number {
   const configured = Number(import.meta.env.VITE_MAX_LIGHTS);
@@ -158,8 +196,8 @@ export class PhaserRenderer {
   private visited = new Set<number>();
   private background: Phaser.GameObjects.TileSprite | null = null;
   private staticObjects: Phaser.GameObjects.GameObject[] = [];
-  private roomLayers = new Map<number, Phaser.GameObjects.Container>();
-  private corridorLayers = new Map<string, Phaser.GameObjects.Container>();
+  private roomStatics = new Map<number, StaticObject[]>();
+  private corridorStatics = new Map<string, StaticObject[]>();
   private bulletsGraphics: Phaser.GameObjects.Graphics | null = null;
   private debugGraphics: Phaser.GameObjects.Graphics | null = null;
   private decorations: Phaser.GameObjects.Container[] = [];
@@ -196,7 +234,7 @@ export class PhaserRenderer {
   private lightProfiles: WorldLight[] = [];
   private lastFlickerUpdate = -Infinity;
   private corridorBounds = new Map<string, WorldBounds>();
-  private staticVisibility = new Map<Phaser.GameObjects.Container, boolean>();
+  private staticVisibility = new Map<StaticObject, boolean>();
   private bulletLights: Phaser.GameObjects.Light[] = [];
   private monsterAuras = new Map<string, Phaser.GameObjects.Light>();
   private lootAuras = new Map<string, Phaser.GameObjects.Light>();
@@ -464,12 +502,12 @@ export class PhaserRenderer {
     const layout = this.layout;
     if (!layout) return;
     for (const room of layout.nodes) {
-      const visible = this.visited.has(room.id);
-      this.roomLayers.get(room.id)?.setAlpha(visible ? 1 : HIDDEN_WORLD_ALPHA);
+      const alpha = this.visited.has(room.id) ? 1 : HIDDEN_WORLD_ALPHA;
+      for (const object of this.roomStatics.get(room.id) ?? []) object.setAlpha(alpha);
     }
     for (const link of layout.links) {
-      const visible = this.visited.has(link.source.id) || this.visited.has(link.target.id);
-      this.corridorLayers.get(link.id)?.setAlpha(visible ? 1 : HIDDEN_WORLD_ALPHA);
+      const alpha = this.visited.has(link.source.id) || this.visited.has(link.target.id) ? 1 : HIDDEN_WORLD_ALPHA;
+      for (const object of this.corridorStatics.get(link.id) ?? []) object.setAlpha(alpha);
     }
     this.refreshLocalLightVisibility(true);
     this.updateStaticWorldVisibility();
@@ -495,7 +533,7 @@ export class PhaserRenderer {
       candidate.top <= bounds.bottom;
 
     for (const room of layout.nodes) {
-      this.setStaticVisible(this.roomLayers.get(room.id), intersects({
+      for (const object of this.roomStatics.get(room.id) ?? []) this.setStaticVisible(object, intersects({
         left: room.x - room.width / 2,
         right: room.x + room.width / 2,
         top: room.y - room.height / 2,
@@ -503,16 +541,18 @@ export class PhaserRenderer {
       }));
     }
     for (const link of layout.links) {
-      this.setStaticVisible(this.corridorLayers.get(link.id), intersects(this.corridorBounds.get(link.id) ?? {
-        left: Infinity,
-        right: -Infinity,
-        top: Infinity,
-        bottom: -Infinity,
-      }));
+      for (const object of this.corridorStatics.get(link.id) ?? []) {
+        this.setStaticVisible(object, intersects(this.corridorBounds.get(link.id) ?? {
+          left: Infinity,
+          right: -Infinity,
+          top: Infinity,
+          bottom: -Infinity,
+        }));
+      }
     }
   }
 
-  private setStaticVisible(object: Phaser.GameObjects.Container | undefined, visible: boolean): void {
+  private setStaticVisible(object: StaticObject | undefined, visible: boolean): void {
     if (!object || this.staticVisibility.get(object) === visible) return;
     object.setVisible(visible);
     this.staticVisibility.set(object, visible);
@@ -523,24 +563,30 @@ export class PhaserRenderer {
     if (!scene) return;
     const left = room.x - room.width / 2;
     const top = room.y - room.height / 2;
-    const container = this.rememberStatic(scene.add.container(0, 0).setDepth(-2).setAlpha(alpha));
-    this.roomLayers.set(room.id, container);
+    const floorContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(ROOM_FLOOR_DEPTH).setAlpha(alpha));
     const floor = scene.add.tileSprite(left, top, room.width, room.height, textureKey(this.roomFloorAsset(room)))
       .setOrigin(0)
       .setTileScale(FLOOR_TILE_SCALE);
     this.illuminate(floor);
-    container.add(floor);
-    this.addRoomFloorDetails(container, room);
+    floorContainer.add(floor);
+    this.addRoomFloorDetails(floorContainer, room);
+    const statics: StaticObject[] = [floorContainer];
     const doors = this.roomDoors(room);
-    this.addRoomWalls(container, room, doors);
-    for (const door of doors) container.add(this.createDoor(door.position, door.side));
+    for (const wall of this.addRoomWalls(room, doors)) {
+      statics.push(this.rememberStatic(wall.setAlpha(alpha)));
+    }
+    for (const door of doors) {
+      const doorObject = this.createDoor(door.position, door.side);
+      statics.push(this.rememberStatic(doorObject.setAlpha(alpha).setDepth(doorDepth(door.side, door.position.y))));
+    }
+    this.roomStatics.set(room.id, statics);
   }
 
   private renderCorridor(link: DungeonLayout["links"][number], alpha: number): void {
     const scene = this.scene;
     if (!scene) return;
-    const container = this.rememberStatic(scene.add.container(0, 0).setDepth(-4).setAlpha(alpha));
-    this.corridorLayers.set(link.id, container);
+    const floorContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_FLOOR_DEPTH).setAlpha(alpha));
+    const statics: StaticObject[] = [floorContainer];
     this.corridorBounds.set(link.id, link.points.reduce<WorldBounds>((bounds, point) => ({
       left: Math.min(bounds.left, point.x - link.width / 2),
       right: Math.max(bounds.right, point.x + link.width / 2),
@@ -555,14 +601,20 @@ export class PhaserRenderer {
     for (let index = 1; index < link.points.length; index += 1) {
       const start = link.points[index - 1]!;
       const end = link.points[index]!;
-      container.add(this.createCorridorSegment(start, end, link.width, link.source.lootSeed + index));
+      const { floor, walls } = this.corridorSegmentParts(start, end, link.width, link.source.lootSeed + index);
+      this.illuminate(floor);
+      floorContainer.add(floor);
+      for (const wall of walls) {
+        statics.push(this.rememberStatic(wall.setAlpha(alpha)));
+      }
     }
+    this.corridorStatics.set(link.id, statics);
   }
 
   private roomFloorAsset(room: GraphNode): string {
     if (room.isRoot) return ASSETS.floorPlain;
     if (room.tag === "script") return ASSETS.floorHex;
-    return FLOOR_ASSETS[room.lootSeed % FLOOR_ASSETS.length] ?? ASSETS.floorPlain;
+    return BASE_FLOOR_ASSETS[room.lootSeed % BASE_FLOOR_ASSETS.length] ?? ASSETS.floorPlain;
   }
 
   private addRoomFloorDetails(
@@ -583,7 +635,10 @@ export class PhaserRenderer {
       const key = `${column}:${row}`;
       if (occupied.has(key)) continue;
       occupied.add(key);
-      const asset = FLOOR_ASSETS[(room.lootSeed + index * 5) % FLOOR_ASSETS.length] ?? ASSETS.floorHatch;
+      const damaged = seed % 100 < FLOOR_DAMAGE_CHANCE_PERCENT;
+      const asset = damaged
+        ? DAMAGED_FLOOR_ASSETS[(seed >>> 8) % DAMAGED_FLOOR_ASSETS.length] ?? ASSETS.floorCracks
+        : BASE_FLOOR_ASSETS[(room.lootSeed + index * 5) % BASE_FLOOR_ASSETS.length] ?? ASSETS.floorPlain;
       const detail = scene.add.image(
         room.x - room.width / 2 + column * FLOOR_TILE_SIZE + FLOOR_TILE_SIZE / 2,
         room.y - room.height / 2 + row * FLOOR_TILE_SIZE + FLOOR_TILE_SIZE / 2,
@@ -594,51 +649,54 @@ export class PhaserRenderer {
     }
   }
 
-  private createCorridorSegment(start: Point, end: Point, width: number, seed: number): Phaser.GameObjects.Container {
+  private corridorSegmentParts(
+    start: Point,
+    end: Point,
+    width: number,
+    seed: number,
+  ): { floor: Phaser.GameObjects.TileSprite; walls: Phaser.GameObjects.Image[] } {
     const scene = this.scene!;
-    const container = scene.add.container(0, 0);
-    const floorAsset = FLOOR_ASSETS[Math.abs(seed) % FLOOR_ASSETS.length] ?? ASSETS.floorTread;
+    const walls: Phaser.GameObjects.Image[] = [];
+    const floorAsset = BASE_FLOOR_ASSETS[Math.abs(seed) % BASE_FLOOR_ASSETS.length] ?? ASSETS.floorTread;
     if (Math.abs(start.x - end.x) >= Math.abs(start.y - end.y)) {
       const left = Math.min(start.x, end.x);
       const length = Math.abs(end.x - start.x);
       const top = start.y - width / 2;
       const floor = scene.add.tileSprite(left, top, length, width, textureKey(floorAsset)).setOrigin(0).setTileScale(FLOOR_TILE_SCALE);
-      this.illuminate(floor);
-      container.add(floor);
       const columns = Math.round(length / SEGMENT_SIZE);
       for (let column = 0; column < columns; column += 1) {
         const x = left + (column + 0.5) * SEGMENT_SIZE;
-        container.add(this.createEnvironmentModule(x, top + SEGMENT_SIZE / 2, ASSETS.wallHorizontalTop));
-        container.add(this.createEnvironmentModule(x, top + width - SEGMENT_SIZE / 2, ASSETS.wallHorizontalBottom));
+        walls.push(this.createEnvironmentModule(x, top + SEGMENT_SIZE / 2, ASSETS.wallHorizontalTop));
+        walls.push(this.createEnvironmentModule(x, top + width - SEGMENT_SIZE / 2, ASSETS.wallHorizontalBottom));
       }
-      return container;
+      return { floor, walls };
     }
     const top = Math.min(start.y, end.y);
     const length = Math.abs(end.y - start.y);
     const left = start.x - width / 2;
     const floor = scene.add.tileSprite(left, top, width, length, textureKey(floorAsset)).setOrigin(0).setTileScale(FLOOR_TILE_SCALE);
-    this.illuminate(floor);
-    container.add(floor);
     const rows = Math.round(length / SEGMENT_SIZE);
     for (let row = 0; row < rows; row += 1) {
       const y = top + (row + 0.5) * SEGMENT_SIZE;
-      container.add(this.createEnvironmentModule(
+      walls.push(this.createEnvironmentModule(
         left + SEGMENT_SIZE / 2,
         y,
         ASSETS.wallVerticalLeft,
       ));
-      container.add(this.createEnvironmentModule(
+      walls.push(this.createEnvironmentModule(
         left + width - SEGMENT_SIZE / 2,
         y,
         ASSETS.wallVerticalRight,
       ));
     }
-    return container;
+    return { floor, walls };
   }
 
   private createEnvironmentModule(x: number, y: number, asset: string): Phaser.GameObjects.Image {
     return this.illuminate(
-      this.scene!.add.image(x, y, textureKey(asset)).setDisplaySize(SEGMENT_SIZE, SEGMENT_SIZE),
+      this.scene!.add.image(x, y, textureKey(asset))
+        .setDisplaySize(SEGMENT_SIZE, SEGMENT_SIZE)
+        .setDepth(wallDepth(asset, y)),
     );
   }
 
@@ -666,10 +724,10 @@ export class PhaserRenderer {
   }
 
   private addRoomWalls(
-    container: Phaser.GameObjects.Container,
     room: GraphNode,
     doors: ReadonlyArray<{ position: Point; side: "N" | "E" | "S" | "W" }>,
-  ): void {
+  ): Phaser.GameObjects.Image[] {
+    const walls: Phaser.GameObjects.Image[] = [];
     const left = room.x - room.width / 2;
     const top = room.y - room.height / 2;
     const columns = Math.round(room.width / SEGMENT_SIZE);
@@ -687,21 +745,22 @@ export class PhaserRenderer {
     }
     const isDoorCell = (side: string, index: number): boolean => occupied.get(side)?.has(index) ?? false;
 
-    container.add(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, top + SEGMENT_SIZE / 2, ASSETS.wallCornerTopLeft));
-    container.add(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, top + SEGMENT_SIZE / 2, ASSETS.wallCornerTopRight));
-    container.add(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallCornerBottomLeft));
-    container.add(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallCornerBottomRight));
+    walls.push(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, top + SEGMENT_SIZE / 2, ASSETS.wallCornerTopLeft));
+    walls.push(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, top + SEGMENT_SIZE / 2, ASSETS.wallCornerTopRight));
+    walls.push(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallCornerBottomLeft));
+    walls.push(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallCornerBottomRight));
 
     for (let column = 1; column < columns - 1; column += 1) {
       const x = left + (column + 0.5) * SEGMENT_SIZE;
-      if (!isDoorCell("N", column)) container.add(this.createEnvironmentModule(x, top + SEGMENT_SIZE / 2, ASSETS.wallHorizontalTop));
-      if (!isDoorCell("S", column)) container.add(this.createEnvironmentModule(x, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallHorizontalBottom));
+      if (!isDoorCell("N", column)) walls.push(this.createEnvironmentModule(x, top + SEGMENT_SIZE / 2, ASSETS.wallHorizontalTop));
+      if (!isDoorCell("S", column)) walls.push(this.createEnvironmentModule(x, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallHorizontalBottom));
     }
     for (let row = 1; row < rows - 1; row += 1) {
       const y = top + (row + 0.5) * SEGMENT_SIZE;
-      if (!isDoorCell("W", row)) container.add(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, y, ASSETS.wallVerticalLeft));
-      if (!isDoorCell("E", row)) container.add(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, y, ASSETS.wallVerticalRight));
+      if (!isDoorCell("W", row)) walls.push(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, y, ASSETS.wallVerticalLeft));
+      if (!isDoorCell("E", row)) walls.push(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, y, ASSETS.wallVerticalRight));
     }
+    return walls;
   }
 
   private createDoor(position: Point, side: "N" | "E" | "S" | "W"): Phaser.GameObjects.Container {
@@ -742,8 +801,8 @@ export class PhaserRenderer {
     this.lightProfiles.length = 0;
     this.corridorBounds.clear();
     this.staticVisibility.clear();
-    this.roomLayers.clear();
-    this.corridorLayers.clear();
+    this.roomStatics.clear();
+    this.corridorStatics.clear();
   }
 
   private addRoomLight(room: GraphNode, visible: boolean): void {
@@ -1044,7 +1103,12 @@ export class PhaserRenderer {
       this.applyClip(sprite, state.clip, item.size, state.elapsed);
       this.applyClip(shadow, state.clip, item.size, state.elapsed);
       this.applyShadowOffset(shadow, item.x, item.y, item.size);
-      const container = scene.add.container(item.x, item.y, [shadow, sprite]).setDepth(item.destroyed ? 18 : 20);
+      const isDebris = item.destroyed ||
+        item.kind === "debris" ||
+        item.kind === "doorway-debris" ||
+        item.definitionId.startsWith("debris");
+      const container = scene.add.container(item.x, item.y, [shadow, sprite])
+        .setDepth(isDebris ? DEBRIS_DEPTH : yDepth(item.y));
       this.decorationSprites.set(item.id, sprite);
       this.decorationShadows.set(item.id, shadow);
       this.syncDecorationEffectLight(item, state);
@@ -1185,7 +1249,7 @@ export class PhaserRenderer {
         const sprite = this.illuminate(scene.add.image(0, yOffset, textureKey(weaponAsset(item.weapon.kind)))
           .setDisplaySize(definition.size, definition.size)
           .setOrigin(visual.origin.x, visual.origin.y));
-        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(25));
+        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(yDepth(item.y, 0.5)));
         continue;
       }
       const definition = item.kind === "weapon" ? undefined : LOOT_DEFINITIONS[item.kind];
@@ -1197,11 +1261,11 @@ export class PhaserRenderer {
         const sprite = this.illuminate(scene.add.image(0, 0, textureKey(this.clipAsset(clip, elapsed))));
         this.applyClip(sprite, clip, definition.size, elapsed);
         this.lootSprites.set(item.id, sprite);
-        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(25));
+        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(yDepth(item.y, 0.5)));
         continue;
       }
       const sprite = this.illuminate(scene.add.image(0, 0, textureKey(asset)).setDisplaySize(definition.size, definition.size));
-      this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(25));
+      this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(yDepth(item.y, 0.5)));
     }
     this.refreshLocalLightVisibility(true);
   }
@@ -1241,7 +1305,7 @@ export class PhaserRenderer {
           .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
           .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y)
           .setName("sprite"));
-        container = scene.add.container(stair.x, stair.y, [sprite]).setDepth(24);
+        container = scene.add.container(stair.x, stair.y, [sprite]).setDepth(yDepth(stair.y));
         container.setData("enabled", false);
         container.setData("animationToken", 0);
         this.portals.set(stair.id, container);
@@ -1387,7 +1451,7 @@ export class PhaserRenderer {
             color: "#f7ddff", fontSize: `${world(11)}px`, fontStyle: "bold",
           }).setOrigin(0.5));
         }
-        container = scene.add.container(item.x, item.y, children).setDepth(item.dead ? 18 : 30);
+        container = scene.add.container(item.x, item.y, children).setDepth(yDepth(item.y, item.dead ? -1 : 0));
         container.setData("hpWidth", barWidth);
         container.setData("dead", item.dead);
         this.monsters.set(item.id, container);
@@ -1404,7 +1468,7 @@ export class PhaserRenderer {
           if (aura) this.monsterAuras.set(item.id, aura);
         }
       }
-      container.setPosition(item.x, item.y);
+      container.setPosition(item.x, item.y).setDepth(yDepth(item.y, item.dead ? -1 : 0));
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
       this.applyMonsterFrame(container, item, performance.now());
       const aura = this.monsterAuras.get(item.id);
@@ -1432,7 +1496,7 @@ export class PhaserRenderer {
     for (const item of items) {
       const container = this.monsters.get(item.id);
       if (!container) continue;
-      container.setPosition(item.x, item.y);
+      container.setPosition(item.x, item.y).setDepth(yDepth(item.y, item.dead ? -1 : 0));
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
       const previousAsset = sprite.texture.key;
       this.applyMonsterFrame(container, item, now);
@@ -1498,7 +1562,7 @@ export class PhaserRenderer {
     this.setHostData("bullets", String(items.length));
     if (!this.scene) return;
     this.bulletsGraphics ??= this.scene.add.graphics()
-      .setDepth(40)
+      .setDepth(OVERHEAD_DEPTH)
       .setBlendMode(Phaser.BlendModes.ADD);
     this.bulletsGraphics.clear();
     for (const bullet of items) {
@@ -1588,9 +1652,9 @@ export class PhaserRenderer {
       this.playerSprite = this.illuminate(scene.add.image(0, 0, textureKey(asset))
         .setOrigin(clip.origin.x, clip.origin.y));
       this.applyClip(this.playerSprite, clip, PLAYER_SPEC.spriteSize, 0, asset);
-      this.player = scene.add.container(position.x, position.y, [this.playerSprite]).setDepth(50);
+      this.player = scene.add.container(position.x, position.y, [this.playerSprite]).setDepth(yDepth(position.y));
     }
-    this.player.setPosition(position.x, position.y);
+    this.player.setPosition(position.x, position.y).setDepth(yDepth(position.y));
     this.syncPlayerFollowingEffects();
     if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
     this.applyClip(this.playerSprite!, clip, PLAYER_SPEC.spriteSize, 0, asset);
@@ -1683,7 +1747,7 @@ export class PhaserRenderer {
 
   private renderDebugGeometry(): void {
     if (!SHOW_DEBUG_GEOMETRY || !this.scene) return;
-    const graphics = this.debugGraphics ??= this.scene.add.graphics().setDepth(70);
+    const graphics = this.debugGraphics ??= this.scene.add.graphics().setDepth(DEBUG_DEPTH);
     graphics.clear();
     graphics.lineStyle(world(1), 0x69f7de, 0.9);
     graphics.strokeCircle(this.currentPlayer.x, this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY, PLAYER_SPEC.radius);
@@ -1763,7 +1827,7 @@ export class PhaserRenderer {
       return;
     }
     const effect = scene.add.image(x, y, textureKey(clip.frames[0]!))
-      .setDepth(55)
+      .setDepth(OVERHEAD_DEPTH)
       .setBlendMode(Phaser.BlendModes.ADD);
     this.activeEffects.add(effect);
     this.setHostData("lastEffect", clip.frames[0]!);

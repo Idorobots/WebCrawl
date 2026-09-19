@@ -86,22 +86,29 @@ export const ASSETS = {
   lootEnergy: asset("pickups/ammo_energy.png"),
 } as const;
 
-export const FLOOR_ASSETS = [
+/** Floors that may tile whole rooms and corridors: undamaged materials only. */
+export const BASE_FLOOR_ASSETS = [
   ASSETS.floorPlain,
   ASSETS.floorComposite,
-  ASSETS.floorWorn,
-  ASSETS.floorCracks,
-  ASSETS.floorRubble,
-  ASSETS.floorDented,
-  ASSETS.floorCables,
-  ASSETS.floorRock,
-  ASSETS.floorScorched,
   ASSETS.floorPlate,
   ASSETS.floorHex,
   ASSETS.floorHatch,
   ASSETS.floorTread,
+  ASSETS.floorRock,
   ASSETS.floorAsteroidDust,
 ] as const;
+
+/** Broken/worn floors, reserved as sparse flavour details rather than main tiles. */
+export const DAMAGED_FLOOR_ASSETS = [
+  ASSETS.floorWorn,
+  ASSETS.floorDented,
+  ASSETS.floorCracks,
+  ASSETS.floorRubble,
+  ASSETS.floorCables,
+  ASSETS.floorScorched,
+] as const;
+
+export const FLOOR_ASSETS = [...BASE_FLOOR_ASSETS, ...DAMAGED_FLOOR_ASSETS] as const;
 
 export const SCENERY_ASSETS = {
   plantViolet: asset("scenery/plants/plant_large_violet.png"),

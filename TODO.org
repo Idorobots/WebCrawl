@@ -74,12 +74,6 @@ When invulnerable, the player can not take damage even when hit by enemy attacks
 
 The final game score should be built based on the types of loot collected and the enemies killed. Crystals available at the end of the game should count for a lot of points.
 
-* More use of HTML elements in-game.
-- Show what each room is based on the element type, etc.
-- Scripts should be boss rooms with a larger, harder oponen.
-- Use shorter text contents as signage on rooms' floor (use a modern font for the rendering).
-- Data Terminals - when a room has text contents (`p` etc) place a data-terminal in the room allowing the player to read the contents in a modal popover visible whenever the player character is over the terminal.
-
 * CANCELLED Procedurally generated names
 :LOGBOOK:
 - State "CANCELLED"  from              [2026-09-19 Sat 12:34] \\
@@ -192,12 +186,20 @@ Don't explode crates or plants, these should "break down".
 Barrels should be the only scenery item that blows up. When they do, they should deal 2 damage to all objects/enemies/players in their vicinity.
 
 * Scenery semantics
-Scenario sprites ordering should "be on top" of the characters when above the "midline" and under the characters otherwise. This can be achieved by ordering the sprites by their Y and X coordinates before displaying them. The same is true for walls.
-
-Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
+Scenery sprites' ordering should "be on top" of the characters when above the "midline" and under the characters otherwise. This can be achieved by ordering the sprites by their Y and X coordinates before displaying them. The same is true for walls.
 
 Broken walls and floor tiles should be used sparingly as a means to add flavour to the game.
 
+* Visual bugs
+- Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
+- Move the portal active area and footprint by the same amount as down as the player spawn point.
+
+- Spawner shadow is messed up due to the translucent area on the sprite.
+- Spawner spawn animation should only be triggered when the spawner is actually spawning something.
+- Sprite shadows are too well-defined. They should be softer.
+
+* Wall & door refactor
+Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
 * Enemy refactor
 All enemy visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
 
@@ -422,7 +424,10 @@ index-CCnl2EYo.js:10:28063
 
 - Add loot breakdown in final score screen.
 
-* Graphical bugs
+* DONE Graphical bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 16:33]
+:END:
 - Boss healthbar & name is way too low
 - Health bars on various things are way too large. Let's make all healthbars uniform in size (with the exception of boss and miniboss healthbars).
 - Spawner healthbar is way too high above the spawner sprite..
@@ -593,3 +598,23 @@ What exactly is inflating the size so much?
 
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
+
+* More use of HTML contents in-game.
+The game should leverage the HTML contents some more.
+
+I'd like to achive this in several ways:
+- Floor markings indicating DOM element type and ID/class if available.
+- Corridor arrows showing directions towards other elements.
+- Special "content browser points" in game that display any node text/image contents for the player.
+
+For floor markings, let's use a nice futuristic font and "overlay" the text on the floor, as if it were painted on with a off-white paint.
+
+For corridor markings - use the same "painted on" overlay but also include an arrow (just the head, make it futuristic looking) showing the element type the corridor is leading to.
+
+If any node is build from multiple DOM nodes, use the "top-level" one for the markings. The markings should be "on the floor", so all other assets should be displayed on top of them.
+
+For the in-game content browser point let's add a new scenery item. The assets for that can be found in assets/scenery/content/.
+The content point should be placed in the center of a room mapped to a DOM element that has textual content within it (for example paragraph, etc). The content point should be off by default (use the "off" sprite for that). Whenever the room is cleared from enemies (no enemies spawned in that room remain alive), the content point should turn on (go through "turning" sprite to "on" sprite). When on and the player walks up to it to be within it's direct vicinity, a small translucent box should be displayed containing all the content (text and images) in that room. The box should disappear when the player walks away or destroys the content browser point.
+The content box should be scrollable and use a "best effort" basis to display the content with formatting, etc.
+
+The content point should be destructible, so if it is destroyed before being enabled, it still breaks down and leaves loot behind. The loof of a content point should be a bunch of RAM sticks - 3-7 for each content point.
