@@ -377,9 +377,10 @@ Add a GitHub Actions workflow that automatically builds and deploys the game. It
 - Camera center point should be the midway between the player and the cursor.
 - When a player takes damage they should become invulnerable for a brief moment (200 ms) as not to take damage 10 separate times at once.
 
-* Bugs
-- It's possible to shoot through the doors when the player is standing right begind the blocked door area.
-- When a player enters a portal, the game should be paused to load the next level.
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 11:47]
+:END:
 - Random errors when entering portals:
 ```
 Uncaught TypeError: can't access property "sys", this.scene is undefined
@@ -395,14 +396,18 @@ Uncaught TypeError: can't access property "sys", this.scene is undefined
     t http://127.0.0.1:8000/assets/index-CCnl2EYo.js:5
 index-CCnl2EYo.js:10:28063
 ```
+- Loading screen on teleport should show the actual URL of the target site.
+- When a player enters a portal, the game should be paused to load the next level.
+
+* Bugs
+- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Boss healthbar & name is way too low
 - Health bars on various things are way too large. Let's make all healthbars uniform in size (with the exception of boss and miniboss healthbars).
 - Spawner healthbar is way too high above the spawner sprite..
-- Shdows should point away from the player.
+- Scenery and enemy shdows should point away from the player.
 - Portal sprite is translucent, but shouldn't be.
 - Player is not placed on the portal pedestal when starting the game.
 - Enemy annimations speed should depend on the enemy speed. Otherwise these look very synchronized.
-- Loading screen on teleport should show the actual URL of the target site.
 
 * Extra lighting
 - Rooms need random wall lights in yellow, blue and red variants.
@@ -412,6 +417,11 @@ index-CCnl2EYo.js:10:28063
 - Change the RAM sticks to holographic, nonexistent RAM sticks
 - Use broken floor tiles sparingly
 - Use the pistol as the default weapon
+
+* Enemy rebalance
+- LLaMa boss is too easy to kill - it should always walk towards the player and attempt a heavy melee attack.
+- Walking shooters should have a much lower fire rate, they are basically better sentries right now. Their bullet range should also be reduced.
+- Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
 
 * DONE Loading screen
 :LOGBOOK:
