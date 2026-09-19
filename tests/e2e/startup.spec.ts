@@ -383,12 +383,15 @@ test("charges energy and launches an invulnerable energy dash with right click",
 test("spawns on an enabled entry portal without immediately retriggering it", async ({ page }) => {
   await startGame(page);
   const game = page.locator("#gameCanvas");
-  await page.locator("#urlInput").fill("https://example.com/next");
   const position = await playerPosition(page);
   const aim = await screenPositionFor(page, { x: position.x + world(120), y: position.y });
   await page.mouse.move(aim.x, aim.y);
   await expect(game).toHaveAttribute("data-flashlight-active", "true");
-  await page.getByRole("button", { name: "GO" }).evaluate(button => (button as HTMLButtonElement).click());
+  await page.evaluate(() => {
+    void (window as Window & {
+      __webcrawlTest?: { navigate: (url: string) => Promise<void> };
+    }).__webcrawlTest?.navigate("https://example.com/next");
+  });
   await expect(game).toHaveAttribute("data-floor", "2");
   await expect(game).toHaveAttribute("data-flashlight-active", "true");
 

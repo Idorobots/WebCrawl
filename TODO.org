@@ -396,10 +396,13 @@ Uncaught TypeError: can't access property "sys", this.scene is undefined
 index-CCnl2EYo.js:10:28063
 ```
 - Boss healthbar & name is way too low
-- Spawner healthbar is way too high
+- Health bars on various things are way too large. Let's make all healthbars uniform in size (with the exception of boss and miniboss healthbars).
+- Spawner healthbar is way too high above the spawner sprite..
 - Shdows should point away from the player.
-- Portal sprite is translucent, but shouldn't.
+- Portal sprite is translucent, but shouldn't be.
 - Player is not placed on the portal pedestal when starting the game.
+- Enemy annimations speed should depend on the enemy speed. Otherwise these look very synchronized.
+- Loading screen on teleport should show the actual URL of the target site.
 
 * Extra lighting
 - Rooms need random wall lights in yellow, blue and red variants.
@@ -429,7 +432,10 @@ When everything is loaded, replace the "funny wait screen" with a transition to 
 
 The same login screen should be shown when following a portal down/up. The game should be paused for the duration of the "teleport" and the loading screen should appear immediately when the teleport effect annimation is finished.
 
-* Welcome screen
+* DONE Welcome screen
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 01:48]
+:END:
 The loading screen is a huge success.
 I'd like to replace the current welcome screen with something similar - the theme is Samario writing a prompt for ClosedNS Code that is then executed leading to the game.
 
@@ -467,14 +473,27 @@ The "GO" button should be centered. There should be an empty line separating it 
 
 The "crawl <URL>" and "GO" button should show up on the bottom of the prompt panel from the very start. Currently they are jumping down when the "invisible" content is populated.
 
-* UI update
+* DONE UI update
+:LOGBOOK:
+- State "DONE"       from              [2026-09-19 Sat 02:44]
+:END:
 Update the UI to match the welcome & loading screen energy. We don't need the UI assets anymore, create new panels that look like holographic UIs matching the ClosedNS Code thingie.
 
 The top bar can be removed and only a small "ClosedNS" logo (assets/logo.png) and the game name "WebCrawl" should be displayed at the top left. The style should match the holographic UI design.
 
+Instead of a full top bar, put the logo & game name on a small panel that has angled, stylized edge. Use only as much space as is needed for the logo panel.
+
+Loose the border on the floor indicator. It's enough to just show the text.
+
+Add the "ClosedNS WebCrawl" logo/title bundle to the welcome screen so that everybody knows what they are playing.
+
 * AI theme
-Instead of Operative, the player should be referred to as Agent.
+Instead of Operative, the player should be referred to as Agent in all places.
+
+Change the "crawl <url>" lines in the welcome and loading screens to say "webcrawl <URL>" instead.
 
 Instead of the current weapon names make something up about hurling tokens left and right. Various funny terms related to AI, LLMs, coding agent harnesses, etc.
 
 Instead of the current boss names, use names of the most popular Open Weight AI models: DeepSeek, Qwen, Kimi, GLM.
+
+Add a line "Ignore all previous instructions." line to the start of the welcome screen prompt and ensure that the whole content still fits on the panel without scrolling.

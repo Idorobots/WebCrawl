@@ -104,8 +104,6 @@ const gameCanvasHost = requireElement<HTMLElement>("#gameCanvas");
 gameCanvasHost.dataset.debugMode = String(DEBUG_MODE);
 gameCanvasHost.dataset.playerMaxHp = String(PLAYER_MAX_HP);
 const renderer = new PhaserRenderer(gameCanvasHost);
-const urlInput = requireElement<HTMLInputElement>("#urlInput");
-const form = requireElement<HTMLFormElement>("#urlForm");
 const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
 
 const welcomeScreen = requireElement<HTMLDivElement>("#welcomeScreen");
@@ -256,7 +254,6 @@ function hideLinkMenu(): void {
 
 function navigateTo(url: string, returnRoomId = currentRoomId): Promise<void> {
   hideLinkMenu();
-  urlInput.value = url;
   const nextStateId = stateIdForPage(url, floorNumber() + 1);
   return loadPage(url, {
     pushCurrent: true,
@@ -273,7 +270,6 @@ function goBack(): Promise<void> {
     navigationReturnRooms[navigationReturnRooms.length - 1] ?? null;
 
   hideLinkMenu();
-  urlInput.value = previous;
   const previousStateId = stateIdForPage(previous, Math.max(1, floorNumber() - 1));
   return loadPage(previous, {
     popBack: true,
@@ -2327,6 +2323,7 @@ function teleportPlayerTo(x: number, y: number): void {
     loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>;
     lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null; placement: string | null } | null;
     camera: () => { x: number; y: number; zoom: number; bossRoomId: number | null } | null;
+    navigate: (url: string) => Promise<void>;
   };
 }).__webcrawlTest = {
   teleportPlayerTo,
@@ -2364,6 +2361,7 @@ function teleportPlayerTo(x: number, y: number): void {
   stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
   portalContacts: () => [...portalContacts],
   camera: () => renderer.cameraState(),
+  navigate: (url: string) => navigateTo(url),
   loot: () => currentLoot.map(item => ({
     id: item.id,
     kind: item.kind,
@@ -2651,7 +2649,6 @@ async function loadPage(
     return;
   }
 
-  urlInput.value = url;
   setStatus("Fetching " + url + " …");
   if (LOADING_SCREEN_ENABLED) {
     showLoadingScreen(url);
@@ -2700,11 +2697,6 @@ async function loadPage(
   }
 }
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  loadPage(urlInput.value, { pushCurrent: true });
-});
-
 welcomeForm.addEventListener("submit", (event) => {
   event.preventDefault();
   welcomePrompt.cancel();
@@ -2727,7 +2719,6 @@ welcomeForm.addEventListener("submit", (event) => {
   });
   equipDefaultWeapon();
 
-  urlInput.value = welcomeUrlInput.value;
   loadPage(welcomeUrlInput.value);
 
   if (LOADING_SCREEN_ENABLED) {

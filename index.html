@@ -9,6 +9,10 @@
 </head>
 <body>
   <div id="welcomeScreen">
+    <div class="welcome-titlebar">
+      <img class="welcome-titlebar-logo" src="assets/logo.png" alt="ClosedNS" />
+      <div class="welcome-titlebar-name">WEBCRAWL</div>
+    </div>
     <div class="welcome-layout">
       <figure class="welcome-visual">
         <img src="assets/samario.png" alt="Samario, CEO of ClosedNS" />
@@ -46,28 +50,10 @@
   <div id="gameUi" hidden>
     <header id="topBar">
       <div class="brand-block">
-        <div class="brand-icon">◈</div>
-        <div>
-          <div class="brand-name">WEBCRAWL</div>
-          <div class="brand-tagline">EXPLORE • LOOT • SURVIVE</div>
-        </div>
+        <img class="brand-logo" src="assets/logo.png" alt="ClosedNS" />
+        <div class="brand-name">WEBCRAWL</div>
       </div>
-
-      <form id="urlForm" class="top-url-form">
-        <span class="url-globe">◎</span>
-        <input
-          id="urlInput"
-          type="url"
-          required
-          spellcheck="false"
-          placeholder="https://blog.idorobots.org"
-          value="https://blog.idorobots.org"
-        />
-        <button type="submit">GO</button>
-      </form>
-
-      <div class="top-quote">THE WEB IS DEEPER<br/>THAN YOU THINK...</div>
-</header>
+    </header>
 
     <main id="gameViewport">
       <div id="gameCanvas" role="img" aria-label="WebCrawl dungeon"></div>
