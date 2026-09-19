@@ -696,10 +696,18 @@ function showDeathModal(): void {
   });
 
   deathModal.hidden = false;
+  gameUi.classList.remove("game-ui-ready");
+  deathModal.classList.remove("closing");
+  void deathModal.offsetWidth;
   deathModal.classList.add("open");
 }
 
-restartButton.addEventListener("click", () => location.reload());
+restartButton.addEventListener("click", () => {
+  restartButton.disabled = true;
+  deathModal.classList.remove("open");
+  deathModal.classList.add("closing");
+  window.setTimeout(() => location.reload(), SCREEN_FADE_MS);
+});
 
 function showFetchErrorModal(pageUrl: string, message: string): void {
   fetchErrorMessageEl.textContent = `Could not load ${pageUrl}.`;
@@ -726,6 +734,7 @@ const LOADING_TASK_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const LOADING_SCREEN_ENABLED =
   import.meta.env.VITE_LOADING_SCREEN !== "off" ||
   new URLSearchParams(window.location.search).has("loading-screen");
+const SCREEN_FADE_MS = 320;
 const nextLoadingThought = createThoughtPicker();
 let loadingFrame = 0;
 let loadingShownAt = 0;
@@ -733,6 +742,7 @@ let loadingSpinnerTimer: number | undefined;
 let loadingThoughtTimer: number | undefined;
 let loadingHideTimer: number | undefined;
 let loadingBootGuardTimer: number | undefined;
+let welcomeTransitioning = false;
 
 function loadingAllTasksSettled(): boolean {
   const rows = loadingTasksEl.querySelectorAll<HTMLElement>(".loading-task");
@@ -745,9 +755,13 @@ function showLoadingScreen(pageUrl: string): void {
   if (!LOADING_SCREEN_ENABLED) return;
   loadingPromptTextEl.textContent = `webcrawl ${pageUrl}`;
   if (!loadingScreen.hidden) return;
+  gameUi.classList.remove("game-ui-ready");
   window.clearTimeout(loadingHideTimer);
   loadingHideTimer = undefined;
+  loadingScreen.classList.remove("open", "closing");
   loadingScreen.hidden = false;
+  void loadingScreen.offsetWidth;
+  loadingScreen.classList.add("open");
   loadingTasksEl.replaceChildren();
   loadingThoughtHistoryEl.replaceChildren();
   loadingFrame = 0;
@@ -818,6 +832,8 @@ function hideLoadingScreen(): void {
   window.clearInterval(loadingThoughtTimer);
   loadingSpinnerTimer = undefined;
   loadingThoughtTimer = undefined;
+  gameUi.classList.add("game-ui-ready");
+  loadingScreen.classList.remove("open");
   loadingScreen.classList.add("closing");
   window.setTimeout(() => {
     loadingScreen.classList.remove("closing");
@@ -2729,34 +2745,42 @@ async function loadPage(
 
 welcomeForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (welcomeTransitioning) return;
+  welcomeTransitioning = true;
   welcomePrompt.cancel();
+  welcomeScreen.classList.add("closing");
 
-  navigationHistory.length = 0;
-  navigationReturnRooms.length = 0;
-  currentStateId = null;
-  gameUi.hidden = false;
-  welcomeScreen.hidden = true;
+  window.setTimeout(() => {
+    welcomeScreen.hidden = true;
+    welcomeScreen.classList.remove("closing");
 
-  if (LOADING_SCREEN_ENABLED) {
-    showLoadingScreen(welcomeUrlInput.value);
-  }
-  renderer.start({
-    onBootComplete: () => {
-      window.clearTimeout(loadingBootGuardTimer);
-      loadingBootGuardTimer = undefined;
-      completeLoadingTask("boot");
-    },
-  });
-  equipDefaultWeapon();
+    navigationHistory.length = 0;
+    navigationReturnRooms.length = 0;
+    currentStateId = null;
+    gameUi.hidden = false;
 
-  loadPage(welcomeUrlInput.value);
+    if (LOADING_SCREEN_ENABLED) {
+      showLoadingScreen(welcomeUrlInput.value);
+    }
+    renderer.start({
+      onBootComplete: () => {
+        window.clearTimeout(loadingBootGuardTimer);
+        loadingBootGuardTimer = undefined;
+        completeLoadingTask("boot");
+        if (!LOADING_SCREEN_ENABLED) gameUi.classList.add("game-ui-ready");
+      },
+    });
+    equipDefaultWeapon();
 
-  if (LOADING_SCREEN_ENABLED) {
-    setLoadingTask("boot", "Booting the renderer");
-    loadingBootGuardTimer = window.setTimeout(() => {
-      loadingBootGuardTimer = undefined;
-      completeLoadingTask("boot");
-    }, 30_000);
-  }
-  updateHudPanels();
+    loadPage(welcomeUrlInput.value);
+
+    if (LOADING_SCREEN_ENABLED) {
+      setLoadingTask("boot", "Booting the renderer");
+      loadingBootGuardTimer = window.setTimeout(() => {
+        loadingBootGuardTimer = undefined;
+        completeLoadingTask("boot");
+      }, 30_000);
+    }
+    updateHudPanels();
+  }, SCREEN_FADE_MS);
 });

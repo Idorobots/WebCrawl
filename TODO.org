@@ -542,3 +542,6 @@ UI for twin-stick shooters. :shrug:
 - MIT for code
 - CC-SA for gfx
 - CC-SA for sfx
+* Performance optimization
+- Looks like the flashlight is very heavy on the graphics card. Can that be optimized?
+- The game is heavy on the CPU even when the player is idling in the initial room. There are no enemies or bullets. Why is that? Can that be optimised?

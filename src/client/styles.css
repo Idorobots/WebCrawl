@@ -331,6 +331,9 @@ button:hover {
   display: grid;
   place-items: center;
   background: rgba(2, 5, 9, 0.86);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 320ms ease;
 }
 
 #deathModal[hidden] {
@@ -339,8 +342,14 @@ button:hover {
 
 #deathModal.open {
   display: grid;
+  opacity: 1;
+  pointer-events: auto;
 }
 
+#deathModal.closing {
+  opacity: 0;
+  pointer-events: none;
+}
 
 #deathPanel {
   width: min(620px, calc(100vw - 36px));
@@ -355,6 +364,16 @@ button:hover {
     inset 0 0 26px rgba(120, 30, 40, 0.12),
     0 24px 80px rgba(0, 0, 0, 0.6);
   padding: 22px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 320ms ease,
+    transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+#deathModal.open #deathPanel {
+  opacity: 1;
+  transform: none;
 }
 
 #deathPanel h2 {
@@ -427,7 +446,8 @@ button:hover {
     radial-gradient(circle at 50% 38%, rgba(50, 105, 200, 0.16), rgba(3, 9, 20, 0.92) 72%);
   color: rgba(143, 215, 255, 0.87);
   font-family: "Share Tech Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  opacity: 1;
+  opacity: 0;
+  pointer-events: none;
   transition: opacity 240ms ease;
 }
 
@@ -435,8 +455,14 @@ button:hover {
   display: none;
 }
 
+#loadingScreen.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 #loadingScreen.closing {
   opacity: 0;
+  pointer-events: auto;
 }
 
 #loadingPanel {
@@ -600,6 +626,11 @@ button:hover {
   #loadingScreen,
   #loadingScreen * {
     animation: none !important;
+    transition: none !important;
+  }
+
+  #deathModal,
+  #deathPanel {
     transition: none !important;
   }
 }
@@ -1018,9 +1049,49 @@ body {
 
 #welcomeScreen[hidden] { display: none; }
 
-#welcomeScreen:not(.welcome-ready) :is(.welcome-panel, .welcome-titlebar) {
-  visibility: hidden;
+#welcomeScreen:not(.welcome-ready) :is(.welcome-panel, .welcome-titlebar, .welcome-visual) {
+  pointer-events: none;
 }
+
+.welcome-panel,
+.welcome-titlebar,
+.welcome-visual {
+  opacity: 0;
+  transition:
+    opacity 620ms ease,
+    transform 620ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.welcome-titlebar { transform: translateY(-12px); }
+
+.welcome-visual {
+  transform: translateX(56px);
+  transition-delay: 140ms;
+}
+
+.welcome-panel {
+  transform: translateY(16px);
+  transition-delay: 260ms;
+}
+
+#welcomeScreen.welcome-ready :is(.welcome-panel, .welcome-titlebar, .welcome-visual) {
+  opacity: 1;
+  transform: none;
+}
+
+#welcomeScreen.closing {
+  pointer-events: none;
+}
+
+#welcomeScreen.closing :is(.welcome-panel, .welcome-titlebar, .welcome-visual) {
+  opacity: 0;
+  transition-delay: 0ms;
+  transition-duration: 320ms;
+}
+
+#welcomeScreen.closing .welcome-titlebar { transform: translateY(-12px); }
+#welcomeScreen.closing .welcome-visual { transform: translateX(32px); }
+#welcomeScreen.closing .welcome-panel { transform: translateY(12px); }
 
 .welcome-layout {
   display: flex;
@@ -1323,6 +1394,13 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .welcome-caret { animation: none; }
+
+  .welcome-panel,
+  .welcome-titlebar,
+  .welcome-visual {
+    transition: none;
+    transform: none;
+  }
 }
 
 #gameUi {
@@ -1333,6 +1411,32 @@ body {
 }
 
 #gameUi[hidden] { display: none; }
+
+#topBar,
+#urlBar,
+#rightHud,
+#bottomHud {
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+
+#urlBar { transition-delay: 90ms; }
+
+#rightHud,
+#bottomHud { transition-delay: 160ms; }
+
+#gameUi.game-ui-ready :is(#topBar, #urlBar, #rightHud, #bottomHud) {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #topBar,
+  #urlBar,
+  #rightHud,
+  #bottomHud {
+    transition: none;
+  }
+}
 
 #topBar,
 .welcome-titlebar {
