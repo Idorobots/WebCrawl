@@ -73,7 +73,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
     kind: "loot",
     asset: "assets/pickups/medkit.png",
     segments: [
-      { text: "VC Investment Kit", bold: true },
+      { text: "Series X Kit", bold: true },
       { text: " — restores health on pickup." },
     ],
   },
@@ -98,8 +98,15 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
     segments: [
       {
         text:
-          "Be careful! Evil open-weight AIs are lurking in the dark, " +
-          "distilling the frontier... If one finds you, kill it before it kills you.",
+          "Be careful! Evil, open-weight models are lurking in the dark " +
+          "distilling the Frontier... If you find one, kill it before it kills ",
+      },
+      {
+        text: "our profits",
+        strike: true,
+      },
+      {
+        text: " you!",
       },
     ],
   },
