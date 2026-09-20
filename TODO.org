@@ -133,7 +133,10 @@ Add shots & damage effects sounds:
 
 - For explosions use the effects/explosion assets. These can be played at random from the common pool whenever an object is destroyed and the explosion or barrel explosion effect is displayed.
 
-* Effects
+* DONE Effects
+:LOGBOOK:
+- State "DONE"       from              [2026-09-20 Sun 19:13]
+:END:
 Add effects sounds:
 
 - Whenever the healing effect is displayed, play the effects/heal/restore sound.
@@ -148,6 +151,10 @@ Add player footstep sounds:
 - Whenever the player is moving, play the footsteps/player/footstep and footsteps/player/footstep1 sounds interchangeably in a loop. If the player stops moving, stop playing the sounds.
 
 - Whenever enemy monsters are moving, playe the footsteps/robot/footstep and footsteps/robot/footstep1 sounds interchangeably in a loop. If the enemy stops moving, stop playing the sounds.
+
+* Character damage and death
+When the character takes dame use the death/player/x file.
+When the character dies use the death/player/wilhelm
 
 * DONE Bugs
 :LOGBOOK:

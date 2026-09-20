@@ -219,16 +219,28 @@ const EXPLOSION_SOUNDS: readonly string[] = [
   "sounds/effects/explosion/explosion4.mp3",
   "sounds/effects/explosion/explosion5.mp3",
 ];
-const COMBAT_SOUND_SOURCES: readonly string[] = [...new Set([
+const ENERGY_DASH_SOUNDS: readonly string[] = [
+  "sounds/effects/dash/dash1.mp3",
+  "sounds/effects/dash/dash2.mp3",
+];
+const HEAL_SOUND_SRC = "sounds/effects/heal/restore.mp3";
+const INVULNERABILITY_TURN_ON_SRC = "sounds/effects/invulnerability/turn_on.mp3";
+const INVULNERABILITY_TURN_OFF_SRC = "sounds/effects/invulnerability/turn_off.mp3";
+const POOLED_SOUND_SOURCES: readonly string[] = [...new Set([
   ...Object.values(WEAPON_SHOT_SOUNDS),
   ...Object.values(ENEMY_SHOT_SOUNDS),
   ...DAMAGE_SOUNDS,
   ...EXPLOSION_SOUNDS,
+  ...ENERGY_DASH_SOUNDS,
+  HEAL_SOUND_SRC,
+  INVULNERABILITY_TURN_ON_SRC,
+  INVULNERABILITY_TURN_OFF_SRC,
 ])];
-const SHOT_SFX_VOLUME = 0.1;
-const ENEMY_SHOT_SFX_VOLUME = 0.1;
-const DAMAGE_SFX_VOLUME = 0.1;
-const EXPLOSION_SFX_VOLUME = 0.2;
+const SHOT_SFX_VOLUME = 0.2;
+const ENEMY_SHOT_SFX_VOLUME = 0.2;
+const DAMAGE_SFX_VOLUME = 0.2;
+const EXPLOSION_SFX_VOLUME = 0.3;
+const EFFECT_SFX_VOLUME = 0.3;
 const DAMAGE_SOUND_MIN_INTERVAL_MS = 80;
 const EXPLOSION_SOUND_MIN_INTERVAL_MS = 120;
 
@@ -393,7 +405,7 @@ export class PhaserRenderer {
         for (const asset of assets) this.load.image(textureKey(asset), asset);
         this.load.audio(STATION_AMBIENT_KEY, STATION_AMBIENT_SRC);
         for (const [key, src] of Object.entries(ONE_SHOT_SOUNDS)) this.load.audio(key, src);
-        for (const src of COMBAT_SOUND_SOURCES) this.load.audio(src, src);
+        for (const src of POOLED_SOUND_SOURCES) this.load.audio(src, src);
       }
 
       create(): void {
@@ -618,10 +630,22 @@ export class PhaserRenderer {
     this.playOneShot(pickRandom(EXPLOSION_SOUNDS), EXPLOSION_SFX_VOLUME);
   }
 
+  playHealSound(): void {
+    this.playOneShot(HEAL_SOUND_SRC, EFFECT_SFX_VOLUME);
+  }
+
+  playEnergyDashSound(): void {
+    this.playOneShot(pickRandom(ENERGY_DASH_SOUNDS), EFFECT_SFX_VOLUME);
+  }
+
+  playInvulnerabilitySound(on: boolean): void {
+    this.playOneShot(on ? INVULNERABILITY_TURN_ON_SRC : INVULNERABILITY_TURN_OFF_SRC, EFFECT_SFX_VOLUME);
+  }
+
   private playOneShot(key: string, volume = ONE_SHOT_SFX_VOLUME): void {
-    // Never queue gameplay sounds while the tab is hidden; paused managers
-    // would otherwise replay everything at once when it returns.
-    if (document.hidden) return;
+    // A suspended WebAudio context (window out of focus) freezes context time;
+    // sounds started meanwhile would all fire together when focus returns.
+    if (document.hidden || !document.hasFocus()) return;
     const scene = this.scene;
     if (!scene || !scene.cache.audio.exists(key)) return;
     const sound = scene.sound.add(key, { volume });

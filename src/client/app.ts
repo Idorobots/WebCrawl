@@ -194,6 +194,7 @@ let playerHp: number = PLAYER_MAX_HP;
 let playerAlive = true;
 let playerInvulnerable = false;
 let crystalInvulnerableUntil = 0;
+let crystalShieldSoundActive = false;
 let playerDamageInvulnerableUntil = 0;
 let energyDash: {
   dirX: number;
@@ -644,6 +645,10 @@ function isPlayerInvulnerable(now = performance.now()): boolean {
 }
 
 function updatePlayerProtectionVisual(now = performance.now()): void {
+  if (crystalShieldSoundActive && now >= crystalInvulnerableUntil) {
+    crystalShieldSoundActive = false;
+    renderer?.playInvulnerabilitySound(false);
+  }
   const timedShield = timedShieldState(
     crystalInvulnerableUntil,
     now,
@@ -658,6 +663,8 @@ function activateCrystalInvulnerability(now = performance.now()): boolean {
   if (!playerAlive || lootInventory.crystals <= 0) return false;
   lootInventory.crystals -= 1;
   crystalInvulnerableUntil = now + CRYSTAL_INVULNERABILITY_DURATION_MS;
+  crystalShieldSoundActive = true;
+  renderer?.playInvulnerabilitySound(true);
   updateLootUi();
   updatePlayerProtectionVisual(now);
   setStatus("Crystal shield active for 10 seconds.");
@@ -2008,6 +2015,12 @@ function pauseGameLoop(): void {
   gameLoopSuspended = true;
 }
 
+function resumeGameLoop(): void {
+  if (!gameLoopSuspended) return;
+  gameLoopSuspended = false;
+  startGameLoop();
+}
+
 function spatialCellKey(x: number, y: number): string {
   return `${Math.floor(x / SPATIAL_CELL_SIZE)},${Math.floor(y / SPATIAL_CELL_SIZE)}`;
 }
@@ -2230,18 +2243,19 @@ function checkLoot(): void {
       if (item.kind === "medkit" && playerAlive) {
         const restored = playerHp < PLAYER_MAX_HP ? 1 : 0;
 
-        if (restored > 0) {
-          playerHp += restored;
-          renderer.spawnEffect(
-            PLAYER_SPEC.visual.effects?.healing,
-            player.x,
-            player.y,
-            PLAYER_SPEC.spriteSize,
-            { followPlayer: true },
-          );
-          updateHealthUi();
-          setStatus(`Health pack restored 1 HP · ${currentPageUrl}`);
-        }
+      if (restored > 0) {
+        playerHp += restored;
+        renderer.spawnEffect(
+          PLAYER_SPEC.visual.effects?.healing,
+          player.x,
+          player.y,
+          PLAYER_SPEC.spriteSize,
+          { followPlayer: true },
+        );
+        renderer.playHealSound();
+        updateHealthUi();
+        setStatus(`Health pack restored 1 HP · ${currentPageUrl}`);
+      }
       }
 
       changed = true;
@@ -2469,6 +2483,7 @@ function startEnergyDash(clientX: number, clientY: number): void {
   };
   playerInvulnerable = true;
   renderer.setPlayerDashTint(true);
+  renderer.playEnergyDashSound();
   updatePlayerProtectionVisual();
   setStatus("Energy surge!");
 }
@@ -2784,15 +2799,19 @@ window.addEventListener("pointercancel", () => {
 window.addEventListener("blur", () => {
   pointerInViewport = false;
   resetPlayerInput();
+  pauseGameLoop();
+});
+
+window.addEventListener("focus", () => {
+  resumeGameLoop();
 });
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     resetPlayerInput();
     pauseGameLoop();
-  } else if (gameLoopSuspended) {
-    gameLoopSuspended = false;
-    startGameLoop();
+  } else {
+    resumeGameLoop();
   }
 });
 
