@@ -246,6 +246,12 @@ function cornerKinds(directions: ReadonlySet<Direction>): CorridorCornerKind[] {
   return [];
 }
 
+function oppositeCornerKind(kind: CorridorCornerKind): CorridorCornerKind {
+  const vertical = kind.startsWith("top") ? "bottom" : "top";
+  const horizontal = kind.endsWith("left") ? "right" : "left";
+  return `${vertical}-${horizontal}` as CorridorCornerKind;
+}
+
 function buildJunctions(
   segments: readonly CorridorSegmentPlan[],
   segmentSize: number,
@@ -273,20 +279,17 @@ function buildJunctions(
     const owner = owners[0];
     if (!owner) continue;
     for (const kind of kinds) {
-      const innerCorner = {
+      const namedCellCorner = (cornerKind: CorridorCornerKind) => ({
         ownerLinkId: owner.ownerLinkId,
-        x: point.x + (kind.endsWith("left") ? segmentSize / 2 : -segmentSize / 2),
-        y: point.y + (kind.startsWith("top") ? segmentSize / 2 : -segmentSize / 2),
-        kind,
-      };
-      const outerCorner = {
-        ownerLinkId: owner.ownerLinkId,
-        x: point.x + (kind.endsWith("left") ? -segmentSize / 2 : segmentSize / 2),
-        y: point.y + (kind.startsWith("top") ? -segmentSize / 2 : segmentSize / 2),
-        kind,
-      };
+        x: point.x + (cornerKind.endsWith("left") ? -segmentSize / 2 : segmentSize / 2),
+        y: point.y + (cornerKind.startsWith("top") ? -segmentSize / 2 : segmentSize / 2),
+        kind: cornerKind,
+      });
+      const outerCorner = namedCellCorner(kind);
       if (directions.size === 2) {
-        corners.push(innerCorner);
+        // L bend: the inner wedge is diagonally opposite the outer corner and
+        // carries the opposite kind so it hugs the two inner wall ends.
+        corners.push(namedCellCorner(oppositeCornerKind(kind)));
         outerCorners.push(outerCorner);
         junctionFloors.push({
           ownerLinkId: owner.ownerLinkId,

@@ -84,19 +84,23 @@ describe("corridor render planning", () => {
     [["N", "E"], "bottom-left"],
     [["S", "W"], "top-right"],
     [["S", "E"], "top-left"],
-  ] as const)("encloses the %s bend with the %s internal corner", (directions, expectedCorner) => {
+  ] as const)("encloses the %s bend with the %s outer corner and the opposite inner wedge", (directions, expectedCorner) => {
     const plan = buildCorridorRenderPlan(layoutForArms(directions), SEGMENT_SIZE);
+    const innerKind = expectedCorner.startsWith("top")
+      ? `bottom-${expectedCorner.endsWith("left") ? "right" : "left"}`
+      : `top-${expectedCorner.endsWith("left") ? "right" : "left"}`;
 
-    expect(plan.corners.map(corner => corner.kind)).toEqual([expectedCorner]);
+    expect(plan.corners.map(corner => corner.kind)).toEqual([innerKind]);
     expect(plan.junctionFloors).toHaveLength(1);
     expect(plan.outerCorners).toHaveLength(1);
     expect(plan.outerCorners[0]).toMatchObject({
+      kind: expectedCorner,
       x: expectedCorner.endsWith("left") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
       y: expectedCorner.startsWith("top") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
     });
     expect(plan.corners[0]).toMatchObject({
-      x: expectedCorner.endsWith("left") ? SEGMENT_SIZE / 2 : -SEGMENT_SIZE / 2,
-      y: expectedCorner.startsWith("top") ? SEGMENT_SIZE / 2 : -SEGMENT_SIZE / 2,
+      x: innerKind.endsWith("left") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
+      y: innerKind.startsWith("top") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
     });
     expect(plan.walls).toHaveLength(6);
   });

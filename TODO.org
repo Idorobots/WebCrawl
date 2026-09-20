@@ -757,6 +757,8 @@ Whenever AI is mentioned in the content, render a special Samario content browse
 - "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
 - "floor_hatch" tile should be considered decoration tile, not main floor tile
 
+- Inner corner on corridor L-junctions is placed wrong and of the wrong type.
+
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 
