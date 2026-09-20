@@ -80,7 +80,10 @@ The final game score should be built based on the types of loot collected and th
   Wouldn't fit the theme of the game.
 :END:
 Boss, monster, item and weapon names should be procedurally generated based on the DOM contents.
-* UI sounds
+* DONE UI sounds
+:LOGBOOK:
+- State "DONE"       from              [2026-09-20 Sun 16:16]
+:END:
 For the welcome screen:
 - Start playing the ui/welcome/ambient music.
 - Whenever the prompt text is being populated, play the ui/welcom/interface_text file on repeat.

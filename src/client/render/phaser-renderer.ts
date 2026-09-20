@@ -152,6 +152,11 @@ const CORRIDOR_LIGHT_SPACING = world(240);
 const CORRIDOR_LIGHT_CULL_CELL = CORRIDOR_LIGHT_SPACING / 2;
 const SHOW_DEBUG_GEOMETRY = import.meta.env.VITE_DEBUG_HITBOXES === "true";
 
+const STATION_AMBIENT_KEY = "station-ambient";
+const STATION_AMBIENT_SRC = "sounds/ambient/station/space.mp3";
+const STATION_AMBIENT_VOLUME = 0.55;
+const STATION_AMBIENT_FADE_MS = 750;
+
 interface WorldLight {
   light: Phaser.GameObjects.Light;
   baseIntensity: number;
@@ -270,6 +275,7 @@ export class PhaserRenderer {
   private lastDecorationAnimationUpdate = -Infinity;
   private lastShadowOffsetUpdate = -Infinity;
   private keyedEffects = new Map<string, KeyedEffect>();
+  private stationAmbient: Phaser.Sound.BaseSound | null = null;
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -301,6 +307,7 @@ export class PhaserRenderer {
           WEAPON_ASSETS,
         );
         for (const asset of assets) this.load.image(textureKey(asset), asset);
+        this.load.audio(STATION_AMBIENT_KEY, STATION_AMBIENT_SRC);
       }
 
       create(): void {
@@ -454,6 +461,37 @@ export class PhaserRenderer {
     delete this.host.dataset.followingEffectY;
     delete this.host.dataset.sceneryShadows;
     delete this.host.dataset.monsterShadows;
+  }
+
+  playStationAmbient(): void {
+    const scene = this.scene;
+    if (!scene || !scene.cache.audio.exists(STATION_AMBIENT_KEY)) return;
+    const sound = this.stationAmbient ??= scene.sound.add(STATION_AMBIENT_KEY, {
+      loop: true,
+      volume: 0,
+    });
+    scene.tweens.killTweensOf(sound);
+    if (!sound.isPlaying && !sound.isPaused) sound.play();
+    scene.tweens.add({
+      targets: sound,
+      volume: STATION_AMBIENT_VOLUME,
+      duration: STATION_AMBIENT_FADE_MS,
+      ease: "Linear",
+    });
+  }
+
+  stopStationAmbient(): void {
+    const scene = this.scene;
+    const sound = this.stationAmbient;
+    if (!scene || !sound) return;
+    scene.tweens.killTweensOf(sound);
+    scene.tweens.add({
+      targets: sound,
+      volume: 0,
+      duration: STATION_AMBIENT_FADE_MS,
+      ease: "Linear",
+      onComplete: () => sound.stop(),
+    });
   }
 
   setWorld(layout: DungeonLayout, visited: ReadonlySet<number>): void {

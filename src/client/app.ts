@@ -743,6 +743,7 @@ function recordHighScore(): { scores: HighScore[]; rank: number | null } {
 
 function showDeathModal(): void {
   const { scores, rank } = recordHighScore();
+  renderer?.stopStationAmbient();
 
   deathScoreEl.textContent = `Final score: ${scoreForRun(lootInventory, runStats)}`;
   deathKillsEl.textContent = String(runStats.kills);
@@ -854,6 +855,7 @@ function showLoadingScreen(pageUrl: string): void {
   if (!loadingScreen.hidden) return;
   stopAllMusic();
   startLoadingElevator();
+  renderer?.stopStationAmbient();
   gameUi.classList.remove("game-ui-ready");
   window.clearTimeout(loadingHideTimer);
   loadingHideTimer = undefined;
@@ -942,6 +944,7 @@ function completeLoadingTask(id: string, ok = true): void {
 function hideLoadingScreen(): void {
   if (loadingScreen.hidden) return;
   stopLoadingElevator();
+  renderer?.playStationAmbient();
   window.clearTimeout(loadingHideTimer);
   loadingHideTimer = undefined;
   window.clearInterval(loadingSpinnerTimer);
@@ -2959,7 +2962,10 @@ function startRenderer(): Promise<void> {
         window.clearTimeout(loadingBootGuardTimer);
         loadingBootGuardTimer = undefined;
         completeLoadingTask("boot");
-        if (!LOADING_SCREEN_ENABLED) gameUi.classList.add("game-ui-ready");
+        if (!LOADING_SCREEN_ENABLED) {
+          gameUi.classList.add("game-ui-ready");
+          renderer.playStationAmbient();
+        }
         resolve();
       },
     });
