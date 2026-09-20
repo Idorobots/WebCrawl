@@ -18,6 +18,13 @@ async function stubRemoteFetchFallbacks(page: Page, body: string): Promise<void>
   }));
 }
 
+async function signIn(page: Page): Promise<void> {
+  const signInButton = page.getByRole("button", { name: "Sign In" });
+  await expect(signInButton).toBeVisible({ timeout: 15_000 });
+  await signInButton.click();
+  await expect(page.locator("#welcomeUrlInput")).toBeVisible();
+}
+
 async function startGame(page: Page, debug = false): Promise<void> {
   const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
   if (debug) {
@@ -41,6 +48,7 @@ async function startGame(page: Page, debug = false): Promise<void> {
   await page.goto("/");
 
   await expect(page.locator("#welcomeScreen")).toBeVisible({ timeout: 15_000 });
+  await signIn(page);
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
   await page.getByRole("button", { name: "Go" }).click();
 
@@ -219,6 +227,7 @@ test("starts a lucky crawl from Wikipedia's random page", async ({ page }) => {
     body: fixture,
   }));
   await page.goto("/");
+  await signIn(page);
 
   await page.getByRole("button", { name: "I'm feeling lucky" }).click();
 
@@ -250,6 +259,7 @@ test("starts a lucky crawl from a Hacker News top story", async ({ page }) => {
     body: fixture,
   }));
   await page.goto("/");
+  await signIn(page);
 
   await page.getByRole("button", { name: "I'm feeling lucky" }).click();
 
@@ -518,6 +528,7 @@ test("keeps generated world coordinates independent of viewport size", async ({ 
 
   await page.setViewportSize({ width: 390, height: 720 });
   await page.goto("/");
+  await signIn(page);
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
   await page.getByRole("button", { name: "Go" }).click();
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
@@ -540,6 +551,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
     body: bossFixture,
   }));
   await page.goto("/");
+  await signIn(page);
   await page.locator("#welcomeUrlInput").fill("https://example.com/boss");
   await page.getByRole("button", { name: "Go" }).click();
   const game = page.locator("#gameCanvas");
@@ -818,6 +830,7 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
     body: weaponFixture,
   }));
   await page.goto("/");
+  await signIn(page);
   await page.locator("#welcomeUrlInput").fill("https://example.com/weapons");
   await page.getByRole("button", { name: "Go" }).click();
 
@@ -939,6 +952,7 @@ test("loads a page directly when the site allows CORS, without hitting the relay
     route.fulfill({ status: 200, contentType: "text/html", body: fixture });
   });
   await page.goto("/");
+  await signIn(page);
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
   await page.getByRole("button", { name: "Go" }).click();
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6", { timeout: 30_000 });
@@ -957,6 +971,7 @@ test("shows the ClosedNS Code loading session while fetching a page", async ({ p
     });
   });
   await page.goto("/?loading-screen");
+  await signIn(page);
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
   await page.getByRole("button", { name: "Go" }).click();
 
@@ -1023,6 +1038,7 @@ test("shows the could-not-load modal when every fetch route fails", async ({ pag
   await page.route("**/api/fetch?**", route => route.abort());
   await page.route("https://cors.io/**", route => route.abort());
   await page.goto("/?loading-screen");
+  await signIn(page);
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
   await page.getByRole("button", { name: "Go" }).click();
   const modal = page.locator("#fetchErrorModal");

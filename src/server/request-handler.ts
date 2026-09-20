@@ -55,7 +55,7 @@ export function createRequestHandler(
       serveIndex(response, config.clientDirectory, config.debug);
     } else if (
       request.method === "GET" &&
-      (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/fonts/"))
+      (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/fonts/") || url.pathname.startsWith("/sounds/"))
     ) {
       serveAsset(url.pathname, response, config.clientDirectory);
     } else {

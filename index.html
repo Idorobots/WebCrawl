@@ -25,7 +25,44 @@
       <img class="welcome-titlebar-logo" src="assets/logo.png" alt="ClosedNS" />
       <div class="welcome-titlebar-name">WEBCRAWL</div>
     </div>
-    <div class="welcome-layout">
+    <div id="welcomeStage">
+      <div id="loginLayout" class="welcome-layout login-layout">
+      <section class="welcome-panel login-panel" aria-label="ClosedNS Code — sign in">
+        <header class="welcome-panel-header">
+          <span class="welcome-header-dot" aria-hidden="true">●</span>
+          <span>ClosedNS Code</span>
+          <span class="welcome-header-dim">— sign-in</span>
+        </header>
+        <form id="loginForm" class="login-form" autocomplete="off">
+          <p class="login-welcome">Welcome back!</p>
+          <div class="login-field">
+            <label class="login-label" for="loginUsername">username</label>
+            <input
+              id="loginUsername"
+              type="text"
+              value="samario"
+              spellcheck="false"
+              autocomplete="off"
+              autofocus
+            />
+          </div>
+          <div class="login-field">
+            <label class="login-label" for="loginPassword">password</label>
+            <input
+              id="loginPassword"
+              type="password"
+              value="hunter2"
+              autocomplete="off"
+            />
+          </div>
+          <div class="login-actions">
+            <button id="loginSignInButton" type="submit">Sign In</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div id="promptLayout" class="welcome-layout">
       <figure class="welcome-visual">
         <img src="assets/samario.png" alt="Samario, CEO of ClosedNS" />
       </figure>
@@ -57,6 +94,7 @@
           </div>
         </form>
       </section>
+    </div>
     </div>
   </div>
 

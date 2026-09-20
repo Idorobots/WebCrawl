@@ -211,8 +211,10 @@ export function setupWelcomePrompt(options: {
   promptHost: HTMLElement;
   urlInput: HTMLInputElement;
   surface: HTMLElement;
+  onTypingStart?: () => void;
+  onTypingEnd?: () => void;
 }): WelcomePromptHandle {
-  const { promptHost, urlInput, surface } = options;
+  const { promptHost, urlInput, surface, onTypingStart, onTypingEnd } = options;
   const urlLineNode = urlInput.parentElement;
   if (!(urlLineNode instanceof HTMLElement)) {
     throw new Error("Welcome URL input must live inside a line element");
@@ -236,6 +238,7 @@ export function setupWelcomePrompt(options: {
   let rafId = 0;
   let finished = false;
   let cancelled = false;
+  let typingStarted = false;
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -288,10 +291,18 @@ export function setupWelcomePrompt(options: {
     caret.remove();
   }
 
+  function startTyping(): void {
+    if (typingStarted) return;
+    typingStarted = true;
+    onTypingStart?.();
+  }
+
   function finish(): void {
+    const wasTyping = typingStarted;
     finished = true;
     revealAll();
     focusUrlInput();
+    if (wasTyping) onTypingEnd?.();
   }
 
   function process(budget: number): void {
@@ -329,6 +340,7 @@ export function setupWelcomePrompt(options: {
   function cancel(): void {
     cancelled = true;
     window.cancelAnimationFrame(rafId);
+    if (typingStarted && !finished) onTypingEnd?.();
   }
 
   function onKeyDown(event: KeyboardEvent): void {
@@ -367,30 +379,10 @@ export function setupWelcomePrompt(options: {
     if (!cancelled) syncUrlInput();
   });
 
-  const imagesReady = Promise.all(
-    Array.from(document.images, (img) =>
-      img.complete
-        ? Promise.resolve()
-        : new Promise<void>((resolve) => {
-          img.addEventListener("load", () => resolve(), { once: true });
-          img.addEventListener("error", () => resolve(), { once: true });
-        }),
-    ),
-  );
-  const welcomeLayoutSettled = Promise.all([
-    document.fonts?.ready ?? Promise.resolve(),
-    imagesReady,
-  ]);
-  void Promise.race([
-    welcomeLayoutSettled,
-    new Promise<void>((resolve) => window.setTimeout(resolve, 1200)),
-  ]).then(() => {
-    surface.classList.add("welcome-ready");
-  });
-
   if (reducedMotion.matches) {
     finish();
   } else {
+    startTyping();
     rafId = window.requestAnimationFrame(tick);
   }
   focusUrlInput();

@@ -40,6 +40,7 @@ export function serveAsset(requestPath: string, response: ServerResponse, client
       ".jpg": "image/jpeg",
       ".jpeg": "image/jpeg",
       ".webp": "image/webp",
+      ".mp3": "audio/mpeg",
       ".woff": "font/woff",
       ".woff2": "font/woff2",
     } as Record<string, string>)[path.extname(assetPath).toLowerCase()] || "application/octet-stream";

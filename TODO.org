@@ -80,7 +80,61 @@ The final game score should be built based on the types of loot collected and th
   Wouldn't fit the theme of the game.
 :END:
 Boss, monster, item and weapon names should be procedurally generated based on the DOM contents.
-* Game sounds
+* UI sounds
+For the welcome screen:
+- Start playing the ui/welcome/ambient music.
+- Whenever the prompt text is being populated, play the ui/welcom/interface_text file on repeat.
+- When the prompt text is populated, stop playing the interface_text file.
+- When the player clicks on the "GO" or the "I'm feeling lucky" buttons or presses ENTER to start the game, play the ui/welcome/button_click sound effect once.
+
+For the loading screen:
+- Stop all previously playing music.
+- Play the ui/loading/elevator music while the level loads.
+- Once the loading is over, stop playing the elevator music.
+
+The ambient music and elevator music should fade in and fade out whenever they start and stop playing.
+
+The button click effect should also play when clicking the buttons on the error and final score screens.
+
+* Ambient station sounds
+Add ambient station sounds using the ambient/station/space file. The sample should be looped. It should initially fade in and it should fade out whenever it is stopped for any reason.
+
+* Pickups and scenery
+- Whenever the player picks up any loot, play the sounds from pickup/ directory. For most pickups use the "generic" file, for weapons the "weapons" file and for RAM sticks use the "ram" file.
+
+- Whenever the player enters a portal play the sounds from scenery/portal. Match the down and up portals to their respective files. These effects should play fully regardless if the loading screen starts/stops.
+
+- Whenever a spawner is spawning an enemy play the scenery/spawner/spawn file. Match it to the spawner animation.
+
+- Whenever a content browser is toggled on or off, play the scenery/content/toggle file.
+
+* Shots and damage
+Add shots & damage effects sounds:
+
+- For player weapon fire use the sounds in shots/weapon, each weapon should have a few different sounds that are chosen randomly when firing. Let's settle for 2 to 3 sounds each.
+
+- For enemy fire use the sounds in shots/weapon. Use the sounds chosen randomly when firing.
+
+- For damage sounds, use shots/damage assets. These can be played at random from the common pool whenever a bullet or melee attack hits anything and the damage effect is displayed.
+
+- For explosions use the effects/explosion assets. These can be played at random from the common pool whenever an object is destroyed and the explosion or barrel explosion effect is displayed.
+
+* Effects
+Add effects sounds:
+
+- Whenever the healing effect is displayed, play the effects/heal/restore sound.
+
+- Whenever the player uses the energy dash move, play a random sound from effects/dash directory.
+
+- Whenever the player enables a crystal invulnerability, play the effects/invulnerability/turn_on sound. When the invulnerability wears off, play the effects/invulnerability/turn_off sound.
+
+* Footsteps
+Add player footstep sounds:
+
+- Whenever the player is moving, play the footsteps/player/footstep and footsteps/player/footstep1 sounds interchangeably in a loop. If the player stops moving, stop playing the sounds.
+
+- Whenever enemy monsters are moving, playe the footsteps/robot/footstep and footsteps/robot/footstep1 sounds interchangeably in a loop. If the enemy stops moving, stop playing the sounds.
+
 * DONE Bugs
 :LOGBOOK:
 - State "DONE"       from              [2026-09-11 Fri 23:12]
@@ -273,6 +327,9 @@ When entering a boss arena, the viewport should zoom out to encompass the entire
 - Doors should shut behind the player once the arena is entered.
 - All enemies in the boss arena are invulnerable until the boss fight actually begins (player enters the room).
 - Camera should zoom out to show the entire boss arena at once when the fight begins.
+- Should play one of the alert sounds while the boss fight is starting and then transition to the boss music.
+- Play boss music until the boss is killed (or player is killed).
+
 * DONE Lighting
 :LOGBOOK:
 - State "DONE"       from              [2026-09-18 Fri 11:45]
@@ -771,6 +828,8 @@ There are several backgrounds now, these could be used as an alternative for the
 
 Similarly, there are multiple font files available now. Please randomize which font file is used for the level signage.
 
+Similarly, there are multiple ambient station sounds available. Please randomize which ambient space station sound is used.
+
 * Minimap overhaul
 - Render corridors as wider connectors on the minimap.
 - Show precise location of the player on the minimap, including in corridors.
@@ -785,3 +844,6 @@ Similarly, there are multiple font files available now. Please randomize which f
 - Use point lights for room/corridor lighting.
 - Batch point light rendering together.
 - Phaser 4 update?
+
+* UX improvement, again
+- The error screen and final score screens should take the user back to the welcome screen, but without having to "log back in".

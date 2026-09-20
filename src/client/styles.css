@@ -1460,7 +1460,7 @@ body {
   margin-top: 25px;
 }
 
-.welcome-actions button {
+:is(.welcome-actions, .login-actions) button {
   min-width: 132px;
   min-height: 46px;
   border: 1px solid rgba(64, 180, 255, 0.65);
@@ -1478,7 +1478,9 @@ body {
 }
 
 .welcome-actions button:hover,
-.welcome-actions button:focus-visible {
+.welcome-actions button:focus-visible,
+.login-actions button:hover,
+.login-actions button:focus-visible {
   border-color: rgba(120, 210, 255, 0.9);
   background: linear-gradient(180deg, rgba(38, 159, 255, 0.3), rgba(10, 50, 90, 0.42));
   box-shadow:
@@ -1486,11 +1488,113 @@ body {
     inset 0 0 20px rgba(38, 150, 255, 0.24);
 }
 
-.welcome-actions button:active {
+.welcome-actions button:active,
+.login-actions button:active {
   transform: translateY(1px);
   box-shadow:
     0 0 12px rgba(38, 150, 255, 0.35),
     inset 0 0 10px rgba(38, 150, 255, 0.18);
+}
+
+#loginLayout[hidden],
+#promptLayout[hidden] { display: none; }
+
+#welcomeStage {
+  display: grid;
+  place-items: center;
+}
+
+#welcomeStage > .welcome-layout { grid-area: 1 / 1; }
+
+#loginLayout {
+  transition:
+    opacity 320ms ease,
+    transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+#loginLayout.closing {
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
+#promptLayout {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 320ms ease,
+    transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s linear 320ms;
+}
+
+#promptLayout.open {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 320ms ease,
+    transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s;
+}
+
+.login-panel {
+  flex: 0 1 auto;
+  width: min(560px, 100%);
+  margin: 0 auto;
+}
+
+.login-form {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.login-welcome {
+  margin: 0;
+  font-size: 15px;
+  color: rgba(198, 240, 255, 0.95);
+}
+
+.login-field {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 16px;
+}
+
+.login-label {
+  flex: 0 0 auto;
+  min-width: 9ch;
+  color: rgba(150, 222, 255, 0.8);
+}
+
+.login-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid rgba(38, 159, 255, 0.35);
+  border-radius: 2px;
+  background: rgba(4, 16, 28, 0.6);
+  color: rgba(214, 242, 255, 0.96);
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: 0.05em;
+  caret-color: rgba(190, 235, 255, 0.9);
+  outline: none;
+}
+
+.login-field input:focus {
+  border-color: rgba(120, 210, 255, 0.85);
+  box-shadow: 0 0 14px rgba(38, 150, 255, 0.3);
+}
+
+.login-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
 }
 
 @media (max-width: 900px) {
@@ -1525,7 +1629,9 @@ body {
   .welcome-panel,
   .welcome-titlebar,
   .welcome-visual,
-  .welcome-github {
+  .welcome-github,
+  #loginLayout,
+  #promptLayout {
     transition: none;
     transform: none;
   }

@@ -1,5 +1,14 @@
 import { fetchHtml, normalizeUrl } from "./api/fetch-html";
 import {
+  playButtonClick,
+  playWelcomeAmbient,
+  startInterfaceTextLoop,
+  startLoadingElevator,
+  stopAllMusic,
+  stopInterfaceTextLoop,
+  stopLoadingElevator,
+} from "./audio/sfx";
+import {
   LOOT_ASSETS,
   MAX_NODES,
   PLAYER_DEFAULT_ASSETS,
@@ -91,7 +100,7 @@ import type {
 } from "./types";
 import { requireElement } from "./ui/elements";
 import { createThoughtPicker } from "./ui/loading-texts";
-import { setupWelcomePrompt } from "./ui/welcome-prompt";
+import { setupWelcomePrompt, type WelcomePromptHandle } from "./ui/welcome-prompt";
 
 const runtimeConfig = (window as Window & {
   __WEBCRAWL_RUNTIME_CONFIG__?: { debug?: boolean };
@@ -121,10 +130,30 @@ const luckyButton = requireElement<HTMLButtonElement>("#luckyButton");
 const welcomePromptBody = requireElement<HTMLElement>("#welcomePromptBody");
 const gameUi = requireElement<HTMLDivElement>("#gameUi");
 
-const welcomePrompt = setupWelcomePrompt({
-  promptHost: welcomePromptBody,
-  urlInput: welcomeUrlInput,
-  surface: welcomeScreen,
+const loginLayout = requireElement<HTMLDivElement>("#loginLayout");
+const promptLayout = requireElement<HTMLDivElement>("#promptLayout");
+const loginForm = requireElement<HTMLFormElement>("#loginForm");
+
+let welcomePrompt: WelcomePromptHandle | null = null;
+let welcomeSessionStarted = false;
+
+// The welcome screen (login panel first) fades in once fonts and images have
+// settled, so early interactions do not hit mid-layout elements.
+const imagesReady = Promise.all(
+  Array.from(document.images, (img) =>
+    img.complete
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+        img.addEventListener("load", () => resolve(), { once: true });
+        img.addEventListener("error", () => resolve(), { once: true });
+      }),
+  ),
+);
+void Promise.race([
+  Promise.all([document.fonts?.ready ?? Promise.resolve(), imagesReady]),
+  new Promise<void>((resolve) => window.setTimeout(resolve, 1200)),
+]).then(() => {
+  welcomeScreen.classList.add("welcome-ready");
 });
 
 const sideMinimapCanvas = requireElement<HTMLCanvasElement>("#sideMinimapCanvas");
@@ -765,6 +794,7 @@ function showDeathModal(): void {
 }
 
 restartButton.addEventListener("click", () => {
+  playButtonClick();
   restartButton.disabled = true;
   deathModal.classList.remove("open");
   deathModal.classList.add("closing");
@@ -779,6 +809,7 @@ function showFetchErrorModal(pageUrl: string, message: string): void {
 }
 
 fetchErrorDismissButton.addEventListener("click", () => {
+  playButtonClick();
   fetchErrorModal.hidden = true;
   fetchErrorModal.classList.remove("open");
 });
@@ -821,6 +852,8 @@ function showLoadingScreen(pageUrl: string): void {
   if (!LOADING_SCREEN_ENABLED) return;
   loadingPromptTextEl.textContent = `webcrawl ${pageUrl}`;
   if (!loadingScreen.hidden) return;
+  stopAllMusic();
+  startLoadingElevator();
   gameUi.classList.remove("game-ui-ready");
   window.clearTimeout(loadingHideTimer);
   loadingHideTimer = undefined;
@@ -908,6 +941,7 @@ function completeLoadingTask(id: string, ok = true): void {
 
 function hideLoadingScreen(): void {
   if (loadingScreen.hidden) return;
+  stopLoadingElevator();
   window.clearTimeout(loadingHideTimer);
   loadingHideTimer = undefined;
   window.clearInterval(loadingSpinnerTimer);
@@ -2980,8 +3014,9 @@ async function luckyUrl(): Promise<string> {
 }
 
 function startWelcomeCrawl(rawUrl: string): void {
+  stopAllMusic();
   welcomeTransitioning = true;
-  welcomePrompt.cancel();
+  welcomePrompt?.cancel();
   welcomeScreen.classList.add("closing");
 
   window.setTimeout(() => {
@@ -3022,14 +3057,48 @@ function startWelcomeCrawl(rawUrl: string): void {
   }, SCREEN_FADE_MS);
 }
 
+function startWelcomeSession(): void {
+  if (welcomeSessionStarted) return;
+  welcomeSessionStarted = true;
+  playButtonClick();
+  playWelcomeAmbient();
+  promptLayout.classList.add("open");
+  loginLayout.classList.add("closing");
+  window.setTimeout(() => {
+    loginLayout.hidden = true;
+    loginLayout.classList.remove("closing");
+  }, SCREEN_FADE_MS);
+  welcomePrompt = setupWelcomePrompt({
+    promptHost: welcomePromptBody,
+    urlInput: welcomeUrlInput,
+    surface: welcomeScreen,
+    onTypingStart: startInterfaceTextLoop,
+    onTypingEnd: stopInterfaceTextLoop,
+  });
+}
+
+loginForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  startWelcomeSession();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || welcomeSessionStarted || loginLayout.hidden) return;
+  if (event.target instanceof Element && event.target.closest("#loginForm")) return;
+  event.preventDefault();
+  loginForm.requestSubmit();
+});
+
 welcomeForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (welcomeTransitioning) return;
+  playButtonClick();
   startWelcomeCrawl(welcomeUrlInput.value);
 });
 
 luckyButton.addEventListener("click", () => {
   if (welcomeTransitioning) return;
+  playButtonClick();
   welcomeTransitioning = true;
   luckyButton.disabled = true;
   luckyButton.setAttribute("aria-busy", "true");

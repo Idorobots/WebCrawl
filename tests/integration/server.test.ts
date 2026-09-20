@@ -17,6 +17,8 @@ beforeEach(async () => {
   await fs.writeFile(path.join(directory, "index.html"), "<!doctype html><html><head><title>WebCrawl</title></head></html>");
   await fs.writeFile(path.join(directory, "assets", "app.js"), "export {};\n");
   await fs.writeFile(path.join(directory, "assets", "sprite.png"), Buffer.from([137, 80, 78, 71]));
+  await fs.mkdir(path.join(directory, "sounds", "ui", "welcome"), { recursive: true });
+  await fs.writeFile(path.join(directory, "sounds", "ui", "welcome", "ambient.mp3"), Buffer.from("ID3"));
 });
 
 afterEach(async () => {
@@ -54,6 +56,13 @@ describe("WebCrawl server", () => {
     const sprite = await fetch(`${baseUrl}/assets/sprite.png`);
     expect(sprite.status).toBe(200);
     expect(sprite.headers.get("content-type")).toBe("image/png");
+  });
+
+  it("serves sound assets with the audio mime type", async () => {
+    const baseUrl = await start();
+    const sound = await fetch(`${baseUrl}/sounds/ui/welcome/ambient.mp3`);
+    expect(sound.status).toBe(200);
+    expect(sound.headers.get("content-type")).toBe("audio/mpeg");
   });
 
   it("injects server debug mode into the client runtime config", async () => {
