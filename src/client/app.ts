@@ -219,6 +219,7 @@ const GAME_TICK_INTERVAL_MS = 1_000 / 60;
 let gameAnimationFrame: number | null = null;
 let lastGameTick: number | null = null;
 let nextGameTick: number | null = null;
+let gameLoopSuspended = false;
 
 const lootInventory: LootInventory = { credits: 0, crystals: 0, cores: 0, energy: 0, medkits: 0 };
 const collectedLoot = new Set<string>();
@@ -1195,6 +1196,7 @@ function updateMonsterSpawners(timestamp: number): void {
     saveObstacleState(spawner);
     saveMonsterState(monster);
     renderer.spawnEffect(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
+    renderer.playSpawnerSpawnSound();
     spawned = true;
   }
   if (animationActive) renderer.updateDecorationAnimations(currentSpawners, timestamp);
@@ -1324,6 +1326,7 @@ function updateContentPoints(timestamp: number): void {
       item.contentTurningOff = !enabled;
       item.spawnAnimationStartedAt = timestamp;
       changed = true;
+      renderer.playContentToggleSound();
     } else if (enabled && item.spawnAnimationStartedAt === undefined) {
       item.contentTurningOff = false;
       item.spawnAnimationStartedAt = timestamp - duration;
@@ -1988,6 +1991,13 @@ function startGameLoop(): void {
   gameAnimationFrame = requestAnimationFrame(gameTick);
 }
 
+function pauseGameLoop(): void {
+  if (gameAnimationFrame === null) return;
+  cancelAnimationFrame(gameAnimationFrame);
+  gameAnimationFrame = null;
+  gameLoopSuspended = true;
+}
+
 function spatialCellKey(x: number, y: number): string {
   return `${Math.floor(x / SPATIAL_CELL_SIZE)},${Math.floor(y / SPATIAL_CELL_SIZE)}`;
 }
@@ -2180,6 +2190,11 @@ function checkLoot(): void {
       !temporarilyBlockedLoot.has(item.id)
     ) {
       collectedLoot.add(item.id);
+      renderer.playPickupSound(
+        item.kind === "weapon" ? "weapon"
+        : item.kind === "credit" ? "ram"
+        : "generic",
+      );
 
       if (item.kind === "credit") lootInventory.credits += 1;
       if (item.kind === "crystal") lootInventory.crystals += 1;
@@ -2254,6 +2269,7 @@ function checkStairs(): boolean {
   portalTransitioning = true;
   setTeleportPaused(true);
   renderer.spawnEffect(PLAYER_SPEC.visual.effects?.teleport, player.x, player.y, PLAYER_SPEC.spriteSize);
+  renderer.playPortalSound(stair.type);
   setTimeout(() => {
     portalTransitioning = false;
     const navigation = stair.type === "up"
@@ -2761,7 +2777,13 @@ window.addEventListener("blur", () => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) resetPlayerInput();
+  if (document.hidden) {
+    resetPlayerInput();
+    pauseGameLoop();
+  } else if (gameLoopSuspended) {
+    gameLoopSuspended = false;
+    startGameLoop();
+  }
 });
 
 function renderGraph(

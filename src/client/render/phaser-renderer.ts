@@ -154,14 +154,30 @@ const SHOW_DEBUG_GEOMETRY = import.meta.env.VITE_DEBUG_HITBOXES === "true";
 
 const STATION_AMBIENT_KEY = "station-ambient";
 const STATION_AMBIENT_SRC = "sounds/ambient/station/space.mp3";
-const STATION_AMBIENT_VOLUME = 0.55;
+const STATION_AMBIENT_VOLUME = 0.45;
 const STATION_AMBIENT_FADE_MS = 750;
+
+const ONE_SHOT_SOUNDS: Readonly<Record<string, string>> = {
+  "sfx-pickup-generic": "sounds/pickup/generic.mp3",
+  "sfx-pickup-ram": "sounds/pickup/ram.mp3",
+  "sfx-pickup-weapon": "sounds/pickup/weapon.mp3",
+  "sfx-portal-up": "sounds/scenery/portal/teleport_up.mp3",
+  "sfx-portal-down": "sounds/scenery/portal/teleport_down.mp3",
+  "sfx-spawner-spawn": "sounds/scenery/spawner/spawn.mp3",
+  "sfx-content-toggle": "sounds/scenery/content/toggle.mp3",
+  "sfx-lights-flicker": "sounds/scenery/lights/flicker.mp3",
+};
+const ONE_SHOT_SFX_VOLUME = 0.7;
+const FLICKER_SFX_VOLUME = 0.3;
+const FLICKER_SOUND_MIN_INTERVAL_MS = 700;
 
 interface WorldLight {
   light: Phaser.GameObjects.Light;
   baseIntensity: number;
   flickerAmount: number;
   flickerSeed: number;
+  enabled: boolean;
+  burstActive?: boolean;
   fullyLit?: boolean;
 }
 
@@ -259,6 +275,7 @@ export class PhaserRenderer {
   private floorMarkingTextures = new Set<string>();
   private floorMarkingTextureSerial = 0;
   private lastFlickerUpdate = -Infinity;
+  private lastFlickerSoundAt = -Infinity;
   private corridorBounds = new Map<string, WorldBounds>();
   private staticVisibility = new Map<StaticObject, boolean>();
   private bulletLights: Phaser.GameObjects.Light[] = [];
@@ -308,6 +325,7 @@ export class PhaserRenderer {
         );
         for (const asset of assets) this.load.image(textureKey(asset), asset);
         this.load.audio(STATION_AMBIENT_KEY, STATION_AMBIENT_SRC);
+        for (const [key, src] of Object.entries(ONE_SHOT_SOUNDS)) this.load.audio(key, src);
       }
 
       create(): void {
@@ -492,6 +510,33 @@ export class PhaserRenderer {
       ease: "Linear",
       onComplete: () => sound.stop(),
     });
+  }
+
+  playPickupSound(kind: "generic" | "ram" | "weapon"): void {
+    this.playOneShot(`sfx-pickup-${kind}`);
+  }
+
+  playPortalSound(type: "up" | "down"): void {
+    this.playOneShot(`sfx-portal-${type}`);
+  }
+
+  playSpawnerSpawnSound(): void {
+    this.playOneShot("sfx-spawner-spawn");
+  }
+
+  playContentToggleSound(): void {
+    this.playOneShot("sfx-content-toggle");
+  }
+
+  private playOneShot(key: string, volume = ONE_SHOT_SFX_VOLUME): void {
+    // Never queue gameplay sounds while the tab is hidden; paused managers
+    // would otherwise replay everything at once when it returns.
+    if (document.hidden) return;
+    const scene = this.scene;
+    if (!scene || !scene.cache.audio.exists(key)) return;
+    const sound = scene.sound.add(key, { volume });
+    sound.play();
+    sound.once(Phaser.Sound.Events.COMPLETE, () => sound.destroy());
   }
 
   setWorld(layout: DungeonLayout, visited: ReadonlySet<number>): void {
@@ -1046,6 +1091,7 @@ export class PhaserRenderer {
       baseIntensity,
       flickerAmount,
       flickerSeed: seed,
+      enabled: visible,
       fullyLit: !dimRoom,
     };
     this.roomLights.set(room.id, profile);
@@ -1086,6 +1132,7 @@ export class PhaserRenderer {
           baseIntensity,
           flickerAmount: 0,
           flickerSeed: segment.seed,
+          enabled: visible,
         };
         profiles.push(profile);
         this.lightProfiles.push(profile);
@@ -1097,9 +1144,9 @@ export class PhaserRenderer {
   private updateWorldLightDataset(): void {
     const layout = this.layout;
     if (!layout) return;
-    const visibleRooms = layout.nodes.filter(room => this.roomLights.get(room.id)?.light.visible);
+    const visibleRooms = layout.nodes.filter(room => this.roomLights.get(room.id)?.enabled);
     const visibleCorridors = layout.links.filter(link =>
-      this.corridorLights.get(link.id)?.some(profile => profile.light.visible)
+      this.corridorLights.get(link.id)?.some(profile => profile.enabled)
     );
     this.setHostData("roomLights", String(visibleRooms.length));
     this.setHostData("bossRoomLights", String(visibleRooms.filter(room => room.tag === "script").length));
@@ -1110,7 +1157,7 @@ export class PhaserRenderer {
     this.setHostData("flickeringLights", String([
       ...this.roomLights.values(),
       ...[...this.corridorLights.values()].flat(),
-    ].filter(profile => profile.light.visible && profile.flickerAmount > 0).length));
+    ].filter(profile => profile.enabled && profile.flickerAmount > 0).length));
     this.setHostData("roomLightIntensities", [...this.roomLights.values()]
       .map(profile => profile.baseIntensity.toFixed(2))
       .join(","));
@@ -1161,18 +1208,15 @@ export class PhaserRenderer {
       if (link.source.id === currentRoom.id) localRooms.add(link.target.id);
       if (link.target.id === currentRoom.id) localRooms.add(link.source.id);
     }
-    for (const [roomId, profile] of this.roomLights) profile.light.setVisible(localRooms.has(roomId));
-    const view = this.scene!.cameras.main.worldView;
+    for (const [roomId, profile] of this.roomLights) {
+      profile.enabled = localRooms.has(roomId);
+      profile.light.setVisible(profile.enabled && this.lightOnScreen(profile));
+    }
     for (const link of layout.links) {
       const revealed = this.visited.has(link.source.id) || this.visited.has(link.target.id);
       for (const profile of this.corridorLights.get(link.id) ?? []) {
-        const light = profile.light;
-        const visible = revealed &&
-          light.x + light.radius >= view.x - view.width &&
-          light.x - light.radius <= view.right + view.width &&
-          light.y + light.radius >= view.y - view.height &&
-          light.y - light.radius <= view.bottom + view.height;
-        light.setVisible(visible);
+        profile.enabled = revealed;
+        profile.light.setVisible(revealed && this.lightOnScreen(profile));
       }
     }
     for (const light of this.lootAuras.values()) light.setVisible(true);
@@ -1188,8 +1232,29 @@ export class PhaserRenderer {
     this.syncBulletLights(this.currentBullets);
   }
 
+  private cullLightsToView(): void {
+    for (const profile of this.lightProfiles) {
+      const visible = profile.enabled && this.lightOnScreen(profile);
+      if (visible !== profile.light.visible) profile.light.setVisible(visible);
+    }
+  }
+
+  private lightOnScreen(profile: WorldLight): boolean {
+    const view = this.scene?.cameras.main.worldView;
+    if (!view) return true;
+    const light = profile.light;
+    const pad = light.radius + world(96);
+    return (
+      light.x + pad >= view.x &&
+      light.x - pad <= view.right &&
+      light.y + pad >= view.y &&
+      light.y - pad <= view.bottom
+    );
+  }
+
   updateLighting(time: number): void {
     this.updateStaticWorldVisibility();
+    this.cullLightsToView();
     if (time - this.lastFlickerUpdate < FLICKER_STEP_MS) return;
     this.lastFlickerUpdate = time;
     for (const profile of this.lightProfiles) {
@@ -1199,6 +1264,11 @@ export class PhaserRenderer {
       const burstElapsed = shiftedTime % FLICKER_BURST_INTERVAL_MS;
       const burstDuration = 120 + seededUnit(profile.flickerSeed + burst * 977 + 31) * 160;
       const burstActive = seededUnit(profile.flickerSeed + burst * 977) < 0.3 && burstElapsed < burstDuration;
+      if (burstActive && !profile.burstActive && time - this.lastFlickerSoundAt >= FLICKER_SOUND_MIN_INTERVAL_MS) {
+        this.lastFlickerSoundAt = time;
+        this.playOneShot("sfx-lights-flicker", FLICKER_SFX_VOLUME);
+      }
+      profile.burstActive = burstActive;
       const step = Math.floor(shiftedTime / FLICKER_STEP_MS);
       const illuminated = !burstActive || seededUnit(profile.flickerSeed + step * 31) > 0.42;
       profile.light.setIntensity(illuminated ? profile.baseIntensity : 0);

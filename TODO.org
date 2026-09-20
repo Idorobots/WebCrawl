@@ -99,7 +99,10 @@ The ambient music and elevator music should fade in and fade out whenever they s
 
 The button click effect should also play when clicking the buttons on the error and final score screens.
 
-* Ambient station sounds
+* DONE Ambient station sounds
+:LOGBOOK:
+- State "DONE"       from              [2026-09-20 Sun 16:29]
+:END:
 Add ambient station sounds using the ambient/station/space file. The sample should be looped. It should initially fade in and it should fade out whenever it is stopped for any reason.
 
 * Pickups and scenery
@@ -110,6 +113,8 @@ Add ambient station sounds using the ambient/station/space file. The sample shou
 - Whenever a spawner is spawning an enemy play the scenery/spawner/spawn file. Match it to the spawner animation.
 
 - Whenever a content browser is toggled on or off, play the scenery/content/toggle file.
+
+- Whenever lights flicker play the scenery/lights/flicker file.
 
 * Shots and damage
 Add shots & damage effects sounds:
@@ -850,3 +855,7 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 
 * UX improvement, again
 - The error screen and final score screens should take the user back to the welcome screen, but without having to "log back in".
+- Use the URL and the HTML content for level generation seed
+
+* Particle system
+- Use for sparks etc.
