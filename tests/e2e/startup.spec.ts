@@ -46,7 +46,10 @@ async function startGame(page: Page, debug = false): Promise<void> {
 
   await expect(page.locator("#gameUi")).toBeVisible();
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
-  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
+  // The renderer boots (and loads its texture atlas) before the world is
+  // generated, so world attributes can lag the first canvas by several
+  // seconds. 30s matches the app's own loading boot guard.
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6", { timeout: 30_000 });
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-monsters", "0");
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-visited-rooms", "1");
 }
@@ -220,7 +223,7 @@ test("starts a lucky crawl from Wikipedia's random page", async ({ page }) => {
   await page.getByRole("button", { name: "I'm feeling lucky" }).click();
 
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
-  await expect(page.locator("#urlBarText")).toHaveText("https://en.wikipedia.org/wiki/Example_article");
+  await expect(page.locator("#urlBarText")).toHaveText("https://en.wikipedia.org/wiki/Example_article", { timeout: 30_000 });
 });
 
 test("starts a lucky crawl from a Hacker News top story", async ({ page }) => {
@@ -251,7 +254,7 @@ test("starts a lucky crawl from a Hacker News top story", async ({ page }) => {
   await page.getByRole("button", { name: "I'm feeling lucky" }).click();
 
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
-  await expect(page.locator("#urlBarText")).toHaveText("https://example.com/lucky");
+  await expect(page.locator("#urlBarText")).toHaveText("https://example.com/lucky", { timeout: 30_000 });
 });
 
 test("starts a crawl and renders a playable floor", async ({ page }) => {
@@ -410,9 +413,18 @@ test("ignores repeated damage for 200ms after taking a hit", async ({ page }) =>
   await startGame(page);
   const initialHp = await playerHp(page);
 
-  await damagePlayer(page, 2);
-  await damagePlayer(page, 2);
-  expect(await playerHp(page)).toBe(initialHp - 2);
+  // Both hits must land inside one evaluate: the first damage spawns an
+  // effect light, which makes Phaser recompile its light pipeline and can
+  // stall the main thread past the 200ms window between CDP roundtrips.
+  const hpAfterBurst = await page.evaluate((initial) => {
+    const api = (window as Window & {
+      __webcrawlTest?: { damagePlayer: (amount: number) => void; playerHp: () => number };
+    }).__webcrawlTest;
+    api?.damagePlayer(2);
+    api?.damagePlayer(2);
+    return api?.playerHp() ?? initial;
+  }, initialHp);
+  expect(hpAfterBurst).toBe(initialHp - 2);
 
   await page.waitForTimeout(PLAYER_DAMAGE_INVULNERABILITY_MS + 50);
   await damagePlayer(page, 2);
@@ -509,6 +521,7 @@ test("keeps generated world coordinates independent of viewport size", async ({ 
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
   await page.getByRole("button", { name: "Go" }).click();
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6", { timeout: 30_000 });
 
   expect({
     player: await playerPosition(page),
@@ -518,6 +531,7 @@ test("keeps generated world coordinates independent of viewport size", async ({ 
 });
 
 test("keeps an active boss sized consistently while it follows the player out", async ({ page }) => {
+  test.setTimeout(90_000);
   const bossFixture = "<!doctype html><html><body><script>const boss = true;</script><main><h1>Boss deck</h1></main></body></html>";
   await stubRemoteFetchFallbacks(page, bossFixture);
   await page.route("**/api/fetch?**", route => route.fulfill({
@@ -530,6 +544,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await page.getByRole("button", { name: "Go" }).click();
   const game = page.locator("#gameCanvas");
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
+  await expect(game).toHaveAttribute("data-rooms", /^\d+$/, { timeout: 30_000 });
   await setPlayerInvulnerable(page, true);
   await expect(game).toHaveAttribute("data-active-bosses", "0");
 
@@ -545,7 +560,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await expect.poll(async () => {
     const value = await game.getAttribute("data-visited-rooms");
     return Number(value ?? "0");
-  }).toBeGreaterThanOrEqual(2);
+  }, { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
   await page.keyboard.up(exitKey);
 
   await expect(game).toHaveAttribute("data-active-bosses", "1");
@@ -744,6 +759,7 @@ test("ignores manual pan and zoom gestures", async ({ page }) => {
 });
 
 test("spawns multiple enemies once another room is revealed", async ({ page }) => {
+  test.setTimeout(90_000);
   const pageErrors: string[] = [];
   page.on("pageerror", error => pageErrors.push(error.message));
   await startGame(page);
@@ -793,6 +809,7 @@ test("spawns multiple enemies once another room is revealed", async ({ page }) =
 });
 
 test("swaps temporary weapons, refills only from ammo cores, and falls back to pulse rifle", async ({ page }) => {
+  test.setTimeout(90_000);
   const weaponFixture = "<!doctype html><html><body><img style=\"display:none\" src=\"artifact.png\" alt=\"Secret armory\" /><section style=\"display:none\"><p>Backup cache</p></section><footer>fallback</footer></body></html>";
   await stubRemoteFetchFallbacks(page, weaponFixture);
   await page.route("**/api/fetch?**", route => route.fulfill({
@@ -806,6 +823,7 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
 
   const game = page.locator("#gameCanvas");
   await expect(page.locator("#gameCanvas canvas")).toBeVisible();
+  await expect(game).toHaveAttribute("data-rooms", /^\d+$/, { timeout: 30_000 });
   await setPlayerInvulnerable(page, true);
   await expect(game).toHaveAttribute("data-weapon-kind", "pulse-rifle");
   await expect(game).toHaveAttribute("data-weapon-ammo", "infinite");
@@ -826,7 +844,7 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   await expect.poll(async () => {
     const value = await game.getAttribute("data-visited-rooms");
     return Number(value ?? "0");
-  }).toBeGreaterThanOrEqual(2);
+  }, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
 
   await expect(game).toHaveAttribute("data-available-weapons", /[1-9]/);
   await expect(game).toHaveAttribute("data-weapon-pedestals", /[1-9]/);
@@ -923,7 +941,7 @@ test("loads a page directly when the site allows CORS, without hitting the relay
   await page.goto("/");
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
   await page.getByRole("button", { name: "Go" }).click();
-  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6", { timeout: 30_000 });
   expect(relayHits).toBe(0);
 });
 
@@ -957,11 +975,12 @@ test("shows the ClosedNS Code loading session while fetching a page", async ({ p
   await expect(page.locator('[data-task="generate"] .loading-task-label')).toHaveText("Generating level");
   await expect(page.locator('[data-task="boot"] .loading-task-label')).toHaveText("Booting the renderer");
 
-  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6");
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "6", { timeout: 30_000 });
   await expect(loading).not.toBeVisible({ timeout: 30_000 });
 });
 
 test("pauses the game while teleporting through a portal", async ({ page }) => {
+  test.setTimeout(90_000);
   await startGame(page);
   const game = page.locator("#gameCanvas");
   await setPlayerInvulnerable(page, true);

@@ -441,10 +441,24 @@ index-CCnl2EYo.js:10:28063
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
 
+* Consistent collision detection
+- Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
+- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
+- Use hitboxes for player/bullet collision detection and damage calcualation.
+- Use hitboxes for enemy/bullet collision detection and damage calcualation.
+- Use hitboxes for player/pickup collision detection.
+- Use the footprints for player/scenery collision detection and blocking.
+- Use the footprints for enemy/scenery collision detection and blocking.
+
 * More varied weapons
-- Use different bullet types
-- Homing missles
-- Exploding granades
+Let's introduce more variation to the weapons. Starting with additional bullet types:
+
+- Homing missles - a rocket that flies towards the target (player or closest enemy) but is imprecise - it should have inertia and not be able to turn on the spot so it should sometimes miss the target.
+
+- Exploding granades - the bullet itself deals no damage, but instead causes a damaging explosion after a short delay. The granades should "drop to the ground" and be blocked by scenery and walls. The explosion should deal damage to everything in its vicinity.
+
+- Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
+
 * DONE Loading screen
 :LOGBOOK:
 - State "DONE"       from              [2026-09-19 Sat 00:20]
@@ -556,15 +570,6 @@ UI for twin-stick shooters. :shrug:
 :END:
 Add a GitHub logo badge to the top right corner of the welcome screen. When clicked, it should take the user to the WebCrawl repository on GitHub: github.com/Idorobots/WebCrawl
 Keep the GitHub logo badge style-consistent with the holographic UI.
-
-* Consistent collision detection
-- Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
-- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
-- Use hitboxes for player/bullet collision detection and damage calcualation.
-- Use hitboxes for enemy/bullet collision detection and damage calcualation.
-- Use hitboxes for player/pickup collision detection.
-- Use the footprints for player/scenery collision detection and blocking.
-- Use the footprints for enemy/scenery collision detection and blocking.
 
 * DONE Welcome screen page randomization
 :LOGBOOK:
@@ -739,6 +744,7 @@ N-S with E:
 
 * Easter egg
 Whenever AI is mentioned in the content, render a special Samario content browser.
+
 * Visual bugs
 - Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
 - Move the portal active area and footprint by the same amount as down as the player spawn point.
@@ -750,9 +756,9 @@ Whenever AI is mentioned in the content, render a special Samario content browse
 
 - "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
 - "floor_hatch" tile should be considered decoration tile, not main floor tile
+
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
-
 
 * Additional scenery
 There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
@@ -762,3 +768,18 @@ More scenery items & enemies now have dedicated debris sprites. Please add them 
 There are several backgrounds now, these could be used as an alternative for the current dark "technology" background. Each URL visited should deterministically determine which background to use for those levels.
 
 Similarly, there are multiple font files available now. Please randomize which font file is used for the level signage.
+
+* Minimap overhaul
+- Render corridors as wider connectors on the minimap.
+- Show precise location of the player on the minimap, including in corridors.
+- Mark rooms with a down-portal with a magenta triangle in them (one if any portals exist).
+- Mark rooms with an up-portal with a blue triangle in them (one if any portal exits).
+- Mark the position of any pickups that haven't been picked up (small teal dots).
+- Mark the boss arenas by tinting the minimap room red.
+- Mark the positions of any alive monsters on the minimap (small red dots).
+
+* Performance optimization, again
+- Use point lights for damage & explosion effects.
+- Use point lights for room/corridor lighting.
+- Batch point light rendering together.
+- Phaser 4 update?
