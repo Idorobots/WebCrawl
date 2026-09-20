@@ -166,6 +166,8 @@ const ONE_SHOT_SOUNDS: Readonly<Record<string, string>> = {
   "sfx-spawner-spawn": "sounds/scenery/spawner/spawn.mp3",
   "sfx-content-toggle": "sounds/scenery/content/toggle.mp3",
   "sfx-lights-flicker": "sounds/scenery/lights/flicker.mp3",
+  "sfx-player-hurt": "sounds/death/player/damage.mp3",
+  "sfx-player-death": "sounds/death/player/wilhelm.mp3",
 };
 const ONE_SHOT_SFX_VOLUME = 0.3;
 const FLICKER_SFX_VOLUME = 0.3;
@@ -223,18 +225,37 @@ const ENERGY_DASH_SOUNDS: readonly string[] = [
   "sounds/effects/dash/dash1.mp3",
   "sounds/effects/dash/dash2.mp3",
 ];
+const MELEE_SOUNDS: readonly string[] = [
+  "sounds/shots/melee/melee.mp3",
+  "sounds/shots/melee/melee1.mp3",
+  "sounds/shots/melee/melee2.mp3",
+];
 const HEAL_SOUND_SRC = "sounds/effects/heal/restore.mp3";
 const INVULNERABILITY_TURN_ON_SRC = "sounds/effects/invulnerability/turn_on.mp3";
 const INVULNERABILITY_TURN_OFF_SRC = "sounds/effects/invulnerability/turn_off.mp3";
+const PLAYER_FOOTSTEP_SOUNDS: readonly string[] = [
+  "sounds/footsteps/player/footstep.mp3",
+  "sounds/footsteps/player/footstep1.mp3",
+];
+const ROBOT_FOOTSTEP_SOUNDS: readonly string[] = [
+  "sounds/footsteps/robot/footstep.mp3",
+  "sounds/footsteps/robot/footstep1.mp3",
+];
+const FOOTSTEP_SFX_VOLUME = 0.3;
+const FOOTSTEP_INTERVAL_MS = 125;
+const PLAYER_DEATH_SFX_VOLUME = 0.45;
 const POOLED_SOUND_SOURCES: readonly string[] = [...new Set([
   ...Object.values(WEAPON_SHOT_SOUNDS),
   ...Object.values(ENEMY_SHOT_SOUNDS),
   ...DAMAGE_SOUNDS,
   ...EXPLOSION_SOUNDS,
   ...ENERGY_DASH_SOUNDS,
+  ...MELEE_SOUNDS,
   HEAL_SOUND_SRC,
   INVULNERABILITY_TURN_ON_SRC,
   INVULNERABILITY_TURN_OFF_SRC,
+  ...PLAYER_FOOTSTEP_SOUNDS,
+  ...ROBOT_FOOTSTEP_SOUNDS,
 ])];
 const SHOT_SFX_VOLUME = 0.2;
 const ENEMY_SHOT_SFX_VOLUME = 0.2;
@@ -263,6 +284,21 @@ interface WorldBounds {
   right: number;
   top: number;
   bottom: number;
+}
+
+interface FootstepChain {
+  active: boolean;
+  index: number;
+  sound: Phaser.Sound.BaseSound | null;
+  srcs: readonly string[];
+  intervalMs: number;
+  lastStepAt: number;
+}
+
+interface MonsterFootstep {
+  index: number;
+  lastStepIndex: number;
+  sound: Phaser.Sound.BaseSound | null;
 }
 
 interface AreaLight extends Phaser.GameObjects.Light {
@@ -355,6 +391,15 @@ export class PhaserRenderer {
   private lastFlickerSoundAt = -Infinity;
   private lastDamageSoundAt = -Infinity;
   private lastExplosionSoundAt = -Infinity;
+  private playerFootsteps: FootstepChain = {
+    active: false,
+    index: 0,
+    sound: null,
+    srcs: PLAYER_FOOTSTEP_SOUNDS,
+    intervalMs: FOOTSTEP_INTERVAL_MS,
+    lastStepAt: 0,
+  };
+  private monsterFootsteps = new Map<string, MonsterFootstep>();
   private corridorBounds = new Map<string, WorldBounds>();
   private staticVisibility = new Map<StaticObject, boolean>();
   private bulletLights: Phaser.GameObjects.Light[] = [];
@@ -616,6 +661,10 @@ export class PhaserRenderer {
     this.playOneShot(ENEMY_SHOT_SOUNDS[kind] ?? DEFAULT_ENEMY_SHOT_SOUND, ENEMY_SHOT_SFX_VOLUME);
   }
 
+  playMeleeSound(): void {
+    this.playOneShot(pickRandom(MELEE_SOUNDS), SHOT_SFX_VOLUME);
+  }
+
   playDamageSound(): void {
     const now = performance.now();
     if (now - this.lastDamageSoundAt < DAMAGE_SOUND_MIN_INTERVAL_MS) return;
@@ -640,6 +689,106 @@ export class PhaserRenderer {
 
   playInvulnerabilitySound(on: boolean): void {
     this.playOneShot(on ? INVULNERABILITY_TURN_ON_SRC : INVULNERABILITY_TURN_OFF_SRC, EFFECT_SFX_VOLUME);
+  }
+
+  playPlayerHurtSound(): void {
+    this.playOneShot("sfx-player-hurt", EFFECT_SFX_VOLUME);
+  }
+
+  playPlayerDeathSound(): void {
+    this.playOneShot("sfx-player-death", PLAYER_DEATH_SFX_VOLUME);
+  }
+
+  setPlayerFootsteps(active: boolean, time = performance.now()): void {
+    this.setFootsteps(this.playerFootsteps, active, time);
+  }
+
+  updateFootsteps(time: number): void {
+    this.stepFootstepChain(this.playerFootsteps, time);
+  }
+
+  private setFootsteps(chain: FootstepChain, active: boolean, time: number): void {
+    if (active === chain.active) return;
+    chain.active = active;
+    chain.sound?.destroy();
+    chain.sound = null;
+    if (active) this.playFootstep(chain, time);
+  }
+
+  private stepFootstepChain(chain: FootstepChain, time: number): void {
+    if (!chain.active || time - chain.lastStepAt < chain.intervalMs) return;
+    this.playFootstep(chain, time);
+  }
+
+  private playFootstep(chain: FootstepChain, time: number): void {
+    // Frozen audio context (window out of focus): drop the chain so the next
+    // movement tick restarts it once focus returns.
+    if (document.hidden || !document.hasFocus()) {
+      chain.active = false;
+      return;
+    }
+    const scene = this.scene;
+    if (!scene) return;
+    chain.lastStepAt = time;
+    const src = chain.srcs[chain.index % chain.srcs.length]!;
+    chain.index += 1;
+    chain.sound?.destroy();
+    const sound = scene.sound.add(src, { volume: FOOTSTEP_SFX_VOLUME });
+    chain.sound = sound;
+    sound.once(Phaser.Sound.Events.COMPLETE, () => {
+      if (chain.sound === sound) chain.sound = null;
+      sound.destroy();
+    });
+    sound.play();
+  }
+
+  private updateMonsterFootsteps(items: readonly Monster[], now: number): void {
+    const scene = this.scene;
+    if (!scene || document.hidden || !document.hasFocus()) return;
+    const known = new Set<string>();
+    for (const item of items) {
+      if (item.dead || !item.active || !item.moving) continue;
+      const sprite = this.monsters.get(item.id);
+      if (!sprite) continue;
+      known.add(item.id);
+      const direction = item.moveDir ?? "down";
+      const visual = item.visual.directions[direction] ?? item.visual.directions.down!;
+      const walk = visual.walk;
+      if (!walk) continue;
+      let state = this.monsterFootsteps.get(item.id);
+      if (!state) {
+        state = { index: 0, lastStepIndex: -1, sound: null };
+        this.monsterFootsteps.set(item.id, state);
+      }
+      const elapsed = monsterWalkElapsed(walk, now, item.seed, item.speed);
+      const cycleMs = walk.frames.length * walk.frameDurationMs;
+      const stepIndex = Math.floor(elapsed / (cycleMs / 4)) % 4;
+      if (stepIndex === state.lastStepIndex) continue;
+      const player = this.currentPlayer;
+      const distance = Math.hypot(item.x - player.x, item.y - player.y);
+      const attenuation = Math.max(0, 1 - distance / world(900));
+      if (attenuation <= 0) {
+        state.lastStepIndex = stepIndex;
+        continue;
+      }
+      state.lastStepIndex = stepIndex;
+      const src = ROBOT_FOOTSTEP_SOUNDS[state.index % ROBOT_FOOTSTEP_SOUNDS.length]!;
+      state.index += 1;
+      state.sound?.destroy();
+      const sound = scene.sound.add(src, { volume: FOOTSTEP_SFX_VOLUME * attenuation });
+      state.sound = sound;
+      sound.once(Phaser.Sound.Events.COMPLETE, () => {
+        if (state.sound === sound) state.sound = null;
+        sound.destroy();
+      });
+      sound.play();
+    }
+    for (const [id, state] of [...this.monsterFootsteps]) {
+      if (!known.has(id)) {
+        state.sound?.destroy();
+        this.monsterFootsteps.delete(id);
+      }
+    }
   }
 
   private playOneShot(key: string, volume = ONE_SHOT_SFX_VOLUME): void {
@@ -1911,6 +2060,7 @@ export class PhaserRenderer {
     if (this.monsters.size === 0) return;
     let assetChanged = false;
     const now = performance.now();
+    this.updateMonsterFootsteps(items, now);
     for (const item of items) {
       const container = this.monsters.get(item.id);
       if (!container) continue;

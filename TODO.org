@@ -145,16 +145,18 @@ Add effects sounds:
 
 - Whenever the player enables a crystal invulnerability, play the effects/invulnerability/turn_on sound. When the invulnerability wears off, play the effects/invulnerability/turn_off sound.
 
-* Footsteps
+* Character livelyness
 Add player footstep sounds:
 
 - Whenever the player is moving, play the footsteps/player/footstep and footsteps/player/footstep1 sounds interchangeably in a loop. If the player stops moving, stop playing the sounds.
 
 - Whenever enemy monsters are moving, playe the footsteps/robot/footstep and footsteps/robot/footstep1 sounds interchangeably in a loop. If the enemy stops moving, stop playing the sounds.
 
-* Character damage and death
-When the character takes dame use the death/player/x file.
-When the character dies use the death/player/wilhelm
+Add player damage sounds:
+
+- When the character takes dame use the death/player/damage file.
+
+- When the character dies use the death/player/wilhelm
 
 * DONE Bugs
 :LOGBOOK:
@@ -518,6 +520,7 @@ index-CCnl2EYo.js:10:28063
 
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
+- Spawners should spawn enemies continuously until destroyed every delay seconds.
 
 * Consistent collision detection
 - Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
@@ -825,7 +828,7 @@ Whenever AI is mentioned in the content, render a special Samario content browse
 
 * Visual bugs
 - Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
-- Move the portal active area and footprint by the same amount as down as the player spawn point.
+- Move the portal active area and footprint by the same amount down as the player spawn point.
 
 - Spawner shadow is messed up due to the translucent area on the sprite.
 - Sprite shadows are too well-defined. They should be softer.
@@ -839,8 +842,11 @@ Whenever AI is mentioned in the content, render a special Samario content browse
 
 - Inner corner on corridor L-junctions is placed wrong and of the wrong type.
 
+- Each monster should have their own footsteps.
+
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+- Pathfinding sometimes works in a weird way when compound corridors are involved - often they skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
 
 * Additional scenery
 There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
@@ -874,3 +880,13 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 
 * Particle system
 - Use for sparks etc.
+* Power-ups
+- Higher max health
+- Health regen
+- Shield regen
+- Ammo regen
+- Faster walking speed
+- Faster shot speed
+- "Familiar" robot helping
+- Better loot chance
+- Minimap radar

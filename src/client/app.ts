@@ -1233,7 +1233,7 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
     PLAYER_SPEC.spriteSize,
     { key: "player", lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
   );
-  renderer.playDamageSound();
+  renderer.playPlayerHurtSound();
 
   playerHp = Math.max(0, playerHp - amount);
   playerDamageInvulnerableUntil = now + PLAYER_DAMAGE_INVULNERABILITY_MS;
@@ -1242,6 +1242,7 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
 
   if (playerHp <= 0) {
     playerAlive = false;
+    renderer.playPlayerDeathSound();
     resetPlayerInput();
     const hud = document.querySelector("#hud");
     hud?.classList.add("game-over");
@@ -1661,6 +1662,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
   if (playerDistance <= monster.attackRange && monsterAttackIsReady(monster, timestamp)) {
     monster.attackKind = "melee";
     monster.lastAttackAt = timestamp;
+    renderer.playMeleeSound();
     applyPlayerDamage(monster.attackDamage);
   }
   if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + HEAP_TITAN_WAVE.initialDelayMs;
@@ -1861,6 +1863,7 @@ function gameTick(timestamp: number): void {
     ? timestamp + GAME_TICK_INTERVAL_MS
     : Math.max(timestamp + GAME_TICK_INTERVAL_MS, nextGameTick + GAME_TICK_INTERVAL_MS);
   renderer.updateLighting(timestamp);
+  renderer.updateFootsteps(timestamp);
 
   if (teleportPauseActive || !playerAlive || !currentLayout) {
     lastGameTick = timestamp;
@@ -1982,6 +1985,7 @@ function gameTick(timestamp: number): void {
     ) {
       monster.attackKind = "melee";
       monster.lastAttackAt = timestamp;
+      renderer.playMeleeSound();
       applyPlayerDamage(monster.attackDamage);
     } else if (
       monster.attackPattern !== "melee" &&
@@ -2364,6 +2368,7 @@ function updatePlayerAnimationClasses(): void {
 }
 
 function setPlayerMoving(moving: boolean, timestamp: number): void {
+  renderer?.setPlayerFootsteps(moving, timestamp);
   if (playerMoving !== moving) {
     playerMoving = moving;
     updatePlayerAnimationClasses();
