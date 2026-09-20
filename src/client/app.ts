@@ -1243,7 +1243,9 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
   if (playerHp <= 0) {
     playerAlive = false;
     renderer.playPlayerDeathSound();
+    renderer.endMonsterFootsteps();
     resetPlayerInput();
+    pauseGameLoop();
     const hud = document.querySelector("#hud");
     hud?.classList.add("game-over");
     setStatus("Agent signal lost.", true);
@@ -2020,7 +2022,7 @@ function pauseGameLoop(): void {
 }
 
 function resumeGameLoop(): void {
-  if (!gameLoopSuspended) return;
+  if (!playerAlive || !gameLoopSuspended) return;
   gameLoopSuspended = false;
   startGameLoop();
 }

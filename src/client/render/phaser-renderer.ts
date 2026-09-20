@@ -701,6 +701,17 @@ export class PhaserRenderer {
     this.setFootsteps(this.playerFootsteps, active, time);
   }
 
+  endMonsterFootsteps(): void {
+    // Stop the loops from repeating; each current pass plays out, then cleanup.
+    for (const state of this.monsterFootsteps.values()) {
+      const sound = state.sound;
+      if (!sound) continue;
+      state.sound = null;
+      sound.setLoop(false);
+      sound.once(Phaser.Sound.Events.COMPLETE, () => sound.destroy());
+    }
+  }
+
   updateFootsteps(time: number): void {
     this.stepFootstepChain(this.playerFootsteps, time);
   }

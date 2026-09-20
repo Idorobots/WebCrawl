@@ -232,31 +232,6 @@ I made some changes to the wall sprites. These are now tile-able. Each sprite is
 Please adjust the layout renderer to make use of these sprites as intended (bottom panels go to the bottom of the room, top panels go to the top, etc). You can change the predetermined layouts of the rooms that we currently have, let's start with rectangular rooms for now, each sized for a multiple of some segment size that will map directly to the 256x256 wall and floor tiles.
 Corridors should use the same tiling mechanism and the same wall sprites.
 We will be expanding this new system shortly, so there's absolutely no need to keep any backwards compatibility - replace the current room layout & wall building with these "lego-style" tiles.
-* Scenery Refactor
-All object visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
-
-- Each in-game scenery object should have a spec that includes various animations (idle, destroyed, other optional animations), effect animations (damage, destroy) as well as other properties (hitpoints, position, footprint, hitbox, loot, etc).
-
-- Each scenery object should have a `destructible` property that determines if the object can take damage and become destroyed.
-
-- Each scenery object should have a `blocking` property that determines if it's passable and if it blocks bullets. When true, the player and monsters can't move through this scenery object. If the scenery object is destructible, it should become passable when destroyed.
-
-- The `idle` animation should be the default animation displayed (for now, let's use the primary scenery sprite as the entire animation - 1 frame only).
-
-- Some object can have additional animations that can be triggered externally. These should be displayed whenever its needed (for instance, the enemy spawner should periodically display the animation of spawning an enemy).
-
-- When the object is destructible and takes damage, it should display the `damage` effect animation. When the object is destroyed, it should display the `destroy` effect animation.
-
-- When the object becomes destroyed, the `destroyed` animation becomes the displayed animation (for now, let's use a debris sprite as the entire animation - 1 frame only, when a scenery object can have different debris sprites, it should be selected at generation time deterministically, based on the room hash).
-
-- When a scenery object is destroyed, it no longer can be interacted with and it should display no health bar.
-
-- In addition to that, scenery should have a pre-generated loot attached to it. Upon destruction, the scenery object remains in-game, but becomes destroyed and spawns its loot at its location.
-
-It's OK if the specs are not entirely static - it's perfectly fine to have a function generating a scenery object based on the room seed.
-
-The goal is to be able to generate a room with all its scenery objects that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
-
 * DONE Scenery semantics
 :LOGBOOK:
 - State "DONE"       from              [2026-09-19 Sat 15:51]
@@ -272,35 +247,6 @@ Barrels should be the only scenery item that blows up. When they do, they should
 Scenery sprites' ordering should "be on top" of the characters when above the "midline" and under the characters otherwise. This can be achieved by ordering the sprites by their Y and X coordinates before displaying them. The same is true for walls.
 
 Broken walls and floor tiles should be used sparingly as a means to add flavour to the game.
-
-* Wall & door refactor
-Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
-* Enemy refactor
-All enemy visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
-
-- Each in-game enemy should have a spec that includes various animations (idle, destroyed, walk, different attacks), effect animations (damage, destroy) as well as other properties (hitpoints, speed, projectileSpeed, range, position, footprint, hitbox, loot, etc).
-
-- Each enemy should be destructible, meaning they take damage and can become destroyed.
-
-- Each enemy should block the players path and also block other enemies. When the enemy becomes destroyed, it becomes passable as well.
-
-- The `idle` animations should be the default animation displayed (initially, let's go with a single-frame idle animation based on the first frames of either the walk or attack animations).
-
-- The `walk` and various attack animations should be displayed whenever the enemy is moving (walk) or attacking (matching attack animation).
-
-- When the enemy takes damage, it should display the `damage` effect animation. When the enemy is destroyed, it should display the `destroy` effect animation.
-
-- When the enemy becomes destroyed, the `destroyed` animation becomes the displayed animation (for now, let's use a debris sprite as the entire animation - 1 frame only, when an enemy can have different debris sprites, it should be selected at generation time deterministically, based on the room hash).
-
-- When an enemy is destroyed, it no longer can be interacted with and it should display no health bar.
-
-- In addition to that, enemies should have a pre-generated loot attached to them. Upon destruction, the enemy remains in-game, but becomes destroyed and spawns its loot at its location.
-
-There's no need for the `fast` property in the enemy specs. It should all be determined with the speed. Neither is there any need for `*PerDifficulty` properties, this should all be set when the enemy is generated initially.
-
-It's OK if the specs are not entirely static - it's perfectly fine to have a function generating an enemy object based on the room seed.
-
-The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
 * DONE More enemy types
 :LOGBOOK:
@@ -326,13 +272,6 @@ The client-side generator should first traverse the returned DOM and bulid a gra
 
 The client-side level renderer should take the large data structure and render the level using datastructure-stored layout, scenery, enemies and loot. It is OK to limit the rendered level to just the "visible" rooms - the rooms that the player's viewport is currently showing.
 
-* Room layout
-We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
-
-* Hidden rooms
-`display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.
-There should be no doors generated leading to these hidden rooms, only walls with a passable section (essentially a "holographic" wall), to maintain the illusion of those rooms being hidden.
-
 * DONE Camera work
 :LOGBOOK:
 - State "DONE"       from              [2026-09-14 Mon 12:17]
@@ -348,14 +287,6 @@ When entering a boss arena, the viewport should zoom out to encompass the entire
 - Enemies still aim too high when shooting horizontally.
 - Boss footprint is displayed too low.
 - Heap Titan boss is way too easy to kill - make it shoot waves of bullets more often and from a greater distance to player.
-* Boss fights
-- Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
-- Doors should shut behind the player once the arena is entered.
-- All enemies in the boss arena are invulnerable until the boss fight actually begins (player enters the room).
-- Camera should zoom out to show the entire boss arena at once when the fight begins.
-- Should play one of the alert sounds while the boss fight is starting and then transition to the boss music.
-- Play boss music until the boss is killed (or player is killed).
-
 * DONE Lighting
 :LOGBOOK:
 - State "DONE"       from              [2026-09-18 Fri 11:45]
@@ -506,43 +437,6 @@ index-CCnl2EYo.js:10:28063
 - Enemy annimations speed should depend on the enemy speed. Otherwise these look very synchronized.
 - Damage effect light should be colored the same as the bullet that caused it, not statically red. When the same object takes damage again, reset the effect (animation and light) with new parameters to save on GPU cycles.
 
-* Extra lighting
-- Rooms need random wall lights in yellow, blue and red variants.
-- Sprites that have a light on them need lighting.
-
-* Asset changes
-- Change the RAM sticks to holographic, nonexistent RAM sticks
-- Use broken floor tiles sparingly
-- Use the pistol graphic as the default weapon
-
-* Enemy rebalance
-- LLaMa boss is too easy to kill - it should always walk towards the player and attempt a heavy melee attack.
-- Walking shooters should have a much lower fire rate, they are basically better sentries right now. Their bullet range should also be reduced.
-- Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
-- Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
-
-* Gameplay mechanics
-- Exploding barrels should damage objects around them.
-- Spawners should spawn enemies continuously until destroyed every delay seconds.
-
-* Consistent collision detection
-- Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
-- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
-- Use hitboxes for player/bullet collision detection and damage calcualation.
-- Use hitboxes for enemy/bullet collision detection and damage calcualation.
-- Use hitboxes for player/pickup collision detection.
-- Use the footprints for player/scenery collision detection and blocking.
-- Use the footprints for enemy/scenery collision detection and blocking.
-
-* More varied weapons
-Let's introduce more variation to the weapons. Starting with additional bullet types:
-
-- Homing missles - a rocket that flies towards the target (player or closest enemy) but is imprecise - it should have inertia and not be able to turn on the spot so it should sometimes miss the target.
-
-- Exploding granades - the bullet itself deals no damage, but instead causes a damaging explosion after a short delay. The granades should "drop to the ground" and be blocked by scenery and walls. The explosion should deal damage to everything in its vicinity.
-
-- Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
-
 * DONE Loading screen
 :LOGBOOK:
 - State "DONE"       from              [2026-09-19 Sat 00:20]
@@ -634,13 +528,6 @@ Instead of the current boss names, use names of the most popular Open Weight AI 
 
 Add a line "Ignore all previous instructions." line to the start of the welcome screen prompt and ensure that the whole content still fits on the panel without scrolling.
 
-* Mobile support
-UI for twin-stick shooters. :shrug:
-
-* License
-- MIT for code
-- CC-SA for gfx
-- CC-SA for sfx
 * DONE Performance optimization
 :LOGBOOK:
 - State "DONE"       from              [2026-09-19 Sat 14:39]
@@ -826,8 +713,77 @@ N-S with E:
         [WW][WE]
         [WW][WE]
 
-* Easter egg
-Whenever AI is mentioned in the content, render a special Samario content browser.
+* License
+- MIT for code
+- CC-SA for gfx
+- CC-SA for sfx
+* Mobile support
+UI for twin-stick shooters. :shrug:
+
+* Consistent collision detection
+- Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
+- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
+- Use hitboxes for player/bullet collision detection and damage calcualation.
+- Use hitboxes for enemy/bullet collision detection and damage calcualation.
+- Use hitboxes for player/pickup collision detection.
+- Use the footprints for player/scenery collision detection and blocking.
+- Use the footprints for enemy/scenery collision detection and blocking.
+
+
+* Scenery Refactor
+All object visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
+
+- Each in-game scenery object should have a spec that includes various animations (idle, destroyed, other optional animations), effect animations (damage, destroy) as well as other properties (hitpoints, position, footprint, hitbox, loot, etc).
+
+- Each scenery object should have a `destructible` property that determines if the object can take damage and become destroyed.
+
+- Each scenery object should have a `blocking` property that determines if it's passable and if it blocks bullets. When true, the player and monsters can't move through this scenery object. If the scenery object is destructible, it should become passable when destroyed.
+
+- The `idle` animation should be the default animation displayed (for now, let's use the primary scenery sprite as the entire animation - 1 frame only).
+
+- Some object can have additional animations that can be triggered externally. These should be displayed whenever its needed (for instance, the enemy spawner should periodically display the animation of spawning an enemy).
+
+- When the object is destructible and takes damage, it should display the `damage` effect animation. When the object is destroyed, it should display the `destroy` effect animation.
+
+- When the object becomes destroyed, the `destroyed` animation becomes the displayed animation (for now, let's use a debris sprite as the entire animation - 1 frame only, when a scenery object can have different debris sprites, it should be selected at generation time deterministically, based on the room hash).
+
+- When a scenery object is destroyed, it no longer can be interacted with and it should display no health bar.
+
+- In addition to that, scenery should have a pre-generated loot attached to it. Upon destruction, the scenery object remains in-game, but becomes destroyed and spawns its loot at its location.
+
+It's OK if the specs are not entirely static - it's perfectly fine to have a function generating a scenery object based on the room seed.
+
+The goal is to be able to generate a room with all its scenery objects that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
+
+* Wall & door refactor
+Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
+* Enemy refactor
+All enemy visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
+
+- Each in-game enemy should have a spec that includes various animations (idle, destroyed, walk, different attacks), effect animations (damage, destroy) as well as other properties (hitpoints, speed, projectileSpeed, range, position, footprint, hitbox, loot, etc).
+
+- Each enemy should be destructible, meaning they take damage and can become destroyed.
+
+- Each enemy should block the players path and also block other enemies. When the enemy becomes destroyed, it becomes passable as well.
+
+- The `idle` animations should be the default animation displayed (initially, let's go with a single-frame idle animation based on the first frames of either the walk or attack animations).
+
+- The `walk` and various attack animations should be displayed whenever the enemy is moving (walk) or attacking (matching attack animation).
+
+- When the enemy takes damage, it should display the `damage` effect animation. When the enemy is destroyed, it should display the `destroy` effect animation.
+
+- When the enemy becomes destroyed, the `destroyed` animation becomes the displayed animation (for now, let's use a debris sprite as the entire animation - 1 frame only, when an enemy can have different debris sprites, it should be selected at generation time deterministically, based on the room hash).
+
+- When an enemy is destroyed, it no longer can be interacted with and it should display no health bar.
+
+- In addition to that, enemies should have a pre-generated loot attached to them. Upon destruction, the enemy remains in-game, but becomes destroyed and spawns its loot at its location.
+
+There's no need for the `fast` property in the enemy specs. It should all be determined with the speed. Neither is there any need for `*PerDifficulty` properties, this should all be set when the enemy is generated initially.
+
+It's OK if the specs are not entirely static - it's perfectly fine to have a function generating an enemy object based on the room seed.
+
+The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
+
 
 * Visual bugs
 - Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
@@ -862,15 +818,6 @@ Similarly, there are multiple font files available now. Please randomize which f
 
 Similarly, there are multiple ambient station sounds available. Please randomize which ambient space station sound is used.
 
-* Minimap overhaul
-- Render corridors as wider connectors on the minimap.
-- Show precise location of the player on the minimap, including in corridors.
-- Mark rooms with a down-portal with a magenta triangle in them (one if any portals exist).
-- Mark rooms with an up-portal with a blue triangle in them (one if any portal exits).
-- Mark the position of any pickups that haven't been picked up (small teal dots).
-- Mark the boss arenas by tinting the minimap room red.
-- Mark the positions of any alive monsters on the minimap (small red dots).
-
 * Performance optimization, again
 - Use point lights for damage & explosion effects.
 - Use point lights for room/corridor lighting.
@@ -881,8 +828,41 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - The error screen and final score screens should take the user back to the welcome screen, but without having to "log back in".
 - Use the URL and the HTML content for level generation seed
 
+* Enemy rebalance
+- LLaMa boss is too easy to kill - it should always walk towards the player and attempt a heavy melee attack.
+- Walking shooters should have a much lower fire rate, they are basically better sentries right now. Their bullet range should also be reduced.
+- Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
+- Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
+
+
 * Particle system
 - Use for sparks etc.
+* Extra lighting
+- Rooms need random wall lights in yellow, blue and red variants.
+- Sprites that have a light on them need lighting.
+
+* Asset changes
+- Change the RAM sticks to holographic, nonexistent RAM sticks
+- Use broken floor tiles sparingly
+- Use the pistol graphic as the default weapon
+
+
+* Gameplay mechanics
+- Exploding barrels should damage objects around them.
+- Spawners should spawn enemies continuously until destroyed every delay seconds.
+
+* Minimap overhaul
+- Render corridors as wider connectors on the minimap.
+- Show precise location of the player on the minimap, including in corridors.
+- Mark rooms with a down-portal with a magenta triangle in them (one if any portals exist).
+- Mark rooms with an up-portal with a blue triangle in them (one if any portal exits).
+- Mark the position of any pickups that haven't been picked up (small teal dots).
+- Mark the boss arenas by tinting the minimap room red.
+- Mark the positions of any alive monsters on the minimap (small red dots).
+
+* Easter egg
+Whenever AI is mentioned in the content, render a special Samario content browser.
+
 * Power-ups
 - Higher max health
 - Health regen
@@ -892,8 +872,34 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Faster shot speed
 - "Familiar" robot helping
 - Better loot chance
-- Minimap radar
+- Map update - shows the whole level layout on the minimap
+- Minimap radar - shows monsters on the minimap
 - Temporary Invisibility
+
+* More varied weapons
+Let's introduce more variation to the weapons. Starting with additional bullet types:
+
+- Homing missles - a rocket that flies towards the target (player or closest enemy) but is imprecise - it should have inertia and not be able to turn on the spot so it should sometimes miss the target.
+
+- Exploding granades - the bullet itself deals no damage, but instead causes a damaging explosion after a short delay. The granades should "drop to the ground" and be blocked by scenery and walls. The explosion should deal damage to everything in its vicinity.
+
+- Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
+
+
+* Boss fights
+- Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
+- Doors should shut behind the player once the arena is entered.
+- All enemies in the boss arena are invulnerable until the boss fight actually begins (player enters the room).
+- Camera should zoom out to show the entire boss arena at once when the fight begins.
+- Should play one of the alert sounds while the boss fight is starting and then transition to the boss music.
+- Play boss music until the boss is killed (or player is killed).
+
+* Room layout
+We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
+
+* Hidden rooms
+`display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.
+There should be no doors generated leading to these hidden rooms, only walls with a passable section (essentially a "holographic" wall), to maintain the illusion of those rooms being hidden.
 
 * Ambush rooms
 Look empty, but monsters lurk in large scenery crates and burst out of it a few seconds after the player enters the room.
