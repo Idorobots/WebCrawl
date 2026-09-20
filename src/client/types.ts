@@ -132,9 +132,12 @@ export interface LayoutLink {
   source: GraphNode;
   target: GraphNode;
   direction: Direction;
+  targetDirection?: Direction;
   ownerRoomId: number;
   width: number;
   points: Point[];
+  forkId?: string;
+  forkPointIndex?: number;
 }
 
 export interface DungeonLayout {

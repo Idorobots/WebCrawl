@@ -1,5 +1,4 @@
 import {
-  MAX_CHILDREN_PER_ROOM,
   MAX_NODES,
   MAX_ROOMS_AFTER_COALESCE,
   ROOM_HEIGHT,
@@ -174,7 +173,7 @@ export function domToGraph(html: string, pageUrl: string): DungeonGraph {
   while (queue.length && nodes.length < MAX_NODES) {
     const current = queue.shift();
     if (!current) break;
-    const children = Array.from(current.element.children).slice(0, MAX_CHILDREN_PER_ROOM);
+    const children = Array.from(current.element.children);
 
     for (const [childIndex, childElement] of children.entries()) {
       if (nodes.length >= MAX_NODES) {

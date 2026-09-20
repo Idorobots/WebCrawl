@@ -51,6 +51,11 @@ import type {
   Stair,
 } from "../types";
 import {
+  buildCorridorRenderPlan,
+  type CorridorRenderPlan,
+  type CorridorSegmentPlan,
+} from "./corridor-render-plan";
+import {
   ELLIPTICAL_LIGHT_PIPELINE,
   EllipticalLightPipeline,
 } from "./elliptical-light-pipeline";
@@ -71,6 +76,7 @@ type StaticObject =
 
 const ROOM_FLOOR_DEPTH = -2;
 const CORRIDOR_FLOOR_DEPTH = -4;
+const CORRIDOR_MARKING_DEPTH = -1.75;
 const DEBRIS_DEPTH = -1.5;
 const Y_DEPTH_OFFSET = 4_000_000;
 const SIDE_WALL_DEPTH = 7_000_000;
@@ -86,6 +92,12 @@ const yDepth = (y: number, bias = 0): number => Y_DEPTH_OFFSET + y + bias;
  */
 function wallDepth(asset: string, y: number): number {
   if (asset === ASSETS.wallVerticalLeft || asset === ASSETS.wallVerticalRight) return SIDE_WALL_DEPTH;
+  if (asset === ASSETS.corridorCornerTopLeft || asset === ASSETS.corridorCornerTopRight) {
+    return yDepth(y - SEGMENT_SIZE / 2);
+  }
+  if (asset === ASSETS.corridorCornerBottomLeft || asset === ASSETS.corridorCornerBottomRight) {
+    return yDepth(y + SEGMENT_SIZE / 2, 1);
+  }
   if (asset === ASSETS.wallHorizontalTop || asset === ASSETS.wallCornerTopLeft || asset === ASSETS.wallCornerTopRight) {
     return yDepth(y - SEGMENT_SIZE / 2);
   }
@@ -136,6 +148,8 @@ const FLASHLIGHT_RADIUS_SCALE = 0.8;
 const BOSS_CAMERA_SCALE = 0.75;
 const FLICKER_BURST_INTERVAL_MS = 1_400;
 const FLICKER_STEP_MS = 35;
+const CORRIDOR_LIGHT_SPACING = world(240);
+const CORRIDOR_LIGHT_CULL_CELL = CORRIDOR_LIGHT_SPACING / 2;
 const SHOW_DEBUG_GEOMETRY = import.meta.env.VITE_DEBUG_HITBOXES === "true";
 
 interface WorldLight {
@@ -228,7 +242,7 @@ export class PhaserRenderer {
   private currentLootAssets: Partial<Record<LootKind, string>> = {};
   private cameraRoom: GraphNode | null = null;
   private cameraRoomId: number | null = null;
-  private currentLightRoomId: number | null = null;
+  private currentLightCullKey: string | null = null;
   private playerProtectionActive = false;
   private playerProtectionTintVisible = false;
   private playerDashTintActive = false;
@@ -365,7 +379,7 @@ export class PhaserRenderer {
     this.layout = null;
     this.cameraRoom = null;
     this.cameraRoomId = null;
-    this.currentLightRoomId = null;
+    this.currentLightCullKey = null;
     this.scene?.cameras.main.stopFollow().setDeadzone().resetFX();
     this.background?.destroy();
     this.background = null;
@@ -503,10 +517,11 @@ export class PhaserRenderer {
       .setDepth(-10);
     this.illuminate(this.background);
 
+    const corridorPlan = buildCorridorRenderPlan(this.layout, SEGMENT_SIZE);
     for (const link of this.layout.links) {
       const visible = this.visited.has(link.source.id) || this.visited.has(link.target.id);
-      this.renderCorridor(link, visible ? 1 : HIDDEN_WORLD_ALPHA);
-      this.addCorridorLights(link, visible);
+      this.renderCorridor(link, corridorPlan, visible ? 1 : HIDDEN_WORLD_ALPHA);
+      this.addCorridorLights(link, corridorPlan, visible);
     }
 
     for (const room of this.layout.nodes) {
@@ -588,8 +603,8 @@ export class PhaserRenderer {
       .setTileScale(FLOOR_TILE_SCALE);
     this.illuminate(floor);
     floorContainer.add(floor);
-    this.addRoomFloorMarking(floorContainer, room);
     this.addRoomFloorDetails(floorContainer, room);
+    this.addRoomFloorMarking(floorContainer, room);
     const statics: StaticObject[] = [floorContainer];
     const doors = this.roomDoors(room);
     for (const wall of this.addRoomWalls(room, doors)) {
@@ -602,11 +617,16 @@ export class PhaserRenderer {
     this.roomStatics.set(room.id, statics);
   }
 
-  private renderCorridor(link: DungeonLayout["links"][number], alpha: number): void {
+  private renderCorridor(
+    link: DungeonLayout["links"][number],
+    plan: CorridorRenderPlan,
+    alpha: number,
+  ): void {
     const scene = this.scene;
     if (!scene) return;
     const floorContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_FLOOR_DEPTH).setAlpha(alpha));
-    const statics: StaticObject[] = [floorContainer];
+    const markingContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_MARKING_DEPTH).setAlpha(alpha));
+    const statics: StaticObject[] = [floorContainer, markingContainer];
     this.corridorBounds.set(link.id, link.points.reduce<WorldBounds>((bounds, point) => ({
       left: Math.min(bounds.left, point.x - link.width / 2),
       right: Math.max(bounds.right, point.x + link.width / 2),
@@ -618,17 +638,53 @@ export class PhaserRenderer {
       top: Infinity,
       bottom: -Infinity,
     }));
-    for (let index = 1; index < link.points.length; index += 1) {
-      const start = link.points[index - 1]!;
-      const end = link.points[index]!;
-      const { floor, walls } = this.corridorSegmentParts(start, end, link.width, link.source.lootSeed + index);
+    for (const segment of plan.segments.filter(candidate => candidate.ownerLinkId === link.id)) {
+      const floor = this.createCorridorFloor(segment);
       this.illuminate(floor);
       floorContainer.add(floor);
-      for (const wall of walls) {
-        statics.push(this.rememberStatic(wall.setAlpha(alpha)));
-      }
     }
-    this.addCorridorMarking(floorContainer, link);
+    for (const floorPlan of plan.junctionFloors.filter(candidate => candidate.ownerLinkId === link.id)) {
+      const floor = this.createCorridorJunctionFloor(floorPlan.x, floorPlan.y, floorPlan.seed);
+      this.illuminate(floor);
+      floorContainer.add(floor);
+    }
+    for (const wall of plan.walls.filter(candidate => candidate.ownerLinkId === link.id)) {
+      const asset = ({
+        N: ASSETS.wallHorizontalTop,
+        E: ASSETS.wallVerticalRight,
+        S: ASSETS.wallHorizontalBottom,
+        W: ASSETS.wallVerticalLeft,
+      } as const)[wall.side];
+      statics.push(this.rememberStatic(this.createEnvironmentModule(wall.x, wall.y, asset).setAlpha(alpha)));
+    }
+    for (const corner of plan.outerCorners.filter(candidate => candidate.ownerLinkId === link.id)) {
+      const asset = ({
+        "top-left": ASSETS.wallCornerTopLeft,
+        "top-right": ASSETS.wallCornerTopRight,
+        "bottom-left": ASSETS.wallCornerBottomLeft,
+        "bottom-right": ASSETS.wallCornerBottomRight,
+      } as const)[corner.kind];
+      statics.push(this.rememberStatic(this.createEnvironmentModule(corner.x, corner.y, asset).setAlpha(alpha)));
+    }
+    for (const corner of plan.corners.filter(candidate => candidate.ownerLinkId === link.id)) {
+      const asset = ({
+        "top-left": ASSETS.corridorCornerTopLeft,
+        "top-right": ASSETS.corridorCornerTopRight,
+        "bottom-left": ASSETS.corridorCornerBottomLeft,
+        "bottom-right": ASSETS.corridorCornerBottomRight,
+      } as const)[corner.kind];
+      statics.push(this.rememberStatic(this.createEnvironmentModule(corner.x, corner.y, asset).setAlpha(alpha)));
+    }
+    for (const marking of plan.markings.filter(candidate => candidate.ownerLinkId === link.id)) {
+      this.addCorridorSegmentMarking(
+        markingContainer,
+        marking.start,
+        marking.end,
+        marking.position,
+        marking.label,
+        marking.lateralOffset,
+      );
+    }
     this.corridorStatics.set(link.id, statics);
   }
 
@@ -671,34 +727,56 @@ export class PhaserRenderer {
   }
 
   private addRoomFloorMarking(container: Phaser.GameObjects.Container, room: GraphNode): void {
+    const rotated = (room.lootSeed >>> 1) % 4 === 0;
     const label = this.createFloorMarking(
-      room.x,
-      room.y - room.height * 0.23,
+      0,
+      0,
       room.floorLabel,
       world(34),
+      rotated ? Math.PI / 2 : 0,
     );
-    const maxWidth = room.width - world(96);
+    const maxWidth = (rotated ? room.height : room.width) - world(128);
     if (label.displayWidth > maxWidth) label.setScale(maxWidth / label.displayWidth);
+    const boundsWidth = rotated ? label.displayHeight : label.displayWidth;
+    const boundsHeight = rotated ? label.displayWidth : label.displayHeight;
+    const inset = world(24);
+    const topLeft = (room.lootSeed & 1) === 0;
+    const direction = topLeft ? -1 : 1;
+    const targetX = room.x + direction * room.width * 0.2;
+    const targetY = room.y + direction * room.height * 0.2;
+    const minX = room.x - room.width / 2 + inset + boundsWidth / 2;
+    const maxX = room.x + room.width / 2 - inset - boundsWidth / 2;
+    const minY = room.y - room.height / 2 + inset + boundsHeight / 2;
+    const maxY = room.y + room.height / 2 - inset - boundsHeight / 2;
+    label.setPosition(
+      Math.max(minX, Math.min(maxX, targetX)),
+      Math.max(minY, Math.min(maxY, targetY)),
+    );
     container.add(label);
   }
 
-  private addCorridorMarking(
+  private addCorridorSegmentMarking(
     container: Phaser.GameObjects.Container,
-    link: DungeonLayout["links"][number],
+    start: Point,
+    end: Point,
+    position: Point,
+    label: string,
+    lateralOffset: number,
   ): void {
-    const start = link.points[0]!;
-    const end = link.points[link.points.length - 1]!;
-    const x = (start.x + end.x) / 2;
-    const y = (start.y + end.y) / 2;
-    const vertical = link.direction === "N" || link.direction === "S";
-    const pointsTowardStart = link.direction === "W" || link.direction === "S";
-    const text = pointsTowardStart
-      ? `< ${link.target.floorLabel}`
-      : `${link.target.floorLabel} >`;
-    const label = this.createFloorMarking(x, y, text, world(25), vertical ? -Math.PI / 2 : 0);
-    const maxWidth = Math.max(world(72), link.width - world(20));
-    if (label.displayWidth > maxWidth) label.setScale(maxWidth / label.displayWidth);
-    container.add(label);
+    const vertical = start.x === end.x;
+    const pointsTowardStart = end.x < start.x || end.y > start.y;
+    const text = label
+      ? pointsTowardStart ? `< ${label}` : `${label} >`
+      : pointsTowardStart ? "<" : ">";
+    const marking = this.createFloorMarking(
+      position.x + (vertical ? lateralOffset : 0),
+      position.y + (vertical ? 0 : lateralOffset),
+      text,
+      world(25),
+      vertical ? -Math.PI / 2 : 0,
+    );
+    if (marking.displayWidth > SEGMENT_SIZE) marking.setScale(SEGMENT_SIZE / marking.displayWidth);
+    container.add(marking);
   }
 
   private createFloorMarking(
@@ -713,9 +791,12 @@ export class PhaserRenderer {
     if (!measureContext) throw new Error("Unable to create floor-marking texture.");
     const font = `900 ${fontSize}px Prefix, monospace`;
     measureContext.font = font;
-    const padding = world(12);
-    const width = Math.ceil(measureContext.measureText(text).width + padding * 2);
-    const height = Math.ceil(fontSize * 1.45 + padding * 2);
+    const metrics = measureContext.measureText(text);
+    const padding = world(24);
+    const inkWidth = Math.max(metrics.width, metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight);
+    const inkHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+    const width = Math.ceil(inkWidth + padding * 2);
+    const height = Math.ceil(Math.max(fontSize * 1.45, inkHeight) + padding * 2);
     const key = `floor-marking:${this.floorMarkingTextureSerial++}`;
     const texture = this.scene!.textures.createCanvas(key, width, height);
     if (!texture) throw new Error("Unable to allocate floor-marking texture.");
@@ -733,47 +814,48 @@ export class PhaserRenderer {
       .setRotation(rotation);
   }
 
-  private corridorSegmentParts(
-    start: Point,
-    end: Point,
-    width: number,
-    seed: number,
-  ): { floor: Phaser.GameObjects.TileSprite; walls: Phaser.GameObjects.Image[] } {
-    const scene = this.scene!;
-    const walls: Phaser.GameObjects.Image[] = [];
+  private createCorridorFloor(segment: CorridorSegmentPlan): Phaser.GameObjects.TileSprite {
+    const floorAsset = BASE_FLOOR_ASSETS[Math.abs(segment.seed) % BASE_FLOOR_ASSETS.length] ?? ASSETS.floorTread;
+    if (segment.start.y === segment.end.y) {
+      return this.createAlignedFloor(
+        Math.min(segment.start.x, segment.end.x),
+        segment.start.y - segment.width / 2,
+        Math.abs(segment.end.x - segment.start.x),
+        segment.width,
+        floorAsset,
+      );
+    }
+    return this.createAlignedFloor(
+      segment.start.x - segment.width / 2,
+      Math.min(segment.start.y, segment.end.y),
+      segment.width,
+      Math.abs(segment.end.y - segment.start.y),
+      floorAsset,
+    );
+  }
+
+  private createCorridorJunctionFloor(x: number, y: number, seed: number): Phaser.GameObjects.TileSprite {
     const floorAsset = BASE_FLOOR_ASSETS[Math.abs(seed) % BASE_FLOOR_ASSETS.length] ?? ASSETS.floorTread;
-    if (Math.abs(start.x - end.x) >= Math.abs(start.y - end.y)) {
-      const left = Math.min(start.x, end.x);
-      const length = Math.abs(end.x - start.x);
-      const top = start.y - width / 2;
-      const floor = scene.add.tileSprite(left, top, length, width, textureKey(floorAsset)).setOrigin(0).setTileScale(FLOOR_TILE_SCALE);
-      const columns = Math.round(length / SEGMENT_SIZE);
-      for (let column = 0; column < columns; column += 1) {
-        const x = left + (column + 0.5) * SEGMENT_SIZE;
-        walls.push(this.createEnvironmentModule(x, top + SEGMENT_SIZE / 2, ASSETS.wallHorizontalTop));
-        walls.push(this.createEnvironmentModule(x, top + width - SEGMENT_SIZE / 2, ASSETS.wallHorizontalBottom));
-      }
-      return { floor, walls };
-    }
-    const top = Math.min(start.y, end.y);
-    const length = Math.abs(end.y - start.y);
-    const left = start.x - width / 2;
-    const floor = scene.add.tileSprite(left, top, width, length, textureKey(floorAsset)).setOrigin(0).setTileScale(FLOOR_TILE_SCALE);
-    const rows = Math.round(length / SEGMENT_SIZE);
-    for (let row = 0; row < rows; row += 1) {
-      const y = top + (row + 0.5) * SEGMENT_SIZE;
-      walls.push(this.createEnvironmentModule(
-        left + SEGMENT_SIZE / 2,
-        y,
-        ASSETS.wallVerticalLeft,
-      ));
-      walls.push(this.createEnvironmentModule(
-        left + width - SEGMENT_SIZE / 2,
-        y,
-        ASSETS.wallVerticalRight,
-      ));
-    }
-    return { floor, walls };
+    return this.createAlignedFloor(
+      x - SEGMENT_SIZE / 2,
+      y - SEGMENT_SIZE / 2,
+      SEGMENT_SIZE,
+      SEGMENT_SIZE,
+      floorAsset,
+    );
+  }
+
+  private createAlignedFloor(
+    left: number,
+    top: number,
+    width: number,
+    height: number,
+    asset: string,
+  ): Phaser.GameObjects.TileSprite {
+    return this.scene!.add.tileSprite(left, top, width, height, textureKey(asset))
+      .setOrigin(0)
+      .setTileScale(FLOOR_TILE_SCALE)
+      .setTilePosition(left / FLOOR_TILE_SCALE, top / FLOOR_TILE_SCALE);
   }
 
   private createEnvironmentModule(x: number, y: number, asset: string): Phaser.GameObjects.Image {
@@ -792,8 +874,8 @@ export class PhaserRenderer {
         side: link.direction,
       });
       if (link.target.id === room.id) doors.push({
-        position: this.roomDoorPosition(link.points[link.points.length - 1]!, this.opposite(link.direction)),
-        side: this.opposite(link.direction),
+        position: this.roomDoorPosition(link.points[link.points.length - 1]!, link.targetDirection ?? this.opposite(link.direction)),
+        side: link.targetDirection ?? this.opposite(link.direction),
       });
     }
     return doors;
@@ -932,39 +1014,40 @@ export class PhaserRenderer {
     this.lightProfiles.push(profile);
   }
 
-  private addCorridorLights(link: DungeonLayout["links"][number], visible: boolean): void {
+  private addCorridorLights(
+    link: DungeonLayout["links"][number],
+    plan: CorridorRenderPlan,
+    visible: boolean,
+  ): void {
     if (!this.lightingEnabled || !this.scene) return;
     const profiles: WorldLight[] = [];
     const brightCorridor = roomIsBright(link.target);
     const bossCorridor = link.target.tag === "script";
-    for (let segment = 1; segment < link.points.length; segment += 1) {
-      const start = link.points[segment - 1]!;
-      const end = link.points[segment]!;
+    const baseIntensity = bossCorridor ? 0.78 : brightCorridor ? 0.76 : 0.24;
+    const radius = Math.max(link.width * 1.15, CORRIDOR_LIGHT_SPACING * 0.8);
+    const color = bossCorridor ? 0xd94b52 : brightCorridor ? 0xeaf8ff : 0x5f8ca8;
+    const areaSoftness = brightCorridor ? 0.8 : 0.45;
+    for (const segment of plan.segments.filter(candidate => candidate.ownerLinkId === link.id)) {
+      const start = segment.start;
+      const end = segment.end;
       const length = Math.hypot(end.x - start.x, end.y - start.y);
-      const count = Math.max(1, Math.ceil(length / world(360)));
+      const count = Math.max(1, Math.ceil(length / CORRIDOR_LIGHT_SPACING));
       for (let index = 0; index < count; index += 1) {
         const progress = (index + 0.5) / count;
-        const seed = link.source.lootSeed + link.target.id * 131 + segment * 31 + index;
-        const baseIntensity = brightCorridor
-          ? 0.68 + seededUnit(seed) * 0.16
-          : 0.18 + seededUnit(seed) * 0.12;
-        const radius = brightCorridor
-          ? Math.max(link.width * 1.15, length / count * 0.86)
-          : Math.max(link.width * 0.45, length / count * 0.3);
         const light = this.scene.lights.addLight(
           start.x + (end.x - start.x) * progress,
           start.y + (end.y - start.y) * progress,
           radius,
-          bossCorridor ? 0xd94b52 : brightCorridor ? 0xeaf8ff : 0x5f8ca8,
+          color,
           baseIntensity,
         ) as AreaLight;
-        light.areaSoftness = brightCorridor ? 0.8 : 0.45;
+        light.areaSoftness = areaSoftness;
         light.setVisible(visible);
         const profile = {
           light,
           baseIntensity,
-          flickerAmount: seededUnit(seed + 53) < 0.22 ? 0.12 : 0,
-          flickerSeed: seed,
+          flickerAmount: 0,
+          flickerSeed: segment.seed,
         };
         profiles.push(profile);
         this.lightProfiles.push(profile);
@@ -1027,17 +1110,32 @@ export class PhaserRenderer {
     if (!layout || !this.lightingEnabled) return;
     const currentRoom = this.roomAt(this.currentPlayer);
     if (!currentRoom) return;
-    if (!force && this.currentLightRoomId === currentRoom.id) return;
-    this.currentLightRoomId = currentRoom.id;
+    const cullKey = [
+      currentRoom.id,
+      Math.floor(this.currentPlayer.x / CORRIDOR_LIGHT_CULL_CELL),
+      Math.floor(this.currentPlayer.y / CORRIDOR_LIGHT_CULL_CELL),
+      this.visited.size,
+    ].join(":");
+    if (!force && this.currentLightCullKey === cullKey) return;
+    this.currentLightCullKey = cullKey;
     const localRooms = new Set<number>([currentRoom.id]);
     for (const link of layout.links) {
       if (link.source.id === currentRoom.id) localRooms.add(link.target.id);
       if (link.target.id === currentRoom.id) localRooms.add(link.source.id);
     }
     for (const [roomId, profile] of this.roomLights) profile.light.setVisible(localRooms.has(roomId));
+    const view = this.scene!.cameras.main.worldView;
     for (const link of layout.links) {
-      const visible = link.source.id === currentRoom.id || link.target.id === currentRoom.id;
-      for (const profile of this.corridorLights.get(link.id) ?? []) profile.light.setVisible(visible);
+      const revealed = this.visited.has(link.source.id) || this.visited.has(link.target.id);
+      for (const profile of this.corridorLights.get(link.id) ?? []) {
+        const light = profile.light;
+        const visible = revealed &&
+          light.x + light.radius >= view.x - view.width &&
+          light.x - light.radius <= view.right + view.width &&
+          light.y + light.radius >= view.y - view.height &&
+          light.y - light.radius <= view.bottom + view.height;
+        light.setVisible(visible);
+      }
     }
     for (const light of this.lootAuras.values()) light.setVisible(true);
     for (const light of this.portalAuras.values()) light.setVisible(true);
@@ -2142,6 +2240,17 @@ export class PhaserRenderer {
 
   viewportSize(): { width: number; height: number } {
     return { width: Math.max(1, this.host.clientWidth), height: Math.max(1, this.host.clientHeight) };
+  }
+
+  isWithinMonsterActivityRange(x: number, y: number, screens = 2): boolean {
+    const view = this.scene?.cameras.main.worldView;
+    if (!view) return true;
+    return (
+      x >= view.x - view.width * screens &&
+      x <= view.x + view.width * (screens + 1) &&
+      y >= view.y - view.height * screens &&
+      y <= view.y + view.height * (screens + 1)
+    );
   }
 
   private destroyAll(objects: Phaser.GameObjects.Container[]): void {

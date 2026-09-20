@@ -139,6 +139,13 @@ describe("DOM graph generation", () => {
     expect(graph.nodes[4]?.hrefs).toEqual(["https://example.com/next"]);
   });
 
+  it("keeps more than ten direct DOM children for forked level placement", () => {
+    const children = Array.from({ length: 12 }, (_, index) => `<li>Item ${index}</li>`).join("");
+    const graph = domToGraph(`<body><ul>${children}</ul></body>`, "https://example.com/start");
+    const list = graph.nodes.find(node => node.tag === "ul");
+    expect(graph.nodes.filter(node => node.parentId === list?.id)).toHaveLength(12);
+  });
+
   it("includes structural paths in deterministic room seeds", () => {
     const html = "<body><main><div>same</div><div>same</div></main></body>";
     const first = domToGraph(html, "https://example.com/one");
@@ -192,9 +199,9 @@ describe("layout and geometry", () => {
   it("scales world definitions from authored dimensions", () => {
     expect(ROOM_DEFINITIONS.rectangle).toEqual({ width: ENVIRONMENT_SEGMENT_SIZE * 4, height: ENVIRONMENT_SEGMENT_SIZE * 4 });
     expect(PLAYER_SPEC.radius).toBe(world(36));
-    expect(WORLD_GEOMETRY.segmentSize).toBe(world(128));
+    expect(WORLD_GEOMETRY.segmentSize).toBe(world(64) * 2);
     expect(WORLD_GEOMETRY.floorTileSize).toBe(world(64));
-    expect(Math.abs(WORLD_GEOMETRY.segmentSize - WORLD_GEOMETRY.floorTileSize * 2)).toBeLessThanOrEqual(1);
+    expect(WORLD_GEOMETRY.segmentSize).toBe(WORLD_GEOMETRY.floorTileSize * 2);
   });
 
   it("reserves damaged floor tiles for sparse flavour instead of base floors", () => {
@@ -385,14 +392,12 @@ describe("layout and geometry", () => {
     expect(monsters.every(item => item.spawnRoomId === link.source.id)).toBe(true);
   });
 
-  it("skips rooms rather than forcing corridors through rooms or beyond the length limit", () => {
-    const nodes = Array.from({ length: 100 }, (_, id) => node(
-      id,
-      id === 0 ? null : Math.floor((id - 1) / 5),
-      id === 0 ? 0 : 1,
-      { lootSeed: id + 100 },
-    ));
-    const denseLayout = layoutOrthogonal({
+  it("routes up to eight siblings through one shared fork corridor", () => {
+    const nodes = [
+      node(0, null, 0),
+      ...Array.from({ length: 8 }, (_, index) => node(index + 1, 0, 1)),
+    ];
+    const forkLayout = layoutOrthogonal({
       nodes,
       links: [],
       originalCount: nodes.length,
@@ -400,35 +405,25 @@ describe("layout and geometry", () => {
       truncated: false,
     });
 
-    expect(denseLayout.nodes.length).toBeGreaterThan(1);
-    expect(denseLayout.nodes.length).toBeLessThan(nodes.length);
-    expect(denseLayout.links).toHaveLength(denseLayout.nodes.length - 1);
-    expect(denseLayout.hiddenCount).toBe(nodes.length - denseLayout.nodes.length);
-    expect(new Set(denseLayout.nodes.map(room => room.shape))).toEqual(new Set(["rectangle"]));
-    expect(new Set(denseLayout.nodes.map(room => `${room.width}x${room.height}`)).size).toBeGreaterThan(1);
-    const doorPositions = new Map<string, number[]>();
-    for (const link of denseLayout.links) {
-      expect(corridorLength(link.points)).toBeLessThanOrEqual(WORLD_GEOMETRY.maxCorridorLength);
-      expect(link.points).toHaveLength(2);
+    expect(forkLayout.nodes).toHaveLength(nodes.length);
+    expect(forkLayout.hiddenCount).toBe(0);
+    expect(forkLayout.links).toHaveLength(8);
+    expect(new Set(forkLayout.links.map(link => link.forkId)).size).toBe(1);
+    expect(new Set(forkLayout.links.map(link => JSON.stringify(link.points[0]))).size).toBe(1);
+    expect(new Set(forkLayout.links.map(link => `${link.points[1]!.x}:${link.points[1]!.y}`)).size).toBe(4);
+    for (const link of forkLayout.links) {
+      expect(link.points).toHaveLength(3);
+      expect(link.forkPointIndex).toBe(1);
+      expect(link.targetDirection).toBeDefined();
       expect(corridorLength(link.points) % WORLD_GEOMETRY.segmentSize).toBe(0);
-      expect(link.points[0]!.x === link.points[1]!.x || link.points[0]!.y === link.points[1]!.y).toBe(true);
-      expect(pointInRoom(link.points[0]!.x, link.points[0]!.y, link.source, 0)).toBe(true);
-      expect(pointInRoom(link.points.at(-1)!.x, link.points.at(-1)!.y, link.target, 0)).toBe(true);
-      const axisPosition = link.direction === "N" || link.direction === "S" ? link.points[0]!.x : link.points[0]!.y;
-      const doorKey = `${link.source.id}:${link.direction}`;
-      doorPositions.set(doorKey, [...(doorPositions.get(doorKey) ?? []), axisPosition]);
-      for (const room of denseLayout.nodes) {
+      for (const room of forkLayout.nodes) {
         if (room.id === link.source.id || room.id === link.target.id) continue;
         expect(corridorIntersectsRoom(link, room)).toBe(false);
       }
     }
-    for (const positions of doorPositions.values()) {
-      for (let left = 0; left < positions.length; left += 1) {
-        for (let right = left + 1; right < positions.length; right += 1) {
-          expect(Math.abs(positions[left]! - positions[right]!)).toBeGreaterThanOrEqual(WORLD_GEOMETRY.segmentSize * 2);
-        }
-      }
-    }
+    const forkLink = forkLayout.links[0]!;
+    const forkPoint = forkLink.points[forkLink.forkPointIndex!]!;
+    expect(pointInCorridor(forkPoint.x, forkPoint.y, forkLink, PLAYER_SPEC.radius)).toBe(true);
   });
 
   it("routes around blocked doorway geometry with A*", () => {
@@ -768,7 +763,7 @@ describe("deterministic room contents", () => {
     expect(sceneryFor(script)).toEqual(sceneryFor(section));
   });
 
-  it("scales corridor populations with corridor length", () => {
+  it("never spawns enemies in corridors", () => {
     const source = node(0, null, 0, { isRoot: false });
     const target = node(1, 0, 1);
     const corridor = (length: number, id: string): LayoutLink => ({
@@ -783,7 +778,8 @@ describe("deterministic room contents", () => {
 
     const shortLink = corridor(4, "short");
     const longLink = corridor(12, "long");
-    expect(monsterSpecsForCorridor(shortLink, 1).length).toBeLessThan(monsterSpecsForCorridor(longLink, 1).length);
+    expect(monsterSpecsForCorridor(shortLink, 1)).toEqual([]);
+    expect(monsterSpecsForCorridor(longLink, 1)).toEqual([]);
     expect(decorationSpecsForCorridor(shortLink, 1).length).toBeLessThan(decorationSpecsForCorridor(longLink, 1).length);
   });
 

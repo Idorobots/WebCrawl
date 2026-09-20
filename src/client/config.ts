@@ -25,7 +25,8 @@ export const PUBLIC_FETCH_PROXIES: readonly PublicFetchProxy[] = Object.freeze([
 
 export const WORLD_SCALE = 1.4;
 export const world = (value: number): number => Math.round(value * WORLD_SCALE);
-export const ENVIRONMENT_SEGMENT_SIZE = world(128);
+// Keep each environment segment exactly two floor tiles wide after integer scaling.
+export const ENVIRONMENT_SEGMENT_SIZE = world(64) * 2;
 export const ROOM_WIDTH = ENVIRONMENT_SEGMENT_SIZE * 4;
 export const ROOM_HEIGHT = ENVIRONMENT_SEGMENT_SIZE * 4;
 export const CAMERA_SCALE = 1.0;
@@ -75,6 +76,10 @@ export const ASSETS = {
   wallCornerTopRight: asset("environment/walls/wall_corner_top_right.png"),
   wallCornerBottomLeft: asset("environment/walls/wall_corner_bottom_left.png"),
   wallCornerBottomRight: asset("environment/walls/wall_corner_bottom_right.png"),
+  corridorCornerTopLeft: asset("environment/walls/corridor_corner_top_left.png"),
+  corridorCornerTopRight: asset("environment/walls/corridor_corner_top_right.png"),
+  corridorCornerBottomLeft: asset("environment/walls/corridor_corner_bottom_left.png"),
+  corridorCornerBottomRight: asset("environment/walls/corridor_corner_bottom_right.png"),
   doorOpenTop: asset("environment/doors/door_plain_horizontal_open_top.png"),
   doorOpenBottom: asset("environment/doors/door_plain_horizontal_open_bottom.png"),
   doorOpenLeft: asset("environment/doors/door_plain_vertical_open_left.png"),

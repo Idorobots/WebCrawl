@@ -726,15 +726,9 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossK
 }
 
 export function monsterSpecsForCorridor(link: LayoutLink, floor = 1): Monster[] {
-  if (link.source.isRoot) return [];
-  const corridorSeed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|monsters`);
-  const expected = corridorSegmentLength(link) * monsterDensityForFloor(floor);
-  const count = Math.max(0, Math.floor(expected)) + (corridorSeed % 2);
-  return Array.from({ length: count }, (_, index) => {
-    const seed = stableHash(`${corridorSeed}|${floor}|${index}`);
-    const position = pointAlongCorridor(link, (index + 1) / (count + 1), 0);
-    return regularMonsterSpec(`${link.id}::monster-${index}`, seed, link.ownerRoomId, position, floor, "room");
-  });
+  void link;
+  void floor;
+  return [];
 }
 
 export function monsterSpecForSpawner(spawner: Decoration, floor: number, index: number): Monster {
@@ -797,7 +791,6 @@ export function buildMonsters(
     ));
   const specs = [
     ...roomSpecs,
-    ...layout.links.flatMap(link => monsterSpecsForCorridor(link, floor)),
     ...decorations
       .filter(item => item.spawner)
       .flatMap(item => Array.from(

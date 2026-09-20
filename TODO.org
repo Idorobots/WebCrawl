@@ -423,9 +423,6 @@ index-CCnl2EYo.js:10:28063
 - Enemy annimations speed should depend on the enemy speed. Otherwise these look very synchronized.
 - Damage effect light should be colored the same as the bullet that caused it, not statically red. When the same object takes damage again, reset the effect (animation and light) with new parameters to save on GPU cycles.
 
-* Bugs
-- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
-
 * Extra lighting
 - Rooms need random wall lights in yellow, blue and red variants.
 - Sprites that have a light on them need lighting.
@@ -441,6 +438,13 @@ index-CCnl2EYo.js:10:28063
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
 - Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
 
+* Gameplay mechanics
+- Exploding barrels should damage objects around them.
+
+* More varied weapons
+- Use different bullet types
+- Homing missles
+- Exploding granades
 * DONE Loading screen
 :LOGBOOK:
 - State "DONE"       from              [2026-09-19 Sat 00:20]
@@ -582,9 +586,6 @@ Vite reports:
 
 What exactly is inflating the size so much?
 
-* Gameplay mechanics
-- Exploding barrels should damage objects around them.
-
 * DONE More use of HTML contents in-game.
 :LOGBOOK:
 - State "DONE"       from              [2026-09-19 Sat 21:30]
@@ -623,11 +624,10 @@ When the content browser is turning off, it should animate using the "turning" f
 
 The font is not shown on the the very first load of a room, only after going down a level and back up the font is rendered correctly.
 
-* More varied weapons
-- Use different bullet types
-- Homing missles
-- Exploding granades
-* Level generation overhaul
+* DONE Level generation overhaul
+:LOGBOOK:
+- State "DONE"       from              [2026-09-20 Sun 04:10]
+:END:
 We limit the number of DOM elements usable for level rendering because of the four corridor limitation. Additionally, the layout algoritm removes some of the rooms due to lack of space. I'd like to relax these constraints by allowing longer corridors.
 It's also OK for the corridors to fork.
 
@@ -641,6 +641,104 @@ Update the loading screen with an additional task that fires after fetching the 
 - "Generating level"
 - "Booting renderer"
 
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-20 Sun 04:10]
+:END:
+Adjust the construction of the corridors using the extra corridor corner pieces. Here are the options:
+
+WN = wall north
+WE = wall south
+CC = corridor corner
+WC = wall corner
+
+Corridor W/E:
+
+[WN][WN][WN][WN]
+[Ws][WS][Ws][WS]
+
+Corridor N/S:
+
+[WW][WE]
+[WW][WE]
+[WW][WE]
+[WW][WE]
+
+L-junctions:
+
+N to E:
+
+[WW][WE]
+[WW][WE]
+[WW][CC][WN][WN] - corridor corner top-right
+[WC][WS][WS][WS] - wall corner bottom left
+
+N to W:
+
+        [WW][WE]
+        [WW][WE]
+[WN][WN][CC][WE] - corridor corner top-left
+[WS][WS][WS][WC] - wall corner bottom-right
+
+S to W:
+
+[WN][WN][WN][WC] - wall corner top-right
+[WS][WS][CC][WE] - corridor corner bottom left
+        [WW][WE]
+        [WW][WE]
+
+S to E:
+
+[WC][WN][WN][WN] - wall corner top-left
+[WW][CC][WS][WS] - corridor corner bottom-right
+[WW][WE]
+[WW][WE]
+
+T-junctions:
+
+E-W with N:
+
+        [WW][WE]
+        [WW][WE]
+[WN][WN][CC][CC][WN][WN] - corner pieces are top-left and top-right
+[WS][WS][WS][WS][WS][WS]
+
+E-W with S:
+
+[WN][WN][WN][WN][WN][WN]
+[WS][WS][CC][CC][WS][WS] - corner pieces are bottom-left and bottom-right
+        [WW][WE]
+        [WW][WE]
+
+N-S with W:
+
+        [WW][WE]
+        [WW][WE]
+[WN][WN][CC][WE] - corner top-left
+[WS][WS][CC][WE] - corner bottom-left
+        [WW][WE]
+        [WW][WE]
+
+N-S with E:
+
+[WW][WE]
+[WW][WE]
+[WW][CC][WN][WN] - corner top-right
+[WW][CC][WS][WS] - corner bottom-right
+[WW][WE]
+[WW][WE]
+
++-junction:
+
+        [WW][WE]
+        [WW][WE]
+[WN][WN][CC][CC][WN][WN] - corner pieces are top-left and top-right
+[WS][WS][CC][CC][WS][WS] - corner pieces are bottom left and bottom right
+        [WW][WE]
+        [WW][WE]
+
+* Easter egg
+Whenever AI is mentioned in the content, render a special Samario content browser.
 * Visual bugs
 - Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
 - Move the portal active area and footprint by the same amount as down as the player spawn point.
@@ -652,6 +750,10 @@ Update the loading screen with an additional task that fires after fetching the 
 
 - "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
 - "floor_hatch" tile should be considered decoration tile, not main floor tile
+* Bugs
+- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+
+
 * Additional scenery
 There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
 
@@ -659,3 +761,4 @@ More scenery items & enemies now have dedicated debris sprites. Please add them 
 
 There are several backgrounds now, these could be used as an alternative for the current dark "technology" background. Each URL visited should deterministically determine which background to use for those levels.
 
+Similarly, there are multiple font files available now. Please randomize which font file is used for the level signage.

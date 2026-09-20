@@ -17,6 +17,11 @@ interface Bounds {
 
 const CARDINALS: Direction[] = ["N", "E", "S", "W"];
 const SEGMENT_SIZE = WORLD_GEOMETRY.segmentSize;
+const MAX_FORK_BRANCHES = 8;
+const MAX_CORRIDOR_GAP_SEGMENTS = 48;
+const FORK_TRUNK_SEGMENTS = 3;
+const FORK_BRANCH_SPACING_SEGMENTS = 6;
+const FORK_BRANCH_GAP_SEGMENTS = 3;
 
 export function roomBounds(node: GraphNode, x = node.x, y = node.y, margin = 0): Bounds {
   return {
@@ -52,6 +57,21 @@ function configureRoom(node: GraphNode, childCount: number): void {
 
 function opposite(direction: Direction): Direction {
   return ({ N: "S", E: "W", S: "N", W: "E" } as const)[direction];
+}
+
+function directionVector(direction: Direction): Point {
+  switch (direction) {
+    case "N": return { x: 0, y: -1 };
+    case "E": return { x: 1, y: 0 };
+    case "S": return { x: 0, y: 1 };
+    case "W": return { x: -1, y: 0 };
+  }
+}
+
+function forkBranchDirection(mainDirection: Direction, index: number): Direction {
+  const positive = index % 2 === 0;
+  if (mainDirection === "E" || mainDirection === "W") return positive ? "N" : "S";
+  return positive ? "W" : "E";
 }
 
 function sideSegmentCount(room: GraphNode, side: Direction): number {
@@ -157,7 +177,7 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
   const tryPlace = (node: GraphNode, parent: GraphNode): LayoutLink | null => {
     const rotation = node.lootSeed % CARDINALS.length;
     const directions = CARDINALS.map((_, index) => CARDINALS[(index + rotation) % CARDINALS.length]!);
-    for (let gapSegments = 2; gapSegments <= 12; gapSegments += 1) {
+    for (let gapSegments = 2; gapSegments <= MAX_CORRIDOR_GAP_SEGMENTS; gapSegments += 1) {
       for (const direction of directions) {
         const sideKey = `${parent.id}:${direction}`;
         const slot = sideSlots.get(sideKey) ?? 0;
@@ -177,7 +197,7 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
         const targetSide = opposite(direction);
         const end = doorPositionForSlot(node, targetSide, 0);
         const points = [start, end];
-        if (corridorLength(points) > WORLD_GEOMETRY.maxCorridorLength || !routeIsClear(points, placed, parent.id, node.id)) continue;
+        if (!routeIsClear(points, placed, parent.id, node.id)) continue;
         node.directionFromParent = direction;
         node.parentSide = targetSide;
         sideSlots.set(sideKey, slot + 1);
@@ -187,6 +207,7 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
           source: parent,
           target: node,
           direction,
+          targetDirection: targetSide,
           ownerRoomId: parent.id,
           width: WORLD_GEOMETRY.corridorHalfWidth * 2,
           points,
@@ -196,9 +217,66 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
     return null;
   };
 
+  const tryPlaceForkChild = (
+    node: GraphNode,
+    parent: GraphNode,
+    mainDirection: Direction,
+    index: number,
+  ): LayoutLink | null => {
+    const sideKey = `${parent.id}:${mainDirection}`;
+    const slot = 0;
+    if (slot >= doorCapacity(parent, mainDirection)) return null;
+    const start = doorPositionForSlot(parent, mainDirection, slot);
+    const main = directionVector(mainDirection);
+    const branchDirection = forkBranchDirection(mainDirection, index);
+    const branch = directionVector(branchDirection);
+    const branchOffset = FORK_TRUNK_SEGMENTS + Math.floor(index / 2) * FORK_BRANCH_SPACING_SEGMENTS;
+    const fork = {
+      x: start.x + main.x * branchOffset * SEGMENT_SIZE,
+      y: start.y + main.y * branchOffset * SEGMENT_SIZE,
+    };
+    const targetSide = opposite(branchDirection);
+    const targetHalfSize = branchDirection === "E" || branchDirection === "W"
+      ? node.width / 2
+      : node.height / 2;
+    const point = {
+      x: fork.x + branch.x * (FORK_BRANCH_GAP_SEGMENTS * SEGMENT_SIZE + targetHalfSize),
+      y: fork.y + branch.y * (FORK_BRANCH_GAP_SEGMENTS * SEGMENT_SIZE + targetHalfSize),
+    };
+    if (!roomPlacementIsClear(node, point)) return null;
+    node.x = point.x;
+    node.y = point.y;
+    const end = doorPositionForSlot(node, targetSide, 0);
+    const points = [start, fork, end];
+    if (!routeIsClear(points, placed, parent.id, node.id)) return null;
+    node.directionFromParent = branchDirection;
+    node.parentSide = targetSide;
+    sideSlots.set(sideKey, 1);
+    sideSlots.set(`${node.id}:${targetSide}`, 1);
+    return {
+      id: `${parent.id}->${node.id}`,
+      source: parent,
+      target: node,
+      direction: mainDirection,
+      targetDirection: targetSide,
+      ownerRoomId: parent.id,
+      width: WORLD_GEOMETRY.corridorHalfWidth * 2,
+      points,
+      forkId: `${parent.id}:${mainDirection}`,
+      forkPointIndex: 1,
+    };
+  };
+
   const placeChildren = (parent: GraphNode): void => {
-    for (const child of childrenByParent.get(parent.id) ?? []) {
-      const link = tryPlace(child, parent);
+    const children = childrenByParent.get(parent.id) ?? [];
+    const useFork = children.length > 4;
+    const forkDirection = CARDINALS[(parent.lootSeed + parent.id) % CARDINALS.length]!;
+    for (const [index, child] of children.entries()) {
+      const link = useFork && index < MAX_FORK_BRANCHES
+        ? tryPlaceForkChild(child, parent, forkDirection, index)
+        : useFork
+          ? null
+          : tryPlace(child, parent);
       if (!link) {
         collectSubtreeHrefs(child, parent);
         continue;

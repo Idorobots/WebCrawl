@@ -97,11 +97,13 @@ const runtimeConfig = (window as Window & {
   __WEBCRAWL_RUNTIME_CONFIG__?: { debug?: boolean };
 }).__WEBCRAWL_RUNTIME_CONFIG__;
 const DEBUG_MODE = runtimeConfig?.debug === true;
+const MONSTERS_ENABLED = import.meta.env.VITE_NO_MONSTERS !== "true";
 const PLAYER_MAX_HP = DEBUG_MODE ? 1_000 : PLAYER_SPEC.maxHp;
 
 const gameViewport = requireElement<HTMLElement>("#gameViewport");
 const gameCanvasHost = requireElement<HTMLElement>("#gameCanvas");
 gameCanvasHost.dataset.debugMode = String(DEBUG_MODE);
+gameCanvasHost.dataset.monstersEnabled = String(MONSTERS_ENABLED);
 gameCanvasHost.dataset.playerMaxHp = String(PLAYER_MAX_HP);
 // Start this while the welcome screen is visible so the first floor textures
 // are drawn with Prefix instead of being regenerated after a fallback render.
@@ -397,8 +399,23 @@ function corridorContainingPoint(x: number, y: number): LayoutLink | null {
   return null;
 }
 
+function pointInCommittedForkBranch(x: number, y: number, link: LayoutLink): boolean {
+  if (link.forkPointIndex === undefined) return pointInCorridor(x, y, link, 0);
+  const fork = link.points[link.forkPointIndex];
+  const next = link.points[link.forkPointIndex + 1];
+  if (!fork || !next) return false;
+  const length = Math.hypot(next.x - fork.x, next.y - fork.y);
+  if (!length) return false;
+  const branchProgress = (
+    (x - fork.x) * (next.x - fork.x) +
+    (y - fork.y) * (next.y - fork.y)
+  ) / length;
+  if (branchProgress <= link.width / 2) return false;
+  return pointInCorridor(x, y, { ...link, points: link.points.slice(link.forkPointIndex) }, 0);
+}
+
 function revealRoomsFromCorridor(x: number, y: number): void {
-  const link = corridorContainingPoint(x, y);
+  const link = currentLayout?.links.find(candidate => pointInCommittedForkBranch(x, y, candidate)) ?? null;
   if (!link) return;
 
   // If either end of this corridor is already known, reveal the other end.
@@ -860,6 +877,22 @@ function setLoadingTask(id: string, label: string): void {
   row.querySelector<HTMLElement>(".loading-task-label")!.textContent = label;
 }
 
+function queueLoadingTask(id: string, label: string): void {
+  if (loadingTasksEl.querySelector(`[data-task="${id}"]`)) return;
+  const row = document.createElement("div");
+  row.className = "loading-task";
+  row.dataset.task = id;
+  row.dataset.state = "pending";
+  const glyph = document.createElement("span");
+  glyph.className = "loading-task-glyph";
+  glyph.textContent = "·";
+  const text = document.createElement("span");
+  text.className = "loading-task-label";
+  text.textContent = label;
+  row.append(glyph, text);
+  loadingTasksEl.append(row);
+}
+
 function completeLoadingTask(id: string, ok = true): void {
   const row = loadingTasksEl.querySelector<HTMLElement>(`.loading-task[data-task="${id}"]`);
   if (!row || row.dataset.state !== "run") return;
@@ -1072,6 +1105,7 @@ function activateMonstersInRoom(roomId: number): void {
 }
 
 function updateMonsterSpawners(timestamp: number): void {
+  if (!MONSTERS_ENABLED) return;
   let spawned = false;
   let animationActive = false;
   for (const spawner of currentSpawners) {
@@ -1800,6 +1834,12 @@ function gameTick(timestamp: number): void {
   for (const monster of currentMonsters) {
     if (!monster.active || monster.dead) continue;
     monster.moving = false;
+    if (!renderer.isWithinMonsterActivityRange(monster.x, monster.y)) {
+      monster.path = [];
+      monster.pathIndex = 0;
+      monster.nextPathRefreshAt = Infinity;
+      continue;
+    }
 
     const containingRoom = roomContainingPoint(monster.x, monster.y);
     if (containingRoom && visitedRooms.has(containingRoom.id)) {
@@ -1817,14 +1857,15 @@ function gameTick(timestamp: number): void {
     let targetX = player.x;
     let targetY = player.y;
 
-    if (monster.roomId !== currentRoomId) {
+    const playerIsInCorridor = corridorContainingPoint(player.x, player.y) !== null;
+    if (monster.roomId !== currentRoomId && !playerIsInCorridor) {
       const nextRoom = currentRoomsById.get(nextRoomId);
       if (!nextRoom) continue;
       targetX = nextRoom.x;
       targetY = nextRoom.y;
     }
 
-    const targetRoomId = monster.roomId !== currentRoomId ? nextRoomId : currentRoomId;
+    const targetRoomId = monster.roomId !== currentRoomId && !playerIsInCorridor ? nextRoomId : currentRoomId;
 
     if (monster.speed === 0) {
       const target = playerCollisionCenter();
@@ -2694,6 +2735,7 @@ function renderGraph(
     stateId = null,
     spawnPortalUrl = null,
   }: Pick<LoadPageOptions, "spawnRoomId" | "stateId"> & { spawnPortalUrl?: string | null } = {},
+  preparedLayout: DungeonLayout | null = null,
 ): void {
   currentStateId = stateId ?? stateIdForPage(pageUrl);
   renderer.clear();
@@ -2704,7 +2746,7 @@ function renderGraph(
   hideLinkMenu();
   hideContentBrowser();
 
-  const layout = layoutOrthogonal(graph);
+  const layout = preparedLayout ?? layoutOrthogonal(graph);
   currentLayout = layout;
   currentRoomsById = new Map(layout.nodes.map(room => [room.id, room]));
   roomRoutingDirty = true;
@@ -2725,7 +2767,7 @@ function renderGraph(
   rebuildSpatialIndexes();
   currentLoot.push(...createSceneryDrops(currentDecorations, floorIdentity(pageUrl), collectedLoot));
 
-  currentMonsters = buildMonsters(layout, pageUrl);
+  currentMonsters = MONSTERS_ENABLED ? buildMonsters(layout, pageUrl) : [];
   updateBossGates();
 
   const root =
@@ -2800,7 +2842,7 @@ async function loadPage(
     spawnRoomId = null,
     stateId = null
   }: LoadPageOptions = {},
-  rendererReady: Promise<void> = Promise.resolve(),
+  rendererReady: (() => Promise<void>) | null = null,
 ): Promise<void> {
   const retainedPointerPosition = pointerInViewport ? pointerClientPosition : null;
   resetPlayerInput();
@@ -2826,9 +2868,13 @@ async function loadPage(
     const { html, url: resolvedUrl, via } = await fetchHtml(url);
     if (requestId !== currentRequest) return;
 
-    setStatus(`Fetched via ${via} · Parsing HTML …`);
+    completeLoadingTask("fetch");
+    setLoadingTask("generate", "Generating level");
+    setStatus(`Fetched via ${via} · Generating level …`);
     const graph = domToGraph(html, resolvedUrl);
-    await rendererReady;
+    const layout = layoutOrthogonal(graph);
+    completeLoadingTask("generate");
+    if (rendererReady) await rendererReady();
     if (requestId !== currentRequest) return;
     saveCurrentFloorState();
 
@@ -2852,8 +2898,7 @@ async function loadPage(
       spawnRoomId,
       stateId: currentStateId,
       spawnPortalUrl: popBack ? departingPageUrl : null,
-    });
-    completeLoadingTask("fetch");
+    }, layout);
     if (retainedPointerPosition && pointerInViewport) {
       pointerClientPosition = retainedPointerPosition;
       updatePlayerAimFromPointer();
@@ -2871,13 +2916,19 @@ async function loadRenderer(): Promise<void> {
   await prefixFontReady;
   const { PhaserRenderer } = await import("./render/phaser-renderer");
   renderer = new PhaserRenderer(gameCanvasHost);
-  renderer.start({
-    onBootComplete: () => {
-      window.clearTimeout(loadingBootGuardTimer);
-      loadingBootGuardTimer = undefined;
-      completeLoadingTask("boot");
-      if (!LOADING_SCREEN_ENABLED) gameUi.classList.add("game-ui-ready");
-    },
+}
+
+function startRenderer(): Promise<void> {
+  return new Promise((resolve) => {
+    renderer.start({
+      onBootComplete: () => {
+        window.clearTimeout(loadingBootGuardTimer);
+        loadingBootGuardTimer = undefined;
+        completeLoadingTask("boot");
+        if (!LOADING_SCREEN_ENABLED) gameUi.classList.add("game-ui-ready");
+        resolve();
+      },
+    });
   });
 }
 
@@ -2946,25 +2997,27 @@ function startWelcomeCrawl(rawUrl: string): void {
       showLoadingScreen(rawUrl);
       setLoadingTask("fetch", "Fetching the page");
       setLoadingTask("phaser", "Fetching Phaser");
+      queueLoadingTask("generate", "Generating level");
+      queueLoadingTask("boot", "Booting the renderer");
     }
     equipDefaultWeapon();
 
-    const rendererReady = loadRenderer().then(
+    const phaserReady = loadRenderer().then(
       () => completeLoadingTask("phaser"),
       (error: unknown) => {
         completeLoadingTask("phaser", false);
         throw error;
       },
     );
-    void loadPage(rawUrl, {}, rendererReady);
-
-    if (LOADING_SCREEN_ENABLED) {
+    void loadPage(rawUrl, {}, async () => {
+      await phaserReady;
       setLoadingTask("boot", "Booting the renderer");
       loadingBootGuardTimer = window.setTimeout(() => {
         loadingBootGuardTimer = undefined;
         completeLoadingTask("boot");
       }, 30_000);
-    }
+      await startRenderer();
+    });
     updateHudPanels();
   }, SCREEN_FADE_MS);
 }

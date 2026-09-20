@@ -68,9 +68,24 @@ export function pointInCorridor(x: number, y: number, link: LayoutLink, radius =
     const point = { x, y };
     if (pointInCorridorBody(point, originalStart, originalEnd, width, radius)) return true;
 
+    // Consecutive runs meet at a square junction. Treat it as floor rather
+    // than two exclusive segment endpoints so pathfinding can cross turns.
+    if (index < link.points.length - 1) {
+      const junction = originalEnd;
+      const halfWidth = width / 2 - radius;
+      const top = junction.y - width / 2 + radius + WORLD_GEOMETRY.topWallCollisionDepth;
+      const bottom = junction.y + width / 2 - radius;
+      if (
+        halfWidth >= 0 &&
+        x >= junction.x - halfWidth && x <= junction.x + halfWidth &&
+        y >= top && y <= bottom
+      ) return true;
+    }
+
     const doorwayHalf = Math.max(0, WORLD_GEOMETRY.doorOpeningWidth / 2 - radius);
     const sourceDoorwayDepth = radius + (link.direction === "N" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
-    const targetDoorwayDepth = radius + (link.direction === "S" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
+    const targetDirection = link.targetDirection ?? ({ N: "S", E: "W", S: "N", W: "E" } as const)[link.direction];
+    const targetDoorwayDepth = radius + (targetDirection === "N" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
     const verticalDoorOffset = originalStart.y === originalEnd.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
     if (index === 1) {
       const insideStart = {

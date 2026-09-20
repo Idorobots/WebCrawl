@@ -61,7 +61,6 @@ export const WORLD_GEOMETRY = {
   wallThickness: world(64),
   corridorHalfWidth: ENVIRONMENT_SEGMENT_SIZE,
   verticalDoorPassableOffsetY: world(29),
-  maxCorridorLength: ENVIRONMENT_SEGMENT_SIZE * 12,
   roomCollisionMargin: world(4),
   spatialCellSize: world(366),
   pathGridStep: world(13),
