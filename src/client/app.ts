@@ -1011,6 +1011,7 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
     item.destroyed = true;
     saveObstacleState(item);
     renderer.spawnEffect(item.visual.animations?.destroy, item.x, item.y, item.size);
+    renderer.playExplosionSound();
     renderDecorations();
     if (currentPageUrl) {
       const drops = createSceneryDrops([item], floorIdentity(currentPageUrl), collectedLoot);
@@ -1026,6 +1027,7 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
       item.size,
       { key: `decoration:${item.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
     );
+    renderer.playDamageSound();
     saveObstacleState(item);
     renderDecorations();
   }
@@ -1224,6 +1226,7 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
     PLAYER_SPEC.spriteSize,
     { key: "player", lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
   );
+  renderer.playDamageSound();
 
   playerHp = Math.max(0, playerHp - amount);
   playerDamageInvulnerableUntil = now + PLAYER_DAMAGE_INVULNERABILITY_MS;
@@ -1265,6 +1268,7 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
     monster.dead = true;
     monster.deathAnimating = true;
     renderer.spawnEffect(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
+    renderer.playExplosionSound();
     runStats.kills += 1;
 
     if (isBoss(monster)) {
@@ -1299,6 +1303,7 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
       monster.size,
       { key: `monster:${monster.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
     );
+    renderer.playDamageSound();
     saveMonsterState(monster);
     updateMonsterPositions();
   }
@@ -1389,6 +1394,7 @@ function shootEnemyVolley(monster: Monster, direction: Point, timestamp: number)
   }
   monster.attackKind = "ranged";
   monster.lastAttackAt = timestamp;
+  renderer.playEnemyShotSound(monster.kind);
   renderBullets();
 }
 
@@ -1435,6 +1441,7 @@ function fireBossVolley(monster: Monster, timestamp: number): void {
   monster.attackKind = "ranged";
   monster.lastAttackAt = timestamp;
   saveMonsterState(monster);
+  renderer.playEnemyShotSound(monster.kind);
   renderBullets();
 }
 
@@ -1671,6 +1678,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
     monster.attackKind = "ranged";
     monster.lastAttackAt = timestamp;
     saveMonsterState(monster);
+    renderer.playEnemyShotSound(monster.kind);
     renderBullets();
   }
 }
@@ -1688,6 +1696,7 @@ function shootBullet(): void {
   runStats.shotsFired += 1;
   gameCanvasHost.dataset.shotsFired = String(runStats.shotsFired);
   playPlayerShootFrames();
+  renderer.playWeaponShotSound(currentWeapon.kind);
 
   const projectiles = projectilesForWeapon(currentWeapon, playerFacing, weaponShotSequence);
   for (const [index, projectile] of projectiles.entries()) {
@@ -1763,6 +1772,7 @@ function updateBullets(dt: number): void {
           PLAYER_SPEC.spriteSize,
           { lightColor: renderer.bulletColor(bullet) },
         );
+        renderer.playDamageSound();
         alive = false;
         break;
       }

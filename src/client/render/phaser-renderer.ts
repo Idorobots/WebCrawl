@@ -167,9 +167,74 @@ const ONE_SHOT_SOUNDS: Readonly<Record<string, string>> = {
   "sfx-content-toggle": "sounds/scenery/content/toggle.mp3",
   "sfx-lights-flicker": "sounds/scenery/lights/flicker.mp3",
 };
-const ONE_SHOT_SFX_VOLUME = 0.7;
+const ONE_SHOT_SFX_VOLUME = 0.3;
 const FLICKER_SFX_VOLUME = 0.3;
 const FLICKER_SOUND_MIN_INTERVAL_MS = 700;
+
+const WEAPON_SHOT_SOUNDS: Readonly<Record<string, string>> = {
+  "pulse-rifle": "sounds/shots/weapon/shot4.mp3",
+  "byte-repeater": "sounds/shots/weapon/blaster.mp3",
+  "scatter-array": "sounds/shots/weapon/shot1.mp3",
+  "fork-driver": "sounds/shots/weapon/shot5.mp3",
+  "trident": "sounds/shots/weapon/shot6.mp3",
+  "needle-rail": "sounds/shots/weapon/blaster7.mp3",
+  "packet-lobber": "sounds/shots/weapon/rocket.mp3",
+  "cross-compiler": "sounds/shots/weapon/blaster2.mp3",
+  "nova-cache": "sounds/shots/weapon/blaster10.mp3",
+  "helix-emitter": "sounds/shots/weapon/blaster4.mp3",
+  "sideband-projector": "sounds/shots/weapon/zap.mp3",
+};
+const ENEMY_SHOT_SOUNDS: Readonly<Record<string, string>> = {
+  "shooter-light": "sounds/shots/weapon/blaster8.mp3",
+  "shooter-heavy": "sounds/shots/weapon/blaster8.mp3",
+  "sentry-light": "sounds/shots/weapon/blaster1.mp3",
+  "sentry-heavy": "sounds/shots/weapon/blaster9.mp3",
+  "sentry-scatter": "sounds/shots/weapon/blaster11.mp3",
+  "packet-storm": "sounds/shots/weapon/blaster12.mp3",
+  "fork-bomb": "sounds/shots/weapon/blaster12.mp3",
+  "heap-titan": "sounds/shots/weapon/blaster9.mp3",
+  "kimi-swarm": "sounds/shots/weapon/blaster8.mp3",
+  "llama-herd": "sounds/shots/weapon/blaster11.mp3",
+};
+const DEFAULT_ENEMY_SHOT_SOUND = ENEMY_SHOT_SOUNDS["shooter-light"]!;
+const DAMAGE_SOUNDS: readonly string[] = [
+  "sounds/shots/damage/thud.mp3",
+  "sounds/shots/damage/thud1.mp3",
+  "sounds/shots/damage/thud2.mp3",
+  "sounds/shots/damage/thud3.mp3",
+  "sounds/shots/damage/thud4.mp3",
+  "sounds/shots/damage/thud5.mp3",
+  "sounds/shots/damage/thud6.mp3",
+  "sounds/shots/damage/thud7.mp3",
+  "sounds/shots/damage/thud8.mp3",
+  "sounds/shots/damage/thud9.mp3",
+  "sounds/shots/damage/thud10.mp3",
+  "sounds/shots/damage/thud_heavy.mp3",
+];
+const EXPLOSION_SOUNDS: readonly string[] = [
+  "sounds/effects/explosion/explosion.mp3",
+  "sounds/effects/explosion/explosion1.mp3",
+  "sounds/effects/explosion/explosion2.mp3",
+  "sounds/effects/explosion/explosion3.mp3",
+  "sounds/effects/explosion/explosion4.mp3",
+  "sounds/effects/explosion/explosion5.mp3",
+];
+const COMBAT_SOUND_SOURCES: readonly string[] = [...new Set([
+  ...Object.values(WEAPON_SHOT_SOUNDS),
+  ...Object.values(ENEMY_SHOT_SOUNDS),
+  ...DAMAGE_SOUNDS,
+  ...EXPLOSION_SOUNDS,
+])];
+const SHOT_SFX_VOLUME = 0.1;
+const ENEMY_SHOT_SFX_VOLUME = 0.1;
+const DAMAGE_SFX_VOLUME = 0.1;
+const EXPLOSION_SFX_VOLUME = 0.2;
+const DAMAGE_SOUND_MIN_INTERVAL_MS = 80;
+const EXPLOSION_SOUND_MIN_INTERVAL_MS = 120;
+
+function pickRandom<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length) % items.length]!;
+}
 
 interface WorldLight {
   light: Phaser.GameObjects.Light;
@@ -276,6 +341,8 @@ export class PhaserRenderer {
   private floorMarkingTextureSerial = 0;
   private lastFlickerUpdate = -Infinity;
   private lastFlickerSoundAt = -Infinity;
+  private lastDamageSoundAt = -Infinity;
+  private lastExplosionSoundAt = -Infinity;
   private corridorBounds = new Map<string, WorldBounds>();
   private staticVisibility = new Map<StaticObject, boolean>();
   private bulletLights: Phaser.GameObjects.Light[] = [];
@@ -326,6 +393,7 @@ export class PhaserRenderer {
         for (const asset of assets) this.load.image(textureKey(asset), asset);
         this.load.audio(STATION_AMBIENT_KEY, STATION_AMBIENT_SRC);
         for (const [key, src] of Object.entries(ONE_SHOT_SOUNDS)) this.load.audio(key, src);
+        for (const src of COMBAT_SOUND_SOURCES) this.load.audio(src, src);
       }
 
       create(): void {
@@ -526,6 +594,28 @@ export class PhaserRenderer {
 
   playContentToggleSound(): void {
     this.playOneShot("sfx-content-toggle");
+  }
+
+  playWeaponShotSound(kind: string): void {
+    this.playOneShot(WEAPON_SHOT_SOUNDS[kind] ?? WEAPON_SHOT_SOUNDS["pulse-rifle"]!, SHOT_SFX_VOLUME);
+  }
+
+  playEnemyShotSound(kind: string): void {
+    this.playOneShot(ENEMY_SHOT_SOUNDS[kind] ?? DEFAULT_ENEMY_SHOT_SOUND, ENEMY_SHOT_SFX_VOLUME);
+  }
+
+  playDamageSound(): void {
+    const now = performance.now();
+    if (now - this.lastDamageSoundAt < DAMAGE_SOUND_MIN_INTERVAL_MS) return;
+    this.lastDamageSoundAt = now;
+    this.playOneShot(pickRandom(DAMAGE_SOUNDS), DAMAGE_SFX_VOLUME);
+  }
+
+  playExplosionSound(): void {
+    const now = performance.now();
+    if (now - this.lastExplosionSoundAt < EXPLOSION_SOUND_MIN_INTERVAL_MS) return;
+    this.lastExplosionSoundAt = now;
+    this.playOneShot(pickRandom(EXPLOSION_SOUNDS), EXPLOSION_SFX_VOLUME);
   }
 
   private playOneShot(key: string, volume = ONE_SHOT_SFX_VOLUME): void {

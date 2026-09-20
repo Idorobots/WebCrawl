@@ -105,7 +105,10 @@ The button click effect should also play when clicking the buttons on the error 
 :END:
 Add ambient station sounds using the ambient/station/space file. The sample should be looped. It should initially fade in and it should fade out whenever it is stopped for any reason.
 
-* Pickups and scenery
+* DONE Pickups and scenery
+:LOGBOOK:
+- State "DONE"       from              [2026-09-20 Sun 17:54]
+:END:
 - Whenever the player picks up any loot, play the sounds from pickup/ directory. For most pickups use the "generic" file, for weapons the "weapons" file and for RAM sticks use the "ram" file.
 
 - Whenever the player enters a portal play the sounds from scenery/portal. Match the down and up portals to their respective files. These effects should play fully regardless if the loading screen starts/stops.
@@ -116,7 +119,10 @@ Add ambient station sounds using the ambient/station/space file. The sample shou
 
 - Whenever lights flicker play the scenery/lights/flicker file.
 
-* Shots and damage
+* DONE Shots and damage
+:LOGBOOK:
+- State "DONE"       from              [2026-09-20 Sun 18:51]
+:END:
 Add shots & damage effects sounds:
 
 - For player weapon fire use the sounds in shots/weapon, each weapon should have a few different sounds that are chosen randomly when firing. Let's settle for 2 to 3 sounds each.
@@ -815,9 +821,11 @@ Whenever AI is mentioned in the content, render a special Samario content browse
 - Move the portal active area and footprint by the same amount as down as the player spawn point.
 
 - Spawner shadow is messed up due to the translucent area on the sprite.
-- Spawner spawn animation should only be triggered when the spawner is actually spawning something.
 - Sprite shadows are too well-defined. They should be softer.
 - Shadows are too large in general, please make the "drop shadow" effect slightly less pronounced.
+
+- Spawner spawn animation should only be triggered when the spawner is actually spawning something.
+- Spawner annimation and sound effect should match - when the spawning starts the spawner should start playing the sound, then enter the annimation and only spawn after a specific timeout (let's go with 2 seconds).
 
 - "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
 - "floor_hatch" tile should be considered decoration tile, not main floor tile
