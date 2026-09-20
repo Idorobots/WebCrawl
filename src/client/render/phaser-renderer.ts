@@ -26,6 +26,7 @@ import {
   BOSS_DEFINITIONS,
   DEFAULT_BULLET_SPEC,
   LOOT_DEFINITIONS,
+  MONSTER_WALK_REFERENCE_SPEED,
   monsterHealthBarY,
   monsterVisualCenterOffsetY,
   monsterWalkElapsed,
@@ -237,10 +238,9 @@ const PLAYER_FOOTSTEP_SOUNDS: readonly string[] = [
   "sounds/footsteps/player/footstep.mp3",
   "sounds/footsteps/player/footstep1.mp3",
 ];
-const ROBOT_FOOTSTEP_SOUNDS: readonly string[] = [
-  "sounds/footsteps/robot/footstep.mp3",
-  "sounds/footsteps/robot/footstep1.mp3",
-];
+const MONSTER_LOOP_SOUND_SRC = "sounds/footsteps/robot/robot_heavy1.mp3";
+const MONSTER_FOOTSTEP_MAX_DISTANCE = world(900);
+const MONSTER_FOOTSTEP_RATE_BOOST = 1.2;
 const FOOTSTEP_SFX_VOLUME = 0.3;
 const FOOTSTEP_INTERVAL_MS = 125;
 const PLAYER_DEATH_SFX_VOLUME = 0.45;
@@ -251,11 +251,11 @@ const POOLED_SOUND_SOURCES: readonly string[] = [...new Set([
   ...EXPLOSION_SOUNDS,
   ...ENERGY_DASH_SOUNDS,
   ...MELEE_SOUNDS,
+  MONSTER_LOOP_SOUND_SRC,
   HEAL_SOUND_SRC,
   INVULNERABILITY_TURN_ON_SRC,
   INVULNERABILITY_TURN_OFF_SRC,
   ...PLAYER_FOOTSTEP_SOUNDS,
-  ...ROBOT_FOOTSTEP_SOUNDS,
 ])];
 const SHOT_SFX_VOLUME = 0.2;
 const ENEMY_SHOT_SFX_VOLUME = 0.2;
@@ -296,9 +296,7 @@ interface FootstepChain {
 }
 
 interface MonsterFootstep {
-  index: number;
-  lastStepIndex: number;
-  sound: Phaser.Sound.BaseSound | null;
+  sound: Phaser.Sound.WebAudioSound | null;
 }
 
 interface AreaLight extends Phaser.GameObjects.Light {
@@ -742,49 +740,43 @@ export class PhaserRenderer {
     sound.play();
   }
 
-  private updateMonsterFootsteps(items: readonly Monster[], now: number): void {
+  private updateMonsterFootsteps(items: readonly Monster[]): void {
     const scene = this.scene;
-    if (!scene || document.hidden || !document.hasFocus()) return;
-    const known = new Set<string>();
+    if (!scene) return;
+    const focused = !document.hidden && document.hasFocus();
+    const present = new Set<string>();
     for (const item of items) {
-      if (item.dead || !item.active || !item.moving) continue;
-      const sprite = this.monsters.get(item.id);
-      if (!sprite) continue;
-      known.add(item.id);
-      const direction = item.moveDir ?? "down";
-      const visual = item.visual.directions[direction] ?? item.visual.directions.down!;
-      const walk = visual.walk;
-      if (!walk) continue;
+      present.add(item.id);
       let state = this.monsterFootsteps.get(item.id);
-      if (!state) {
-        state = { index: 0, lastStepIndex: -1, sound: null };
-        this.monsterFootsteps.set(item.id, state);
-      }
-      const elapsed = monsterWalkElapsed(walk, now, item.seed, item.speed);
-      const cycleMs = walk.frames.length * walk.frameDurationMs;
-      const stepIndex = Math.floor(elapsed / (cycleMs / 4)) % 4;
-      if (stepIndex === state.lastStepIndex) continue;
-      const player = this.currentPlayer;
-      const distance = Math.hypot(item.x - player.x, item.y - player.y);
-      const attenuation = Math.max(0, 1 - distance / world(900));
-      if (attenuation <= 0) {
-        state.lastStepIndex = stepIndex;
+      const walking = item.active && !item.dead && item.moving;
+      if (!walking) {
+        if (state?.sound) {
+          state.sound.destroy();
+          state.sound = null;
+        }
         continue;
       }
-      state.lastStepIndex = stepIndex;
-      const src = ROBOT_FOOTSTEP_SOUNDS[state.index % ROBOT_FOOTSTEP_SOUNDS.length]!;
-      state.index += 1;
-      state.sound?.destroy();
-      const sound = scene.sound.add(src, { volume: FOOTSTEP_SFX_VOLUME * attenuation });
-      state.sound = sound;
-      sound.once(Phaser.Sound.Events.COMPLETE, () => {
-        if (state.sound === sound) state.sound = null;
-        sound.destroy();
-      });
-      sound.play();
+      const sprite = this.monsters.get(item.id);
+      if (!sprite) continue;
+      const player = this.currentPlayer;
+      const distance = Math.hypot(item.x - player.x, item.y - player.y);
+      const attenuation = Math.max(0, 1 - distance / MONSTER_FOOTSTEP_MAX_DISTANCE);
+      if (!focused || attenuation <= 0) continue;
+      const rate = Math.min(2, Math.max(0.5, item.speed / MONSTER_WALK_REFERENCE_SPEED * MONSTER_FOOTSTEP_RATE_BOOST));
+      if (!state) {
+        state = { sound: null };
+        this.monsterFootsteps.set(item.id, state);
+      }
+      if (!state.sound) {
+        const sound = scene.sound.add(MONSTER_LOOP_SOUND_SRC, { loop: true, volume: 0 }) as Phaser.Sound.WebAudioSound;
+        state.sound = sound;
+        sound.setRate(rate);
+        sound.play();
+      }
+      state.sound.setVolume(FOOTSTEP_SFX_VOLUME * attenuation);
     }
     for (const [id, state] of [...this.monsterFootsteps]) {
-      if (!known.has(id)) {
+      if (!present.has(id)) {
         state.sound?.destroy();
         this.monsterFootsteps.delete(id);
       }
@@ -2060,7 +2052,7 @@ export class PhaserRenderer {
     if (this.monsters.size === 0) return;
     let assetChanged = false;
     const now = performance.now();
-    this.updateMonsterFootsteps(items, now);
+    this.updateMonsterFootsteps(items);
     for (const item of items) {
       const container = this.monsters.get(item.id);
       if (!container) continue;

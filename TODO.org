@@ -145,7 +145,10 @@ Add effects sounds:
 
 - Whenever the player enables a crystal invulnerability, play the effects/invulnerability/turn_on sound. When the invulnerability wears off, play the effects/invulnerability/turn_off sound.
 
-* Character livelyness
+* DONE Character livelyness
+:LOGBOOK:
+- State "DONE"       from              [2026-09-20 Sun 23:13]
+:END:
 Add player footstep sounds:
 
 - Whenever the player is moving, play the footsteps/player/footstep and footsteps/player/footstep1 sounds interchangeably in a loop. If the player stops moving, stop playing the sounds.
@@ -890,3 +893,7 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - "Familiar" robot helping
 - Better loot chance
 - Minimap radar
+- Temporary Invisibility
+
+* Ambush rooms
+Look empty, but monsters lurk in large scenery crates and burst out of it a few seconds after the player enters the room.
