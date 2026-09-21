@@ -756,7 +756,10 @@ Other:
 :END:
 - On mobile, the URL editing on welcome screen doesn't work very well - the input box is covered by the keyboard and it's hard to tell what the user is editing.
 
-* License
+* DONE License
+:LOGBOOK:
+- State "DONE"       from              [2026-09-21 Mon 17:45]
+:END:
 - MIT for code
 - CC-SA for gfx
 - CC-SA for sfx
