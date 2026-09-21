@@ -11,6 +11,7 @@ import {
 import {
   LOOT_ASSETS,
   MAX_NODES,
+  MOBILE_LAYOUT_QUERY,
   PLAYER_DEFAULT_ASSETS,
   PLAYER_FRAMES,
   WEAPON_ASSETS,
@@ -266,6 +267,15 @@ const hudEnergyFillEl = requireElement<HTMLElement>("#hudEnergyFill");
 const weaponNameEl = requireElement<HTMLElement>("#weaponName");
 const hudAmmoFillEl = requireElement<HTMLElement>("#hudAmmoFill");
 const weaponHudIconEl = requireElement<HTMLImageElement>("#weaponHudIcon");
+const hudHealthFillMiniEl = requireElement<HTMLElement>("#hudHealthFillMini");
+const hudEnergyFillMiniEl = requireElement<HTMLElement>("#hudEnergyFillMini");
+const hudAmmoFillMiniEl = requireElement<HTMLElement>("#hudAmmoFillMini");
+const creditCountMiniEl = requireElement<HTMLElement>("#creditCountMini");
+const crystalCountMiniEl = requireElement<HTMLElement>("#crystalCountMini");
+const coreCountMiniEl = requireElement<HTMLElement>("#coreCountMini");
+const energyLootCountMiniEl = requireElement<HTMLElement>("#energyLootCountMini");
+const medkitCountMiniEl = requireElement<HTMLElement>("#medkitCountMini");
+const rightHud = requireElement<HTMLElement>("#rightHud");
 
 const deathModal = requireElement<HTMLDivElement>("#deathModal");
 const deathScoreEl = requireElement<HTMLElement>("#deathScore");
@@ -535,7 +545,7 @@ function renderSideMinimap(): void {
       bounds.maxY = Math.max(bounds.maxY, point.y);
     }
   }
-  const pad = 18;
+  const pad = Math.min(18, Math.round(width * 0.1));
   const scale = Math.min(
     (width - pad * 2) / Math.max(1, bounds.maxX - bounds.minX),
     (height - pad * 2) / Math.max(1, bounds.maxY - bounds.minY),
@@ -577,6 +587,29 @@ function renderSideMinimap(): void {
   context.fill();
 }
 
+const MINIMAP_SHOW_DELAY_MS = 1600;
+const mobileLayoutQuery = window.matchMedia(MOBILE_LAYOUT_QUERY);
+let minimapActivityHidden = false;
+let lastPlayerActivityAt = 0;
+let lastActivityPlayerPos: Point | null = null;
+
+function updateMinimapVisibility(now: number): void {
+  if (
+    lastActivityPlayerPos === null ||
+    player.x !== lastActivityPlayerPos.x ||
+    player.y !== lastActivityPlayerPos.y
+  ) {
+    lastActivityPlayerPos = { x: player.x, y: player.y };
+    lastPlayerActivityAt = now;
+  }
+  const shouldHide = mobileLayoutQuery.matches
+    && lastPlayerActivityAt > 0
+    && now - lastPlayerActivityAt < MINIMAP_SHOW_DELAY_MS;
+  if (shouldHide === minimapActivityHidden) return;
+  minimapActivityHidden = shouldHide;
+  rightHud.classList.toggle("minimap-hidden", minimapActivityHidden);
+}
+
 function updateHudPanels(): void {
   const floor = navigationHistory.length + 1;
   const rooms = visitedRooms.size;
@@ -604,6 +637,7 @@ function floorIdentity(pageUrl: string): string {
 function updateHealthUi(): void {
   const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_MAX_HP));
   hudHealthFillEl.style.width = `${ratio * 100}%`;
+  hudHealthFillMiniEl.style.width = `${ratio * 100}%`;
   gameCanvasHost.dataset.playerHp = String(playerHp);
 
   renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
@@ -616,6 +650,7 @@ function updateWeaponUi(): void {
     ? 1
     : Math.max(0, Math.min(1, currentWeaponAmmo / Math.max(1, currentWeapon.maxAmmo ?? currentWeaponAmmo)));
   hudAmmoFillEl.style.width = `${ammoRatio * 100}%`;
+  hudAmmoFillMiniEl.style.width = `${ammoRatio * 100}%`;
   gameCanvasHost.dataset.weaponKind = currentWeapon.kind;
   gameCanvasHost.dataset.weaponAmmo = currentWeaponAmmo === null ? "infinite" : String(currentWeaponAmmo);
 }
@@ -626,6 +661,11 @@ function updateLootUi(): void {
   coreCountEl.textContent = String(lootInventory.cores);
   energyLootCountEl.textContent = String(lootInventory.energy);
   medkitCountEl.textContent = String(lootInventory.medkits);
+  creditCountMiniEl.textContent = String(lootInventory.credits);
+  crystalCountMiniEl.textContent = String(lootInventory.crystals);
+  coreCountMiniEl.textContent = String(lootInventory.cores);
+  energyLootCountMiniEl.textContent = String(lootInventory.energy);
+  medkitCountMiniEl.textContent = String(lootInventory.medkits);
   gameCanvasHost.dataset.credits = String(lootInventory.credits);
   gameCanvasHost.dataset.crystals = String(lootInventory.crystals);
   gameCanvasHost.dataset.cores = String(lootInventory.cores);
@@ -638,6 +678,7 @@ function updateLootUi(): void {
 function updateEnergyUi(): void {
   const fill = Math.min(PLAYER_ENERGY_MAX, lootInventory.energy);
   hudEnergyFillEl.style.width = `${fill / PLAYER_ENERGY_MAX * 100}%`;
+  hudEnergyFillMiniEl.style.width = `${fill / PLAYER_ENERGY_MAX * 100}%`;
 }
 
 function isPlayerInvulnerable(now = performance.now()): boolean {
@@ -1704,6 +1745,7 @@ function shootBullet(): void {
   const now = performance.now();
   if (now - lastPlayerShotAt < currentWeapon.fireCooldownMs) return;
   lastPlayerShotAt = now;
+  lastPlayerActivityAt = now;
   runStats.shotsFired += 1;
   gameCanvasHost.dataset.shotsFired = String(runStats.shotsFired);
   playPlayerShootFrames();
@@ -1866,6 +1908,7 @@ function gameTick(timestamp: number): void {
     : Math.max(timestamp + GAME_TICK_INTERVAL_MS, nextGameTick + GAME_TICK_INTERVAL_MS);
   renderer.updateLighting(timestamp);
   renderer.updateFootsteps(timestamp);
+  updateMinimapVisibility(timestamp);
 
   if (teleportPauseActive || !playerAlive || !currentLayout) {
     lastGameTick = timestamp;

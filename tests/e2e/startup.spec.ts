@@ -512,10 +512,44 @@ test("spawns on an enabled entry portal without immediately retriggering it", as
 test("keeps the Phaser viewport playable on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 720 });
   await startGame(page);
-  await expect(page.locator("#rightHud")).toBeHidden();
+  await expect(page.locator("#rightHud")).toBeVisible();
+  await expect(page.locator("#topBarStats")).toBeVisible();
+  await expect(page.locator("#urlBar")).toBeHidden();
+  await expect(page.locator("#bottomHud")).toBeHidden();
   const bounds = await page.locator("#gameViewport").boundingBox();
   expect(bounds?.width).toBeGreaterThanOrEqual(390);
   expect(bounds?.height).toBeGreaterThan(500);
+});
+
+test("fits the welcome prompt on mobile portrait and landscape", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await signIn(page);
+
+  const panel = page.locator("#promptLayout .welcome-panel");
+  await expect(panel).toBeVisible();
+  await expect(page.locator("#promptLayout .welcome-header-dim")).toBeHidden();
+  await page.waitForTimeout(450);
+
+  const titlebar = await page.locator(".welcome-titlebar").boundingBox();
+  const visual = await page.locator(".welcome-visual").boundingBox();
+  expect(visual).not.toBeNull();
+  expect(visual!.y).toBeGreaterThanOrEqual((titlebar?.y ?? 0) + (titlebar?.height ?? 0));
+
+  const portrait = await panel.boundingBox();
+  expect(portrait!.x).toBeGreaterThanOrEqual(0);
+  expect(portrait!.x + portrait!.width).toBeLessThanOrEqual(390);
+
+  const go = await page.getByRole("button", { name: "Go" }).boundingBox();
+  const lucky = await page.getByRole("button", { name: "I'm feeling lucky" }).boundingBox();
+  expect(Math.round(go!.y)).toBe(Math.round(lucky!.y));
+  expect(Math.round(go!.height)).toBe(Math.round(lucky!.height));
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(panel).toBeVisible();
+  await page.waitForTimeout(450);
+  const landscape = await panel.boundingBox();
+  expect(landscape!.height).toBeGreaterThan(150);
 });
 
 test("keeps generated world coordinates independent of viewport size", async ({ page }) => {

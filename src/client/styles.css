@@ -478,6 +478,8 @@ button:hover {
   max-height: calc(100vh - 36px);
   overflow: auto;
   padding: 20px 26px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(64, 170, 255, 0.5) rgba(8, 24, 42, 0.55);
   text-shadow:
     0 0 6px rgba(96, 180, 255, 0.55),
     0 0 22px rgba(64, 140, 255, 0.3);
@@ -1318,16 +1320,19 @@ body {
   scrollbar-color: rgba(64, 170, 255, 0.5) rgba(8, 24, 42, 0.55);
 }
 
-.welcome-prompt-body::-webkit-scrollbar {
+.welcome-prompt-body::-webkit-scrollbar,
+#loadingPanel::-webkit-scrollbar {
   width: 10px;
 }
 
-.welcome-prompt-body::-webkit-scrollbar-track {
+.welcome-prompt-body::-webkit-scrollbar-track,
+#loadingPanel::-webkit-scrollbar-track {
   background: rgba(8, 24, 42, 0.55);
   border-left: 1px solid rgba(38, 159, 255, 0.22);
 }
 
-.welcome-prompt-body::-webkit-scrollbar-thumb {
+.welcome-prompt-body::-webkit-scrollbar-thumb,
+#loadingPanel::-webkit-scrollbar-thumb {
   border: 1px solid rgba(120, 210, 255, 0.45);
   background: linear-gradient(180deg, rgba(64, 180, 255, 0.5), rgba(24, 90, 160, 0.55));
   box-shadow:
@@ -1335,7 +1340,8 @@ body {
     inset 0 0 6px rgba(38, 150, 255, 0.28);
 }
 
-.welcome-prompt-body::-webkit-scrollbar-thumb:hover {
+.welcome-prompt-body::-webkit-scrollbar-thumb:hover,
+#loadingPanel::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, rgba(96, 200, 255, 0.7), rgba(32, 110, 190, 0.7));
 }
 
@@ -1612,14 +1618,37 @@ body {
 
   .welcome-layout {
     flex-direction: column;
+    align-items: stretch;
     gap: 14px;
-    max-height: calc(100vh - 24px);
+    margin-top: 84px;
+    max-height: calc(100vh - 96px);
     overflow: auto;
   }
 
   .welcome-visual {
     flex: 0 0 auto;
     width: min(420px, calc(100vw - 40px));
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .welcome-visual {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  #promptLayout .welcome-header-dim {
+    display: none;
+  }
+
+  .welcome-actions {
+    flex-wrap: nowrap;
+  }
+
+  .welcome-actions button {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }
 
@@ -1741,6 +1770,20 @@ body {
   text-shadow:
     0 0 10px rgba(110, 200, 255, 0.55),
     0 0 28px rgba(64, 140, 255, 0.3);
+}
+
+#topBarStats {
+  display: none;
+}
+
+#gameUi.game-ui-ready #rightHud.minimap-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 380ms ease 80ms;
+}
+
+#gameUi.game-ui-ready #rightHud:not(.minimap-hidden) {
+  transition: opacity 200ms ease;
 }
 
 #gameViewport {
@@ -1872,7 +1915,8 @@ body {
     0 0 10px rgba(38, 150, 255, 0.12);
 }
 
-#hudHealthFill {
+#hudHealthFill,
+#hudHealthFillMini {
   display: block;
   width: 100%;
   height: 100%;
@@ -1899,7 +1943,8 @@ body {
   border-radius: 2px;
 }
 
-#hudEnergyFill {
+#hudEnergyFill,
+#hudEnergyFillMini {
   display: block;
   width: 0%;
   height: 100%;
@@ -1981,20 +2026,21 @@ body {
   flex: 1;
   min-width: 0;
   height: 12px;
-  border: 1px solid rgba(120, 210, 255, 0.45);
+  border: 1px solid rgba(110, 230, 160, 0.45);
   border-radius: 2px;
   background: rgba(4, 12, 20, 0.8);
   box-shadow:
-    inset 0 0 8px rgba(38, 150, 255, 0.18),
-    0 0 10px rgba(38, 150, 255, 0.12);
+    inset 0 0 8px rgba(60, 200, 120, 0.18),
+    0 0 10px rgba(60, 200, 120, 0.12);
 }
 
-#hudAmmoFill {
+#hudAmmoFill,
+#hudAmmoFillMini {
   display: block;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, #1f8fd6, #55c8ff);
-  box-shadow: 0 0 10px rgba(80, 190, 255, 0.55);
+  background: linear-gradient(90deg, #2f9e63, #66e6a3);
+  box-shadow: 0 0 10px rgba(90, 230, 150, 0.55);
   transition: width 140ms linear;
 }
 
@@ -2115,79 +2161,118 @@ body {
   opacity: 0;
 }
 
-@media (max-width: 980px) {
-  #rightHud { width: 260px; height: 260px; }
-  #gameViewport { right: 0; }
-  #bottomHud { grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.2fr) minmax(220px, 1fr); }
-  .weapon-hud-icon { width: 90px; }
-  .loot-status-card { gap: 9px; }
-  .loot-slot img { width: 57px; height: 57px; }
-}
-
-@media (max-width: 720px) {
+@media (max-width: 1230px) {
   #topBar {
-    top: 8px;
-    left: 8px;
-    padding: 6px 18px 6px 10px;
+    top: 4px;
+    left: 4px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    max-width: calc(100vw - 8px);
+    padding: 5px 22px 5px 10px;
+  }
+  #topBar::after {
+    background:
+      repeating-linear-gradient(0deg, rgba(80, 150, 255, 0.04) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, rgba(10, 26, 42, 0.6), rgba(2, 8, 14, 0.68));
   }
   .brand-logo {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
   }
   .brand-name {
-    font-size: 16px;
+    display: none;
+  }
+  #topBarStats {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: clamp(96px, 32vw, 150px);
+    min-width: 0;
+  }
+  .stat-line {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    line-height: 1;
+    color: #9dbed0;
+  }
+  .stat-label {
+    flex: none;
+    min-width: 7ch;
+    color: #7fa8bd;
+  }
+  .stat-line .health-track { height: 9px; }
+  .stat-line .energy-track { height: 6px; }
+  .stat-line .ammo-track { height: 7px; }
+  .loot-mini {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px 9px;
+    margin-top: 3px;
+    font-size: 12px;
+    color: #effcff;
+  }
+  .loot-mini-slot {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .loot-mini-slot img {
+    width: 15px;
+    height: 15px;
+    object-fit: contain;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 0 5px rgba(81, 221, 255, .34));
   }
   .url-bar {
-    left: auto;
-    right: 8px;
-    transform: none;
-    max-width: calc(100vw - 240px);
+    display: none;
   }
   #rightHud {
+    top: 4px;
+    right: 4px;
+    width: 132px;
+    height: 132px;
+  }
+  .minimap-panel {
+    padding: 5px;
+  }
+  .minimap-panel .hud-panel-title {
     display: none;
+  }
+  #sideMinimapCanvas {
+    margin-top: 0;
   }
   #gameViewport {
     top: 0;
     right: 0;
     bottom: 0;
   }
+  #bottomHud {
+    display: none;
+  }
   #contentBrowser {
     right: 8px;
-    bottom: 82px;
+    bottom: 8px;
     width: calc(100vw - 16px);
     max-height: 38vh;
   }
-  #bottomHud {
-    left: 4px;
-    right: 4px;
-    bottom: 4px;
-    height: 70px;
-    grid-template-columns: .9fr 1.2fr .9fr;
-    gap: 4px;
+}
+
+@media (max-width: 720px) {
+  .welcome-titlebar {
+    top: 8px;
+    left: 8px;
+    padding: 6px 20px 8px 10px;
   }
-  #bottomHud > section {
-    padding: 6px;
+  .welcome-titlebar-logo {
+    width: 34px;
+    height: 34px;
   }
-  .loot-status-card { gap: 4px; }
-  .loot-slot { gap: 2px; font-size: 16px; }
-  .loot-slot img { width: 45px; height: 45px; }
-  .weapon-hud-icon {
-    position: absolute;
-    inset: 0;
-    margin: auto;
-    width: 120px;
-    height: 100%;
-    object-fit: cover;
-    opacity: 0.35;
-  }
-  #playerHudPortrait {
-    width: 46px;
-    height: 54px;
-  }
-  .hp-line,
-  .energy-line,
-  .weapon-name,
-  .ammo-line {
-    font-size: 12px;
+  .welcome-titlebar-name {
+    font-size: 18px;
   }
 }

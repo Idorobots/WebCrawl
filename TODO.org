@@ -718,7 +718,30 @@ N-S with E:
 - CC-SA for gfx
 - CC-SA for sfx
 * Mobile support
-UI for twin-stick shooters. :shrug:
+Welcome screen:
+- The title bar on mobile should not cover the other elements, it needs some padding.
+- The Prompt panel on mobile should fit the width of the screen (you can hide or ellide the "agent_prompt.txt" string on mobile to make its title shorter.)
+- The prompt panel should show up even in mobile landscape mode - currently it doesn't.
+
+Login screen:
+- The loading screen is messed up on mobile as it doesn't fit the width of the screen very well. You can adjust the logo text to be smaller on mobile screens so that the loading screen fits.
+
+Game:
+- The game should be zoomed out a bit on mobile.
+- The UI elements such as health, loot and weapon panels and the minimap are covering a lot of the game area. Let's make them all smaller and try to fit them in the top bar - there should be a single panel that fits all of the following: show just the ClosedNS logo, followed by simplified  health stats (no avatar, just the HP, energy and weapon ammo bars stacked vertically), followe by simplified loot stats (RAM counter, crystal counter plus all-other-loot counter). All of the above should be justified left.
+- The weapons panel and health panels will be merged and just show the three bars with titles: "HP:", "energy:", "Ammo:".
+- The website URL panel can be hidden on mobile.
+
+- There should be a small minimap justified right, make it smaller in proportion than on the full screens, but not too small to be useful.
+- The minimap should only be displayed after a brief delay when the player is not moving or shooting.
+
+Game controls:
+- On the bottom of the game area, there should be two UI circles - a standard twin stick shooter UI. The left "stick" circle should register the inputs, derive the X and Y coordinates and move the player in that direction. The right "stick" circle should register the inputs, derive the X and Y coordinates and move the players cursor in that direction while triggering shots (whenever there's any input on that element, the player character should shoot).
+- Above the left "stick" circle there should be two ver translucent buttons, one for Govt. Bailout and one for Regulatory Capture. When the player clicks the Govt. Bailout button, a crystal is consumed as if they pressed a spacebar. When the player clicks the Regulatory Capture button, the dash ability is used as if they pressed the right mouse button.
+
+Other:
+- On mobile browsers it would be nice to enter the full screen mode after "logging into" the game.
+- It seems that the flashlight on mobile doesn't show until the user clicks the screen. Let's make the flashlight point at the player in case there's no input.
 
 * Consistent collision detection
 - Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.

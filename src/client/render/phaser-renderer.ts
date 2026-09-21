@@ -5,6 +5,8 @@ import {
   CAMERA_FOLLOW_LERP,
   CAMERA_SCALE,
   CAMERA_TRANSITION_MS,
+  MOBILE_LAYOUT_QUERY,
+  MOBILE_CAMERA_SCALE,
   DEBRIS_ASSETS,
   BASE_FLOOR_ASSETS,
   DAMAGED_FLOOR_ASSETS,
@@ -374,6 +376,7 @@ export class PhaserRenderer {
   private currentLootAssets: Partial<Record<LootKind, string>> = {};
   private cameraRoom: GraphNode | null = null;
   private cameraRoomId: number | null = null;
+  private readonly mobileLayout = window.matchMedia(MOBILE_LAYOUT_QUERY);
   private currentLightCullKey: string | null = null;
   private playerProtectionActive = false;
   private playerProtectionTintVisible = false;
@@ -2569,7 +2572,7 @@ export class PhaserRenderer {
     this.setCameraTarget(this.currentCameraTarget);
     camera.startFollow(this.cameraTarget!, false, CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_LERP);
     camera.setDeadzone();
-    const zoom = this.cameraRoom ? BOSS_CAMERA_SCALE : CAMERA_SCALE;
+    const zoom = (this.cameraRoom ? BOSS_CAMERA_SCALE : CAMERA_SCALE) * this.cameraScaleFactor();
     if (this.cameraRoom) {
       camera.setZoom(zoom);
       return;
@@ -2581,9 +2584,19 @@ export class PhaserRenderer {
     }
   }
 
+  private cameraScaleFactor(): number {
+    return this.mobileLayout.matches ? MOBILE_CAMERA_SCALE : 1;
+  }
+
   private refreshCameraForResize(): void {
-    if (!this.cameraRoom) return;
-    this.applyCameraMode(true);
+    const camera = this.scene?.cameras.main;
+    if (!camera) return;
+    if (this.cameraRoom) {
+      this.applyCameraMode(true);
+      return;
+    }
+    const zoom = CAMERA_SCALE * this.cameraScaleFactor();
+    if (Math.abs(camera.zoom - zoom) > 1e-3) camera.setZoom(zoom);
   }
 
   worldPointAt(clientX: number, clientY: number): Point | null {
