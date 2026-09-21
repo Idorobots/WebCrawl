@@ -14,6 +14,17 @@
   src: url("/fonts/Prefix-2Oa8.ttf") format("truetype");
 }
 
+/* Terminal monospace with the box-drawing glyphs the loading logo needs.
+   Noto Sans Mono ships with the game and covers them at a uniform 0.6em
+   advance, keeping every column aligned on mobile and desktop alike. */
+@font-face {
+  font-family: "Noto Sans Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/noto-sans-mono.woff2") format("woff2");
+}
+
 :root {
   color-scheme: dark;
   --bg: #0b0d10;
@@ -488,10 +499,11 @@ button:hover {
 
 #loadingLogo {
   margin: 0 0 10px;
-  /* The art is box-drawing glyphs, so pin it to one monospace per platform
-     that actually covers them — the UA `pre { font-family: monospace }`
-     fallback misaligns columns on mobile where they are missing. */
+  /* The art is box-drawing glyphs (█╗║╔╝╚═) that most platform fonts lack.
+     Noto Sans Mono ships with the game and covers them at a uniform 0.6em
+     advance, keeping every column aligned on mobile and desktop alike. */
   font-family:
+    "Noto Sans Mono",
     ui-monospace,
     Menlo,
     Consolas,
