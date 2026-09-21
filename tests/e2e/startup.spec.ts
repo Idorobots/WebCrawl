@@ -1081,4 +1081,7 @@ test("shows the could-not-load modal when every fetch route fails", async ({ pag
   await expect(page.locator("#fetchErrorMessage")).toContainText("https://example.com/start");
   await page.getByRole("button", { name: "UNDERSTOOD" }).click();
   await expect(modal).not.toBeVisible();
+  await expect(page.locator("#welcomeScreen")).toBeVisible();
+  await expect(page.locator("#gameUi")).not.toBeVisible();
+  await expect(page.locator("#welcomeUrlInput")).toHaveValue("https://example.com/start");
 });

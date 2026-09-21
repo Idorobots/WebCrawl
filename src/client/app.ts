@@ -174,6 +174,7 @@ const sideFloorLabelEl = requireElement<HTMLElement>("#sideFloorLabel");
 let currentRequest = 0;
 let currentPageUrl: string | null = null;
 let currentStateId: string | null = null;
+let gameStarted = false;
 const navigationHistory: string[] = [];
 const navigationReturnRooms: Array<number | null> = [];
 
@@ -890,7 +891,53 @@ fetchErrorDismissButton.addEventListener("click", () => {
   playButtonClick();
   fetchErrorModal.hidden = true;
   fetchErrorModal.classList.remove("open");
+  if (!gameStarted) returnToWelcome();
 });
+
+function resetRunState(): void {
+  currentPageUrl = null;
+  currentStateId = null;
+  navigationHistory.length = 0;
+  navigationReturnRooms.length = 0;
+  playerHp = PLAYER_MAX_HP;
+  playerAlive = true;
+  playerInvulnerable = false;
+  visitedRooms = new Set();
+  discoveredRoomsByPage.clear();
+  collectedLoot.clear();
+  lootInventory.credits = 0;
+  lootInventory.crystals = 0;
+  lootInventory.cores = 0;
+  lootInventory.energy = 0;
+  lootInventory.medkits = 0;
+  runStats.kills = 0;
+  runStats.fastKills = 0;
+  runStats.slowKills = 0;
+  runStats.sentryKills = 0;
+  runStats.bossKills = 0;
+  runStats.shotsFired = 0;
+  if (killsCountEl) killsCountEl.textContent = "0";
+}
+
+function returnToWelcome(): void {
+  resetRunState();
+  stopAllMusic();
+  renderer?.stopStationAmbient();
+  hideLinkMenu();
+  hideContentBrowser();
+  urlBar.hidden = true;
+  gameUi.hidden = true;
+  gameUi.classList.remove("game-ui-ready");
+  welcomeTransitioning = false;
+  welcomePrompt?.cancel();
+  welcomePromptBody.replaceChildren();
+  spawnWelcomePrompt();
+  welcomeScreen.hidden = false;
+  welcomeScreen.classList.remove("closing", "welcome-ready");
+  void welcomeScreen.offsetWidth;
+  welcomeScreen.classList.add("welcome-ready");
+  playWelcomeAmbient();
+}
 
 const loadingScreen = requireElement<HTMLDivElement>("#loadingScreen");
 const loadingPromptTextEl = requireElement<HTMLElement>("#loadingPromptText");
@@ -3306,6 +3353,7 @@ async function loadPage(
       stateId: currentStateId,
       spawnPortalUrl: popBack ? departingPageUrl : null,
     }, layout);
+    gameStarted = true;
     if (retainedPointerPosition && pointerInViewport) {
       pointerClientPosition = retainedPointerPosition;
       updatePlayerAimFromPointer();
@@ -3399,9 +3447,7 @@ function startWelcomeCrawl(rawUrl: string): void {
     welcomeScreen.hidden = true;
     welcomeScreen.classList.remove("closing");
 
-    navigationHistory.length = 0;
-    navigationReturnRooms.length = 0;
-    currentStateId = null;
+    resetRunState();
     gameUi.hidden = false;
 
     if (LOADING_SCREEN_ENABLED) {
@@ -3433,6 +3479,16 @@ function startWelcomeCrawl(rawUrl: string): void {
   }, SCREEN_FADE_MS);
 }
 
+function spawnWelcomePrompt(): void {
+  welcomePrompt = setupWelcomePrompt({
+    promptHost: welcomePromptBody,
+    urlInput: welcomeUrlInput,
+    surface: welcomeScreen,
+    onTypingStart: startInterfaceTextLoop,
+    onTypingEnd: stopInterfaceTextLoop,
+  });
+}
+
 function startWelcomeSession(): void {
   if (welcomeSessionStarted) return;
   welcomeSessionStarted = true;
@@ -3444,13 +3500,7 @@ function startWelcomeSession(): void {
     loginLayout.hidden = true;
     loginLayout.classList.remove("closing");
   }, SCREEN_FADE_MS);
-  welcomePrompt = setupWelcomePrompt({
-    promptHost: welcomePromptBody,
-    urlInput: welcomeUrlInput,
-    surface: welcomeScreen,
-    onTypingStart: startInterfaceTextLoop,
-    onTypingEnd: stopInterfaceTextLoop,
-  });
+  spawnWelcomePrompt();
 }
 
 loginForm.addEventListener("submit", (event) => {

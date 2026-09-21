@@ -764,7 +764,10 @@ Other:
 - CC-SA for gfx
 - CC-SA for sfx
 
-* Visual/audio bugs
+* DONE Visual/audio bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-21 Mon 20:58]
+:END:
 - Monster walk sound effect loop persists when the player moves to another floor. When the player changes floors or dies, please stop all movement-related sound effects.
 
 - Spawner spawn animation should only be triggered when the spawner is actually spawning something. When the spawner is blocked, it should not trigger spawning.
@@ -781,7 +784,7 @@ Other:
 
 - Portals don't cast a shadow but they should.
 
-- Shadows should be elongated along the player-cursor axis. The closer they are to the player, the longer the shadows should be. The shadows should still remain "attached" to the objects they are cast from.
+- Scenery and monsters can be generated on the same exact spots.
 
 * CANCELLED Visual bugs
 :LOGBOOK:
@@ -790,6 +793,7 @@ Other:
 :END:
 - Sprite shadows are too well-defined. They should be softer.
 - Shadows are too large in general, please make the "drop shadow" effect slightly less pronounced.
+- Shadows should be elongated along the player-cursor axis. The closer they are to the player, the longer the shadows should be. The shadows should still remain "attached" to the objects they are cast from.
 
 * DONE Visual audio/bugs
 :LOGBOOK:
@@ -921,6 +925,7 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Regulatory Capture should be triggerable whenever the energy bar is non-empty. The distance travelled and damage dealt should be proportional to the amount of energy spent at once (more energy used, the longer the player travels and deals more damage). The max energy should be increased to 5.
 
 * Minimap overhaul
+- Minimap should be circular
 - Render corridors as wider connectors on the minimap.
 - Show precise location of the player on the minimap, including in corridors.
 - Mark rooms with a down-portal with a magenta triangle in them (one if any portals exist).
@@ -932,7 +937,7 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 * Easter egg
 Whenever AI is mentioned in the content, render a special Samario content browser.
 
-* Power-ups
+* Power-ups & enhancements
 - Higher max health
 - Health regen
 - Shield regen
@@ -942,8 +947,9 @@ Whenever AI is mentioned in the content, render a special Samario content browse
 - "Familiar" robot helping
 - Better loot chance
 - Map update - shows the whole level layout on the minimap
-- Minimap radar - shows monsters on the minimap
-- Temporary Invisibility
+- Minimap radar - show a rotating bar that marks monsters on the minimap for a brief moment
+- Better minimap radar - shows monsters on the minimap all the time
+- Temporary Invisibility triggered with a button
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:
