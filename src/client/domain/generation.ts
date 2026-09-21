@@ -268,8 +268,7 @@ export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[]
       destroyed: false,
       dropKind: "core",
       spawner: true,
-      spawnIntervalMs: Math.max(2_800, 7_000 - difficulty * 500),
-      spawnLimit: Math.min(7, 2 + Math.floor(difficulty / 2)),
+      spawnIntervalMs: Math.max(10_000, 30_000 - difficulty * 1_000),
       spawnedCount: 0,
     });
   }
@@ -409,7 +408,6 @@ function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly
       hp: 0,
       dropKind: null,
       spawner: false,
-      spawnLimit: undefined,
       spawnedCount: undefined,
     };
   });

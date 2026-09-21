@@ -160,6 +160,10 @@ const STATION_AMBIENT_SRC = "sounds/ambient/station/space.mp3";
 const STATION_AMBIENT_VOLUME = 0.45;
 const STATION_AMBIENT_FADE_MS = 750;
 
+// Spawner sequence: discharge flash and brief ready flash after the monster
+// appears, each lasting this long, before settling back onto the dormant frame.
+const SPAWNER_DISCHARGE_FRAME_MS = 100;
+
 const ONE_SHOT_SOUNDS: Readonly<Record<string, string>> = {
   "sfx-pickup-generic": "sounds/pickup/generic.mp3",
   "sfx-pickup-ram": "sounds/pickup/ram.mp3",
@@ -740,15 +744,22 @@ export class PhaserRenderer {
     this.setFootsteps(this.playerFootsteps, active, time);
   }
 
-  endMonsterFootsteps(): void {
-    // Stop the loops from repeating; each current pass plays out, then cleanup.
+  stopMovementSounds(): void {
+    // Hard-stop every movement sound (player footsteps, monster walk loops);
+    // used on player death and when changing floors so nothing drones on.
+    const chain = this.playerFootsteps;
+    chain.active = false;
+    chain.lastStepAt = 0;
+    chain.sound?.destroy();
+    chain.sound = null;
     for (const state of this.monsterFootsteps.values()) {
       const sound = state.sound;
       if (!sound) continue;
       state.sound = null;
-      sound.setLoop(false);
-      sound.once(Phaser.Sound.Events.COMPLETE, () => sound.destroy());
+      sound.stop();
+      sound.destroy();
     }
+    this.monsterFootsteps.clear();
   }
 
   updateFootsteps(time: number): void {
@@ -1656,6 +1667,27 @@ export class PhaserRenderer {
     }
     const spawn = item.visual.animations?.spawn;
     if (spawn && item.spawnAnimationStartedAt !== undefined) {
+      if (item.spawner) {
+        // Spawner sequence driven from app.ts. Charge phase (pendingSpawnAt
+        // set): charging frame, switching to ready at 90% of the charge.
+        // Discharge phase (startedAt = spawn moment): discharge flash, brief
+        // ready flash, then settle back onto the dormant (off) frame.
+        const frames = spawn.frames;
+        if (item.pendingSpawnAt !== undefined) {
+          const total = Math.max(1, item.pendingSpawnAt - item.spawnAnimationStartedAt);
+          const elapsed = Math.max(0, now - item.spawnAnimationStartedAt);
+          const frame = elapsed < total * 0.9 ? frames[1]! : frames[3]!;
+          return { clip: { ...spawn, frames: [frame], holdLast: true }, elapsed: 0 };
+        }
+        const elapsed = Math.max(0, now - item.spawnAnimationStartedAt);
+        if (elapsed < SPAWNER_DISCHARGE_FRAME_MS) {
+          return { clip: { ...spawn, frames: [frames[2]!], holdLast: true }, elapsed: 0 };
+        }
+        if (elapsed < SPAWNER_DISCHARGE_FRAME_MS * 2) {
+          return { clip: { ...spawn, frames: [frames[3]!], holdLast: true }, elapsed: 0 };
+        }
+        return { clip: item.visual.normal, elapsed: 0 };
+      }
       if (item.contentTurningOff) {
         return {
           clip: {

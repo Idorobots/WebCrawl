@@ -24,6 +24,7 @@ import {
   applyObstacleDamage,
   enemyVolleyProjectiles,
   monsterAttackIsReady,
+  MONSTER_ATTACK_WARMUP_MS,
   monsterEngagementRange,
   projectileHitsCircle,
   projectileHitsDecoration,
@@ -1219,65 +1220,84 @@ function activateMonstersInRoom(roomId: number): void {
   if (changed) renderMonsters();
 }
 
+const SPAWNER_CHARGE_UP_MS = 2_000;
+
 function updateMonsterSpawners(timestamp: number): void {
   if (!MONSTERS_ENABLED) return;
   let spawned = false;
-  let animationActive = false;
   for (const spawner of currentSpawners) {
     if (
       !spawner.spawner ||
       spawner.destroyed ||
-      !visitedRooms.has(spawner.roomId) ||
-      (spawner.spawnedCount ?? 0) >= (spawner.spawnLimit ?? 0)
+      !visitedRooms.has(spawner.roomId)
     ) continue;
 
-    if (spawner.nextSpawnAt === undefined) {
-      spawner.nextSpawnAt = timestamp + (spawner.spawnIntervalMs ?? 7_000);
+    // Charge-up sequence already running: spawn once the timeout elapses.
+    if (spawner.pendingSpawnAt !== undefined) {
+      if (timestamp < spawner.pendingSpawnAt) continue;
+      const index = spawner.spawnedCount ?? 0;
+      const monster = monsterSpecForSpawner(spawner, floorNumber(), index);
+      monster.hp = monster.maxHp;
+      monster.active = true;
+      const position = findSpawnerSpawnPosition(monster, spawner);
+      if (!position) {
+        // Blocked mid-charge (something moved in): revert to dormant, retry soon.
+        delete spawner.pendingSpawnAt;
+        delete spawner.spawnAnimationStartedAt;
+        renderDecorations();
+        spawner.nextSpawnAt = timestamp + 1_000;
+        continue;
+      }
+      monster.x = position.x;
+      monster.y = position.y;
+      monster.attackWarmupUntil = timestamp + MONSTER_ATTACK_WARMUP_MS;
+      currentMonsters.push(monster);
+      spawner.spawnedCount = index + 1;
+      spawner.nextSpawnAt = timestamp + (spawner.spawnIntervalMs ?? 20_000);
+      // Enter the discharge flash; the clip settles back onto the dormant frame.
+      spawner.spawnAnimationStartedAt = timestamp;
+      delete spawner.pendingSpawnAt;
+      saveObstacleState(spawner);
+      saveMonsterState(monster);
+      renderer.spawnEffect(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
+      spawned = true;
       continue;
     }
-    const spawnClip = spawner.visual.animations?.spawn;
-    const eventDelay = (spawnClip?.eventFrame ?? 0) * (spawnClip?.frameDurationMs ?? 0);
-    const animationStartAt = spawner.nextSpawnAt - eventDelay;
-    if (timestamp >= animationStartAt && (spawner.spawnAnimationStartedAt ?? -Infinity) < animationStartAt) {
-      spawner.spawnAnimationStartedAt = animationStartAt;
-    }
-    if (spawner.spawnAnimationStartedAt !== undefined && spawnClip) {
-      const duration = spawnClip.frames.length * spawnClip.frameDurationMs;
-      animationActive ||= timestamp <= spawner.spawnAnimationStartedAt + duration + 50;
+
+    if (spawner.nextSpawnAt === undefined) {
+      spawner.nextSpawnAt = timestamp + (spawner.spawnIntervalMs ?? 20_000);
+      continue;
     }
     if (timestamp < spawner.nextSpawnAt) continue;
 
+    // Only start sound + animation when there is actually room to spawn.
     const index = spawner.spawnedCount ?? 0;
     const monster = monsterSpecForSpawner(spawner, floorNumber(), index);
-    monster.hp = monster.maxHp;
-    monster.active = true;
-    const sideDistance = (spawner.footprint ?? spawner.radius) + monster.radius + world(8);
-    const spawnOffsets: Point[] = [
-      { x: 0, y: 0 },
-      { x: sideDistance, y: 0 }, { x: -sideDistance, y: 0 },
-      { x: 0, y: sideDistance }, { x: 0, y: -sideDistance },
-      { x: sideDistance, y: sideDistance }, { x: -sideDistance, y: -sideDistance },
-    ];
-    const safePosition = spawnOffsets
-      .map(offset => ({ x: spawner.x + offset.x, y: spawner.y + offset.y }))
-      .find(point => monsterSpawnPositionIsClear(monster, spawner, point));
-    if (!safePosition) {
+    if (!findSpawnerSpawnPosition(monster, spawner)) {
       spawner.nextSpawnAt = timestamp + 1_000;
       continue;
     }
-    monster.x = safePosition.x;
-    monster.y = safePosition.y;
-    currentMonsters.push(monster);
-    spawner.spawnedCount = index + 1;
-    spawner.nextSpawnAt = timestamp + (spawner.spawnIntervalMs ?? 7_000);
-    saveObstacleState(spawner);
-    saveMonsterState(monster);
-    renderer.spawnEffect(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
+    spawner.spawnAnimationStartedAt = timestamp;
+    spawner.pendingSpawnAt = timestamp + SPAWNER_CHARGE_UP_MS;
     renderer.playSpawnerSpawnSound();
-    spawned = true;
   }
-  if (animationActive) renderer.updateDecorationAnimations(currentSpawners, timestamp);
+  renderer.updateDecorationAnimations(currentSpawners, timestamp);
   if (spawned) renderMonsters();
+}
+
+function findSpawnerSpawnPosition(monster: Monster, spawner: Decoration): Point | null {
+  const sideDistance = (spawner.footprint ?? spawner.radius) + monster.radius + world(8);
+  // Stationary monsters (sentries) are placed beside the spawner so they do
+  // not sit on top of it; mobile monsters emerge from the spawner itself.
+  const spawnOffsets: Point[] = [
+    ...(monster.speed === 0 ? [] : [{ x: 0, y: 0 }]),
+    { x: sideDistance, y: 0 }, { x: -sideDistance, y: 0 },
+    { x: 0, y: sideDistance }, { x: 0, y: -sideDistance },
+    { x: sideDistance, y: sideDistance }, { x: -sideDistance, y: -sideDistance },
+  ];
+  return spawnOffsets
+    .map(offset => ({ x: spawner.x + offset.x, y: spawner.y + offset.y }))
+    .find(point => monsterSpawnPositionIsClear(monster, spawner, point)) ?? null;
 }
 
 function renderMonsters(): void {
@@ -1311,7 +1331,7 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
   if (playerHp <= 0) {
     playerAlive = false;
     renderer.playPlayerDeathSound();
-    renderer.endMonsterFootsteps();
+    renderer.stopMovementSounds();
     resetPlayerInput();
     pauseGameLoop();
     const hud = document.querySelector("#hud");
@@ -1541,6 +1561,7 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
     if (!isWalkable(minion.x, minion.y, minion.radius)) continue;
     minion.hp = minion.maxHp;
     minion.active = true;
+    minion.attackWarmupUntil = timestamp + MONSTER_ATTACK_WARMUP_MS;
     currentMonsters.push(minion);
     saveMonsterState(minion);
     renderer.spawnEffect(minion.visual.effects?.destroy, minion.x, minion.y, minion.size);
@@ -1975,6 +1996,14 @@ function gameTick(timestamp: number): void {
       continue;
     }
 
+    // Newly-appeared monsters stand still until their attack warmup elapses.
+    if (monster.attackWarmupUntil !== undefined && timestamp < monster.attackWarmupUntil) {
+      monster.path = [];
+      monster.pathIndex = 0;
+      monster.nextPathRefreshAt = 0;
+      continue;
+    }
+
     const containingRoom = roomContainingPoint(monster.x, monster.y);
     if (containingRoom && visitedRooms.has(containingRoom.id)) {
       monster.roomId = containingRoom.id;
@@ -2370,6 +2399,7 @@ function checkStairs(): boolean {
   if (!stair) return false;
   portalTransitioning = true;
   setTeleportPaused(true);
+  renderer.stopMovementSounds();
   renderer.spawnEffect(PLAYER_SPEC.visual.effects?.teleport, player.x, player.y, PLAYER_SPEC.spriteSize);
   renderer.playPortalSound(stair.type);
   setTimeout(() => {

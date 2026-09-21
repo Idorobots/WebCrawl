@@ -863,6 +863,11 @@ describe("deterministic room contents", () => {
     expect(lightSentry.visual.directions.down?.ranged?.frameDurationMs).toBe(125);
     expect(monsterAttackIsReady(lightSentry, 1_399)).toBe(false);
     expect(monsterAttackIsReady(lightSentry, 1_400)).toBe(true);
+    lightSentry.attackWarmupUntil = 1_450;
+    expect(monsterAttackIsReady(lightSentry, 1_449)).toBe(false);
+    expect(monsterAttackIsReady(lightSentry, 1_450)).toBe(true);
+    delete lightSentry.attackWarmupUntil;
+    expect(monsterAttackIsReady(lightSentry, 1_400)).toBe(true);
   });
 
   it("promotes at most one room enemy to a rare deterministic miniboss", () => {
@@ -1378,7 +1383,8 @@ describe("deterministic room contents", () => {
     const deepSpawners = floorTen.filter(item => item.spawner);
 
     expect(deepSpawners[0]!.maxHp).toBeGreaterThan(earlySpawners[0]!.maxHp);
-    expect(deepSpawners[0]!.spawnLimit).toBeGreaterThan(earlySpawners[0]!.spawnLimit ?? 0);
+    expect(earlySpawners[0]!.spawnIntervalMs).toBe(30_000);
+    expect(deepSpawners[0]!.spawnIntervalMs).toBe(21_000);
     expect(deepSpawners[0]!.spawnIntervalMs).toBeLessThan(earlySpawners[0]!.spawnIntervalMs ?? Infinity);
 
     const spawner = deepSpawners[0]!;

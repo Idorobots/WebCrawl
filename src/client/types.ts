@@ -211,9 +211,10 @@ export interface Decoration extends Point {
   contentTurningOff?: boolean;
   spawner?: boolean;
   spawnIntervalMs?: number;
-  spawnLimit?: number;
   spawnedCount?: number;
   nextSpawnAt?: number;
+  /** Timestamp at which a started spawn sequence completes; set when the charge-up begins. */
+  pendingSpawnAt?: number;
   spawnAnimationStartedAt?: number;
 }
 
@@ -249,6 +250,8 @@ export interface Monster extends Point {
   projectileRange: number;
   dropsLoot: boolean;
   lastAttackAt: number;
+  /** Timestamp before which the monster will not attack; set when it appears. */
+  attackWarmupUntil?: number;
   attackKind?: MonsterAttackKind;
   active: boolean;
   dead: boolean;

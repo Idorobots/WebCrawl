@@ -765,22 +765,26 @@ Other:
 - CC-SA for sfx
 
 * Visual/audio bugs
-- Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
+- Monster walk sound effect loop persists when the player moves to another floor. When the player changes floors or dies, please stop all movement-related sound effects.
+
+- Spawner spawn animation should only be triggered when the spawner is actually spawning something. When the spawner is blocked, it should not trigger spawning.
+- Spawner annimation and sound effect should match - when the spawning starts the spawner should start playing the sound, then enter the annimation and only spawn after a specific timeout (let's go with 2 seconds).
+- Spawners should spawn enemies continuously until destroyed every delay seconds.
+
+- Player is spawend the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
 - Move the portal active area and footprint by the same amount down as the player spawn point.
 
 - Spawner shadow is messed up due to the translucent area on the sprite.
 - Sprite shadows are too well-defined. They should be softer.
 - Shadows are too large in general, please make the "drop shadow" effect slightly less pronounced.
 
-- Spawner spawn animation should only be triggered when the spawner is actually spawning something.
-- Spawner annimation and sound effect should match - when the spawning starts the spawner should start playing the sound, then enter the annimation and only spawn after a specific timeout (let's go with 2 seconds).
-
 - "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
 - "floor_hatch" tile should be considered decoration tile, not main floor tile
 
-- Monster walk sound effect loop persists when the player moves to another floor. When the player changes floors or dies, please stop all movement-related sound effects.
-
-* Visual audio/bugs
+* DONE Visual audio/bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-21 Mon 17:46]
+:END:
 - Inner corner on corridor L-junctions is placed wrong and of the wrong type.
 
 - Floor tile edges look weird when moving. It's likely due to the scaling of the floor sprites. Can something be done so that the sprites don't look weird when moving? In addition to that, the sprites seem to be way more pixelated than they should, especially on mobile.
@@ -904,7 +908,6 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
-- Spawners should spawn enemies continuously until destroyed every delay seconds.
 - Regulatory Capture should be triggerable whenever the energy bar is non-empty. The distance travelled and damage dealt should be proportional to the amount of energy spent at once (more energy used, the longer the player travels and deals more damage). The max energy should be increased to 5.
 
 * Minimap overhaul

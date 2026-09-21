@@ -66,7 +66,11 @@ export function projectileHitsCircle(
   return Math.hypot(projectile.x - target.x, projectile.y - target.y) <= targetRadius + projectileRadius;
 }
 
+/** Grace period after a monster appears before it may start attacking. */
+export const MONSTER_ATTACK_WARMUP_MS = 500;
+
 export function monsterAttackIsReady(monster: Monster, timestamp: number): boolean {
+  if (monster.attackWarmupUntil !== undefined && timestamp < monster.attackWarmupUntil) return false;
   return timestamp - monster.lastAttackAt >= monster.attackCooldownMs;
 }
 
