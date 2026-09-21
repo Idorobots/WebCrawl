@@ -810,14 +810,22 @@ Other:
 - In compound corridors the scenery is often placed in the same spot overlapping. This should not be the case, all scenery should be placed in different spots.
 - The error screen should redirect back to the welcome screen.
 
-* Other issues
+* DONE Other issues
+:LOGBOOK:
+- State "DONE"       from              [2026-09-21 Mon 22:43]
+:END:
 - Content browser does not turn off - it remains displaying the intermediate annimation frame. It doesn't open up fully either, only after it is shot.
 
 - Debris (including monster debris) should always be displayed underneath all objects.
 
+- Instead of "new expedition high score" it should say "new session high score".
+* CANCELLED Other issues
+:LOGBOOK:
+- State "CANCELLED"  from              [2026-09-21 Mon 22:42] \\
+  Nah, it makes no sense.
+:END:
 - Non-blocking scenery should not interfere with the bullets unless actually aimed at.
 
-- Instead of "new expedition high score" it should say "new session high score".
 
 * Wall & door refactor
 Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.

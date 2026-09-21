@@ -2120,7 +2120,8 @@ export class PhaserRenderer {
             color: "#f7ddff", fontSize: `${world(11)}px`, fontStyle: "bold",
           }).setOrigin(0.5));
         }
-        container = scene.add.container(item.x, item.y, children).setDepth(yDepth(item.y, item.dead ? -1 : 0));
+        container = scene.add.container(item.x, item.y, children)
+          .setDepth(this.monsterDepth(item));
         container.setData("hpWidth", barWidth);
         container.setData("dead", item.dead);
         this.monsters.set(item.id, container);
@@ -2137,7 +2138,7 @@ export class PhaserRenderer {
           if (aura) this.monsterAuras.set(item.id, aura);
         }
       }
-      container.setPosition(item.x, item.y).setDepth(yDepth(item.y, item.dead ? -1 : 0));
+      container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
       this.applyMonsterFrame(container, item, performance.now());
       const aura = this.monsterAuras.get(item.id);
@@ -2166,7 +2167,7 @@ export class PhaserRenderer {
     for (const item of items) {
       const container = this.monsters.get(item.id);
       if (!container) continue;
-      container.setPosition(item.x, item.y).setDepth(yDepth(item.y, item.dead ? -1 : 0));
+      container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
       const previousAsset = sprite.texture.key;
       this.applyMonsterFrame(container, item, now);
@@ -2205,6 +2206,10 @@ export class PhaserRenderer {
     this.applyClip(sprite, frame.clip, item.size, frame.elapsed);
     const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
     if (shadow) this.applyClip(shadow, frame.clip, item.size, frame.elapsed);
+  }
+
+  private monsterDepth(item: Monster): number {
+    return item.dead && item.visual.destroyed?.length ? DEBRIS_DEPTH : yDepth(item.y);
   }
 
   private monsterFrame(item: Monster, now: number): { asset: string; animation: MonsterAnimation; clip: SpriteClip; elapsed: number } {
