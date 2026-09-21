@@ -797,13 +797,16 @@ export function buildMonsters(
       )),
     ...bossSummons,
   ];
-  return specs.flatMap((spec) => {
+  const placedMonsters: Array<Pick<Monster, "x" | "y" | "radius">> = [];
+  const monsters: Monster[] = [];
+  for (const spec of specs) {
     const saved = savedStates.get(spec.id);
     const desired = { x: saved?.x ?? spec.x, y: saved?.y ?? spec.y };
-    const position = safeMonsterPosition(spec, desired, layout, decorations);
-    if (!position) return [];
+    const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters);
+    if (!position) continue;
+    placedMonsters.push({ x: position.x, y: position.y, radius: spec.radius });
     const relocated = position.x !== desired.x || position.y !== desired.y;
-    return [{
+    monsters.push({
       ...spec,
       ...position,
       roomId: relocated ? spec.spawnRoomId : saved?.roomId ?? spec.roomId,
@@ -817,8 +820,9 @@ export function buildMonsters(
       dropKind: saved?.dropKind ?? null,
       attackSequence: saved?.attackSequence ?? spec.attackSequence,
       summonedCount: saved?.summonedCount ?? spec.summonedCount,
-    }];
-  });
+    });
+  }
+  return monsters;
 }
 
 export function monsterPositionIsClear(
@@ -827,6 +831,7 @@ export function monsterPositionIsClear(
   layout: DungeonLayout,
   decorations: readonly Decoration[],
   ignoredDecorationId?: string,
+  placedMonsters: ReadonlyArray<Pick<Monster, "x" | "y" | "radius">> = [],
 ): boolean {
   const onFloor = layout.nodes.some(room => pointInRoomFloor(position.x, position.y, room, radius)) ||
     layout.links.some(link => pointInCorridor(position.x, position.y, link, radius));
@@ -836,6 +841,8 @@ export function monsterPositionIsClear(
     !item.obstacle ||
     item.destroyed ||
     Math.hypot(position.x - item.x, position.y - item.y) >= radius + (item.footprint ?? item.radius)
+  ) && placedMonsters.every(placed =>
+    Math.hypot(position.x - placed.x, position.y - placed.y) >= radius + placed.radius
   );
 }
 
@@ -844,6 +851,7 @@ function safeMonsterPosition(
   desired: Point,
   layout: DungeonLayout,
   decorations: readonly Decoration[],
+  placedMonsters: ReadonlyArray<Pick<Monster, "x" | "y" | "radius">> = [],
 ): Point | null {
   const room = layout.nodes.find(candidate => candidate.id === monster.spawnRoomId);
   const centers = [desired, ...(room ? [{ x: room.x, y: room.y }] : [])];
@@ -862,8 +870,22 @@ function safeMonsterPosition(
       }
     }
   }
+  if (room) {
+    // Dense rooms can exhaust the ring candidates; fall back to a
+    // deterministic scan of the room floor so crowded spots still relocate.
+    const step = Math.max(world(48), monster.radius);
+    const left = room.x - room.width / 2 + monster.radius;
+    const right = room.x + room.width / 2 - monster.radius;
+    const top = room.y - room.height / 2 + monster.radius + WORLD_GEOMETRY.topWallCollisionDepth;
+    const bottom = room.y + room.height / 2 - monster.radius;
+    for (let y = top; y <= bottom; y += step) {
+      for (let x = left; x <= right; x += step) {
+        candidates.push({ x, y });
+      }
+    }
+  }
   return candidates.find(position =>
-    monsterPositionIsClear(position, monster.radius, layout, decorations, monster.spawnSourceId)
+    monsterPositionIsClear(position, monster.radius, layout, decorations, monster.spawnSourceId, placedMonsters)
   ) ?? null;
 }
 
@@ -875,16 +897,44 @@ export function lootCountForRoom(room: GraphNode): number {
 
 }
 
+const LOOT_SEPARATION = world(66);
+
 export function lootPositions(room: GraphNode, count: number): Point[] {
   if (!count) return [];
   const offsets: Array<[number, number]> = [
     [-world(160), -world(100)], [world(160), -world(100)],
     [-world(160), world(100)], [world(160), world(100)], [0, world(135)],
   ];
-  return Array.from({ length: count }, (_, index) => {
-    const offset = offsets[index % offsets.length]!;
-    return { x: room.x + offset[0], y: room.y + offset[1] };
-  });
+  const positions: Point[] = [];
+  for (let index = 0; index < count; index += 1) {
+    let position = index < offsets.length
+      ? { x: room.x + offsets[index]![0], y: room.y + offsets[index]![1] }
+      : null;
+    if (!position || lootPositionsOverlap(position, positions)) {
+      const seed = stableHash(`${room.lootSeed}|loot|${index}`);
+      for (let attempt = 0; attempt < 16; attempt += 1) {
+        const angle = ((seed >>> attempt) % 720) / 720 * Math.PI * 2 + attempt * 0.4;
+        const fraction = 0.35 + ((seed >>> (attempt + 4)) % 55) / 100;
+        const candidate = {
+          x: room.x + Math.cos(angle) * room.width / 2 * fraction,
+          y: room.y + Math.sin(angle) * room.height / 2 * fraction,
+        };
+        if (!lootPositionsOverlap(candidate, positions)) {
+          position = candidate;
+          break;
+        }
+      }
+      position ??= { x: room.x, y: room.y + ((seed >>> 6) % 2 ? world(135) : -world(135)) };
+    }
+    positions.push(position);
+  }
+  return positions;
+}
+
+function lootPositionsOverlap(position: Point, placed: readonly Point[]): boolean {
+  return placed.some(other =>
+    Math.hypot(position.x - other.x, position.y - other.y) < LOOT_SEPARATION
+  );
 }
 
 export function staircasePositions(

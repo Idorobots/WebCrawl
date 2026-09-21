@@ -501,8 +501,8 @@ test("spawns on an enabled entry portal without immediately retriggering it", as
   if (!entryPortal) throw new Error("Expected an up portal on floor two");
 
   expect(await playerPosition(page)).toEqual({
-    x: Math.round(entryPortal.x),
-    y: Math.round(entryPortal.y),
+    x: Math.round(entryPortal.x + PORTAL_DEFINITION.spawnOffset.x),
+    y: Math.round(entryPortal.y + PORTAL_DEFINITION.spawnOffset.y),
   });
   expect(state.contacts).not.toContain(entryPortal.id);
   await page.waitForTimeout(500);

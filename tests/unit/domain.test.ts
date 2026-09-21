@@ -43,6 +43,7 @@ import {
   decorationSpecsForCorridor,
   decorationSpecsForRoom,
   lootCountForRoom,
+  lootPositions,
   monsterSpecsForCorridor,
   monsterSpecsForRoom,
   monsterPositionIsClear,
@@ -92,7 +93,7 @@ import {
   weaponForRoom,
   weaponKinds,
 } from "../../src/client/domain/weapons";
-import type { DungeonGraph, GraphNode, LayoutLink, MonsterVisualKind, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
+import type { Decoration, DungeonGraph, GraphNode, LayoutLink, MonsterVisualKind, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
   id,
@@ -499,7 +500,7 @@ describe("portal entry", () => {
 
   it("uses the portal energy ring rather than the low sprite anchor", () => {
     const contacts = new Set<string>();
-    const { contactOffset, contactRadius } = PORTAL_DEFINITION;
+    const { contactOffset, contactRadius, spawnOffset } = PORTAL_DEFINITION;
     expect(updatePortalContacts(
       [portal],
       { x: portal.x + contactOffset.x, y: portal.y + contactOffset.y },
@@ -508,7 +509,13 @@ describe("portal entry", () => {
       contactOffset,
     )).toEqual(portal);
     contacts.clear();
-    expect(updatePortalContacts([portal], portal, contactRadius, contacts, contactOffset)).toBeNull();
+    expect(updatePortalContacts(
+      [portal],
+      { x: portal.x + spawnOffset.x, y: portal.y + spawnOffset.y },
+      contactRadius,
+      contacts,
+      contactOffset,
+    )).toBeNull();
   });
 
   it("selects the entry portal by explicit url, then the up portal, then the first room stair", () => {
@@ -520,8 +527,13 @@ describe("portal entry", () => {
     expect(entryPortalFor([], null)).toBeNull();
   });
 
-  it("places the player on the portal pedestal when spawning", () => {
-    expect(initialPlayerPosition(portal, { x: 500, y: 500 })).toEqual({ x: portal.x, y: portal.y });
+  it("places the player in front of the portal when spawning", () => {
+    const { spawnOffset } = PORTAL_DEFINITION;
+    expect(spawnOffset.y).toBeGreaterThan(0);
+    expect(initialPlayerPosition(portal, { x: 500, y: 500 })).toEqual({
+      x: portal.x + spawnOffset.x,
+      y: portal.y + spawnOffset.y,
+    });
     expect(initialPlayerPosition(null, { x: 500, y: 500 })).toEqual({ x: 500, y: 500 });
   });
 });
@@ -644,6 +656,46 @@ describe("deterministic room contents", () => {
     expect(relocated).toBeDefined();
     expect(relocated).not.toMatchObject({ x: original.x, y: original.y });
     expect(monsterPositionIsClear(relocated, relocated.radius, combatLayout, [blocker])).toBe(true);
+  });
+
+  it("scatters generated monsters and loot so no two items share the same space", () => {
+    const rooms = Array.from({ length: 40 }, (_, index) => node(index + 30_000, 0, 1, {
+      tag: index % 4 === 3 ? "img" : "section",
+      isRoot: false,
+      x: index * ROOM_WIDTH * 2,
+      y: (index % 5) * ROOM_HEIGHT * 2,
+      lootSeed: stableHash(`scatter-room-${index}`),
+    }));
+    const layout = { nodes: rooms, links: [], hiddenCount: 0 };
+    const decorations = rooms.flatMap(room => decorationSpecsForRoom(room, 5));
+    const monsters = buildMonsters(layout, new Map(), new Set(), 5, decorations);
+    const group = [...monsters, ...decorations];
+    for (const [index, item] of group.entries()) {
+      for (const other of group.slice(index + 1)) {
+        if (item.roomId !== other.roomId) continue;
+        const itemIsDecoration = "footprint" in item;
+        const otherIsDecoration = "footprint" in other;
+        // Monsters only keep their distance from obstacle scenery; non-obstacle
+        // low scenery is intentionally walkable. Decoration pairs always separate.
+        if (itemIsDecoration !== otherIsDecoration) {
+          const decoration = itemIsDecoration ? item : other;
+          if (!(decoration as Decoration).obstacle) continue;
+        }
+        const minimum = ("footprint" in item ? item.footprint ?? item.radius : item.radius) +
+          ("footprint" in other ? other.footprint ?? other.radius : other.radius);
+        expect(Math.hypot(item.x - other.x, item.y - other.y), `${item.id} vs ${other.id}`)
+          .toBeGreaterThanOrEqual(minimum);
+      }
+    }
+    for (const room of rooms) {
+      const positions = lootPositions(room, lootCountForRoom(room));
+      for (const [index, position] of positions.entries()) {
+        for (const other of positions.slice(index + 1)) {
+          expect(Math.hypot(position.x - other.x, position.y - other.y))
+            .toBeGreaterThanOrEqual(world(66));
+        }
+      }
+    }
   });
 
   it("creates rich image-room loot and capped stairs", () => {

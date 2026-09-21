@@ -779,6 +779,10 @@ Other:
 
 - Spawner shadow is messed up due to the translucent area on the sprite, let's treat translucent areas as non-shadow casting if possible (or if it's too hard, let's treat them as shadows).
 
+- Portals don't cast a shadow but they should.
+
+- Shadows should be elongated along the player-cursor axis. The closer they are to the player, the longer the shadows should be. The shadows should still remain "attached" to the objects they are cast from.
+
 * CANCELLED Visual bugs
 :LOGBOOK:
 - State "CANCELLED"  from              [2026-09-21 Mon 18:57] \\
@@ -798,7 +802,7 @@ Other:
 * Bugs
 - The error screen should redirect back to the welcome screen.
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
-- Pathfinding sometimes works in a weird way when compound corridors are involved - often they skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
+- Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
 - In compound corridors the scenery is often placed in the same spot overlapping. This should not be the case, all scenery should be placed in different spots.
 
 * Consistent collision detection

@@ -35,6 +35,7 @@ import {
   pointInRoom,
   pointInRoomFloor,
   slideAlongObstacles,
+  type CircleObstacle,
 } from "./domain/geometry";
 import {
   buildDecorations as createDecorations,
@@ -1559,6 +1560,9 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
     const index = summonedCount + added;
     const minion = monsterSpecForBossSummon(boss, floorNumber(), index);
     if (!isWalkable(minion.x, minion.y, minion.radius)) continue;
+    if (currentMonsters.some(other => !other.dead &&
+      Math.hypot(minion.x - other.x, minion.y - other.y) < minion.radius + other.radius)
+    ) continue;
     minion.hp = minion.maxHp;
     minion.active = true;
     minion.attackWarmupUntil = timestamp + MONSTER_ATTACK_WARMUP_MS;
@@ -2218,6 +2222,37 @@ function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_SPEC.rad
   return false;
 }
 
+/**
+ * Deactivated portals act as blocking, indestructible scenery: a circular
+ * space inside the energy ring cannot be entered by the player or monsters.
+ */
+function portalFootprintBlocks(x: number, y: number, radius: number): boolean {
+  for (const stair of currentStairs) {
+    if (stair.enabled) continue;
+    const distance = Math.hypot(
+      x - stair.x,
+      y - (stair.y + PORTAL_DEFINITION.contactOffset.y),
+    );
+    if (distance < radius + PORTAL_DEFINITION.blockingFootprint) return true;
+  }
+  return false;
+}
+
+/** Circle obstacles for the sliding movement solver, including blocked portals. */
+function slideObstaclesNear(x: number, y: number): CircleObstacle[] {
+  const decorations = [...(obstacleCells.get(spatialCellKey(x, y)) ?? [])]
+    .filter(item => item.obstacle && !item.destroyed)
+    .map(item => ({ x: item.x, y: item.y, radius: item.footprint ?? item.radius }));
+  const portals = currentStairs
+    .filter(stair => !stair.enabled)
+    .map(stair => ({
+      x: stair.x,
+      y: stair.y + PORTAL_DEFINITION.contactOffset.y,
+      radius: PORTAL_DEFINITION.blockingFootprint,
+    }));
+  return [...decorations, ...portals];
+}
+
 function isGeometryWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): boolean {
   if (!currentLayout) return false;
   const cell = geometryCells.get(spatialCellKey(x, y));
@@ -2235,12 +2270,14 @@ function isGeometryWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): 
 function isWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): boolean {
   return (
     isGeometryWalkable(x, y, radius) &&
-    !pointBlockedByDecoration(x, y, radius)
+    !pointBlockedByDecoration(x, y, radius) &&
+    !portalFootprintBlocks(x, y, radius)
   );
 }
 
 function isMonsterWalkable(monster: Monster, x: number, y: number): boolean {
   if (!isGeometryWalkable(x, y, monster.radius)) return false;
+  if (portalFootprintBlocks(x, y, monster.radius)) return false;
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
     if (!item.obstacle || item.destroyed) continue;
     const extent = monster.radius + (item.footprint ?? item.radius);
@@ -2257,6 +2294,7 @@ function isMonsterWalkable(monster: Monster, x: number, y: number): boolean {
 
 function monsterSpawnPositionIsClear(monster: Monster, spawner: Decoration, position: Point): boolean {
   if (!isGeometryWalkable(position.x, position.y, monster.radius)) return false;
+  if (portalFootprintBlocks(position.x, position.y, monster.radius)) return false;
   for (const item of currentDecorations) {
     if (item.id === spawner.id || !item.obstacle || item.destroyed) continue;
     if (Math.hypot(position.x - item.x, position.y - item.y) <
@@ -2400,7 +2438,12 @@ function checkStairs(): boolean {
   portalTransitioning = true;
   setTeleportPaused(true);
   renderer.stopMovementSounds();
-  renderer.spawnEffect(PLAYER_SPEC.visual.effects?.teleport, player.x, player.y, PLAYER_SPEC.spriteSize);
+  renderer.spawnEffect(
+    PLAYER_SPEC.visual.effects?.teleport,
+    player.x,
+    player.y + PLAYER_SPEC.visualCenterOffsetY,
+    PLAYER_SPEC.spriteSize,
+  );
   renderer.playPortalSound(stair.type);
   setTimeout(() => {
     portalTransitioning = false;
@@ -2543,14 +2586,11 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
     player = next;
     moved = true;
   } else {
-    const nearbyObstacles = [...(obstacleCells.get(spatialCellKey(next.x, next.y)) ?? [])]
-      .filter(item => item.obstacle && !item.destroyed)
-      .map(item => ({ x: item.x, y: item.y, radius: item.footprint ?? item.radius }));
     const slid = slideAlongObstacles(
       player,
       { x: dx, y: dy },
       PLAYER_SPEC.radius,
-      nearbyObstacles,
+      slideObstaclesNear(next.x, next.y),
       point => isWalkable(point.x, point.y),
     );
     if (slid) {

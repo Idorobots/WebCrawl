@@ -1795,6 +1795,10 @@ export class PhaserRenderer {
       const shadow = this.decorationShadows.get(item.id);
       if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
     }
+    for (const container of this.portals.values()) {
+      const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
+      if (shadow) this.applyShadowOffset(shadow, container.x, container.y, PORTAL_DEFINITION.size);
+    }
   }
 
   private syncDecorationEffectLight(
@@ -1942,11 +1946,16 @@ export class PhaserRenderer {
       if (!visible.has(stair.id)) continue;
       let container = this.portals.get(stair.id);
       if (!container) {
-        const sprite = this.illuminate(scene.add.image(0, 0, textureKey(PORTAL_DEFINITION.frames[stair.type][0]))
+        const frame = PORTAL_DEFINITION.frames[stair.type][0];
+        const shadow = this.createShadow(frame)
+          .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
+          .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y);
+        this.applyShadowOffset(shadow, stair.x, stair.y, PORTAL_DEFINITION.size);
+        const sprite = this.illuminate(scene.add.image(0, 0, textureKey(frame))
           .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
           .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y)
           .setName("sprite"));
-        container = scene.add.container(stair.x, stair.y, [sprite]).setDepth(yDepth(stair.y));
+        container = scene.add.container(stair.x, stair.y, [shadow, sprite]).setDepth(yDepth(stair.y + PORTAL_DEFINITION.orderingOffsetY));
         container.setData("enabled", false);
         container.setData("animationToken", 0);
         this.portals.set(stair.id, container);
@@ -1982,23 +1991,28 @@ export class PhaserRenderer {
   ): void {
     const scene = this.scene!;
     const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
+    const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
     const frames = PORTAL_DEFINITION.frames[type];
     const token = Number(container.getData("animationToken") ?? 0) + 1;
     container.setData("animationToken", token);
     container.setData("enabled", enabled);
-    if (initial && !enabled) {
-      sprite.setTexture(textureKey(frames[0]))
+    const applyFrame = (asset: string): void => {
+      sprite.setTexture(textureKey(asset))
         .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
         .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y);
+      shadow?.setTexture(textureKey(asset))
+        .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
+        .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y);
+    };
+    if (initial && !enabled) {
+      applyFrame(frames[0]);
       return;
     }
     const sequence = enabled ? frames : [...frames].reverse();
     sequence.forEach((asset, index) => {
       scene.time.delayedCall(index * PORTAL_FRAME_MS, () => {
         if (!container.active || Number(container.getData("animationToken")) !== token) return;
-        sprite.setTexture(textureKey(asset))
-          .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
-          .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y);
+        applyFrame(asset);
       });
     });
   }

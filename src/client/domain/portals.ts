@@ -1,4 +1,5 @@
 import type { Point, Stair } from "../types";
+import { PORTAL_DEFINITION } from "./specs";
 
 export function entryPortalFor(
   roomStairs: readonly Stair[],
@@ -15,7 +16,9 @@ export function entryPortalFor(
 }
 
 export function initialPlayerPosition(portal: Stair | null, fallback: Point): Point {
-  return portal ? { x: portal.x, y: portal.y } : { x: fallback.x, y: fallback.y };
+  if (!portal) return { x: fallback.x, y: fallback.y };
+  const offset = PORTAL_DEFINITION.spawnOffset;
+  return { x: portal.x + offset.x, y: portal.y + offset.y };
 }
 
 export function updatePortalContacts(
