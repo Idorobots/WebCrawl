@@ -101,13 +101,11 @@ export const BASE_FLOOR_ASSETS = [
   ASSETS.floorComposite,
   ASSETS.floorPlate,
   ASSETS.floorHex,
-  ASSETS.floorHatch,
   ASSETS.floorTread,
-  ASSETS.floorRock,
   ASSETS.floorAsteroidDust,
 ] as const;
 
-/** Broken/worn floors, reserved as sparse flavour details rather than main tiles. */
+/** Floors reserved as sparse decoration details rather than main tiles. */
 export const DAMAGED_FLOOR_ASSETS = [
   ASSETS.floorWorn,
   ASSETS.floorDented,
@@ -115,6 +113,8 @@ export const DAMAGED_FLOOR_ASSETS = [
   ASSETS.floorRubble,
   ASSETS.floorCables,
   ASSETS.floorScorched,
+  ASSETS.floorRock,
+  ASSETS.floorHatch,
 ] as const;
 
 export const FLOOR_ASSETS = [...BASE_FLOOR_ASSETS, ...DAMAGED_FLOOR_ASSETS] as const;

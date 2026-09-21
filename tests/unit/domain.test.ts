@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ASSETS,
   BASE_FLOOR_ASSETS,
   DAMAGED_FLOOR_ASSETS,
   DEBRIS_ASSETS,
@@ -207,6 +208,8 @@ describe("layout and geometry", () => {
   it("reserves damaged floor tiles for sparse flavour instead of base floors", () => {
     const base = new Set<string>(BASE_FLOOR_ASSETS);
     expect(base.size).toBeGreaterThanOrEqual(4);
+    expect(base.has(ASSETS.floorRock)).toBe(false);
+    expect(base.has(ASSETS.floorHatch)).toBe(false);
     for (const asset of DAMAGED_FLOOR_ASSETS) {
       expect(base.has(asset), `${asset} must not be a base floor`).toBe(false);
       expect(FLOOR_ASSETS).toContain(asset);

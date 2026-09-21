@@ -771,15 +771,21 @@ Other:
 - Spawner annimation and sound effect should match - when the spawning starts the spawner should start playing the sound, then enter the annimation and only spawn after a specific timeout (let's go with 2 seconds).
 - Spawners should spawn enemies continuously until destroyed every delay seconds.
 
+- "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
+- "floor_hatch" tile should be considered decoration tile, not main floor tile
+
 - Player is spawend the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
 - Move the portal active area and footprint by the same amount down as the player spawn point.
 
-- Spawner shadow is messed up due to the translucent area on the sprite.
+- Spawner shadow is messed up due to the translucent area on the sprite, let's treat translucent areas as non-shadow casting if possible (or if it's too hard, let's treat them as shadows).
+
+* CANCELLED Visual bugs
+:LOGBOOK:
+- State "CANCELLED"  from              [2026-09-21 Mon 18:57] \\
+  Decided againts these.
+:END:
 - Sprite shadows are too well-defined. They should be softer.
 - Shadows are too large in general, please make the "drop shadow" effect slightly less pronounced.
-
-- "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
-- "floor_hatch" tile should be considered decoration tile, not main floor tile
 
 * DONE Visual audio/bugs
 :LOGBOOK:
