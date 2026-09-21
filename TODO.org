@@ -713,10 +713,6 @@ N-S with E:
         [WW][WE]
         [WW][WE]
 
-* License
-- MIT for code
-- CC-SA for gfx
-- CC-SA for sfx
 * Mobile support
 Welcome screen:
 - The title bar on mobile should not cover the other elements, it needs some padding.
@@ -742,11 +738,49 @@ Game controls:
 - The game controls should be as unobtrusive as possible, they should be very translucent.
 
 Other:
+- On mobile, when the on-screen controls are enabled, please do not allow tapping on the screen to shoot in that direction. Only the sticks can be used for that. It's Ok to drag the flashlight in that direction though.
+- Make the ClosedNS logo & WebCrawl title bar a bit smaller on mobile. Same height as the GitHub logo. Make sure it's smaller in both orientations (basically, whenever the UI is in mobile mode the titlebar should be smaller).
 - On mobile browsers it would be nice to enter the full screen mode after "logging into" the game and keep it in full screen mode throughout the game. Even when the user scrolls the panels.
+
 - It seems that the flashlight on mobile doesn't show until the user clicks the screen. Let's make the flashlight point at the player in case there's no input.
 - On mobile, the prompt in the welcome screen should instruct the player to move with the left stick and shoot with the right stick, and analogously indicate to use specific UI buttons for the special abilities.
 
-- Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-21 Mon 15:45]
+:END:
+- On mobile, the URL editing on welcome screen doesn't work very well - the input box is covered by the keyboard and it's hard to tell what the user is editing.
+
+* License
+- MIT for code
+- CC-SA for gfx
+- CC-SA for sfx
+
+* Visual/audio bugs
+- Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
+- Move the portal active area and footprint by the same amount down as the player spawn point.
+
+- Spawner shadow is messed up due to the translucent area on the sprite.
+- Sprite shadows are too well-defined. They should be softer.
+- Shadows are too large in general, please make the "drop shadow" effect slightly less pronounced.
+
+- Spawner spawn animation should only be triggered when the spawner is actually spawning something.
+- Spawner annimation and sound effect should match - when the spawning starts the spawner should start playing the sound, then enter the annimation and only spawn after a specific timeout (let's go with 2 seconds).
+
+- "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
+- "floor_hatch" tile should be considered decoration tile, not main floor tile
+
+- Inner corner on corridor L-junctions is placed wrong and of the wrong type.
+
+- Monster walk sound effect loop persists when the player moves to another floor. When the player changes floors on dies, please stop all movement-related sound effects.
+
+- Floor tile edges look weird when moving. It's likely due to the scaling of the floor sprites. Can something be done so that the sprites don't look weird when moving? In addition to that, the sprites seem to be way more pixelated than they should,
+
+* Bugs
+- The error screen should redirect back to the welcome screen.
+- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+- Pathfinding sometimes works in a weird way when compound corridors are involved - often they skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
+- In compound corridors the scenery is often placed in the same spot overlapping. This should not be the case, all scenery should be placed in different spots.
 
 * Consistent collision detection
 - Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
@@ -813,28 +847,6 @@ It's OK if the specs are not entirely static - it's perfectly fine to have a fun
 The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
 
-* Visual/audio bugs
-- Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
-- Move the portal active area and footprint by the same amount down as the player spawn point.
-
-- Spawner shadow is messed up due to the translucent area on the sprite.
-- Sprite shadows are too well-defined. They should be softer.
-- Shadows are too large in general, please make the "drop shadow" effect slightly less pronounced.
-
-- Spawner spawn animation should only be triggered when the spawner is actually spawning something.
-- Spawner annimation and sound effect should match - when the spawning starts the spawner should start playing the sound, then enter the annimation and only spawn after a specific timeout (let's go with 2 seconds).
-
-- "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
-- "floor_hatch" tile should be considered decoration tile, not main floor tile
-
-- Inner corner on corridor L-junctions is placed wrong and of the wrong type.
-
-- Monster walk sound effect loop persists when the player moves to another floor. When the player changes floors on dies, please stop all movement-related sound effects.
-
-* Bugs
-- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
-- Pathfinding sometimes works in a weird way when compound corridors are involved - often they skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
-
 * Additional scenery
 There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
 
@@ -866,6 +878,8 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
 - Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
 
+- Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
+
 
 * Particle system
 - Use for sparks etc.
@@ -882,6 +896,7 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
 - Spawners should spawn enemies continuously until destroyed every delay seconds.
+- Regulatory Capture should be triggerable whenever the energy bar is non-empty. The distance travelled and damage dealt should be proportional to the amount of energy spent at once (more energy used, the longer the player travels and deals more damage). The max energy should be increased to 5.
 
 * Minimap overhaul
 - Render corridors as wider connectors on the minimap.

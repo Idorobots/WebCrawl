@@ -100,6 +100,7 @@ import type {
   WeaponSpec,
 } from "./types";
 import { requireElement } from "./ui/elements";
+import { requestMobileFullscreen } from "./ui/fullscreen";
 import { createThoughtPicker } from "./ui/loading-texts";
 import { setupWelcomePrompt, type WelcomePromptHandle } from "./ui/welcome-prompt";
 
@@ -138,6 +139,10 @@ const gameUi = requireElement<HTMLDivElement>("#gameUi");
 const loginLayout = requireElement<HTMLDivElement>("#loginLayout");
 const promptLayout = requireElement<HTMLDivElement>("#promptLayout");
 const loginForm = requireElement<HTMLFormElement>("#loginForm");
+const loginFields = [
+  requireElement<HTMLInputElement>("#loginUsername"),
+  requireElement<HTMLInputElement>("#loginPassword"),
+];
 
 let welcomePrompt: WelcomePromptHandle | null = null;
 let welcomeSessionStarted = false;
@@ -1013,6 +1018,7 @@ function completeLoadingTask(id: string, ok = true): void {
 
 function hideLoadingScreen(): void {
   if (loadingScreen.hidden) return;
+  requestMobileFullscreen();
   stopLoadingElevator();
   renderer?.playStationAmbient();
   window.clearTimeout(loadingHideTimer);
@@ -1949,6 +1955,7 @@ function gameTick(timestamp: number): void {
   updateEnergyDash(dt, timestamp);
   if (touchAimActive) updateTouchAim(dt);
   else if (playerAimNeedsUpdate()) updatePlayerAimFromPointer();
+  if (!touchAimActive && (!pointerInViewport || !pointerClientPosition)) updateIdleFlashlight();
   if ((primaryPointerDown && pointerInViewport) || touchAimActive) shootBullet();
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
@@ -2781,7 +2788,7 @@ function applyAimTarget(target: Point): void {
 function updatePlayerAimFromPointer(): void {
   if (!pointerInViewport || !pointerClientPosition) {
     renderer.setCameraTarget(player);
-    renderer.setFlashlightTarget(null);
+    updateIdleFlashlight();
     playerAimDirty = false;
     lastAimCamera = null;
     return;
@@ -2796,6 +2803,13 @@ function updatePlayerAimFromPointer(): void {
   const camera = renderer.cameraState();
   lastAimCamera = camera ? { x: camera.x, y: camera.y } : null;
   playerAimDirty = false;
+}
+
+function updateIdleFlashlight(): void {
+  renderer.setFlashlightTarget({
+    x: player.x,
+    y: player.y + PLAYER_SPEC.visualCenterOffsetY,
+  });
 }
 
 function playerAimNeedsUpdate(): boolean {
@@ -2896,6 +2910,7 @@ gameViewport.addEventListener("pointerdown", event => {
 
   event.preventDefault();
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  if (mobileLayoutQuery.matches) return;
   primaryPointerDown = true;
   shootBullet();
 });
@@ -3373,6 +3388,22 @@ loginForm.addEventListener("submit", (event) => {
   startWelcomeSession();
 });
 
+for (const field of loginFields) {
+  field.addEventListener("focus", () => {
+    const length = field.value.length;
+    field.setSelectionRange(length, length);
+  });
+  field.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "touch") return;
+    window.setTimeout(() => {
+      if (document.activeElement === field) {
+        const length = field.value.length;
+        field.setSelectionRange(length, length);
+      }
+    }, 0);
+  });
+}
+
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" || welcomeSessionStarted || loginLayout.hidden) return;
   if (event.target instanceof Element && event.target.closest("#loginForm")) return;
@@ -3384,12 +3415,14 @@ welcomeForm.addEventListener("submit", (event) => {
   event.preventDefault();
   if (welcomeTransitioning) return;
   playButtonClick();
+  requestMobileFullscreen();
   startWelcomeCrawl(welcomeUrlInput.value);
 });
 
 luckyButton.addEventListener("click", () => {
   if (welcomeTransitioning) return;
   playButtonClick();
+  requestMobileFullscreen();
   welcomeTransitioning = true;
   luckyButton.disabled = true;
   luckyButton.setAttribute("aria-busy", "true");

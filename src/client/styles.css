@@ -474,9 +474,10 @@ button:hover {
 }
 
 #loadingPanel {
-  width: min(680px, calc(100vw - 36px));
+  width: min(680px, 80vw);
   max-height: calc(100vh - 36px);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 20px 26px 16px;
   scrollbar-width: thin;
   scrollbar-color: rgba(64, 170, 255, 0.5) rgba(8, 24, 42, 0.55);
@@ -500,7 +501,7 @@ button:hover {
     "Cascadia Mono",
     "Courier New",
     monospace;
-  font-size: clamp(6.5px, 2.05vw, 14px);
+  font-size: min(14px, calc((min(680px, 80vw) - 52px) / 44));
   line-height: 1.06;
   white-space: pre;
   color: rgba(170, 224, 255, 0.92);
@@ -547,6 +548,7 @@ button:hover {
 
 #loadingTasks {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   margin: 0 0 12px;
   font-size: 14px;
@@ -620,6 +622,7 @@ button:hover {
 
 #loadingThoughtHistory {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   margin: 0;
   font-size: 13px;
 }
@@ -648,13 +651,8 @@ button:hover {
 @media (max-width: 560px) {
   #loadingPanel {
     padding: 14px 16px 16px;
-    overflow-x: hidden;
     text-size-adjust: 100%;
     -webkit-text-size-adjust: 100%;
-  }
-
-  #loadingLogo {
-    font-size: clamp(4.5px, 1.8vw, 8px);
   }
 }
 
@@ -1334,6 +1332,7 @@ body {
   min-width: 0;
   height: auto;
   max-height: calc(100vh - 32px);
+  max-height: calc(100svh - 32px);
   display: flex;
   flex-direction: column;
   padding: 18px 26px 20px;
@@ -1545,6 +1544,12 @@ body {
   position: absolute;
   top: 50%;
   transform: translateY(-55%);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.welcome-url-line input:focus ~ .welcome-url-caret {
+  visibility: visible;
 }
 
 .welcome-url-mirror {
@@ -1604,6 +1609,7 @@ body {
 #welcomeStage {
   display: grid;
   place-items: center;
+  transition: transform 160ms ease;
 }
 
 #welcomeStage > .welcome-layout { grid-area: 1 / 1; }
@@ -1699,7 +1705,7 @@ body {
   margin-top: 10px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1230px) {
   .welcome-github {
     top: 10px;
     right: 10px;
@@ -1712,12 +1718,22 @@ body {
     height: 24px;
   }
 
+  .welcome-titlebar-logo {
+    width: 24px;
+    height: 24px;
+  }
+
+  .welcome-titlebar-name {
+    font-size: 16px;
+  }
+
   .welcome-layout {
     flex-direction: column;
     align-items: stretch;
     gap: 14px;
-    margin-top: 84px;
-    max-height: calc(100vh - 96px);
+    margin-top: 60px;
+    max-height: calc(100vh - 72px);
+    max-height: calc(100svh - 72px);
     overflow: auto;
   }
 
@@ -1725,9 +1741,31 @@ body {
     flex: 0 0 auto;
     width: min(420px, calc(100vw - 40px));
   }
+
+  .welcome-panel {
+    padding: 12px 16px 14px;
+  }
+
+  .welcome-panel-header {
+    margin: -12px -16px 10px;
+    padding: 8px 16px;
+  }
+
+  .login-panel {
+    max-height: none;
+  }
+
+  .login-form {
+    gap: 10px;
+    margin-top: 6px;
+  }
+
+  .login-actions {
+    margin-top: 4px;
+  }
 }
 
-@media (max-width: 900px) and (orientation: landscape) {
+@media (max-width: 1230px) and (orientation: landscape) {
   .welcome-visual {
     display: none;
   }
@@ -2448,13 +2486,13 @@ body {
   .welcome-titlebar {
     top: 8px;
     left: 8px;
-    padding: 6px 20px 8px 10px;
+    padding: 9px 30px 11px 16px;
   }
   .welcome-titlebar-logo {
-    width: 34px;
-    height: 34px;
+    width: 24px;
+    height: 24px;
   }
   .welcome-titlebar-name {
-    font-size: 18px;
+    font-size: 16px;
   }
 }

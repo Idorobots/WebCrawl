@@ -1,4 +1,5 @@
 import { WEAPON_ASSETS } from "../config";
+import { isMobileDevice } from "./fullscreen";
 
 interface Segment {
   text: string;
@@ -19,6 +20,20 @@ const WEAPON_ICON_ASSETS: readonly string[] = (() => {
   }
   return files.slice(0, 5);
 })();
+
+const MOBILE_CONTROLS = isMobileDevice();
+
+const MOVE_CONTROLS_TEXT = MOBILE_CONTROLS
+  ? "Move with the left stick. Shoot with the right stick. "
+  : "Move with WSAD or the arrow keys. Shoot with the left mouse button. ";
+
+const BAILOUT_CONTROLS_TEXT = MOBILE_CONTROLS
+  ? " — press the Bailout button for a Government Bailout (10 seconds of invulnerability)."
+  : " — press SPACE for a Government Bailout (10 seconds of invulnerability).";
+
+const CAPTURE_CONTROLS_TEXT = MOBILE_CONTROLS
+  ? " — press the Capture button for Regulatory Capture once the meter is full."
+  : " — right-click for Regulatory Capture once the meter is full.";
 
 const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   {
@@ -41,7 +56,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
     segments: [
       {
         text:
-          "Move with WSAD or the arrow keys. Shoot with the left mouse button. " +
+          MOVE_CONTROLS_TEXT +
           "Other weapons are scattered across the web — swap when you find one:",
       },
     ],
@@ -82,7 +97,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
     asset: "assets/pickups/crystal.png",
     segments: [
       { text: "Endgame Crystals", bold: true },
-      { text: " — SPACE for a Government Bailout (10 seconds of invulnerability)." },
+      { text: BAILOUT_CONTROLS_TEXT },
     ],
   },
   {
@@ -90,7 +105,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
     asset: "assets/pickups/ammo_energy.png",
     segments: [
       { text: "AI Doomer Energy", bold: true },
-      { text: " — right-click for Regulatory Capture once the meter is full." },
+      { text: CAPTURE_CONTROLS_TEXT },
     ],
   },
   {
@@ -243,11 +258,8 @@ export function setupWelcomePrompt(options: {
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   function sizeUrlInput(): void {
-    urlMirror.textContent = urlInput.value;
     const available = urlLine.clientWidth - urlPrefix.offsetWidth;
-    const desired = urlMirror.offsetWidth + 1;
-    const width = Math.min(Math.max(desired, 2), Math.max(available, 2));
-    urlInput.style.width = `${width}px`;
+    urlInput.style.width = `${Math.max(available, 2)}px`;
   }
 
   function positionUrlCaret(): void {
@@ -258,6 +270,13 @@ export function setupWelcomePrompt(options: {
 
   function syncUrlInput(): void {
     sizeUrlInput();
+    positionUrlCaret();
+  }
+
+  function moveUrlCaretToEnd(): void {
+    if (document.activeElement !== urlInput) urlInput.focus();
+    const length = urlInput.value.length;
+    urlInput.setSelectionRange(length, length);
     positionUrlCaret();
   }
 
@@ -337,6 +356,7 @@ export function setupWelcomePrompt(options: {
       finish();
       return;
     }
+    caret.scrollIntoView({ block: "nearest", behavior: "instant" });
     rafId = window.requestAnimationFrame(tick);
   }
 
@@ -369,19 +389,102 @@ export function setupWelcomePrompt(options: {
     skip();
   }
 
-  function onUrlLinePointerDown(): void {
+  let touchTappedUrl = false;
+
+  function onUrlInputPointerDown(event: PointerEvent): void {
+    touchTappedUrl = event.pointerType === "touch";
+  }
+
+  function onUrlInputClick(): void {
+    if (touchTappedUrl) {
+      touchTappedUrl = false;
+      window.setTimeout(moveUrlCaretToEnd, 0);
+      return;
+    }
+    positionUrlCaret();
+  }
+
+  function onUrlLinePointerDown(event: PointerEvent): void {
     if (document.activeElement !== urlInput) urlInput.focus();
+    if (event.pointerType === "touch") moveUrlCaretToEnd();
+  }
+
+  const stage = urlInput.closest<HTMLElement>("#welcomeStage");
+  const visualViewport = window.visualViewport;
+  const virtualKeyboard = (
+    navigator as Navigator & {
+      virtualKeyboard?: {
+        overlaysContent: boolean;
+        readonly boundingRect: { readonly y: number; readonly height: number };
+        addEventListener(type: "geometrychange", listener: () => void): void;
+        removeEventListener(type: "geometrychange", listener: () => void): void;
+      };
+    }
+  ).virtualKeyboard;
+  let keyboardShift = 0;
+  let fullscreenKeyboardMode = false;
+  const KEYBOARD_PAD = 12;
+
+  function updateKeyboardMode(): void {
+    if (!virtualKeyboard) return;
+    const wanted = document.activeElement === urlInput && document.fullscreenElement != null;
+    if (wanted === fullscreenKeyboardMode) return;
+    fullscreenKeyboardMode = wanted;
+    virtualKeyboard.overlaysContent = wanted;
+  }
+
+  function keyboardTopInLayout(): number | null {
+    if (virtualKeyboard && fullscreenKeyboardMode) {
+      const rect = virtualKeyboard.boundingRect;
+      return rect.height > 0 ? rect.y : null;
+    }
+    if (visualViewport) return visualViewport.offsetTop + visualViewport.height;
+    return null;
+  }
+
+  function resetKeyboardShift(): void {
+    if (keyboardShift === 0) return;
+    keyboardShift = 0;
+    stage?.style.setProperty("transform", "");
+  }
+
+  function updateKeyboardShift(): void {
+    if (!stage) return;
+    updateKeyboardMode();
+    if (document.activeElement !== urlInput) {
+      resetKeyboardShift();
+      return;
+    }
+    const keyboardTop = keyboardTopInLayout();
+    if (keyboardTop === null) {
+      resetKeyboardShift();
+      return;
+    }
+    urlInput.scrollIntoView({ block: "center", behavior: "instant" });
+    const rect = urlInput.getBoundingClientRect();
+    const overlap = Math.max(0, rect.bottom - keyboardTop + KEYBOARD_PAD);
+    if (overlap > 0) {
+      keyboardShift += overlap;
+      stage.style.transform = `translateY(${-keyboardShift}px)`;
+    }
   }
 
   sizeUrlInput();
   positionUrlCaret();
   urlInput.addEventListener("input", syncUrlInput);
   urlInput.addEventListener("keyup", positionUrlCaret);
-  urlInput.addEventListener("click", positionUrlCaret);
+  urlInput.addEventListener("click", onUrlInputClick);
+  urlInput.addEventListener("pointerdown", onUrlInputPointerDown);
   urlInput.addEventListener("focus", positionUrlCaret);
   urlInput.addEventListener("select", positionUrlCaret);
+  urlInput.addEventListener("focus", updateKeyboardShift);
+  urlInput.addEventListener("blur", updateKeyboardShift);
   urlLine.addEventListener("pointerdown", onUrlLinePointerDown);
   window.addEventListener("resize", syncUrlInput);
+  visualViewport?.addEventListener("resize", updateKeyboardShift);
+  visualViewport?.addEventListener("scroll", updateKeyboardShift);
+  virtualKeyboard?.addEventListener("geometrychange", updateKeyboardShift);
+  document.addEventListener("fullscreenchange", updateKeyboardShift);
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("pointerdown", onPointerDown);
   void document.fonts?.ready.then(() => {
@@ -402,13 +505,22 @@ export function setupWelcomePrompt(options: {
       cancel();
       urlInput.removeEventListener("input", syncUrlInput);
       urlInput.removeEventListener("keyup", positionUrlCaret);
-      urlInput.removeEventListener("click", positionUrlCaret);
+      urlInput.removeEventListener("click", onUrlInputClick);
+      urlInput.removeEventListener("pointerdown", onUrlInputPointerDown);
       urlInput.removeEventListener("focus", positionUrlCaret);
       urlInput.removeEventListener("select", positionUrlCaret);
+      urlInput.removeEventListener("focus", updateKeyboardShift);
+      urlInput.removeEventListener("blur", updateKeyboardShift);
       urlLine.removeEventListener("pointerdown", onUrlLinePointerDown);
       window.removeEventListener("resize", syncUrlInput);
+      visualViewport?.removeEventListener("resize", updateKeyboardShift);
+      visualViewport?.removeEventListener("scroll", updateKeyboardShift);
+      virtualKeyboard?.removeEventListener("geometrychange", updateKeyboardShift);
+      document.removeEventListener("fullscreenchange", updateKeyboardShift);
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
+      if (virtualKeyboard) virtualKeyboard.overlaysContent = false;
+      if (stage) stage.style.transform = "";
     },
   };
 }

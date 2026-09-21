@@ -2304,8 +2304,23 @@ export class PhaserRenderer {
     const dy = target.y - originY;
     const rawDistance = Math.hypot(dx, dy);
     if (rawDistance < 1) {
-      pipeline.flashlight.active = false;
-      this.setHostData("flashlightActive", "false");
+      pipeline.flashlight = {
+        active: true,
+        originX,
+        originY,
+        targetX: originX,
+        targetY: originY,
+        axisX: 1,
+        axisY: 0,
+        majorRadius: world(244) * FLASHLIGHT_RADIUS_SCALE,
+        minorRadius: world(224) * FLASHLIGHT_RADIUS_SCALE,
+        intensity: 1.48,
+      };
+      this.setHostData("flashlightActive", "true");
+      this.setHostData("flashlightTargetX", String(Math.round(originX)));
+      this.setHostData("flashlightTargetY", String(Math.round(originY)));
+      this.setHostData("flashlightMajorRadius", String(Math.round(pipeline.flashlight.majorRadius)));
+      this.setHostData("flashlightMinorRadius", String(Math.round(pipeline.flashlight.minorRadius)));
       return;
     }
     const distance = Math.min(rawDistance, FLASHLIGHT_MAX_RANGE);
