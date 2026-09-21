@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import {
   ASSETS,
   BARREL_EXPLOSION_FRAMES,
+  BOSS_CAMERA_SCALE,
   CAMERA_FOLLOW_LERP,
   CAMERA_SCALE,
   CAMERA_TRANSITION_MS,
@@ -148,7 +149,6 @@ const SHADOW_MAX_DISTANCE = world(26);
 const EFFECT_LIGHT_FALLBACK = { color: 0x8bdfff, radiusScale: 0.8, intensity: 0.9 };
 const FLASHLIGHT_MAX_RANGE = world(720);
 const FLASHLIGHT_RADIUS_SCALE = 0.8;
-const BOSS_CAMERA_SCALE = 0.75;
 const FLICKER_BURST_INTERVAL_MS = 1_400;
 const FLICKER_STEP_MS = 35;
 const CORRIDOR_LIGHT_SPACING = world(240);
@@ -345,6 +345,8 @@ function assetPaths(...sources: unknown[]): string[] {
 export class PhaserRenderer {
   private game: Phaser.Game | null = null;
   private scene: Phaser.Scene | null = null;
+  private hostResizeObserver: ResizeObserver | null = null;
+  private renderDpr = 1;
   private layout: DungeonLayout | null = null;
   private visited = new Set<number>();
   private background: Phaser.GameObjects.TileSprite | null = null;
@@ -460,24 +462,55 @@ export class PhaserRenderer {
       }
     }
 
+    this.renderDpr = this.currentDpr();
     this.game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: this.host,
       transparent: true,
       render: {
-        antialias: false,
-        pixelArt: true,
+        antialias: true,
+        pixelArt: false,
         roundPixels: true,
         maxLights: MAX_LIGHTS,
         powerPreference: "high-performance",
       },
       scale: {
-        mode: Phaser.Scale.RESIZE,
-        width: Math.max(1, this.host.clientWidth),
-        height: Math.max(1, this.host.clientHeight),
+        // Render the canvas at device-pixel resolution and display it back at
+        // CSS size (zoom = 1/dpr) so high-DPI screens get crisp output.
+        mode: Phaser.Scale.NONE,
+        width: this.scaledGameWidth(),
+        height: this.scaledGameHeight(),
+        zoom: 1 / this.renderDpr,
       },
       scene: DungeonScene,
     });
+  }
+
+  private currentDpr(): number {
+    const configured = Number(import.meta.env.VITE_RENDER_DPR);
+    if (Number.isFinite(configured) && configured > 0) return configured;
+    return Math.min(2, window.devicePixelRatio || 1);
+  }
+
+  private scaledGameWidth(): number {
+    return Math.max(1, Math.round(this.host.clientWidth * this.renderDpr));
+  }
+
+  private scaledGameHeight(): number {
+    return Math.max(1, Math.round(this.host.clientHeight * this.renderDpr));
+  }
+
+  private handleHostResize(): void {
+    if (!this.game) return;
+    const dpr = this.currentDpr();
+    const dprChanged = dpr !== this.renderDpr;
+    this.renderDpr = dpr;
+    if (dprChanged
+      || this.game.scale.gameSize.width !== this.scaledGameWidth()
+      || this.game.scale.gameSize.height !== this.scaledGameHeight()) {
+      this.game.scale.setZoom(1 / dpr);
+      this.game.scale.setGameSize(this.scaledGameWidth(), this.scaledGameHeight());
+    }
   }
 
   private attach(scene: Phaser.Scene): void {
@@ -505,6 +538,9 @@ export class PhaserRenderer {
       this.host.dataset.portalUpAuraColor = PORTAL_UP_AURA_COLOR.toString(16).padStart(6, "0");
     }
     scene.scale.on(Phaser.Scale.Events.RESIZE, this.refreshCameraForResize, this);
+    this.hostResizeObserver?.disconnect();
+    this.hostResizeObserver = new ResizeObserver(() => this.handleHostResize());
+    this.hostResizeObserver.observe(this.host);
     this.refreshFloorMarkingsAfterFontLoad();
     this.drawWorld();
     this.renderDecorations(this.currentDecorations, this.visited);
@@ -2600,7 +2636,7 @@ export class PhaserRenderer {
   }
 
   private cameraScaleFactor(): number {
-    return this.mobileLayout.matches ? MOBILE_CAMERA_SCALE : 1;
+    return this.renderDpr * (this.mobileLayout.matches ? MOBILE_CAMERA_SCALE : 1);
   }
 
   private refreshCameraForResize(): void {
@@ -2636,7 +2672,7 @@ export class PhaserRenderer {
     return {
       x: camera.midPoint.x,
       y: camera.midPoint.y,
-      zoom: camera.zoom,
+      zoom: camera.zoom / this.renderDpr,
       bossRoomId: this.cameraRoomId,
     };
   }

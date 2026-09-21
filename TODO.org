@@ -770,11 +770,14 @@ Other:
 - "floor_rock_grit" tile should be considered debris decoration tile, not main floor tile.
 - "floor_hatch" tile should be considered decoration tile, not main floor tile
 
+- Monster walk sound effect loop persists when the player moves to another floor. When the player changes floors or dies, please stop all movement-related sound effects.
+
+- Replace the ClosedNS logo on the mobile UI stats panel with the player avatar.
+
+* Visual audio/bugs
 - Inner corner on corridor L-junctions is placed wrong and of the wrong type.
 
-- Monster walk sound effect loop persists when the player moves to another floor. When the player changes floors on dies, please stop all movement-related sound effects.
-
-- Floor tile edges look weird when moving. It's likely due to the scaling of the floor sprites. Can something be done so that the sprites don't look weird when moving? In addition to that, the sprites seem to be way more pixelated than they should,
+- Floor tile edges look weird when moving. It's likely due to the scaling of the floor sprites. Can something be done so that the sprites don't look weird when moving? In addition to that, the sprites seem to be way more pixelated than they should, especially on mobile.
 
 * Bugs
 - The error screen should redirect back to the welcome screen.

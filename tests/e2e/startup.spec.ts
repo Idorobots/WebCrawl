@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { CAMERA_SCALE, world } from "../../src/client/config";
+import { BOSS_CAMERA_SCALE, CAMERA_SCALE, MOBILE_CAMERA_SCALE, world } from "../../src/client/config";
 import {
   PLAYER_DAMAGE_INVULNERABILITY_MS,
   PLAYER_SPEC,
@@ -630,7 +630,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await expect.poll(async () => {
     const camera = await cameraState(page);
     return camera && {
-      zoomedOut: Math.abs(camera.zoom - 0.75) < 0.01,
+      zoomedOut: Math.abs(camera.zoom - BOSS_CAMERA_SCALE) < 0.01,
       bossRoom: camera.bossRoomId !== null,
     };
   }).toEqual({ zoomedOut: true, bossRoom: true });
@@ -638,7 +638,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await expect.poll(async () => {
     const camera = await cameraState(page);
     return camera && {
-      zoomedOut: Math.abs(camera.zoom - 0.75) < 0.01,
+      zoomedOut: Math.abs(camera.zoom - BOSS_CAMERA_SCALE * MOBILE_CAMERA_SCALE) < 0.01,
     };
   }).toEqual({ zoomedOut: true });
   const initialBossPosition = {
@@ -647,7 +647,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   };
   await teleportPlayer(page, position);
   await expect(game).toHaveAttribute("data-current-room-tag", "body");
-  await expect.poll(async () => await cameraState(page)).toMatchObject({ zoom: CAMERA_SCALE, bossRoomId: null });
+  await expect.poll(async () => await cameraState(page)).toMatchObject({ zoom: MOBILE_CAMERA_SCALE, bossRoomId: null });
   await expect.poll(async () => {
     const x = Number(await game.getAttribute("data-active-boss-x"));
     const y = Number(await game.getAttribute("data-active-boss-y"));
