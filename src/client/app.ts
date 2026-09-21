@@ -838,7 +838,7 @@ function showDeathModal(): void {
 
   newHighScoreEl.textContent =
     rank === 1
-      ? "New expedition high score."
+      ? "New session high score."
       : rank
         ? `Run placed #${rank}.`
         : "";
