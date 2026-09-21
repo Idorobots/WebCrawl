@@ -809,6 +809,15 @@ Other:
 - Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
 - In compound corridors the scenery is often placed in the same spot overlapping. This should not be the case, all scenery should be placed in different spots.
 
+* Other issues
+- Content browser does not turn off - it remains displaying the intermediate annimation frame. It doesn't open up fully either, only after it is shot.
+
+- Debris (including monster debris) should always be displayed underneath all objects.
+
+- Non-blocking scenery should not interfere with the bullets unless actually aimed at.
+
+Instead of "new expedition high score" it should say "new session high score".
+
 * Consistent collision detection
 - Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
 - Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
@@ -950,6 +959,7 @@ Whenever AI is mentioned in the content, render a special Samario content browse
 - Minimap radar - show a rotating bar that marks monsters on the minimap for a brief moment
 - Better minimap radar - shows monsters on the minimap all the time
 - Temporary Invisibility triggered with a button
+- Extra damage
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:

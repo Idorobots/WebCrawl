@@ -1455,13 +1455,28 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
   }
 }
 
+const CONTENT_TOGGLE_FRAME_MS = 180;
+
+function contentPointFrameFor(item: Decoration, now: number): string {
+  const spawn = item.visual.animations?.spawn;
+  const turningFrame = spawn?.frames[0];
+  const onFrame = spawn?.frames[1] ?? turningFrame;
+  const offFrame = item.visual.normal.frames[0]!;
+  if (spawn && turningFrame !== undefined && item.spawnAnimationStartedAt !== undefined) {
+    const elapsed = now - item.spawnAnimationStartedAt;
+    if (item.contentTurningOff) {
+      return elapsed < CONTENT_TOGGLE_FRAME_MS ? turningFrame : offFrame;
+    }
+    return elapsed < CONTENT_TOGGLE_FRAME_MS ? turningFrame : onFrame ?? offFrame;
+  }
+  return item.contentEnabled ? onFrame ?? offFrame : offFrame;
+}
+
 function updateContentPoints(timestamp: number): void {
   let changed = false;
   const occupiedRoomId = roomContainingPoint(player.x, player.y)?.id ?? null;
   for (const item of currentDecorations) {
     if (!item.contentPoint || item.destroyed) continue;
-    const activation = item.visual.animations?.spawn;
-    const duration = activation ? activation.frames.length * activation.frameDurationMs : 0;
     const playerInRoom = occupiedRoomId === item.roomId;
     if (
       !item.contentUnlocked &&
@@ -1480,11 +1495,11 @@ function updateContentPoints(timestamp: number): void {
       renderer.playContentToggleSound();
     } else if (enabled && item.spawnAnimationStartedAt === undefined) {
       item.contentTurningOff = false;
-      item.spawnAnimationStartedAt = timestamp - duration;
+      item.spawnAnimationStartedAt = timestamp - CONTENT_TOGGLE_FRAME_MS;
     }
+    renderer.applyDecorationFrame(item, contentPointFrameFor(item, timestamp));
   }
   if (changed) renderDecorations();
-  renderer.updateDecorationAnimations(currentDecorations, timestamp);
   renderContentBrowser();
 }
 
@@ -2799,6 +2814,16 @@ function teleportPlayerTo(x: number, y: number): void {
     damagePlayer: (amount: number) => void;
     spawnHealingEffect: () => void;
     stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y">>;
+    contentPoints: () => Array<{
+      id: string;
+      x: number;
+      y: number;
+      unlocked: boolean;
+      enabled: boolean;
+      turningOff: boolean;
+      animating: boolean;
+      texture: string | null;
+    }>;
     portalContacts: () => string[];
     loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>;
     lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null; placement: string | null } | null;
@@ -2838,7 +2863,19 @@ function teleportPlayerTo(x: number, y: number): void {
   spawnHealingEffect(): void {
     renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize, { followPlayer: true });
   },
-  stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
+    stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
+    contentPoints: () => currentDecorations
+      .filter(item => item.contentPoint)
+      .map(item => ({
+        id: item.id,
+        x: item.x,
+        y: item.y,
+        unlocked: Boolean(item.contentUnlocked),
+        enabled: Boolean(item.contentEnabled),
+        turningOff: Boolean(item.contentTurningOff),
+        animating: item.spawnAnimationStartedAt !== undefined,
+        texture: renderer.decorationTexture(item.id),
+      })),
   portalContacts: () => [...portalContacts],
   camera: () => renderer.cameraState(),
   navigate: (url: string) => navigateTo(url),

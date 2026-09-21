@@ -1788,6 +1788,20 @@ export class PhaserRenderer {
     }
   }
 
+  decorationTexture(id: string): string | null {
+    return this.decorationSprites.get(id)?.texture.key ?? null;
+  }
+
+  applyDecorationFrame(item: Decoration, asset: string): void {
+    const sprite = this.decorationSprites.get(item.id);
+    if (!sprite) return;
+    const base = item.visual.animations?.spawn ?? item.visual.normal;
+    const clip = { ...base, frames: [asset], holdLast: true };
+    this.applyClip(sprite, clip, item.size, 0, asset);
+    const shadow = this.decorationShadows.get(item.id);
+    if (shadow) this.applyClip(shadow, clip, item.size, 0, asset);
+  }
+
   updateShadowOffsets(items: readonly Decoration[], now: number): void {
     if (now - this.lastShadowOffsetUpdate < 50) return;
     this.lastShadowOffsetUpdate = now;
