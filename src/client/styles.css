@@ -487,6 +487,19 @@ button:hover {
 
 #loadingLogo {
   margin: 0 0 10px;
+  /* The art is box-drawing glyphs, so pin it to one monospace per platform
+     that actually covers them — the UA `pre { font-family: monospace }`
+     fallback misaligns columns on mobile where they are missing. */
+  font-family:
+    ui-monospace,
+    Menlo,
+    Consolas,
+    "DejaVu Sans Mono",
+    "Noto Sans Mono",
+    "Liberation Mono",
+    "Cascadia Mono",
+    "Courier New",
+    monospace;
   font-size: clamp(6.5px, 2.05vw, 14px);
   line-height: 1.06;
   white-space: pre;
@@ -632,6 +645,19 @@ button:hover {
   color: rgba(143, 215, 255, 0.08);
 }
 
+@media (max-width: 560px) {
+  #loadingPanel {
+    padding: 14px 16px 16px;
+    overflow-x: hidden;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  #loadingLogo {
+    font-size: clamp(4.5px, 1.8vw, 8px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #loadingScreen,
   #loadingScreen * {
@@ -679,6 +705,50 @@ button:hover {
 #restartButton {
   width: 100%;
   padding: 10px 12px;
+}
+
+@media (max-width: 560px) {
+  #deathPanel {
+    width: min(620px, calc(100vw - 16px));
+    max-height: calc(100vh - 16px);
+    padding: 14px 14px 16px;
+  }
+
+  #deathPanel h2 {
+    font-size: 16px;
+    letter-spacing: .08em;
+  }
+
+  #deathScore {
+    font-size: 18px;
+    margin: 8px 0 12px;
+  }
+
+  .death-stats {
+    gap: 4px 10px;
+    margin: 10px 0 14px;
+    font-size: 12px;
+  }
+
+  .death-loot {
+    gap: 4px 10px;
+    margin: 0 0 8px;
+    font-size: 12px;
+  }
+
+  #highScoreTable {
+    margin: 8px 0 12px;
+  }
+
+  #highScoreTable th,
+  #highScoreTable td {
+    padding: 4px 5px;
+    font-size: 11px;
+  }
+
+  #restartButton {
+    min-height: 44px;
+  }
 }
 
 #newHighScore {
@@ -779,6 +849,32 @@ button:hover {
   font-size: 15px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.content-browser-close {
+  position: sticky;
+  top: 2px;
+  display: block;
+  width: 26px;
+  height: 26px;
+  margin: -4px -2px 4px auto;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  color: rgba(207, 230, 242, 0.55);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.content-browser-close:hover,
+.content-browser-close:focus-visible {
+  color: #eaffff;
+  text-shadow:
+    0 0 6px rgba(140, 220, 255, 0.95),
+    0 0 14px rgba(64, 170, 255, 0.7);
 }
 
 .content-browser-body {
@@ -1678,7 +1774,8 @@ body {
 #topBar,
 #urlBar,
 #rightHud,
-#bottomHud {
+#bottomHud,
+#mobileControls {
   opacity: 0;
   transition: opacity 420ms ease;
 }
@@ -1688,15 +1785,95 @@ body {
 #rightHud,
 #bottomHud { transition-delay: 160ms; }
 
-#gameUi.game-ui-ready :is(#topBar, #urlBar, #rightHud, #bottomHud) {
+#gameUi.game-ui-ready :is(#topBar, #urlBar, #rightHud, #bottomHud, #mobileControls) {
   opacity: 1;
+}
+
+#gameUi:not(.game-ui-ready) #mobileControls {
+  visibility: hidden;
+}
+
+#mobileControls {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: none;
+  pointer-events: none;
+}
+
+#mobileControls > * {
+  pointer-events: auto;
+}
+
+.touch-stick {
+  position: absolute;
+  bottom: 20px;
+  width: 112px;
+  height: 112px;
+  border: 2px solid rgba(120, 210, 255, 0.4);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, rgba(38, 150, 255, 0.16), rgba(6, 18, 30, 0.42) 70%);
+  box-shadow:
+    0 0 16px rgba(38, 150, 255, 0.2),
+    inset 0 0 14px rgba(38, 150, 255, 0.12);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#moveStick { left: 20px; }
+
+#aimStick { right: 20px; }
+
+.touch-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(190, 235, 255, 0.5);
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, rgba(140, 220, 255, 0.55), rgba(24, 90, 160, 0.5));
+  box-shadow: 0 0 10px rgba(110, 200, 255, 0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.mobile-abilities {
+  position: absolute;
+  left: 20px;
+  bottom: 148px;
+  display: flex;
+  gap: 10px;
+}
+
+.mobile-abilities button {
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgba(120, 210, 255, 0.4);
+  border-radius: 50%;
+  background: rgba(10, 30, 48, 0.28);
+  color: rgba(214, 242, 255, 0.85);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 6px rgba(110, 200, 255, 0.5);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mobile-abilities button:active {
+  background: rgba(38, 150, 255, 0.32);
+  border-color: rgba(120, 210, 255, 0.7);
 }
 
 @media (prefers-reduced-motion: reduce) {
   #topBar,
   #urlBar,
   #rightHud,
-  #bottomHud {
+  #bottomHud,
+  #mobileControls {
     transition: none;
   }
 }
@@ -2162,6 +2339,9 @@ body {
 }
 
 @media (max-width: 1230px) {
+  #mobileControls {
+    display: block;
+  }
   #topBar {
     top: 4px;
     left: 4px;
@@ -2178,8 +2358,9 @@ body {
       linear-gradient(180deg, rgba(10, 26, 42, 0.6), rgba(2, 8, 14, 0.68));
   }
   .brand-logo {
-    width: 30px;
-    height: 30px;
+    width: 18px;
+    height: 18px;
+    filter: drop-shadow(0 0 6px rgba(38, 150, 255, 0.5));
   }
   .brand-name {
     display: none;
@@ -2209,12 +2390,12 @@ body {
   .stat-line .ammo-track { height: 7px; }
   .loot-mini {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 3px 9px;
+    gap: 3px 6px;
     margin-top: 3px;
-    font-size: 12px;
+    font-size: 11px;
     color: #effcff;
+    white-space: nowrap;
   }
   .loot-mini-slot {
     display: inline-flex;
@@ -2222,8 +2403,8 @@ body {
     gap: 3px;
   }
   .loot-mini-slot img {
-    width: 15px;
-    height: 15px;
+    width: 13px;
+    height: 13px;
     object-fit: contain;
     image-rendering: pixelated;
     filter: drop-shadow(0 0 5px rgba(81, 221, 255, .34));
@@ -2236,6 +2417,7 @@ body {
     right: 4px;
     width: 132px;
     height: 132px;
+    grid-template-rows: minmax(0, 1fr);
   }
   .minimap-panel {
     padding: 5px;

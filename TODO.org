@@ -739,9 +739,14 @@ Game controls:
 - On the bottom of the game area, there should be two UI circles - a standard twin stick shooter UI. The left "stick" circle should register the inputs, derive the X and Y coordinates and move the player in that direction. The right "stick" circle should register the inputs, derive the X and Y coordinates and move the players cursor in that direction while triggering shots (whenever there's any input on that element, the player character should shoot).
 - Above the left "stick" circle there should be two ver translucent buttons, one for Govt. Bailout and one for Regulatory Capture. When the player clicks the Govt. Bailout button, a crystal is consumed as if they pressed a spacebar. When the player clicks the Regulatory Capture button, the dash ability is used as if they pressed the right mouse button.
 
+- The game controls should be as unobtrusive as possible, they should be very translucent.
+
 Other:
-- On mobile browsers it would be nice to enter the full screen mode after "logging into" the game.
+- On mobile browsers it would be nice to enter the full screen mode after "logging into" the game and keep it in full screen mode throughout the game. Even when the user scrolls the panels.
 - It seems that the flashlight on mobile doesn't show until the user clicks the screen. Let's make the flashlight point at the player in case there's no input.
+- On mobile, the prompt in the welcome screen should instruct the player to move with the left stick and shoot with the right stick, and analogously indicate to use specific UI buttons for the special abilities.
+
+- Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
 
 * Consistent collision detection
 - Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
@@ -808,7 +813,7 @@ It's OK if the specs are not entirely static - it's perfectly fine to have a fun
 The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
 
-* Visual bugs
+* Visual/audio bugs
 - Player is initially rendered behind the portal. Move the player's spawn point a bit to the bottom, so that they appear in front of the portal.
 - Move the portal active area and footprint by the same amount down as the player spawn point.
 
@@ -824,7 +829,7 @@ The goal is to be able to generate a room with all its enemies that already incl
 
 - Inner corner on corridor L-junctions is placed wrong and of the wrong type.
 
-- Each monster should have their own footsteps.
+- Monster walk sound effect loop persists when the player moves to another floor. When the player changes floors on dies, please stop all movement-related sound effects.
 
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
@@ -842,10 +847,14 @@ Similarly, there are multiple font files available now. Please randomize which f
 Similarly, there are multiple ambient station sounds available. Please randomize which ambient space station sound is used.
 
 * Performance optimization, again
+- Do not re-load the previous level - when a player goes down a floor, do not remove the state for the previous floor. When the player goes back a floor just re-use the stored state instead of loading the game again.
+
 - Use point lights for damage & explosion effects.
 - Use point lights for room/corridor lighting.
 - Batch point light rendering together.
 - Phaser 4 update?
+
+- Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
 
 * UX improvement, again
 - The error screen and final score screens should take the user back to the welcome screen, but without having to "log back in".

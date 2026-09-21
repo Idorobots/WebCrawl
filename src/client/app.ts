@@ -112,6 +112,10 @@ const PLAYER_MAX_HP = DEBUG_MODE ? 1_000 : PLAYER_SPEC.maxHp;
 
 const gameViewport = requireElement<HTMLElement>("#gameViewport");
 const gameCanvasHost = requireElement<HTMLElement>("#gameCanvas");
+const moveStick = requireElement<HTMLElement>("#moveStick");
+const aimStick = requireElement<HTMLElement>("#aimStick");
+const bailoutButton = requireElement<HTMLButtonElement>("#bailoutButton");
+const captureButton = requireElement<HTMLButtonElement>("#captureButton");
 gameCanvasHost.dataset.debugMode = String(DEBUG_MODE);
 gameCanvasHost.dataset.monstersEnabled = String(MONSTERS_ENABLED);
 gameCanvasHost.dataset.playerMaxHp = String(PLAYER_MAX_HP);
@@ -331,9 +335,17 @@ function hideLinkMenu(): void {
   linkMenu.replaceChildren();
 }
 
+let dismissedContentPointId: string | null = null;
+
+function dismissContentBrowser(): void {
+  dismissedContentPointId = visibleContentPointId;
+  contentBrowserEl.hidden = true;
+}
+
 function hideContentBrowser(): void {
   contentBrowserEl.hidden = true;
   visibleContentPointId = null;
+  dismissedContentPointId = null;
 }
 
 function renderContentBrowser(): void {
@@ -349,9 +361,15 @@ function renderContentBrowser(): void {
     return;
   }
   if (visibleContentPointId === point.id) {
-    contentBrowserEl.hidden = false;
+    if (dismissedContentPointId !== point.id) contentBrowserEl.hidden = false;
     return;
   }
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "content-browser-close";
+  closeButton.setAttribute("aria-label", "Close recovered content");
+  closeButton.textContent = "×";
 
   const heading = document.createElement("h2");
   heading.textContent = room.floorLabel;
@@ -359,9 +377,11 @@ function renderContentBrowser(): void {
   content.className = "content-browser-body";
   // contentHtml is reduced to a fixed allowlist while the fetched page is parsed.
   content.innerHTML = room.contentHtml;
-  contentBrowserEl.replaceChildren(heading, content);
+  closeButton.addEventListener("click", dismissContentBrowser);
+  contentBrowserEl.replaceChildren(closeButton, heading, content);
   contentBrowserEl.hidden = false;
   visibleContentPointId = point.id;
+  dismissedContentPointId = null;
 }
 
 function navigateTo(url: string, returnRoomId = currentRoomId): Promise<void> {
@@ -545,7 +565,8 @@ function renderSideMinimap(): void {
       bounds.maxY = Math.max(bounds.maxY, point.y);
     }
   }
-  const pad = Math.min(18, Math.round(width * 0.1));
+  const pad = Math.min(18, Math.round(width * 0.06));
+  const compact = width < 200;
   const scale = Math.min(
     (width - pad * 2) / Math.max(1, bounds.maxX - bounds.minX),
     (height - pad * 2) / Math.max(1, bounds.maxY - bounds.minY),
@@ -555,7 +576,7 @@ function renderSideMinimap(): void {
   context.lineCap = "round";
   context.lineJoin = "round";
   context.strokeStyle = "#315267";
-  context.lineWidth = Math.max(2, 20 * scale);
+  context.lineWidth = Math.max(compact ? 1.5 : 2, 20 * scale);
   for (const link of links) {
     context.beginPath();
     link.points.forEach((point, index) => index
@@ -567,8 +588,8 @@ function renderSideMinimap(): void {
   for (const room of nodes) {
     const x = mapX(room.x - room.width / 2);
     const y = mapY(room.y - room.height / 2);
-    const roomWidth = Math.max(3, room.width * scale);
-    const roomHeight = Math.max(3, room.height * scale);
+    const roomWidth = Math.max(compact ? 2 : 3, room.width * scale);
+    const roomHeight = Math.max(compact ? 2 : 3, room.height * scale);
     context.fillStyle = room.id === currentRoomId ? "#57d9c1" : room.isRoot ? "#244d59" : "#1a303e";
     context.fillRect(x, y, roomWidth, roomHeight);
     context.strokeStyle = room.id === currentRoomId ? "#bafff1" : "#568198";
@@ -578,12 +599,12 @@ function renderSideMinimap(): void {
   for (const stair of currentStairs.filter(item => visibleIds.has(item.roomId))) {
     context.fillStyle = stair.type === "up" ? "#62e6c8" : "#c07cff";
     context.beginPath();
-    context.arc(mapX(stair.x), mapY(stair.y), 3, 0, Math.PI * 2);
+    context.arc(mapX(stair.x), mapY(stair.y), compact ? 2 : 3, 0, Math.PI * 2);
     context.fill();
   }
   context.fillStyle = "#ffffff";
   context.beginPath();
-  context.arc(mapX(player.x), mapY(player.y), 4, 0, Math.PI * 2);
+  context.arc(mapX(player.x), mapY(player.y), compact ? 3 : 4, 0, Math.PI * 2);
   context.fill();
 }
 
@@ -1926,8 +1947,9 @@ function gameTick(timestamp: number): void {
 
   updatePlayerProtectionVisual(timestamp);
   updateEnergyDash(dt, timestamp);
-  if (playerAimNeedsUpdate()) updatePlayerAimFromPointer();
-  if (primaryPointerDown && pointerInViewport) shootBullet();
+  if (touchAimActive) updateTouchAim(dt);
+  else if (playerAimNeedsUpdate()) updatePlayerAimFromPointer();
+  if ((primaryPointerDown && pointerInViewport) || touchAimActive) shootBullet();
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
   updateContentPoints(timestamp);
@@ -2450,11 +2472,19 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
 
   let inputX = 0;
   let inputY = 0;
-  for (const code of heldMovementKeys) {
-    const direction = movementDirections[code];
-    if (!direction) continue;
-    inputX += direction.x;
-    inputY += direction.y;
+  if (touchMoveVector) {
+    const stickMagnitude = Math.hypot(touchMoveVector.x, touchMoveVector.y);
+    if (stickMagnitude > STICK_DEADZONE) {
+      inputX = touchMoveVector.x;
+      inputY = touchMoveVector.y;
+    }
+  } else {
+    for (const code of heldMovementKeys) {
+      const direction = movementDirections[code];
+      if (!direction) continue;
+      inputX += direction.x;
+      inputY += direction.y;
+    }
   }
 
   const magnitude = Math.hypot(inputX, inputY);
@@ -2463,7 +2493,7 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
     return;
   }
 
-  const distance = PLAYER_SPEC.speed * dt;
+  const distance = PLAYER_SPEC.speed * dt * Math.min(1, magnitude);
   const dx = inputX / magnitude * distance;
   const dy = inputY / magnitude * distance;
   const next = {
@@ -2515,9 +2545,13 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
 }
 
 function startEnergyDash(clientX: number, clientY: number): void {
-  if (!playerAlive || !currentLayout || energyDash || lootInventory.energy < PLAYER_ENERGY_MAX) return;
   const target = renderer.worldPointAt(clientX, clientY);
   if (!target) return;
+  startEnergyDashTowards(target);
+}
+
+function startEnergyDashTowards(target: Point): void {
+  if (!playerAlive || !currentLayout || energyDash || lootInventory.energy < PLAYER_ENERGY_MAX) return;
   const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
   const dx = target.x - center.x;
   const dy = target.y - center.y;
@@ -2616,6 +2650,7 @@ function updateEnergyDash(dt: number, timestamp: number): void {
 function teleportPlayerTo(x: number, y: number): void {
   if (!currentLayout || !isWalkable(x, y)) return;
   player = { x, y };
+  touchAimCursor = null;
   updatePlayerVisual();
   updatePlayerAimFromPointer();
   revealRoomsFromCorridor(player.x, player.y);
@@ -2728,6 +2763,21 @@ window.addEventListener("keyup", event => {
   heldMovementKeys.delete(event.code);
 });
 
+function applyAimTarget(target: Point): void {
+  renderer.setFlashlightTarget(target);
+  const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+  renderer.setCameraTarget({
+    x: player.x + (target.x - player.x) / 3,
+    y: player.y + (target.y - player.y) / 3,
+  });
+  const dx = target.x - center.x;
+  const dy = target.y - center.y;
+  const magnitude = Math.hypot(dx, dy);
+  if (magnitude < 1) return;
+  playerFacing = { x: dx / magnitude, y: dy / magnitude };
+  updatePlayerFacingAsset();
+}
+
 function updatePlayerAimFromPointer(): void {
   if (!pointerInViewport || !pointerClientPosition) {
     renderer.setCameraTarget(player);
@@ -2742,22 +2792,7 @@ function updatePlayerAimFromPointer(): void {
     playerAimDirty = false;
     return;
   }
-  renderer.setFlashlightTarget(target);
-  const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
-  renderer.setCameraTarget({
-    x: player.x + (target.x - player.x) / 3,
-    y: player.y + (target.y - player.y) / 3,
-  });
-  const dx = target.x - center.x;
-  const dy = target.y - center.y;
-  const magnitude = Math.hypot(dx, dy);
-  if (magnitude < 1) {
-    playerAimDirty = false;
-    return;
-  }
-
-  playerFacing = { x: dx / magnitude, y: dy / magnitude };
-  updatePlayerFacingAsset();
+  applyAimTarget(target);
   const camera = renderer.cameraState();
   lastAimCamera = camera ? { x: camera.x, y: camera.y } : null;
   playerAimDirty = false;
@@ -2769,6 +2804,39 @@ function playerAimNeedsUpdate(): boolean {
   const camera = renderer.cameraState();
   if (!camera || !lastAimCamera) return true;
   return Math.abs(camera.x - lastAimCamera.x) > 0.1 || Math.abs(camera.y - lastAimCamera.y) > 0.1;
+}
+
+function updateTouchAim(dt: number): void {
+  const vector = touchAimVector ?? { x: 0, y: 0 };
+  const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+  if (!touchAimCursor) {
+    const magnitude = Math.hypot(vector.x, vector.y);
+    const direction = magnitude > STICK_DEADZONE
+      ? { x: vector.x / magnitude, y: vector.y / magnitude }
+      : { x: playerFacing.x, y: playerFacing.y };
+    touchAimCursor = {
+      x: center.x + direction.x * TOUCH_AIM_SEED_RANGE,
+      y: center.y + direction.y * TOUCH_AIM_SEED_RANGE,
+    };
+  } else {
+    const magnitude = Math.hypot(vector.x, vector.y);
+    if (magnitude > STICK_DEADZONE) {
+      touchAimCursor = {
+        x: touchAimCursor.x + vector.x * TOUCH_AIM_SPEED * dt,
+        y: touchAimCursor.y + vector.y * TOUCH_AIM_SPEED * dt,
+      };
+    }
+    const dx = touchAimCursor.x - center.x;
+    const dy = touchAimCursor.y - center.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > TOUCH_AIM_MAX_RANGE) {
+      touchAimCursor = {
+        x: center.x + dx / distance * TOUCH_AIM_MAX_RANGE,
+        y: center.y + dy / distance * TOUCH_AIM_MAX_RANGE,
+      };
+    }
+  }
+  applyAimTarget(touchAimCursor);
 }
 
 function updatePlayerAim(clientX: number, clientY: number): void {
@@ -2785,6 +2853,12 @@ function resetPlayerInput(): void {
   lastAimCamera = null;
   playerSpriteAnimationToken += 1;
   playerShooting = false;
+  touchMoveVector = null;
+  moveStickPointerId = null;
+  touchAimActive = false;
+  touchAimVector = null;
+  touchAimCursor = null;
+  aimStickPointerId = null;
   renderer?.setFlashlightTarget(null);
   setPlayerMoving(false, performance.now());
   if (renderer) updatePlayerFacingAsset();
@@ -2844,6 +2918,115 @@ window.addEventListener("pointerup", event => {
 
 window.addEventListener("pointercancel", () => {
   primaryPointerDown = false;
+});
+
+const STICK_DEADZONE = 0.18;
+const TOUCH_AIM_SPEED = world(520);
+const TOUCH_AIM_MAX_RANGE = world(210);
+const TOUCH_AIM_SEED_RANGE = world(80);
+let touchMoveVector: Point | null = null;
+let touchAimVector: Point | null = null;
+let touchAimActive = false;
+let touchAimCursor: Point | null = null;
+let moveStickPointerId: number | null = null;
+let aimStickPointerId: number | null = null;
+
+function stickVectorFromEvent(stick: HTMLElement, event: PointerEvent): Point {
+  const rect = stick.getBoundingClientRect();
+  const radius = rect.width / 2;
+  if (!radius) return { x: 0, y: 0 };
+  let dx = (event.clientX - (rect.left + radius)) / radius;
+  let dy = (event.clientY - (rect.top + radius)) / radius;
+  const magnitude = Math.hypot(dx, dy);
+  if (magnitude > 1) {
+    dx /= magnitude;
+    dy /= magnitude;
+  }
+  return { x: dx, y: dy };
+}
+
+function setStickKnob(stick: HTMLElement, vector: Point): void {
+  const knob = stick.querySelector<HTMLElement>(".touch-stick-knob");
+  if (!knob) return;
+  const travel = Math.max(0, stick.clientWidth / 2 - knob.clientWidth / 2 - 2);
+  knob.style.transform =
+    `translate(calc(-50% + ${(vector.x * travel).toFixed(1)}px), calc(-50% + ${(vector.y * travel).toFixed(1)}px))`;
+}
+
+moveStick.addEventListener("pointerdown", event => {
+  if (gameUi.hidden || moveStickPointerId !== null) return;
+  event.preventDefault();
+  moveStickPointerId = event.pointerId;
+  moveStick.setPointerCapture(event.pointerId);
+  touchMoveVector = stickVectorFromEvent(moveStick, event);
+  setStickKnob(moveStick, touchMoveVector);
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+});
+
+moveStick.addEventListener("pointermove", event => {
+  if (event.pointerId !== moveStickPointerId) return;
+  event.preventDefault();
+  touchMoveVector = stickVectorFromEvent(moveStick, event);
+  setStickKnob(moveStick, touchMoveVector);
+});
+
+function releaseMoveStick(event: PointerEvent): void {
+  if (event.pointerId !== moveStickPointerId) return;
+  moveStickPointerId = null;
+  touchMoveVector = null;
+  setStickKnob(moveStick, { x: 0, y: 0 });
+}
+
+moveStick.addEventListener("pointerup", releaseMoveStick);
+moveStick.addEventListener("pointercancel", releaseMoveStick);
+
+aimStick.addEventListener("pointerdown", event => {
+  if (gameUi.hidden || aimStickPointerId !== null) return;
+  event.preventDefault();
+  aimStickPointerId = event.pointerId;
+  aimStick.setPointerCapture(event.pointerId);
+  touchAimActive = true;
+  touchAimVector = stickVectorFromEvent(aimStick, event);
+  touchAimCursor = null;
+  setStickKnob(aimStick, touchAimVector);
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  if (teleportPauseActive || !currentLayout || !playerAlive) return;
+  shootBullet();
+});
+
+aimStick.addEventListener("pointermove", event => {
+  if (event.pointerId !== aimStickPointerId) return;
+  event.preventDefault();
+  touchAimVector = stickVectorFromEvent(aimStick, event);
+  setStickKnob(aimStick, touchAimVector);
+});
+
+function releaseAimStick(event: PointerEvent): void {
+  if (event.pointerId !== aimStickPointerId) return;
+  aimStickPointerId = null;
+  touchAimActive = false;
+  touchAimVector = null;
+  touchAimCursor = null;
+  setStickKnob(aimStick, { x: 0, y: 0 });
+  renderer.setCameraTarget(player);
+  renderer.setFlashlightTarget(null);
+}
+
+aimStick.addEventListener("pointerup", releaseAimStick);
+aimStick.addEventListener("pointercancel", releaseAimStick);
+
+bailoutButton.addEventListener("click", () => {
+  if (gameUi.hidden || teleportPauseActive) return;
+  activateCrystalInvulnerability();
+});
+
+captureButton.addEventListener("click", () => {
+  if (gameUi.hidden || teleportPauseActive || !currentLayout || !playerAlive) return;
+  const target = touchAimCursor ?? {
+    x: player.x + playerFacing.x * world(120),
+    y: player.y + playerFacing.y * world(120),
+  };
+  startEnergyDashTowards(target);
 });
 
 window.addEventListener("blur", () => {
@@ -2922,6 +3105,7 @@ function renderGraph(
     const roomStairs = currentStairs.filter(stair => stair.roomId === spawnRoom.id);
     const entryPortal = entryPortalFor(roomStairs, spawnPortalUrl);
     player = initialPlayerPosition(entryPortal, spawnRoom);
+    touchAimCursor = null;
 
     currentRoomId = spawnRoom.id;
     gameCanvasHost.dataset.currentRoomTag = spawnRoom.tag;

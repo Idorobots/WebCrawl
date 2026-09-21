@@ -282,6 +282,15 @@ export function setupWelcomePrompt(options: {
     urlInput.setSelectionRange(length, length);
   }
 
+  function focusPrimaryAction(): void {
+    const submitButton = urlInput.form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submitButton) {
+      submitButton.focus();
+      return;
+    }
+    focusUrlInput();
+  }
+
   function revealAll(): void {
     for (let i = stepIndex; i < steps.length; i += 1) {
       steps[i]!.el.classList.remove("welcome-char-pending");
@@ -301,7 +310,7 @@ export function setupWelcomePrompt(options: {
     const wasTyping = typingStarted;
     finished = true;
     revealAll();
-    focusUrlInput();
+    focusPrimaryAction();
     if (wasTyping) onTypingEnd?.();
   }
 
@@ -385,7 +394,7 @@ export function setupWelcomePrompt(options: {
     startTyping();
     rafId = window.requestAnimationFrame(tick);
   }
-  focusUrlInput();
+  focusPrimaryAction();
 
   return {
     skip,
