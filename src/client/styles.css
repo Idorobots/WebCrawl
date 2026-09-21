@@ -1977,6 +1977,15 @@ body {
   filter: drop-shadow(0 0 12px rgba(38, 150, 255, 0.55));
 }
 
+.brand-avatar {
+  display: none;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 12px rgba(70, 192, 244, 0.4));
+}
+
 .brand-name {
   font-size: 20px;
   line-height: 1;
@@ -2396,9 +2405,13 @@ body {
       linear-gradient(180deg, rgba(10, 26, 42, 0.6), rgba(2, 8, 14, 0.68));
   }
   .brand-logo {
-    width: 18px;
-    height: 18px;
-    filter: drop-shadow(0 0 6px rgba(38, 150, 255, 0.5));
+    display: none;
+  }
+  .brand-avatar {
+    display: block;
+    width: 40px;
+    height: 40px;
+    filter: drop-shadow(0 0 6px rgba(70, 192, 244, 0.4));
   }
   .brand-name {
     display: none;
@@ -2407,7 +2420,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    width: clamp(96px, 32vw, 150px);
+    width: clamp(130px, 44vw, 220px);
     min-width: 0;
   }
   .stat-line {

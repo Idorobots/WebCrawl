@@ -713,7 +713,10 @@ N-S with E:
         [WW][WE]
         [WW][WE]
 
-* Mobile support
+* DONE Mobile support
+:LOGBOOK:
+- State "DONE"       from              [2026-09-21 Mon 16:54]
+:END:
 Welcome screen:
 - The title bar on mobile should not cover the other elements, it needs some padding.
 - The Prompt panel on mobile should fit the width of the screen (you can hide or ellide the "agent_prompt.txt" string on mobile to make its title shorter.)
@@ -745,6 +748,8 @@ Other:
 - It seems that the flashlight on mobile doesn't show until the user clicks the screen. Let's make the flashlight point at the player in case there's no input.
 - On mobile, the prompt in the welcome screen should instruct the player to move with the left stick and shoot with the right stick, and analogously indicate to use specific UI buttons for the special abilities.
 
+- Replace the ClosedNS logo on the mobile UI stats panel with the player avatar.
+
 * DONE Bugs
 :LOGBOOK:
 - State "DONE"       from              [2026-09-21 Mon 15:45]
@@ -771,8 +776,6 @@ Other:
 - "floor_hatch" tile should be considered decoration tile, not main floor tile
 
 - Monster walk sound effect loop persists when the player moves to another floor. When the player changes floors or dies, please stop all movement-related sound effects.
-
-- Replace the ClosedNS logo on the mobile UI stats panel with the player avatar.
 
 * Visual audio/bugs
 - Inner corner on corridor L-junctions is placed wrong and of the wrong type.
