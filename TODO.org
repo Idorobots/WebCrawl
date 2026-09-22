@@ -828,8 +828,27 @@ Other:
 
 
 * Wall & door refactor
-Rooms should have doors leading to their corridors. Initially the doors should be closed, but then open when the player comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player comes near them. Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
+All corridors should be 2 segments wide.
+Doors are always one segment wide.
 
+Rooms should have doors leading to their corridors.
+Initially the doors should be closed, but then open when the player or a monster comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player or a monster comes near them.
+Corridors should be revealed when the connected door opens for the first tiem. Initially, corridors should be hidden.
+Similarly, rooms should be revealed only when the doors leading up to them open for the first time.
+
+Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
+
+* Bugs
+- Room corners are not correct.
+- Corridor corners are wrong. They need to be constructed the same way as the room corners.
+
+- New walls and especially the corners in corridors need adjusments on the bullet collisions.
+- Both south and north walls can use the same block zones. Use the one from the S walls.
+- Both west and east walls can use the same block zones. Use the one from W walls.
+
+- Missign floor triangle on top-left inner corners.
+
+- "I'm feeling lucky" button doesn't work after an error and redirect back into the welcome screen.
 
 * Consistent collision detection
 - Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.

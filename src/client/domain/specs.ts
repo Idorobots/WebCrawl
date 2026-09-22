@@ -55,7 +55,8 @@ const robotDebris = (sizeScale: number): readonly SpriteClip[] => [
 export const WORLD_GEOMETRY = {
   segmentSize: ENVIRONMENT_SEGMENT_SIZE,
   floorTileSize: world(64),
-  doorSpanSegments: 2,
+  doorSpanSegmentsVertical: 3,
+  doorSpanSegmentsHorizontal: 2,
   doorOpeningWidth: ENVIRONMENT_SEGMENT_SIZE * 1.25,
   topWallCollisionDepth: ENVIRONMENT_SEGMENT_SIZE / 2,
   wallThickness: world(64),

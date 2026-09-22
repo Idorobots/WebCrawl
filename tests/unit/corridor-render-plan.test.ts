@@ -3,7 +3,11 @@ import { layoutOrthogonal } from "../../src/client/domain/layout";
 import { WORLD_GEOMETRY } from "../../src/client/domain/specs";
 import {
   buildCorridorRenderPlan,
+  buildRoomWalls,
+  doorModuleStyle,
+  wallModuleStyle,
   type CorridorCornerKind,
+  type DoorModulePlan,
 } from "../../src/client/render/corridor-render-plan";
 import type {
   Direction,
@@ -72,74 +76,88 @@ function layoutForArms(directions: readonly Direction[]): DungeonLayout {
   return { nodes: [source, ...links.map(link => link.target)], links, hiddenCount: 0 };
 }
 
-function sortedCornerKinds(layout: DungeonLayout): CorridorCornerKind[] {
+function sortedCornerKinds(layout: DungeonLayout): string[] {
   return buildCorridorRenderPlan(layout, SEGMENT_SIZE).corners
+    .filter(corner => corner.kind !== "wall")
     .map(corner => corner.kind)
     .sort();
 }
 
+const cell = (kind: string): Point => ({
+  x: kind.endsWith("left") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
+  y: kind.startsWith("top") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
+});
+
+const oppositeCorner = (kind: string): string => {
+  const vertical = kind.startsWith("top") ? "bottom" : "top";
+  const horizontal = kind.endsWith("left") ? "right" : "left";
+  return `${vertical}-${horizontal}`;
+};
+
 describe("corridor render planning", () => {
   it.each([
-    [["N", "W"], "bottom-right"],
-    [["N", "E"], "bottom-left"],
-    [["S", "W"], "top-right"],
-    [["S", "E"], "top-left"],
-  ] as const)("encloses the %s bend with the %s outer corner and the opposite inner wedge", (directions, expectedCorner) => {
+    [["N", "W"], "bottom-right", 4],
+    [["N", "E"], "bottom-left", 5],
+    [["S", "W"], "top-right", 5],
+    [["S", "E"], "top-left", 6],
+  ] as const)("encloses the %s bend with the %s corner construction on both corner cells", (directions, expectedCorner, expectedWalls) => {
     const plan = buildCorridorRenderPlan(layoutForArms(directions), SEGMENT_SIZE);
-    const innerKind = expectedCorner.startsWith("top")
-      ? `bottom-${expectedCorner.endsWith("left") ? "right" : "left"}`
-      : `top-${expectedCorner.endsWith("left") ? "right" : "left"}`;
+    const outerCell = cell(expectedCorner);
+    const innerKindCell = oppositeCorner(expectedCorner);
+    const innerCell = cell(innerKindCell);
+    const innerShift = {
+      x: innerKindCell.endsWith("left") ? -SEGMENT_SIZE : SEGMENT_SIZE,
+      y: innerKindCell.startsWith("top") ? -SEGMENT_SIZE : SEGMENT_SIZE,
+    };
 
-    expect(plan.corners.map(corner => corner.kind)).toEqual([innerKind]);
+    expect(plan.corners.filter(corner => corner.kind !== "wall").map(corner => corner.kind))
+      .toEqual([expectedCorner, expectedCorner]);
     expect(plan.junctionFloors).toHaveLength(1);
-    expect(plan.outerCorners).toHaveLength(1);
-    expect(plan.outerCorners[0]).toMatchObject({
-      kind: expectedCorner,
-      x: expectedCorner.endsWith("left") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
-      y: expectedCorner.startsWith("top") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
-    });
-    expect(plan.corners[0]).toMatchObject({
-      x: innerKind.endsWith("left") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
-      y: innerKind.startsWith("top") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2,
-    });
-    expect(plan.walls).toHaveLength(6);
+    expect(plan.corners.filter(corner => corner.kind !== "wall")).toMatchObject([
+      { kind: expectedCorner, x: outerCell.x, y: outerCell.y },
+      { kind: expectedCorner, x: innerCell.x + innerShift.x, y: innerCell.y + innerShift.y },
+    ]);
+    expect(plan.walls).toHaveLength(expectedWalls);
   });
 
   it.each([
-    [["N", "W", "E"], ["top-left", "top-right"]],
-    [["S", "W", "E"], ["bottom-left", "bottom-right"]],
-    [["E", "N", "S"], ["bottom-right", "top-right"]],
-    [["W", "N", "S"], ["bottom-left", "top-left"]],
-  ] as const)("encloses the %s junction with both corridor corners", (directions, expectedCorners) => {
+    [["N", "W", "E"], ["bottom-left", "bottom-right"], 5],
+    [["S", "W", "E"], ["top-left", "top-right"], 7],
+    [["E", "N", "S"], ["bottom-left", "top-left"], 7],
+    [["W", "N", "S"], ["bottom-right", "top-right"], 5],
+  ] as const)("encloses the %s junction with the opposite constructions on its concave corners", (directions, expectedCorners, expectedWalls) => {
     const layout = layoutForArms(directions);
     const plan = buildCorridorRenderPlan(layout, SEGMENT_SIZE);
 
     expect(sortedCornerKinds(layout)).toEqual([...expectedCorners].sort());
-    for (const corner of plan.corners) {
-      expect(corner.x).toBe(corner.kind.endsWith("left") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2);
-      expect(corner.y).toBe(corner.kind.startsWith("top") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2);
+    for (const corner of plan.corners.filter(candidate => candidate.kind !== "wall")) {
+      // The construction kind is the diagonally opposite room corner of the
+      // corner's own cell.
+      expect(corner.kind).toBe(oppositeCorner(
+        `${corner.y < 0 ? "top" : "bottom"}-${corner.x < 0 ? "left" : "right"}`,
+      ));
     }
     expect(plan.junctionFloors).toEqual([]);
-    expect(plan.outerCorners).toEqual([]);
-    expect(plan.walls).toHaveLength(8);
+    expect(plan.walls).toHaveLength(expectedWalls);
   });
 
-  it("encloses a four-way junction with all four internal corners", () => {
+  it("encloses a four-way junction with the opposite construction on every corner", () => {
     const plan = buildCorridorRenderPlan(layoutForArms(["N", "E", "S", "W"]), SEGMENT_SIZE);
+    const cornerModules = plan.corners.filter(corner => corner.kind !== "wall");
 
-    expect(plan.corners.map(corner => corner.kind).sort()).toEqual([
+    expect(cornerModules.map(corner => corner.kind).sort()).toEqual([
       "bottom-left",
       "bottom-right",
       "top-left",
       "top-right",
     ]);
-    for (const corner of plan.corners) {
-      expect(corner.x).toBe(corner.kind.endsWith("left") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2);
-      expect(corner.y).toBe(corner.kind.startsWith("top") ? -SEGMENT_SIZE / 2 : SEGMENT_SIZE / 2);
+    for (const corner of cornerModules) {
+      expect(corner.kind).toBe(oppositeCorner(
+        `${corner.y < 0 ? "top" : "bottom"}-${corner.x < 0 ? "left" : "right"}`,
+      ));
     }
     expect(plan.junctionFloors).toEqual([]);
-    expect(plan.outerCorners).toEqual([]);
-    expect(plan.walls).toHaveLength(8);
+    expect(plan.walls).toHaveLength(4);
     expect(plan.walls.some(wall =>
       Math.abs(wall.x) <= SEGMENT_SIZE / 2 &&
       Math.abs(wall.y) <= SEGMENT_SIZE / 2
@@ -275,6 +293,94 @@ describe("corridor render planning", () => {
         label: source.floorLabel,
         lateralOffset: SEGMENT_SIZE / 3,
       },
+    ]);
+  });
+});
+
+describe("wall module styles", () => {
+  const style = (side: Direction, kind: "wall" | CorridorCornerKind) =>
+    wallModuleStyle({ x: 0, y: 0, side, kind }, SEGMENT_SIZE);
+
+  it("shifts northern horizontal walls one segment up", () => {
+    expect(style("N", "wall")).toMatchObject({ offsetX: 0, offsetY: -SEGMENT_SIZE, width: SEGMENT_SIZE, height: SEGMENT_SIZE });
+    expect(style("S", "wall")).toMatchObject({ offsetX: 0, offsetY: 0, width: SEGMENT_SIZE, height: SEGMENT_SIZE });
+  });
+
+  it("shifts western vertical walls one segment left and bottom-anchors the overlap", () => {
+    expect(style("E", "wall")).toMatchObject({ offsetX: 0, offsetY: -SEGMENT_SIZE / 2, width: SEGMENT_SIZE, height: SEGMENT_SIZE * 2 });
+    expect(style("W", "wall")).toMatchObject({ offsetX: -SEGMENT_SIZE, offsetY: -SEGMENT_SIZE / 2, width: SEGMENT_SIZE, height: SEGMENT_SIZE * 2 });
+  });
+
+  it("anchors left corners like vertical walls and top corners like northern walls", () => {
+    expect(style("W", "top-left")).toMatchObject({ offsetX: -SEGMENT_SIZE, offsetY: -SEGMENT_SIZE, height: SEGMENT_SIZE });
+    expect(style("E", "top-right")).toMatchObject({ offsetX: 0, offsetY: -SEGMENT_SIZE, height: SEGMENT_SIZE });
+    expect(style("W", "bottom-left")).toMatchObject({ offsetX: -SEGMENT_SIZE, offsetY: -SEGMENT_SIZE / 2, height: SEGMENT_SIZE * 2 });
+    expect(style("E", "bottom-right")).toMatchObject({ offsetX: 0, offsetY: -SEGMENT_SIZE / 2, height: SEGMENT_SIZE * 2 });
+  });
+
+  it("spans horizontal doors over two segments and vertical doors over three", () => {
+    expect(doorModuleStyle("N", SEGMENT_SIZE)).toMatchObject({
+      width: SEGMENT_SIZE * 2,
+      height: SEGMENT_SIZE,
+      offsetX: 0,
+      offsetY: -SEGMENT_SIZE / 2,
+    });
+    expect(doorModuleStyle("S", SEGMENT_SIZE)).toMatchObject({ offsetX: 0, offsetY: -SEGMENT_SIZE / 2 });
+    expect(doorModuleStyle("E", SEGMENT_SIZE)).toMatchObject({
+      width: SEGMENT_SIZE,
+      height: SEGMENT_SIZE * 3,
+      offsetX: -SEGMENT_SIZE / 2,
+      offsetY: -SEGMENT_SIZE * 0.75,
+    });
+    expect(doorModuleStyle("W", SEGMENT_SIZE)).toMatchObject({ offsetX: -SEGMENT_SIZE / 2, offsetY: -SEGMENT_SIZE * 0.75 });
+  });
+});
+
+describe("room wall layout", () => {
+  const door = (side: DoorModulePlan["side"], boundary: Point): DoorModulePlan => ({ position: boundary, side });
+
+  it("reserves two cells for horizontal doors and three for vertical doors", () => {
+    // 4x4-segment room centered on the origin; boundaries at +-2 segments.
+    const baseRoom = { ...room(0), x: 0, y: 0 };
+    const modules = buildRoomWalls(baseRoom, [
+      door("N", { x: 0, y: -SEGMENT_SIZE * 2 }),
+      door("E", { x: SEGMENT_SIZE * 2, y: 0 }),
+    ], SEGMENT_SIZE);
+    const edgeWall = (side: Direction, x: number, y: number): boolean => modules.some(module =>
+      module.kind === "wall" && module.side === side && module.x === x && module.y === y,
+    );
+
+    // North row: columns 1 and 2 flank the boundary at x=0 and are both
+    // reserved; only the top-left corner's own segment remains.
+    expect(edgeWall("N", -SEGMENT_SIZE / 2, -SEGMENT_SIZE * 1.5)).toBe(false);
+    expect(edgeWall("N", SEGMENT_SIZE / 2, -SEGMENT_SIZE * 1.5)).toBe(false);
+    expect(modules.filter(module => module.side === "N" && module.kind === "wall")).toHaveLength(1);
+
+    // The south row stays fully walled.
+    expect(edgeWall("S", -SEGMENT_SIZE / 2, SEGMENT_SIZE * 1.5)).toBe(true);
+    expect(edgeWall("S", SEGMENT_SIZE / 2, SEGMENT_SIZE * 1.5)).toBe(true);
+
+    // East column: the door cell plus the two above (rows 1..2) are reserved;
+    // the top-right corner's extra vertical segment stays at the corner row.
+    expect(edgeWall("E", SEGMENT_SIZE * 1.5, -SEGMENT_SIZE * 1.5)).toBe(true);
+    expect(edgeWall("E", SEGMENT_SIZE * 1.5, -SEGMENT_SIZE / 2)).toBe(false);
+    expect(edgeWall("E", SEGMENT_SIZE * 1.5, SEGMENT_SIZE / 2)).toBe(false);
+    expect(modules.filter(module => module.side === "E" && module.kind === "wall")).toHaveLength(1);
+
+    // Corners are always placed regardless of reservations.
+    expect(modules.filter(module => module.kind !== "wall")).toHaveLength(4);
+  });
+
+  it("places plain wall modules on every unreserved perimeter cell", () => {
+    const baseRoom = { ...room(0), x: 0, y: 0 };
+    const modules = buildRoomWalls(baseRoom, [], SEGMENT_SIZE);
+    // 2 cells per edge plus the extra segments the top-left, top-right and
+    // bottom-left corner cells need next to their corner sprites.
+    expect(modules.filter(module => module.kind === "wall")).toHaveLength(12);
+    expect(modules.filter(module => module.kind === "wall" && module.side === "N")).toEqual([
+      { x: -SEGMENT_SIZE * 1.5, y: -SEGMENT_SIZE * 1.5, side: "N", kind: "wall" },
+      { x: -SEGMENT_SIZE / 2, y: -SEGMENT_SIZE * 1.5, side: "N", kind: "wall" },
+      { x: SEGMENT_SIZE / 2, y: -SEGMENT_SIZE * 1.5, side: "N", kind: "wall" },
     ]);
   });
 });

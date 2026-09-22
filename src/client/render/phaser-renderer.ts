@@ -56,8 +56,13 @@ import type {
 } from "../types";
 import {
   buildCorridorRenderPlan,
+  buildRoomWalls,
+  doorModuleStyle,
+  wallModuleStyle,
   type CorridorRenderPlan,
   type CorridorSegmentPlan,
+  type DoorModulePlan,
+  type WallModulePlan,
 } from "./corridor-render-plan";
 import {
   ELLIPTICAL_LIGHT_PIPELINE,
@@ -83,39 +88,41 @@ const CORRIDOR_FLOOR_DEPTH = -4;
 const CORRIDOR_MARKING_DEPTH = -1.75;
 const DEBRIS_DEPTH = -1.5;
 const Y_DEPTH_OFFSET = 4_000_000;
-const SIDE_WALL_DEPTH = 7_000_000;
 const OVERHEAD_DEPTH = 8_000_000;
 const DEBUG_DEPTH = 12_000_000;
 const yDepth = (y: number, bias = 0): number => Y_DEPTH_OFFSET + y + bias;
 
 /**
- * Depth anchor per wall module:
- * - E/W walls always draw above actors.
- * - N walls anchor at their top edge so anything south of them draws in front.
- * - S walls anchor at their bottom edge (+1 to win boundary ties) so they stay in front.
+ * Depth anchor per wall module — walls order by Y so modules positioned
+ * lower on screen draw on top:
+ * - E/W walls anchor at their cell's bottom edge, which also lets the
+ *   bottom corners (anchored at the room's bottom edge) sort above them.
+ * - N walls and top corners anchor at their cell's top edge (their face band
+ *   sits just above it) so anything south of them draws in front.
+ * - S walls and bottom corners anchor at the cell's bottom edge (+1 to win
+ *   boundary ties) so they stay in front.
  */
-function wallDepth(asset: string, y: number): number {
-  if (asset === ASSETS.wallVerticalLeft || asset === ASSETS.wallVerticalRight) return SIDE_WALL_DEPTH;
-  if (asset === ASSETS.corridorCornerTopLeft || asset === ASSETS.corridorCornerTopRight) {
-    return yDepth(y - SEGMENT_SIZE / 2);
+function wallDepth(module: WallModulePlan): number {
+  if (module.kind === "wall" && (module.side === "E" || module.side === "W")) {
+    return yDepth(module.y + SEGMENT_SIZE / 2, 1);
   }
-  if (asset === ASSETS.corridorCornerBottomLeft || asset === ASSETS.corridorCornerBottomRight) {
-    return yDepth(y + SEGMENT_SIZE / 2, 1);
+  if (module.kind === "top-left" || module.kind === "top-right" || (module.kind === "wall" && module.side === "N")) {
+    return yDepth(module.y - SEGMENT_SIZE / 2);
   }
-  if (asset === ASSETS.wallHorizontalTop || asset === ASSETS.wallCornerTopLeft || asset === ASSETS.wallCornerTopRight) {
-    return yDepth(y - SEGMENT_SIZE / 2);
-  }
-  return yDepth(y + SEGMENT_SIZE / 2, 1);
+  return yDepth(module.y + SEGMENT_SIZE / 2, 1);
 }
 
 /**
- * Doors follow their wall's anchor: E/W always draw above actors, N doors
- * anchor at the module top edge, S doors at the bottom edge (+1 tie bias).
+ * Doors follow their wall's anchor: E/W anchor at the bottom of their lowest
+ * cell (Y ordering, so wall segments lower on screen draw in front), N doors
+ * anchor at the boundary line, S doors at the boundary line (+1 tie bias).
  */
-function doorDepth(side: "N" | "E" | "S" | "W", y: number): number {
-  if (side === "E" || side === "W") return SIDE_WALL_DEPTH;
-  if (side === "N") return yDepth(y - SEGMENT_SIZE / 2);
-  return yDepth(y + SEGMENT_SIZE / 2, 1);
+function doorDepth(door: DoorModulePlan): number {
+  if (door.side === "E" || door.side === "W") {
+    return yDepth(door.position.y + SEGMENT_SIZE / 2, 1);
+  }
+  if (door.side === "N") return yDepth(door.position.y);
+  return yDepth(door.position.y, 1);
 }
 const PORTAL_FRAME_MS = 125;
 function supportedMaxLights(): number {
@@ -1006,12 +1013,11 @@ export class PhaserRenderer {
     this.addRoomFloorMarking(floorContainer, room);
     const statics: StaticObject[] = [floorContainer];
     const doors = this.roomDoors(room);
-    for (const wall of this.addRoomWalls(room, doors)) {
-      statics.push(this.rememberStatic(wall.setAlpha(alpha)));
+    for (const module of buildRoomWalls(room, doors, SEGMENT_SIZE)) {
+      statics.push(this.rememberStatic(this.createEnvironmentModule(module).setAlpha(alpha)));
     }
     for (const door of doors) {
-      const doorObject = this.createDoor(door.position, door.side);
-      statics.push(this.rememberStatic(doorObject.setAlpha(alpha).setDepth(doorDepth(door.side, door.position.y))));
+      statics.push(this.rememberStatic(this.createDoor(door).setAlpha(alpha).setDepth(doorDepth(door))));
     }
     this.roomStatics.set(room.id, statics);
   }
@@ -1048,31 +1054,10 @@ export class PhaserRenderer {
       floorContainer.add(floor);
     }
     for (const wall of plan.walls.filter(candidate => candidate.ownerLinkId === link.id)) {
-      const asset = ({
-        N: ASSETS.wallHorizontalTop,
-        E: ASSETS.wallVerticalRight,
-        S: ASSETS.wallHorizontalBottom,
-        W: ASSETS.wallVerticalLeft,
-      } as const)[wall.side];
-      statics.push(this.rememberStatic(this.createEnvironmentModule(wall.x, wall.y, asset).setAlpha(alpha)));
-    }
-    for (const corner of plan.outerCorners.filter(candidate => candidate.ownerLinkId === link.id)) {
-      const asset = ({
-        "top-left": ASSETS.wallCornerTopLeft,
-        "top-right": ASSETS.wallCornerTopRight,
-        "bottom-left": ASSETS.wallCornerBottomLeft,
-        "bottom-right": ASSETS.wallCornerBottomRight,
-      } as const)[corner.kind];
-      statics.push(this.rememberStatic(this.createEnvironmentModule(corner.x, corner.y, asset).setAlpha(alpha)));
+      statics.push(this.rememberStatic(this.createEnvironmentModule(wall).setAlpha(alpha)));
     }
     for (const corner of plan.corners.filter(candidate => candidate.ownerLinkId === link.id)) {
-      const asset = ({
-        "top-left": ASSETS.corridorCornerTopLeft,
-        "top-right": ASSETS.corridorCornerTopRight,
-        "bottom-left": ASSETS.corridorCornerBottomLeft,
-        "bottom-right": ASSETS.corridorCornerBottomRight,
-      } as const)[corner.kind];
-      statics.push(this.rememberStatic(this.createEnvironmentModule(corner.x, corner.y, asset).setAlpha(alpha)));
+      statics.push(this.rememberStatic(this.createEnvironmentModule(corner).setAlpha(alpha)));
     }
     for (const marking of plan.markings.filter(candidate => candidate.ownerLinkId === link.id)) {
       this.addCorridorSegmentMarking(
@@ -1257,92 +1242,42 @@ export class PhaserRenderer {
       .setTilePosition(left / FLOOR_TILE_SCALE, top / FLOOR_TILE_SCALE);
   }
 
-  private createEnvironmentModule(x: number, y: number, asset: string): Phaser.GameObjects.Image {
+  private createEnvironmentModule(module: WallModulePlan): Phaser.GameObjects.Image {
+    const style = wallModuleStyle(module, SEGMENT_SIZE);
     return this.illuminate(
-      this.scene!.add.image(x, y, textureKey(asset))
-        .setDisplaySize(SEGMENT_SIZE, SEGMENT_SIZE)
-        .setDepth(wallDepth(asset, y)),
+      this.scene!.add.image(
+        module.x + style.offsetX,
+        module.y + style.offsetY,
+        textureKey(style.asset),
+      )
+        .setDisplaySize(style.width, style.height)
+        .setDepth(wallDepth(module)),
     );
   }
 
-  private roomDoors(room: GraphNode): Array<{ position: Point; side: "N" | "E" | "S" | "W" }> {
-    const doors: Array<{ position: Point; side: "N" | "E" | "S" | "W" }> = [];
+  private roomDoors(room: GraphNode): DoorModulePlan[] {
+    const doors: DoorModulePlan[] = [];
     for (const link of this.layout?.links ?? []) {
       if (link.source.id === room.id) doors.push({
-        position: this.roomDoorPosition(link.points[0]!, link.direction),
+        position: link.points[0]!,
         side: link.direction,
       });
       if (link.target.id === room.id) doors.push({
-        position: this.roomDoorPosition(link.points[link.points.length - 1]!, link.targetDirection ?? this.opposite(link.direction)),
+        position: link.points[link.points.length - 1]!,
         side: link.targetDirection ?? this.opposite(link.direction),
       });
     }
     return doors;
   }
 
-  private roomDoorPosition(boundary: Point, side: "N" | "E" | "S" | "W"): Point {
-    const inset = SEGMENT_SIZE / 2;
-    return {
-      x: boundary.x + (side === "W" ? inset : side === "E" ? -inset : 0),
-      y: boundary.y + (side === "N" ? inset : side === "S" ? -inset : 0),
-    };
-  }
-
-  private addRoomWalls(
-    room: GraphNode,
-    doors: ReadonlyArray<{ position: Point; side: "N" | "E" | "S" | "W" }>,
-  ): Phaser.GameObjects.Image[] {
-    const walls: Phaser.GameObjects.Image[] = [];
-    const left = room.x - room.width / 2;
-    const top = room.y - room.height / 2;
-    const columns = Math.round(room.width / SEGMENT_SIZE);
-    const rows = Math.round(room.height / SEGMENT_SIZE);
-    const occupied = new Map<string, Set<number>>();
-    for (const door of doors) {
-      const horizontal = door.side === "N" || door.side === "S";
-      const axisStart = horizontal ? left : top;
-      const axisPosition = horizontal ? door.position.x : door.position.y;
-      const startIndex = Math.round((axisPosition - axisStart) / SEGMENT_SIZE - 1);
-      const cells = occupied.get(door.side) ?? new Set<number>();
-      cells.add(startIndex);
-      cells.add(startIndex + 1);
-      occupied.set(door.side, cells);
-    }
-    const isDoorCell = (side: string, index: number): boolean => occupied.get(side)?.has(index) ?? false;
-
-    walls.push(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, top + SEGMENT_SIZE / 2, ASSETS.wallCornerTopLeft));
-    walls.push(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, top + SEGMENT_SIZE / 2, ASSETS.wallCornerTopRight));
-    walls.push(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallCornerBottomLeft));
-    walls.push(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallCornerBottomRight));
-
-    for (let column = 1; column < columns - 1; column += 1) {
-      const x = left + (column + 0.5) * SEGMENT_SIZE;
-      if (!isDoorCell("N", column)) walls.push(this.createEnvironmentModule(x, top + SEGMENT_SIZE / 2, ASSETS.wallHorizontalTop));
-      if (!isDoorCell("S", column)) walls.push(this.createEnvironmentModule(x, top + room.height - SEGMENT_SIZE / 2, ASSETS.wallHorizontalBottom));
-    }
-    for (let row = 1; row < rows - 1; row += 1) {
-      const y = top + (row + 0.5) * SEGMENT_SIZE;
-      if (!isDoorCell("W", row)) walls.push(this.createEnvironmentModule(left + SEGMENT_SIZE / 2, y, ASSETS.wallVerticalLeft));
-      if (!isDoorCell("E", row)) walls.push(this.createEnvironmentModule(left + room.width - SEGMENT_SIZE / 2, y, ASSETS.wallVerticalRight));
-    }
-    return walls;
-  }
-
-  private createDoor(position: Point, side: "N" | "E" | "S" | "W"): Phaser.GameObjects.Container {
+  private createDoor(door: DoorModulePlan): Phaser.GameObjects.Image {
     const scene = this.scene!;
-    const container = scene.add.container(0, 0);
-    const horizontal = side === "N" || side === "S";
-    const asset = ({
-      N: ASSETS.doorOpenTop,
-      E: ASSETS.doorOpenRight,
-      S: ASSETS.doorOpenBottom,
-      W: ASSETS.doorOpenLeft,
-    } as const)[side];
-    container.add(this.illuminate(scene.add.image(position.x, position.y, textureKey(asset)).setDisplaySize(
-      horizontal ? SEGMENT_SIZE * WORLD_GEOMETRY.doorSpanSegments : SEGMENT_SIZE,
-      horizontal ? SEGMENT_SIZE : SEGMENT_SIZE * WORLD_GEOMETRY.doorSpanSegments,
-    )));
-    return container;
+    const style = doorModuleStyle(door.side, SEGMENT_SIZE);
+    return this.illuminate(scene.add.image(
+      door.position.x + style.offsetX,
+      door.position.y + style.offsetY,
+      textureKey(style.asset),
+    ).setDisplaySize(style.width, style.height));
   }
 
   private opposite(direction: "N" | "E" | "S" | "W"): "N" | "E" | "S" | "W" {
