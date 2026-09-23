@@ -121,6 +121,44 @@ describe("fetchHtml", () => {
     expect(requests[2]!.input).toBe("https://cors.io/?url=https%3A%2F%2Fexample.com");
   });
 
+  it("uses the proxied page's canonical link as the final URL", async () => {
+    handlers = [
+      corsBlocked,
+      corsBlocked,
+      async () => envelopeResponse(
+        '<link rel="canonical" href="https://example.com/article"><body>proxied</body>',
+      ),
+    ];
+    const outcome = await fetchHtml("https://example.com/wiki/Special:Random");
+    expect(outcome).toEqual({
+      html: '<link rel="canonical" href="https://example.com/article"><body>proxied</body>',
+      url: "https://example.com/article",
+      via: "proxy",
+    });
+  });
+
+  it("resolves a relative canonical link against the requested URL", async () => {
+    handlers = [
+      corsBlocked,
+      corsBlocked,
+      async () => envelopeResponse('<link rel="canonical" href="/wiki/Article"><body>x</body>'),
+    ];
+    const outcome = await fetchHtml("https://en.example.com/wiki/Special:Random");
+    expect(outcome.url).toBe("https://en.example.com/wiki/Article");
+  });
+
+  it("uses the proxied page's og:url when there is no canonical link", async () => {
+    handlers = [
+      corsBlocked,
+      corsBlocked,
+      async () => envelopeResponse(
+        '<meta content="https://example.com/story" property="og:url"><body>x</body>',
+      ),
+    ];
+    const outcome = await fetchHtml("https://example.com");
+    expect(outcome.url).toBe("https://example.com/story");
+  });
+
   it("reports every route when all of them fail", async () => {
     handlers = [corsBlocked, corsBlocked, corsBlocked];
     const error = await fetchHtml("https://example.com").catch((value: unknown) => value);

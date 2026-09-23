@@ -519,8 +519,11 @@ export class PhaserRenderer {
     if (dprChanged
       || this.game.scale.gameSize.width !== this.scaledGameWidth()
       || this.game.scale.gameSize.height !== this.scaledGameHeight()) {
-      this.game.scale.setZoom(1 / dpr);
+      // In Scale.NONE mode Phaser only rewrites the canvas inline style when
+      // _resetZoom is armed, so setZoom must run last for its refresh to write
+      // the new host size (otherwise the stale boot-time style wins over CSS).
       this.game.scale.setGameSize(this.scaledGameWidth(), this.scaledGameHeight());
+      this.game.scale.setZoom(1 / dpr);
     }
   }
 

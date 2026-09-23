@@ -220,6 +220,12 @@ test("starts a lucky crawl from Wikipedia's random page", async ({ page }) => {
     Math.random = () => 0;
   });
   await page.route("https://en.wikipedia.org/**", route => route.abort());
+  await page.route("https://en.wikipedia.org/w/api.php**", route => route.fulfill({
+    status: 200,
+    headers: { "access-control-allow-origin": "*" },
+    contentType: "application/json",
+    body: JSON.stringify({ query: { random: [{ id: 1, ns: 0, title: "Example article" }] } }),
+  }));
   await page.route("**/api/fetch?**", route => route.fulfill({
     status: 200,
     headers: { "x-webcrawl-final-url": "https://en.wikipedia.org/wiki/Example_article" },
@@ -1101,6 +1107,77 @@ test("pauses the game while teleporting through a portal", async ({ page }) => {
     async () => await game.getAttribute("data-floor"),
     { timeout: 15_000 },
   ).toBe("2");
+});
+
+test("starts a lucky crawl after an error returns to the welcome screen", async ({ page }) => {
+  const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
+  await page.addInitScript(() => {
+    Math.random = () => 0;
+  });
+  await page.route("https://en.wikipedia.org/**", route => route.abort());
+  await page.route("**/api/fetch?**", route => route.abort());
+  await page.route("https://cors.io/**", route => route.abort());
+  await page.goto("/");
+  await signIn(page);
+
+  const lucky = page.getByRole("button", { name: "I'm feeling lucky" });
+  await lucky.click();
+
+  const modal = page.locator("#fetchErrorModal");
+  await expect(modal).toBeVisible();
+  await page.getByRole("button", { name: "UNDERSTOOD" }).click();
+  await expect(modal).not.toBeVisible();
+  await expect(page.locator("#welcomeScreen")).toBeVisible();
+
+  await expect(lucky).toBeEnabled();
+
+  await page.route("https://en.wikipedia.org/w/api.php**", route => route.fulfill({
+    status: 200,
+    headers: { "access-control-allow-origin": "*" },
+    contentType: "application/json",
+    body: JSON.stringify({ query: { random: [{ id: 1, ns: 0, title: "Example article" }] } }),
+  }));
+  await page.route("**/api/fetch?**", route => route.fulfill({
+    status: 200,
+    headers: { "x-webcrawl-final-url": "https://en.wikipedia.org/wiki/Example_article" },
+    contentType: "text/html",
+    body: fixture,
+  }));
+  await lucky.click();
+
+  await expect(page.locator("#gameCanvas canvas")).toBeVisible();
+  await expect(page.locator("#urlBarText")).toHaveText("https://en.wikipedia.org/wiki/Example_article", { timeout: 30_000 });
+});
+
+test("rescales the game when the viewport is resized", async ({ page }) => {
+  await startGame(page);
+  const host = page.locator("#gameCanvas");
+  const canvas = page.locator("#gameCanvas canvas");
+
+  const dpr = await page.evaluate(() => window.devicePixelRatio || 1);
+  await page.setViewportSize({ width: 700, height: 900 });
+
+  // The canvas buffer must track the host size and the canvas must fill the
+  // host again (previously a stale inline style kept the boot-time size).
+  await expect.poll(async () => {
+    const [hostBox, canvasBox] = await Promise.all([host.boundingBox(), canvas.boundingBox()]);
+    if (!hostBox || !canvasBox) return null;
+    return {
+      width: Math.round(canvasBox.width),
+      height: Math.round(canvasBox.height),
+      hostWidth: Math.round(hostBox.width),
+      hostHeight: Math.round(hostBox.height),
+      bufferWidth: await canvas.evaluate((element) => (element as HTMLCanvasElement).width),
+      bufferHeight: await canvas.evaluate((element) => (element as HTMLCanvasElement).height),
+    };
+  }).toEqual({
+    width: 700,
+    height: 900,
+    hostWidth: 700,
+    hostHeight: 900,
+    bufferWidth: Math.round(700 * dpr),
+    bufferHeight: Math.round(900 * dpr),
+  });
 });
 
 test("shows the could-not-load modal when every fetch route fails", async ({ page }) => {

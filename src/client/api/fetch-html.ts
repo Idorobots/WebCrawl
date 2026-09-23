@@ -141,10 +141,43 @@ function fetchViaProxy(proxy: PublicFetchProxy, url: string): Promise<FetchedHtm
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`Proxy answered HTTP ${response.status}.`);
-    if (proxy.parse === "json") return { html: await readJsonEnvelope(response, controller), url };
+    if (proxy.parse === "json") {
+      const html = await readJsonEnvelope(response, controller);
+      return { html, url: pageUrlFor(html, url) };
+    }
     assertHtmlContentType(response.headers.get("content-type"));
-    return { html: await readBodyChecked(response, controller), url };
+    const html = await readBodyChecked(response, controller);
+    return { html, url: pageUrlFor(html, url) };
   });
+}
+
+// Routes that follow redirects server-side (public proxies) do not report the
+// final URL, so the page URL is recovered from the document itself. Sites that
+// were redirected - like Wikipedia's Special:Random - publish the destination
+// as their canonical link or an og:url meta tag.
+function pageUrlFor(html: string, requestedUrl: string): string {
+  const canonical = extractCanonicalUrl(html);
+  if (canonical === null) return requestedUrl;
+  try {
+    const parsed = new URL(canonical, requestedUrl);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : requestedUrl;
+  } catch {
+    return requestedUrl;
+  }
+}
+
+function extractCanonicalUrl(html: string): string | null {
+  for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
+    if (!/\brel\s*=\s*["']?canonical["']?/i.test(tag)) continue;
+    const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(tag);
+    if (href?.[1]) return href[1];
+  }
+  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+    if (!/\bproperty\s*=\s*["']og:url["']/i.test(tag)) continue;
+    const content = /\bcontent\s*=\s*["']([^"']+)["']/i.exec(tag);
+    if (content?.[1]) return content[1];
+  }
+  return null;
 }
 
 async function readJsonEnvelope(

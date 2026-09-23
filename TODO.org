@@ -856,16 +856,6 @@ Initially the doors should be closed, but then open when the player or a monster
 Corridors should be revealed when the connected door opens for the first tiem. Initially, corridors should be hidden.
 Similarly, rooms should be revealed only when the doors leading up to them open for the first time.
 
-* Consistent collision detection
-- Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
-- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
-- Use hitboxes for player/bullet collision detection and damage calcualation.
-- Use hitboxes for enemy/bullet collision detection and damage calcualation.
-- Use hitboxes for player/pickup collision detection.
-- Use the footprints for player/scenery collision detection and blocking.
-- Use the footprints for enemy/scenery collision detection and blocking.
-
-
 * Scenery Refactor
 All object visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
 
@@ -918,6 +908,16 @@ It's OK if the specs are not entirely static - it's perfectly fine to have a fun
 
 The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
+* Consistent collision detection
+- Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
+- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
+- Use hitboxes for player/bullet collision detection and damage calcualation.
+- Use hitboxes for enemy/bullet collision detection and damage calcualation.
+- Use hitboxes for player/pickup collision detection.
+- Use the footprints for player/scenery collision detection and blocking.
+- Use the footprints for enemy/scenery collision detection and blocking.
+
+
 
 * Additional scenery
 There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
@@ -946,17 +946,10 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - The error screen and final score screens should take the user back to the welcome screen, but without having to "log back in".
 
 * UX improvement, again
-- Use the URL and the HTML content for level generation seed, not just the HTML contents
-- Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
+- Use the URL and the HTML content for level generation seed, not just the HTML contents.
 - Show just 3 weapon icons on the welcome prompt on mobile
-* Enemy rebalance
-- LLaMa boss is too easy to kill - it should always walk towards the player and attempt a heavy melee attack.
-- Walking shooters should have a much lower fire rate, they are basically better sentries right now. Their bullet range should also be reduced.
-- Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
-- Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
 
-- Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
-
+- Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
 
 * Particle system
 - Use for sparks etc.
@@ -969,6 +962,14 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Use broken floor tiles sparingly
 - Use the pistol graphic as the default weapon
 
+
+* Enemy rebalance
+- LLaMa boss is too easy to kill - it should always walk towards the player and attempt a heavy melee attack.
+- Walking shooters should have a much lower fire rate, they are basically better sentries right now. Their bullet range should also be reduced.
+- Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
+- Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
+
+- Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
 
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
@@ -1012,12 +1013,11 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
 
 * Bugs
-
-* Bugs
 - "I'm feeling lucky" button doesn't work after an error and redirect back into the welcome screen.
 - Resizing the canvas (for instance by changing mobile orientation) does not reflect in the game proportions.
 - Game fetches the random wikipedia page and attempts to fetch the redirect, but if that fails it then tries to fetch the random page via the backend, which does not follow redirects. It should fetch the redirected-to URL via the backend.
 
+* Bugs
 - Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 

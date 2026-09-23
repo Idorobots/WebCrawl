@@ -937,6 +937,8 @@ function returnToWelcome(): void {
   gameUi.hidden = true;
   gameUi.classList.remove("game-ui-ready");
   welcomeTransitioning = false;
+  luckyButton.disabled = false;
+  luckyButton.removeAttribute("aria-busy");
   welcomePrompt?.cancel();
   welcomePromptBody.replaceChildren();
   spawnWelcomePrompt();
@@ -963,6 +965,8 @@ const LOADING_SCREEN_ENABLED =
 const SCREEN_FADE_MS = 320;
 const LUCKY_REQUEST_TIMEOUT_MS = 5_000;
 const WIKIPEDIA_RANDOM_URL = "https://en.wikipedia.org/wiki/Special:Random";
+const WIKIPEDIA_RANDOM_API_URL =
+  "https://en.wikipedia.org/w/api.php?action=query&list=random&rnnamespace=0&rnlimit=1&format=json&origin=*";
 const HACKER_NEWS_TOP_STORIES_URL = "https://hacker-news.firebaseio.com/v0/topstories.json";
 const HACKER_NEWS_ITEM_URL = "https://hacker-news.firebaseio.com/v0/item";
 const nextLoadingThought = createThoughtPicker();
@@ -3497,8 +3501,27 @@ function externalStoryUrl(story: unknown): string | null {
   }
 }
 
+interface WikipediaRandomResponse {
+  query?: { random?: Array<{ title?: unknown }> };
+}
+
+async function wikipediaRandomUrl(): Promise<string> {
+  try {
+    const data = await fetchLuckyJson(WIKIPEDIA_RANDOM_API_URL) as WikipediaRandomResponse;
+    const title = data.query?.random?.[0]?.title;
+    if (typeof title !== "string" || title.trim() === "") {
+      throw new Error("Wikipedia returned no random page.");
+    }
+    return `https://en.wikipedia.org/wiki/${encodeURIComponent(title.trim().replaceAll(" ", "_"))}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    setStatus(`Could not select a Wikipedia article: ${message}. Using the random page redirect instead.`, true);
+    return WIKIPEDIA_RANDOM_URL;
+  }
+}
+
 async function luckyUrl(): Promise<string> {
-  if (Math.random() < 0.5) return WIKIPEDIA_RANDOM_URL;
+  if (Math.random() < 0.5) return wikipediaRandomUrl();
 
   try {
     const storyIds = await fetchLuckyJson(HACKER_NEWS_TOP_STORIES_URL);
@@ -3626,8 +3649,16 @@ luckyButton.addEventListener("click", () => {
   welcomeTransitioning = true;
   luckyButton.disabled = true;
   luckyButton.setAttribute("aria-busy", "true");
-  void luckyUrl().then((url) => {
-    welcomeUrlInput.value = url;
-    startWelcomeCrawl(url);
-  });
+  void luckyUrl()
+    .then((url) => {
+      welcomeUrlInput.value = url;
+      startWelcomeCrawl(url);
+    })
+    .catch((error: unknown) => {
+      welcomeTransitioning = false;
+      luckyButton.disabled = false;
+      luckyButton.removeAttribute("aria-busy");
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setStatus(`Could not pick a random page: ${message}`, true);
+    });
 });
