@@ -75,10 +75,20 @@ async function alignPlayerToDoor(
   door: { x: number; y: number },
   direction: string | null,
 ): Promise<void> {
-  const position = await playerPosition(page);
-  await teleportPlayer(page, direction === "N" || direction === "S"
-    ? { x: door.x, y: position.y }
-    : { x: position.x, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY });
+  // Start inside the doorway, beyond any obstacle in the middle of the room
+  // (including the disabled up portal), then walk through the opening.
+  const inset = PLAYER_SPEC.radius + WORLD_GEOMETRY.wallThickness + world(20);
+  const target = direction === "N" ? { x: door.x, y: door.y + inset }
+    : direction === "S" ? { x: door.x, y: door.y - inset }
+    : direction === "E" ? { x: door.x - inset, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY }
+    : direction === "W" ? { x: door.x + inset, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY }
+    : null;
+  if (!target) throw new Error(`Unknown exit direction: ${direction}`);
+  await teleportPlayer(page, target);
+  await expect.poll(async () => {
+    const position = await playerPosition(page);
+    return Math.hypot(position.x - target.x, position.y - target.y);
+  }).toBeLessThan(2);
 }
 
 async function cameraState(page: Page): Promise<{ x: number; y: number; zoom: number; bossRoomId: number | null } | null> {
