@@ -93,7 +93,7 @@ import {
   weaponForRoom,
   weaponKinds,
 } from "../../src/client/domain/weapons";
-import type { Decoration, DungeonGraph, GraphNode, LayoutLink, MonsterVisualKind, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
+import type { Decoration, DungeonGraph, GraphNode, LayoutLink, MonsterVisualKind, Point, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
   id,
@@ -262,7 +262,7 @@ describe("layout and geometry", () => {
 
   it("blocks room walls halfway through their segment and admits only the middle of doors", () => {
     const room = layout.nodes[0]!;
-    const topWallEdge = room.y - room.height / 2 + WORLD_GEOMETRY.topWallCollisionDepth;
+    const topWallEdge = room.y - room.height / 2;
     expect(pointInRoomFloor(room.x, topWallEdge, room, 0)).toBe(true);
     expect(pointInRoomFloor(room.x, topWallEdge - 1, room, 0)).toBe(false);
     expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.radius, room, PLAYER_SPEC.radius)).toBe(true);
@@ -297,6 +297,20 @@ describe("layout and geometry", () => {
       PLAYER_SPEC.radius,
     )).toBe(false);
 
+    // The door's blocked band spans the wall thickness into the corridor:
+    // walkable only through the opening, blocked everywhere else.
+    const bandHalf = WORLD_GEOMETRY.wallThickness / 2;
+    const bandOpening = {
+      x: start.x + unit.x * bandHalf,
+      y: start.y + unit.y * bandHalf + (start.y === end.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
+    };
+    expect(pointInCorridor(bandOpening.x, bandOpening.y, link, PLAYER_SPEC.radius)).toBe(true);
+    const bandEdge = {
+      x: bandOpening.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
+      y: bandOpening.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
+    };
+    expect(pointInCorridor(bandEdge.x, bandEdge.y, link, PLAYER_SPEC.radius), "Expected blocked door band edge").toBe(false);
+
     const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
     expect(pointInCorridor(midpoint.x, midpoint.y, link, PLAYER_SPEC.radius)).toBe(true);
     expect(pointInCorridor(
@@ -306,7 +320,7 @@ describe("layout and geometry", () => {
       0,
     )).toBe(false);
     if (start.y === end.y) {
-      const topWallEdge = midpoint.y - link.width / 2 + WORLD_GEOMETRY.topWallCollisionDepth;
+      const topWallEdge = midpoint.y - link.width / 2;
       expect(pointInCorridor(midpoint.x, topWallEdge, link, 0)).toBe(true);
       expect(pointInCorridor(midpoint.x, topWallEdge - 1, link, 0)).toBe(false);
       expect(pointInCorridor(midpoint.x, midpoint.y + link.width / 2, link, 0)).toBe(true);
@@ -364,7 +378,7 @@ describe("layout and geometry", () => {
         { boundary: end, inward: unit, side: targetSide },
       ];
       for (const door of doors) {
-        const depth = PLAYER_SPEC.radius + (door.side === "N" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
+        const depth = PLAYER_SPEC.radius;
         const center = {
           x: door.boundary.x + door.inward.x * depth / 2,
           y: door.boundary.y + door.inward.y * depth / 2 + verticalShift,
@@ -1461,11 +1475,31 @@ describe("deterministic room contents", () => {
     reinforcement.lastAttackAt = 1_000;
     expect(monsterAttackIsReady(reinforcement, 1_000)).toBe(false);
     expect(monsterAttackIsReady(reinforcement, 1_001)).toBe(true);
+    // Save the reinforcement at a spot that is actually free: placement
+    // capacity depends on obstacle layout, but the restored state must be
+    // honored wherever it fits.
+    const placedBeforeSave = buildMonsters(combatLayout, new Map(), new Set([combatRoom.id]), 10, restoredDecorations)
+      .map(item => ({ x: item.x, y: item.y, radius: item.radius }));
+    let savedPosition: Point | undefined;
+    for (let ring = 0; ring <= 9 && !savedPosition; ring += 1) {
+      for (let index = 0; index < 24; index += 1) {
+        const angle = index / 24 * Math.PI * 2;
+        const position = {
+          x: reinforcement.x + Math.cos(angle) * world(45) * ring,
+          y: reinforcement.y + Math.sin(angle) * world(45) * ring,
+        };
+        if (monsterPositionIsClear(position, reinforcement.radius, combatLayout, restoredDecorations, reinforcement.spawnSourceId, placedBeforeSave)) {
+          savedPosition = position;
+          break;
+        }
+      }
+    }
+    expect(savedPosition).toBeDefined();
     const restoredMonsters = buildMonsters(combatLayout, new Map([[
       reinforcement.id,
       {
-        x: reinforcement.x + 31,
-        y: reinforcement.y - 17,
+        x: savedPosition!.x,
+        y: savedPosition!.y,
         roomId: combatRoom.id,
         hp: 1,
         dead: false,

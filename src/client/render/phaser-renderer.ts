@@ -2412,6 +2412,36 @@ export class PhaserRenderer {
     for (const bullet of this.currentBullets) {
       graphics.strokeCircle(bullet.x, bullet.y, bullet.radius ?? DEFAULT_BULLET_SPEC.radius);
     }
+    graphics.lineStyle(world(1), 0xff8bd2, 0.9);
+    for (const room of this.layout?.nodes ?? []) {
+      graphics.strokeRect(
+        room.x - room.width / 2,
+        room.y - room.height / 2,
+        room.width,
+        room.height,
+      );
+    }
+    for (const link of this.layout?.links ?? []) {
+      for (let index = 1; index < link.points.length; index += 1) {
+        const start = link.points[index - 1]!;
+        const end = link.points[index]!;
+        if (start.y === end.y) {
+          graphics.strokeRect(
+            Math.min(start.x, end.x),
+            start.y - link.width / 2,
+            Math.abs(end.x - start.x),
+            link.width,
+          );
+        } else {
+          graphics.strokeRect(
+            start.x - link.width / 2,
+            Math.min(start.y, end.y),
+            link.width,
+            Math.abs(end.y - start.y),
+          );
+        }
+      }
+    }
   }
 
   setPlayerAsset(asset: string): void {

@@ -1931,7 +1931,7 @@ function updateBullets(dt: number): void {
         break;
       }
       const movementAlignedBulletY = bullet.y - PLAYER_SPEC.visualCenterOffsetY;
-      if (!isGeometryWalkable(bullet.x, movementAlignedBulletY, PLAYER_SPEC.radius)) {
+      if (!isGeometryWalkable(bullet.x, movementAlignedBulletY, bulletRadius)) {
         renderer.spawnEffect(
           PLAYER_SPEC.visual.effects?.damage,
           bullet.x,

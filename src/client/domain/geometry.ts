@@ -23,7 +23,7 @@ export function pointInRoom(x: number, y: number, room: GraphNode, padding = PLA
 export function pointInRoomFloor(x: number, y: number, room: GraphNode, radius = PLAYER_SPEC.radius): boolean {
   const left = room.x - room.width / 2 + radius;
   const right = room.x + room.width / 2 - radius;
-  const top = room.y - room.height / 2 + radius + WORLD_GEOMETRY.topWallCollisionDepth;
+  const top = room.y - room.height / 2 + radius;
   const bottom = room.y + room.height / 2 - radius;
   return left <= right && top <= bottom && x >= left && x <= right && y >= top && y <= bottom;
 }
@@ -45,7 +45,7 @@ function pointInCorridorBody(point: Point, start: Point, end: Point, width: numb
   if (start.y === end.y) {
     const minX = Math.min(start.x, end.x);
     const maxX = Math.max(start.x, end.x);
-    const top = start.y - width / 2 + radius + WORLD_GEOMETRY.topWallCollisionDepth;
+    const top = start.y - width / 2 + radius;
     const bottom = start.y + width / 2 - radius;
     return point.x > minX && point.x < maxX && point.y >= top && point.y <= bottom;
   }
@@ -65,15 +65,32 @@ export function pointInCorridor(x: number, y: number, link: LayoutLink, radius =
     const dy = originalEnd.y - originalStart.y;
     const length = Math.hypot(dx, dy);
     if (!length) continue;
+    const unitX = dx / length;
+    const unitY = dy / length;
     const point = { x, y };
-    if (pointInCorridorBody(point, originalStart, originalEnd, width, radius)) return true;
+    // Door ends carry a blocked band of the wall's thickness: the corridor
+    // floor stops short of the door frame, and only the door opening cuts
+    // through the band.
+    const bodyStart = index === 1
+      ? {
+        x: originalStart.x + unitX * WORLD_GEOMETRY.wallThickness,
+        y: originalStart.y + unitY * WORLD_GEOMETRY.wallThickness,
+      }
+      : originalStart;
+    const bodyEnd = index === link.points.length - 1
+      ? {
+        x: originalEnd.x - unitX * WORLD_GEOMETRY.wallThickness,
+        y: originalEnd.y - unitY * WORLD_GEOMETRY.wallThickness,
+      }
+      : originalEnd;
+    if (pointInCorridorBody(point, bodyStart, bodyEnd, width, radius)) return true;
 
     // Consecutive runs meet at a square junction. Treat it as floor rather
     // than two exclusive segment endpoints so pathfinding can cross turns.
     if (index < link.points.length - 1) {
       const junction = originalEnd;
       const halfWidth = width / 2 - radius;
-      const top = junction.y - width / 2 + radius + WORLD_GEOMETRY.topWallCollisionDepth;
+      const top = junction.y - width / 2 + radius;
       const bottom = junction.y + width / 2 - radius;
       if (
         halfWidth >= 0 &&
@@ -83,23 +100,28 @@ export function pointInCorridor(x: number, y: number, link: LayoutLink, radius =
     }
 
     const doorwayHalf = Math.max(0, WORLD_GEOMETRY.doorOpeningWidth / 2 - radius);
-    const sourceDoorwayDepth = radius + (link.direction === "N" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
-    const targetDirection = link.targetDirection ?? ({ N: "S", E: "W", S: "N", W: "E" } as const)[link.direction];
-    const targetDoorwayDepth = radius + (targetDirection === "N" ? WORLD_GEOMETRY.topWallCollisionDepth : 0);
     const verticalDoorOffset = originalStart.y === originalEnd.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
     if (index === 1) {
       const insideStart = {
-        x: originalStart.x - dx / length * sourceDoorwayDepth,
-        y: originalStart.y - dy / length * sourceDoorwayDepth + verticalDoorOffset,
+        x: originalStart.x - unitX * radius,
+        y: originalStart.y - unitY * radius + verticalDoorOffset,
       };
-      if (pointInAxisAlignedSegment(point, insideStart, { x: originalStart.x, y: originalStart.y + verticalDoorOffset }, doorwayHalf)) return true;
+      const outsideStart = {
+        x: originalStart.x + unitX * WORLD_GEOMETRY.wallThickness,
+        y: originalStart.y + unitY * WORLD_GEOMETRY.wallThickness + verticalDoorOffset,
+      };
+      if (pointInAxisAlignedSegment(point, insideStart, outsideStart, doorwayHalf)) return true;
     }
     if (index === link.points.length - 1) {
       const insideEnd = {
-        x: originalEnd.x + dx / length * targetDoorwayDepth,
-        y: originalEnd.y + dy / length * targetDoorwayDepth + verticalDoorOffset,
+        x: originalEnd.x + unitX * radius,
+        y: originalEnd.y + unitY * radius + verticalDoorOffset,
       };
-      if (pointInAxisAlignedSegment(point, { x: originalEnd.x, y: originalEnd.y + verticalDoorOffset }, insideEnd, doorwayHalf)) return true;
+      const outsideEnd = {
+        x: originalEnd.x - unitX * WORLD_GEOMETRY.wallThickness,
+        y: originalEnd.y - unitY * WORLD_GEOMETRY.wallThickness + verticalDoorOffset,
+      };
+      if (pointInAxisAlignedSegment(point, outsideEnd, insideEnd, doorwayHalf)) return true;
     }
   }
   return false;

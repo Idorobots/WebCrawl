@@ -873,10 +873,12 @@ function safeMonsterPosition(
   if (room) {
     // Dense rooms can exhaust the ring candidates; fall back to a
     // deterministic scan of the room floor so crowded spots still relocate.
-    const step = Math.max(world(48), monster.radius);
+    // Perimeter obstacles leave narrow walkable strips along the walls, so
+    // the step stays fine relative to the monster's radius.
+    const step = Math.max(world(16), monster.radius / 3);
     const left = room.x - room.width / 2 + monster.radius;
     const right = room.x + room.width / 2 - monster.radius;
-    const top = room.y - room.height / 2 + monster.radius + WORLD_GEOMETRY.topWallCollisionDepth;
+    const top = room.y - room.height / 2 + monster.radius;
     const bottom = room.y + room.height / 2 - monster.radius;
     for (let y = top; y <= bottom; y += step) {
       for (let x = left; x <= right; x += step) {
