@@ -993,7 +993,7 @@ turns into:
 [W][W][W]
 [ ][ ][ ]
 
-* door refactor, continued
+* Door refactor, continued
 Initially the doors should be closed, but then open when the player or a monster comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player or a monster comes near them.
 
 Corridors should be revealed when the connected door opens for the first tiem. Initially, corridors should be hidden.
@@ -1085,13 +1085,15 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 * Performance optimization, again
 - Phaser 4 update?
 
-* UX improvement, again
+* DONE UX improvement, again
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 17:25]
+:END:
 - The error screen and final score screens should take the user back to the welcome screen, but without having to "log back in".
-
-* UX improvement, again
 - Use the URL and the HTML content for level generation seed, not just the HTML contents.
 - Show just 3 weapon icons on the welcome prompt on mobile
 
+* UX improvement, again
 - Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
 
 * Particle system
@@ -1117,6 +1119,7 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
 - Regulatory Capture should be triggerable whenever the energy bar is non-empty. The distance travelled and damage dealt should be proportional to the amount of energy spent at once (more energy used, the longer the player travels and deals more damage). The max energy should be increased to 5.
+- Dash should stunn enemies that are hit but survive
 
 * Minimap overhaul
 - Minimap should be circular
@@ -1133,18 +1136,22 @@ Whenever AI is mentioned in the content, render a special Samario content browse
 
 * Power-ups & enhancements
 - Higher max health
+- Higher damage
 - Health regen
 - Shield regen
 - Ammo regen
+- Critical damage chance
+- Better loot chance
 - Faster walking speed
 - Faster shot speed
-- Extra damage
 - "Familiar" robot helping
-- Better loot chance
 - Map update - shows the whole level layout on the minimap
 - Minimap radar - show a rotating bar that marks monsters on the minimap for a brief moment
 - Better minimap radar - shows monsters on the minimap all the time
 - Temporary Invisibility triggered with a button
+- Slowing bullets
+- Stun chance or regular shots
+
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:
@@ -1163,11 +1170,17 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Resizing the canvas (for instance by changing mobile orientation) does not reflect in the game proportions.
 - Game fetches the random wikipedia page and attempts to fetch the redirect, but if that fails it then tries to fetch the random page via the backend, which does not follow redirects. It should fetch the redirected-to URL via the backend.
 
-* Bugs
-- Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
-- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 17:53]
+:END:
 - Health bars should appear on top of everything else in game.
 - Scenery and monsters are never placed near the top wall edge.
+
+* Bugs
+- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+- Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
+- Monsters get stuck on doors again during pathfinding.
 
 * Boss fights
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).

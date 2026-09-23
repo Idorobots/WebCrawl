@@ -89,6 +89,7 @@ const CORRIDOR_MARKING_DEPTH = -1.75;
 const DEBRIS_DEPTH = -1.5;
 const Y_DEPTH_OFFSET = 4_000_000;
 const OVERHEAD_DEPTH = 8_000_000;
+const HEALTH_BAR_DEPTH = 10_000_000;
 const DEBUG_DEPTH = 12_000_000;
 const yDepth = (y: number, bias = 0): number => Y_DEPTH_OFFSET + y + bias;
 
@@ -373,6 +374,8 @@ export class PhaserRenderer {
   private lootSprites = new Map<string, Phaser.GameObjects.Image>();
   private portals = new Map<string, Phaser.GameObjects.Container>();
   private monsters = new Map<string, Phaser.GameObjects.Container>();
+  private monsterHealthBars = new Map<string, Phaser.GameObjects.Container>();
+  private decorationHealthBars = new Map<string, Phaser.GameObjects.Container>();
   private player: Phaser.GameObjects.Container | null = null;
   private cameraTarget: Phaser.GameObjects.Container | null = null;
   private playerSprite: Phaser.GameObjects.Image | null = null;
@@ -596,6 +599,10 @@ export class PhaserRenderer {
     this.destroyPortalObjects();
     for (const object of this.monsters.values()) object.destroy(true);
     this.monsters.clear();
+    for (const bar of this.monsterHealthBars.values()) bar.destroy(true);
+    this.monsterHealthBars.clear();
+    for (const bar of this.decorationHealthBars.values()) bar.destroy(true);
+    this.decorationHealthBars.clear();
     this.destroyLights(this.monsterAuras);
     this.destroyLights(this.lootAuras);
     this.destroyLights(this.portalAuras);
@@ -1679,6 +1686,8 @@ export class PhaserRenderer {
     this.destroyAll(this.decorations);
     this.decorationSprites.clear();
     this.decorationShadows.clear();
+    for (const bar of this.decorationHealthBars.values()) bar.destroy(true);
+    this.decorationHealthBars.clear();
     for (const light of this.decorationEffectLights.values()) this.scene?.lights.removeLight(light);
     this.decorationEffectLights.clear();
     const scene = this.scene;
@@ -1701,6 +1710,7 @@ export class PhaserRenderer {
       this.decorationSprites.set(item.id, sprite);
       this.decorationShadows.set(item.id, shadow);
       this.syncDecorationEffectLight(item, state);
+      this.decorations.push(container);
       if (item.destructible && !item.destroyed && item.hp != item.maxHp) {
         const barWidth = world(44);
         const barY = -item.size * state.clip.origin.y + (item.healthBarTop ?? 0) * item.size - world(8);
@@ -1711,10 +1721,10 @@ export class PhaserRenderer {
           barWidth * Math.max(0, item.hp) / Math.max(1, item.maxHp),
           world(5),
           0x62e6c8,
-        ).setOrigin(0, 0.5);
-        container.add([bg, hp]);
+        ).setOrigin(0, 0.5).setName("hp");
+        const bar = scene.add.container(item.x, item.y, [bg, hp]).setDepth(HEALTH_BAR_DEPTH);
+        this.decorationHealthBars.set(item.id, bar);
       }
-      this.decorations.push(container);
     }
     this.setHostData("sceneryShadows", String(this.decorationShadows.size));
     this.refreshLocalLightVisibility(true);
@@ -2018,6 +2028,8 @@ export class PhaserRenderer {
       if (!visibleIds.has(id)) {
         object.destroy(true);
         this.monsters.delete(id);
+        this.monsterHealthBars.get(id)?.destroy(true);
+        this.monsterHealthBars.delete(id);
         const aura = this.monsterAuras.get(id);
         if (aura) scene.lights.removeLight(aura);
         this.monsterAuras.delete(id);
@@ -2029,6 +2041,8 @@ export class PhaserRenderer {
       if (container && Boolean(container.getData("dead")) !== item.dead) {
         container.destroy(true);
         this.monsters.delete(item.id);
+        this.monsterHealthBars.get(item.id)?.destroy(true);
+        this.monsterHealthBars.delete(item.id);
         const aura = this.monsterAuras.get(item.id);
         if (aura) scene.lights.removeLight(aura);
         this.monsterAuras.delete(item.id);
@@ -2056,23 +2070,27 @@ export class PhaserRenderer {
           )
             .setStrokeStyle(world(3), color, 0.8));
         }
-        if (!item.dead) {
-          const barHeight = item.bossKind ? world(9) : item.miniboss ? world(7) : world(5);
-          const fillHeight = item.bossKind ? world(7) : item.miniboss ? world(6) : world(5);
-          const fillColor = item.bossKind ? 0xf09cff : item.miniboss ? 0xffc857 : item.speed === 0 ? 0xc07cff : 0xff6b6b;
-          children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, barHeight, 0x071018).setOrigin(0, 0.5));
-          children.push(scene.add.rectangle(-barWidth / 2, barY, barWidth, fillHeight, fillColor).setOrigin(0, 0.5).setName("hp"));
-        }
-        if (item.bossKind && !item.dead) {
-          children.push(scene.add.text(0, barY - world(9), BOSS_DEFINITIONS[item.bossKind].label, {
-            color: "#f7ddff", fontSize: `${world(11)}px`, fontStyle: "bold",
-          }).setOrigin(0.5));
-        }
         container = scene.add.container(item.x, item.y, children)
           .setDepth(this.monsterDepth(item));
         container.setData("hpWidth", barWidth);
         container.setData("dead", item.dead);
         this.monsters.set(item.id, container);
+        if (!item.dead) {
+          const barHeight = item.bossKind ? world(9) : item.miniboss ? world(7) : world(5);
+          const fillHeight = item.bossKind ? world(7) : item.miniboss ? world(6) : world(5);
+          const fillColor = item.bossKind ? 0xf09cff : item.miniboss ? 0xffc857 : item.speed === 0 ? 0xc07cff : 0xff6b6b;
+          const barChildren: Phaser.GameObjects.GameObject[] = [
+            scene.add.rectangle(-barWidth / 2, barY, barWidth, barHeight, 0x071018).setOrigin(0, 0.5),
+            scene.add.rectangle(-barWidth / 2, barY, barWidth, fillHeight, fillColor).setOrigin(0, 0.5).setName("hp"),
+          ];
+          if (item.bossKind) {
+            barChildren.push(scene.add.text(0, barY - world(9), BOSS_DEFINITIONS[item.bossKind].label, {
+              color: "#f7ddff", fontSize: `${world(11)}px`, fontStyle: "bold",
+            }).setOrigin(0.5));
+          }
+          const bar = scene.add.container(item.x, item.y, barChildren).setDepth(HEALTH_BAR_DEPTH);
+          this.monsterHealthBars.set(item.id, bar);
+        }
         if (!item.dead) {
           const auraRadius = item.radius + world(item.bossKind ? 110 : 64);
           const auraY = item.y + monsterVisualCenterOffsetY(item.size, item.visualKind);
@@ -2087,6 +2105,8 @@ export class PhaserRenderer {
         }
       }
       container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
+      const barContainer = this.monsterHealthBars.get(item.id);
+      barContainer?.setPosition(item.x, item.y);
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
       this.applyMonsterFrame(container, item, performance.now());
       const aura = this.monsterAuras.get(item.id);
@@ -2094,7 +2114,7 @@ export class PhaserRenderer {
         aura.x = item.x;
         aura.y = item.y + monsterVisualCenterOffsetY(item.size, item.visualKind);
       }
-      const hp = container.getByName("hp") as Phaser.GameObjects.Rectangle | null;
+      const hp = (barContainer ?? container).getByName("hp") as Phaser.GameObjects.Rectangle | null;
       if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
       if (item === activeBoss) {
         this.host.dataset.activeBossDisplayWidth = String(sprite.displayWidth);
@@ -2116,6 +2136,7 @@ export class PhaserRenderer {
       const container = this.monsters.get(item.id);
       if (!container) continue;
       container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
+      this.monsterHealthBars.get(item.id)?.setPosition(item.x, item.y);
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
       const previousAsset = sprite.texture.key;
       this.applyMonsterFrame(container, item, now);
@@ -2127,7 +2148,7 @@ export class PhaserRenderer {
         aura.x = item.x;
         aura.y = item.y + monsterVisualCenterOffsetY(item.size, item.visualKind);
       }
-      const hp = container.getByName("hp") as Phaser.GameObjects.Rectangle | null;
+      const hp = this.monsterHealthBars.get(item.id)?.getByName("hp") as Phaser.GameObjects.Rectangle | null;
       if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
       if (item.bossKind && item.active && !item.dead) {
         this.setHostData("activeBossX", String(Math.round(item.x)));

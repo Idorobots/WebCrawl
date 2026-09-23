@@ -63,8 +63,16 @@ function roomContent(element: Element, pageUrl: string): string | null {
   return markup.replace(/<[^>]+>/g, "").trim() || /<img\b/i.test(markup) ? markup : null;
 }
 
-function nodeLootSeed(element: Element, text: string, structuralPath: string): number {
+function nodeLootSeed(
+  element: Element,
+  text: string,
+  structuralPath: string,
+  pageUrl: string,
+  floor: number,
+): number {
   return stableHash([
+    pageUrl,
+    `floor-${floor}`,
     structuralPath,
     element.tagName.toLowerCase(),
     element.id || "",
@@ -119,7 +127,7 @@ function makeTitle(element: Element, text: string, href: string | null): string 
   return parts.join("\n");
 }
 
-export function domToGraph(html: string, pageUrl: string): DungeonGraph {
+export function domToGraph(html: string, pageUrl: string, floor = 1): DungeonGraph {
   const documentNode = new DOMParser().parseFromString(html, "text/html");
   const { body } = documentNode;
   if (!body) throw new Error("The fetched page did not contain a body element.");
@@ -150,7 +158,7 @@ export function domToGraph(html: string, pageUrl: string): DungeonGraph {
       contentHtml: roomContent(element, pageUrl),
       width: ROOM_WIDTH,
       height: ROOM_HEIGHT,
-      lootSeed: nodeLootSeed(element, text, structuralPath),
+      lootSeed: nodeLootSeed(element, text, structuralPath, pageUrl, floor),
       isRoot: parent === null,
       isHidden: /(?:^|;)\s*display\s*:\s*none\s*(?:!important)?\s*(?:;|$)/i.test(
         element.getAttribute("style") || "",

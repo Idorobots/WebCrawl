@@ -12,16 +12,16 @@ type Block =
   | { kind: "icons"; assets: readonly string[] }
   | { kind: "loot"; asset: string; segments: Segment[] };
 
+const MOBILE_CONTROLS = isMobileDevice();
+
 const WEAPON_ICON_ASSETS: readonly string[] = (() => {
   const files = [...new Set(Object.values(WEAPON_ASSETS))];
   for (let index = files.length - 1; index > 0; index -= 1) {
     const swap = Math.floor(Math.random() * (index + 1));
     [files[index], files[swap]] = [files[swap]!, files[index]!];
   }
-  return files.slice(0, 5);
+  return files.slice(0, MOBILE_CONTROLS ? 3 : 5);
 })();
-
-const MOBILE_CONTROLS = isMobileDevice();
 
 const MOVE_CONTROLS_TEXT = MOBILE_CONTROLS
   ? "Move with the left stick. Shoot with the right stick. "

@@ -148,11 +148,15 @@ describe("DOM graph generation", () => {
     expect(graph.nodes.filter(node => node.parentId === list?.id)).toHaveLength(12);
   });
 
-  it("includes structural paths in deterministic room seeds", () => {
+  it("includes page url, floor and structural paths in deterministic room seeds", () => {
     const html = "<body><main><div>same</div><div>same</div></main></body>";
     const first = domToGraph(html, "https://example.com/one");
     const second = domToGraph(html, "https://example.net/two");
-    expect(first.nodes.map(room => room.lootSeed)).toEqual(second.nodes.map(room => room.lootSeed));
+    const repeat = domToGraph(html, "https://example.com/one");
+    const deeper = domToGraph(html, "https://example.com/one", 2);
+    expect(first.nodes.map(room => room.lootSeed)).toEqual(repeat.nodes.map(room => room.lootSeed));
+    expect(first.nodes.map(room => room.lootSeed)).not.toEqual(second.nodes.map(room => room.lootSeed));
+    expect(first.nodes.map(room => room.lootSeed)).not.toEqual(deeper.nodes.map(room => room.lootSeed));
     expect(first.nodes[2]?.lootSeed).not.toBe(first.nodes[3]?.lootSeed);
   });
 

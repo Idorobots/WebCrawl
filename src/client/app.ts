@@ -3390,7 +3390,7 @@ async function loadPage(
       completeLoadingTask("fetch");
       setLoadingTask("generate", "Generating level");
       setStatus(`Fetched via ${via} · Generating level …`);
-      graph = domToGraph(html, fetchedUrl);
+      graph = domToGraph(html, fetchedUrl, floorNumber());
       layout = layoutOrthogonal(graph);
       resolvedUrl = fetchedUrl;
       completeLoadingTask("generate");
