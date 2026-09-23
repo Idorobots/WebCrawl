@@ -202,6 +202,77 @@ describe("corridor render planning", () => {
     expect(hasWall("E", SEGMENT_SIZE / 2, -SEGMENT_SIZE / 2)).toBe(true);
   });
 
+  it("keeps the shared wall between adjacent parallel corridors that do not connect", () => {
+    const south = { x: 0, y: 0 };
+    const links: LayoutLink[] = [
+      {
+        id: "run-a",
+        source: room(0),
+        target: room(1, 0),
+        direction: "E",
+        ownerRoomId: 0,
+        width: CORRIDOR_WIDTH,
+        points: [south, { x: SEGMENT_SIZE * 4, y: 0 }],
+      },
+      {
+        id: "run-b",
+        source: room(2),
+        target: room(3, 2),
+        direction: "E",
+        ownerRoomId: 2,
+        width: CORRIDOR_WIDTH,
+        points: [{ x: 0, y: SEGMENT_SIZE * 2 }, { x: SEGMENT_SIZE * 4, y: SEGMENT_SIZE * 2 }],
+      },
+    ];
+    const plan = buildCorridorRenderPlan({ nodes: [room(0), room(2)], links, hiddenCount: 0 }, SEGMENT_SIZE);
+    const hasWall = (side: Direction, x: number, y: number): boolean => plan.walls.some(wall =>
+      wall.side === side && wall.x === x && wall.y === y
+    );
+
+    // The bands touch along y = one segment; both facing walls must survive.
+    for (const column of [1, 2, 3]) {
+      const x = (column + 0.5) * SEGMENT_SIZE;
+      expect(hasWall("S", x, SEGMENT_SIZE - SEGMENT_SIZE / 2)).toBe(true);
+      expect(hasWall("N", x, SEGMENT_SIZE + SEGMENT_SIZE / 2)).toBe(true);
+    }
+  });
+
+  it("keeps the corridor mouth open where a perpendicular corridor connects mid-run", () => {
+    const links: LayoutLink[] = [
+      {
+        id: "run-a",
+        source: room(0),
+        target: room(1, 0),
+        direction: "E",
+        ownerRoomId: 0,
+        width: CORRIDOR_WIDTH,
+        points: [{ x: 0, y: 0 }, { x: SEGMENT_SIZE * 6, y: 0 }],
+      },
+      {
+        id: "branch",
+        source: room(2),
+        target: room(3, 2),
+        direction: "S",
+        ownerRoomId: 2,
+        width: CORRIDOR_WIDTH,
+        points: [{ x: SEGMENT_SIZE * 2, y: 0 }, { x: SEGMENT_SIZE * 2, y: SEGMENT_SIZE * 4 }],
+      },
+    ];
+    const plan = buildCorridorRenderPlan({ nodes: [room(0), room(2)], links, hiddenCount: 0 }, SEGMENT_SIZE);
+    const hasWall = (side: Direction, x: number, y: number): boolean => plan.walls.some(wall =>
+      wall.side === side && wall.x === x && wall.y === y
+    );
+
+    // The trunk's south wall is open across the branch's mouth...
+    expect(hasWall("S", SEGMENT_SIZE * 2 - SEGMENT_SIZE / 2, SEGMENT_SIZE / 2)).toBe(false);
+    expect(hasWall("S", SEGMENT_SIZE * 2 + SEGMENT_SIZE / 2, SEGMENT_SIZE / 2)).toBe(false);
+    // ...stays closed past it, and the north wall is intact all along.
+    expect(hasWall("S", SEGMENT_SIZE * 4 + SEGMENT_SIZE / 2, SEGMENT_SIZE / 2)).toBe(true);
+    expect(hasWall("S", SEGMENT_SIZE * 5 + SEGMENT_SIZE / 2, SEGMENT_SIZE / 2)).toBe(true);
+    expect(hasWall("N", SEGMENT_SIZE * 2 - SEGMENT_SIZE / 2, -SEGMENT_SIZE / 2)).toBe(true);
+    expect(hasWall("N", SEGMENT_SIZE * 2 + SEGMENT_SIZE / 2, -SEGMENT_SIZE / 2)).toBe(true);
+  });
+
   it("deduplicates a fork trunk and gives its entrance and branches distinct signs", () => {
     const nodes = [
       room(0),

@@ -850,7 +850,150 @@ Corridors can be made a bit longer in the generator, so that more variety is ava
 - Both south and north walls can use the same block zones. Use the one from the S walls.
 - Both west and east walls can use the same block zones. Use the one from W walls.
 
-* Wall & door refactor, continued
+* Wall refactor, again
+Generate the layout, collect floor segments iterate over all segments and check each one against its surroundings.
+Below are the templates to check against (the tile of focus is the middle tile with its 8 neighbours).
+There are several cases (* is the tile under iteraction, F is floor segment, W is wall, C is corner, empty is empty space):
+
+# Central part
+[F][F][F]
+[F][*][F]
+[F][F][F]
+
+This stays unchanged.
+
+# Top left outer corner
+[ ][ ][ ]
+[ ][*][F]
+[ ][F][F]
+
+turns into:
+
+[C][W][W]
+[W][F][F]
+[W][F][F]
+
+# Top right outer corner
+[ ][ ][ ]
+[F][*][ ]
+[F][F][ ]
+
+turns into:
+
+[W][C][ ]
+[F][W][ ]
+[F][W][ ]
+
+# Bottom right outer corner
+[F][F][ ]
+[F][*][ ]
+[ ][ ][ ]
+
+turns into:
+[F][W][ ]
+[W][C][ ]
+[ ][ ][ ]
+
+# Bottom left outer corner
+[ ][F][F]
+[ ][*][F]
+[ ][ ][ ]
+
+turns into:
+
+[W][F][F]
+[C][W][W]
+[ ][ ][ ]
+
+# Top right inner corner
+[F][F][ ]
+[F][*][F]
+[F][F][F]
+
+turns into:
+
+[F][C][W]
+[F][F][F]
+[F][F][F]
+
+# Top left inner corner
+[ ][F][F]
+[F][*][F]
+[F][F][F]
+
+turns into:
+
+[C][F][F]
+[F][F][F]
+[F][F][F]
+
+# Bottom left inner corner
+[F][F][F]
+[F][*][F]
+[ ][F][F]
+
+turns into:
+
+[F][F][F]
+[C][F][F]
+[w][F][F]
+
+# Bottom right inner corner
+[F][F][F]
+[F][*][F]
+[F][F][ ]
+
+turns into:
+
+[F][F][F]
+[F][C][W]
+[F][W][ ]
+
+# West side
+[ ][F][F]
+[ ][*][F]
+[ ][F][F]
+
+turns into:
+
+[W][F][F]
+[W][F][F]
+[W][F][F]
+
+# East side
+[F][F][ ]
+[F][*][ ]
+[F][F][ ]
+
+turns into:
+
+[F][W][ ]
+[F][W][ ]
+[F][W][ ]
+
+# North side
+[ ][ ][ ]
+[F][*][F]
+[F][F][F]
+
+turns into:
+
+[W][W][W]
+[F][F][F]
+[F][F][F]
+
+# South side
+[F][F][F]
+[F][*][F]
+[ ][ ][ ]
+
+turns into:
+
+[F][F][F]
+[W][W][W]
+[ ][ ][ ]
+
+* door refactor, continued
 Initially the doors should be closed, but then open when the player or a monster comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player or a monster comes near them.
 
 Corridors should be revealed when the connected door opens for the first tiem. Initially, corridors should be hidden.
@@ -1012,7 +1155,10 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 
 - Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
 
-* Bugs
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 13:38]
+:END:
 - "I'm feeling lucky" button doesn't work after an error and redirect back into the welcome screen.
 - Resizing the canvas (for instance by changing mobile orientation) does not reflect in the game proportions.
 - Game fetches the random wikipedia page and attempts to fetch the redirect, but if that fails it then tries to fetch the random page via the backend, which does not follow redirects. It should fetch the redirected-to URL via the backend.
@@ -1020,6 +1166,8 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 * Bugs
 - Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+- Health bars should appear on top of everything else in game.
+- Scenery and monsters are never placed near the top wall edge.
 
 * Boss fights
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).

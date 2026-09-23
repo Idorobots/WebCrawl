@@ -142,38 +142,50 @@ function buildPhysicalSegments(layout: DungeonLayout): CorridorSegmentPlan[] {
   return [...segments.values()];
 }
 
-function pointInSegmentFloor(point: Point, segment: CorridorSegmentPlan): boolean {
-  const halfWidth = segment.width / 2;
-  if (segment.start.y === segment.end.y) {
-    return point.x >= Math.min(segment.start.x, segment.end.x) &&
-      point.x <= Math.max(segment.start.x, segment.end.x) &&
-      point.y >= segment.start.y - halfWidth &&
-      point.y <= segment.start.y + halfWidth;
-  }
-  return point.y >= Math.min(segment.start.y, segment.end.y) &&
-    point.y <= Math.max(segment.start.y, segment.end.y) &&
-    point.x >= segment.start.x - halfWidth &&
-    point.x <= segment.start.x + halfWidth;
-}
-
 function wallIsInterior(
   segment: CorridorSegmentPlan,
   side: Direction,
   axisPosition: number,
   allSegments: readonly CorridorSegmentPlan[],
 ): boolean {
+  const horizontal = segment.start.y === segment.end.y;
   const halfWidth = segment.width / 2;
-  const probeOffset = 0.01;
-  const probe = segment.start.y === segment.end.y
-    ? {
-        x: axisPosition,
-        y: segment.start.y + (side === "N" ? -halfWidth - probeOffset : halfWidth + probeOffset),
-      }
-    : {
-        x: segment.start.x + (side === "W" ? -halfWidth - probeOffset : halfWidth + probeOffset),
-        y: axisPosition,
-      };
-  return allSegments.some(candidate => candidate !== segment && pointInSegmentFloor(probe, candidate));
+  // The wall's face line. Only corridors that pass through this line (floor on
+  // both sides of it at the probed cell) open a gap in the wall. Corridors that
+  // merely run alongside - adjacent parallel bands of a compound corridor -
+  // keep their shared wall instead of silently merging with no junction.
+  const wallLine = horizontal
+    ? segment.start.y + (side === "N" ? -halfWidth : halfWidth)
+    : segment.start.x + (side === "W" ? -halfWidth : halfWidth);
+  return allSegments.some(candidate => {
+    if (candidate === segment) return false;
+    const candidateHalfWidth = candidate.width / 2;
+    const candidateHorizontal = candidate.start.y === candidate.end.y;
+    const alongStart = horizontal
+      ? Math.min(candidate.start.x, candidate.end.x)
+      : Math.min(candidate.start.y, candidate.end.y);
+    const alongEnd = horizontal
+      ? Math.max(candidate.start.x, candidate.end.x)
+      : Math.max(candidate.start.y, candidate.end.y);
+    if (candidateHorizontal === horizontal) {
+      // Parallel corridor: only its floor band straddling the wall line
+      // (a partial overlap, not a flush side-by-side run) opens the wall.
+      const band = horizontal ? candidate.start.y : candidate.start.x;
+      if (!(band - candidateHalfWidth < wallLine && wallLine < band + candidateHalfWidth)) return false;
+      return axisPosition >= alongStart && axisPosition <= alongEnd;
+    }
+    // Perpendicular corridor: its run must cross the wall line within the
+    // width of its own band.
+    const band = candidateHorizontal ? candidate.start.y : candidate.start.x;
+    if (!(axisPosition >= band - candidateHalfWidth && axisPosition <= band + candidateHalfWidth)) return false;
+    const runStart = horizontal
+      ? Math.min(candidate.start.y, candidate.end.y)
+      : Math.min(candidate.start.x, candidate.end.x);
+    const runEnd = horizontal
+      ? Math.max(candidate.start.y, candidate.end.y)
+      : Math.max(candidate.start.x, candidate.end.x);
+    return runStart < wallLine && wallLine < runEnd;
+  });
 }
 
 function buildWalls(
