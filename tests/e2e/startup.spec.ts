@@ -470,6 +470,42 @@ test("charges energy and launches an invulnerable energy dash with right click",
   await expect(game).toHaveAttribute("data-energy", "0");
 });
 
+test("restores the previous floor from its snapshot without re-fetching it", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  await expect(game).toHaveAttribute("data-floor", "1");
+  const startRooms = await game.getAttribute("data-rooms");
+
+  await page.evaluate(() => {
+    void (window as Window & {
+      __webcrawlTest?: { navigate: (url: string) => Promise<void> };
+    }).__webcrawlTest?.navigate("https://example.com/next");
+  });
+  await expect(game).toHaveAttribute("data-floor", "2");
+
+  // The previous floor must not be re-fetched when going back: if the game
+  // tries to reload it, this route aborts and the level load fails.
+  await page.route("**/api/fetch?*", route => route.abort());
+  await page.route("https://example.com/**", route => route.abort());
+
+  await page.evaluate(() => {
+    void (window as Window & {
+      __webcrawlTest?: { goBack: () => Promise<void> };
+    }).__webcrawlTest?.goBack();
+  });
+  await expect(game).toHaveAttribute("data-floor", "1", { timeout: 10_000 });
+  await expect(game).toHaveAttribute("data-rooms", startRooms ?? "");
+  await expect(game).toHaveAttribute("data-visited-rooms", "1");
+
+  // Descending into the same page again must reuse its stored level too.
+  await page.evaluate(() => {
+    void (window as Window & {
+      __webcrawlTest?: { navigate: (url: string) => Promise<void> };
+    }).__webcrawlTest?.navigate("https://example.com/next");
+  });
+  await expect(game).toHaveAttribute("data-floor", "2", { timeout: 10_000 });
+});
+
 test("spawns on an enabled entry portal without immediately retriggering it", async ({ page }) => {
   await startGame(page);
   const game = page.locator("#gameCanvas");

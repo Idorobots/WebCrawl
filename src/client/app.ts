@@ -179,6 +179,13 @@ const navigationHistory: string[] = [];
 const navigationReturnRooms: Array<number | null> = [];
 
 let currentLayout: DungeonLayout | null = null;
+let currentGraph: DungeonGraph | null = null;
+interface FloorSnapshot {
+  graph: DungeonGraph;
+  layout: DungeonLayout;
+  url: string;
+}
+const floorSnapshots = new Map<string, FloorSnapshot>();
 let currentRoomsById = new Map<number, GraphNode>();
 let currentStairs: Stair[] = [];
 let currentLoot: LootItem[] = [];
@@ -904,6 +911,7 @@ function resetRunState(): void {
   playerInvulnerable = false;
   visitedRooms = new Set();
   discoveredRoomsByPage.clear();
+  floorSnapshots.clear();
   collectedLoot.clear();
   lootInventory.credits = 0;
   lootInventory.crystals = 0;
@@ -2829,6 +2837,7 @@ function teleportPlayerTo(x: number, y: number): void {
     lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null; placement: string | null } | null;
     camera: () => { x: number; y: number; zoom: number; bossRoomId: number | null } | null;
     navigate: (url: string) => Promise<void>;
+    goBack: () => Promise<void>;
   };
 }).__webcrawlTest = {
   teleportPlayerTo,
@@ -2879,6 +2888,7 @@ function teleportPlayerTo(x: number, y: number): void {
   portalContacts: () => [...portalContacts],
   camera: () => renderer.cameraState(),
   navigate: (url: string) => navigateTo(url),
+  goBack: () => goBack(),
   loot: () => currentLoot.map(item => ({
     id: item.id,
     kind: item.kind,
@@ -3237,6 +3247,7 @@ function renderGraph(
   hideContentBrowser();
 
   const layout = preparedLayout ?? layoutOrthogonal(graph);
+  currentGraph = graph;
   currentLayout = layout;
   currentRoomsById = new Map(layout.nodes.map(room => [room.id, room]));
   roomRoutingDirty = true;
@@ -3349,25 +3360,57 @@ async function loadPage(
     return;
   }
 
-  setStatus("Fetching " + url + " …");
-  if (LOADING_SCREEN_ENABLED) {
-    showLoadingScreen(url);
-    setLoadingTask("fetch", "Fetching the page");
+  const snapshot = stateId ? floorSnapshots.get(stateId) ?? null : null;
+  let resolvedUrl = url;
+  let graph: DungeonGraph;
+  let layout: DungeonLayout;
+
+  if (snapshot) {
+    // Returning to a previously loaded floor (going back up or re-entering it
+    // via a down portal): reuse its stored level instead of re-fetching and
+    // re-generating it.
+    if (LOADING_SCREEN_ENABLED) hideLoadingScreen();
+    graph = snapshot.graph;
+    layout = snapshot.layout;
+    resolvedUrl = snapshot.url;
+  } else {
+    setStatus("Fetching " + url + " …");
+    if (LOADING_SCREEN_ENABLED) {
+      showLoadingScreen(url);
+      setLoadingTask("fetch", "Fetching the page");
+    }
+    try {
+      const { html, url: fetchedUrl, via } = await fetchHtml(url);
+      if (requestId !== currentRequest) return;
+
+      completeLoadingTask("fetch");
+      setLoadingTask("generate", "Generating level");
+      setStatus(`Fetched via ${via} · Generating level …`);
+      graph = domToGraph(html, fetchedUrl);
+      layout = layoutOrthogonal(graph);
+      resolvedUrl = fetchedUrl;
+      completeLoadingTask("generate");
+    } catch (err) {
+      if (requestId !== currentRequest) return;
+      hideLoadingScreen();
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setStatus(`Could not load ${url}: ${message}`, true);
+      showFetchErrorModal(url, message);
+      return;
+    }
   }
 
   try {
-    const { html, url: resolvedUrl, via } = await fetchHtml(url);
-    if (requestId !== currentRequest) return;
-
-    completeLoadingTask("fetch");
-    setLoadingTask("generate", "Generating level");
-    setStatus(`Fetched via ${via} · Generating level …`);
-    const graph = domToGraph(html, resolvedUrl);
-    const layout = layoutOrthogonal(graph);
-    completeLoadingTask("generate");
     if (rendererReady) await rendererReady();
     if (requestId !== currentRequest) return;
     saveCurrentFloorState();
+    if (currentPageUrl && currentStateId && currentGraph && currentLayout) {
+      floorSnapshots.set(currentStateId, {
+        graph: currentGraph,
+        layout: currentLayout,
+        url: currentPageUrl,
+      });
+    }
 
     if (pushCurrent && currentPageUrl) {
       navigationHistory.push(currentPageUrl);

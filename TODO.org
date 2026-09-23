@@ -826,19 +826,22 @@ Other:
 :END:
 - Non-blocking scenery should not interfere with the bullets unless actually aimed at.
 
+* DONE Wall & door refactor
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 11:39]
+:END:
+Adjust the layout generator for a simplified set of wall tiles.
 
-* Wall & door refactor
 All corridors should be 2 segments wide.
 Doors are always one segment wide.
-
 Rooms should have doors leading to their corridors.
-Initially the doors should be closed, but then open when the player or a monster comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player or a monster comes near them.
-Corridors should be revealed when the connected door opens for the first tiem. Initially, corridors should be hidden.
-Similarly, rooms should be revealed only when the doors leading up to them open for the first time.
 
-Corridors can be made a bit longer in the  generator, so that more variety is available in the game.
+Corridors can be made a bit longer in the generator, so that more variety is available in the game.
 
-* Bugs
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 11:39]
+:END:
 - Room corners are not correct.
 - Corridor corners are wrong. They need to be constructed the same way as the room corners.
 - Missign floor triangle on top-left inner corners.
@@ -846,6 +849,12 @@ Corridors can be made a bit longer in the  generator, so that more variety is av
 - New walls and especially the corners in corridors need adjusments on the bullet collisions.
 - Both south and north walls can use the same block zones. Use the one from the S walls.
 - Both west and east walls can use the same block zones. Use the one from W walls.
+
+* Wall & door refactor, continued
+Initially the doors should be closed, but then open when the player or a monster comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player or a monster comes near them.
+
+Corridors should be revealed when the connected door opens for the first tiem. Initially, corridors should be hidden.
+Similarly, rooms should be revealed only when the doors leading up to them open for the first time.
 
 * Consistent collision detection
 - Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
@@ -921,19 +930,24 @@ Similarly, there are multiple font files available now. Please randomize which f
 
 Similarly, there are multiple ambient station sounds available. Please randomize which ambient space station sound is used.
 
-* Performance optimization, again
+* DONE Performance optimization, again
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 12:10]
+:END:
 - Do not re-load the previous level - when a player goes down a floor, do not remove the state for the previous floor. When the player goes back a floor just re-use the stored state instead of loading the game again.
-
 - Use point lights for damage & explosion effects.
 - Use point lights for room/corridor lighting.
 - Batch point light rendering together.
-- Phaser 4 update?
 
-- Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
+* Performance optimization, again
+- Phaser 4 update?
 
 * UX improvement, again
 - The error screen and final score screens should take the user back to the welcome screen, but without having to "log back in".
-- Use the URL and the HTML content for level generation seed
+
+- Loading assets takes a long, long time. It should be indicated as a separate "task" on the loading screen.
+- Use the URL and the HTML content for level generation seed, not just the HTML contents
+- Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
 
 * Enemy rebalance
 - LLaMa boss is too easy to kill - it should always walk towards the player and attempt a heavy melee attack.
@@ -998,12 +1012,13 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
 
 * Bugs
-- Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
-- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - "I'm feeling lucky" button doesn't work after an error and redirect back into the welcome screen.
 - Resizing the canvas does not reflect in the game proportions.
 - Game fetches the random wikipedia page and attempts to fetch the redirect, but if that fails it then tries to fetch the random page via the backend, which does not follow redirects. It should fetch the redirected-to URL via the backend.
-- Loading assets takes a long, long time. It should be extracted into a separate "task" on the loading screen.
+
+* Bugs
+- Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
+- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 
 * Boss fights
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
