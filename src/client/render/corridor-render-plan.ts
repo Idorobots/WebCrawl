@@ -412,6 +412,16 @@ function buildJunctions(
           side: kind.endsWith("left") ? "W" : "E",
           kind,
         });
+        // The inner corner sprite leaves a transparent notch; the floor
+        // tile beneath it is missing and must be filled.
+        if (kind === "bottom-right") {
+          junctionFloors.push({
+            ownerLinkId: owner.ownerLinkId,
+            x: innerCell.x + innerShift.x + segmentSize/2,
+            y: innerCell.y + innerShift.y + segmentSize/2,
+            seed: owner.seed,
+          });
+        }
         cornerCells.push(...innerClearedCells(kind, innerCell, innerShift));
         junctionFloors.push({
           ownerLinkId: owner.ownerLinkId,
@@ -431,6 +441,14 @@ function buildJunctions(
           side: innerKind.endsWith("left") ? "W" : "E",
           kind: innerKind,
         });
+        if (innerKind === "bottom-right") {
+          junctionFloors.push({
+            ownerLinkId: owner.ownerLinkId,
+            x: outerCell.x + innerShift.x + segmentSize/2,
+            y: outerCell.y + innerShift.y + segmentSize/2,
+            seed: owner.seed,
+          });
+        }
         cornerCells.push(...innerClearedCells(innerKind, outerCell, innerShift));
       }
     }

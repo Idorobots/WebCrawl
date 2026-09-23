@@ -841,14 +841,11 @@ Corridors can be made a bit longer in the  generator, so that more variety is av
 * Bugs
 - Room corners are not correct.
 - Corridor corners are wrong. They need to be constructed the same way as the room corners.
+- Missign floor triangle on top-left inner corners.
 
 - New walls and especially the corners in corridors need adjusments on the bullet collisions.
 - Both south and north walls can use the same block zones. Use the one from the S walls.
 - Both west and east walls can use the same block zones. Use the one from W walls.
-
-- Missign floor triangle on top-left inner corners.
-
-- "I'm feeling lucky" button doesn't work after an error and redirect back into the welcome screen.
 
 * Consistent collision detection
 - Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
@@ -1003,7 +1000,10 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 * Bugs
 - Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
-
+- "I'm feeling lucky" button doesn't work after an error and redirect back into the welcome screen.
+- Resizing the canvas does not reflect in the game proportions.
+- Game fetches the random wikipedia page and attempts to fetch the redirect, but if that fails it then tries to fetch the random page via the backend, which does not follow redirects. It should fetch the redirected-to URL via the backend.
+- Loading assets takes a long, long time. It should be extracted into a separate "task" on the loading screen.
 
 * Boss fights
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).

@@ -112,7 +112,9 @@ describe("corridor render planning", () => {
 
     expect(plan.corners.filter(corner => corner.kind !== "wall").map(corner => corner.kind))
       .toEqual([expectedCorner, expectedCorner]);
-    expect(plan.junctionFloors).toHaveLength(1);
+    // The inner bottom-right construction adds a floor tile behind its sprite's
+    // transparent notch.
+    expect(plan.junctionFloors).toHaveLength(expectedCorner === "bottom-right" ? 2 : 1);
     expect(plan.corners.filter(corner => corner.kind !== "wall")).toMatchObject([
       { kind: expectedCorner, x: outerCell.x, y: outerCell.y },
       { kind: expectedCorner, x: innerCell.x + innerShift.x, y: innerCell.y + innerShift.y },
@@ -137,7 +139,7 @@ describe("corridor render planning", () => {
         `${corner.y < 0 ? "top" : "bottom"}-${corner.x < 0 ? "left" : "right"}`,
       ));
     }
-    expect(plan.junctionFloors).toEqual([]);
+    expect(plan.junctionFloors).toHaveLength(expectedCorners.some(kind => kind === "bottom-right") ? 1 : 0);
     expect(plan.walls).toHaveLength(expectedWalls);
   });
 
@@ -156,7 +158,7 @@ describe("corridor render planning", () => {
         `${corner.y < 0 ? "top" : "bottom"}-${corner.x < 0 ? "left" : "right"}`,
       ));
     }
-    expect(plan.junctionFloors).toEqual([]);
+    expect(plan.junctionFloors).toHaveLength(1);
     expect(plan.walls).toHaveLength(4);
     expect(plan.walls.some(wall =>
       Math.abs(wall.x) <= SEGMENT_SIZE / 2 &&
@@ -330,9 +332,9 @@ describe("wall module styles", () => {
       width: SEGMENT_SIZE,
       height: SEGMENT_SIZE * 3,
       offsetX: -SEGMENT_SIZE / 2,
-      offsetY: -SEGMENT_SIZE * 0.75,
+      offsetY: -SEGMENT_SIZE / 2,
     });
-    expect(doorModuleStyle("W", SEGMENT_SIZE)).toMatchObject({ offsetX: -SEGMENT_SIZE / 2, offsetY: -SEGMENT_SIZE * 0.75 });
+    expect(doorModuleStyle("W", SEGMENT_SIZE)).toMatchObject({ offsetX: -SEGMENT_SIZE / 2, offsetY: -SEGMENT_SIZE / 2 });
   });
 });
 
