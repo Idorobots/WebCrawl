@@ -1175,6 +1175,10 @@ export class PhaserRenderer {
     if (!measureContext) throw new Error("Unable to create floor-marking texture.");
     const font = `900 ${fontSize}px Prefix, monospace`;
     measureContext.font = font;
+    // Measure with the same alignment used for drawing, so the ink bounding
+    // box is relative to the exact point the text will be drawn at.
+    measureContext.textAlign = "center";
+    measureContext.textBaseline = "middle";
     const metrics = measureContext.measureText(text);
     const padding = world(24);
     const inkWidth = Math.max(metrics.width, metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight);
@@ -1190,7 +1194,13 @@ export class PhaserRenderer {
     context.fillStyle = "rgba(236, 232, 219, 0.46)";
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText(text, width / 2, height / 2);
+    // Glyph bearings are asymmetric, so the ink is not centered on the draw
+    // origin; compensate so the visible text is centered in the texture.
+    context.fillText(
+      text,
+      width / 2 + (metrics.actualBoundingBoxLeft - metrics.actualBoundingBoxRight) / 2,
+      height / 2 + (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2,
+    );
     texture.refresh();
     this.floorMarkingTextures.add(key);
     return this.illuminate(this.scene!.add.image(x, y, key))

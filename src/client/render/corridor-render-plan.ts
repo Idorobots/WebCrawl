@@ -484,7 +484,7 @@ function buildMarkings(layout: DungeonLayout, segmentSize: number): CorridorMark
       end,
       position: pointAlongSegment(start, end, segmentSize / 2),
       label: link.target.floorLabel,
-      lateralOffset: -segmentSize / 3,
+      lateralOffset: -(segmentSize / 3 + segmentSize / 2),
     });
     const returnStart = link.points.at(-1)!;
     const returnEnd = link.points.at(-2)!;
@@ -525,7 +525,7 @@ function buildMarkings(layout: DungeonLayout, segmentSize: number): CorridorMark
         end: branchEnd,
         position: pointAlongSegment(point, branchEnd, link.width / 2 + segmentSize / 2),
         label: link.target.floorLabel,
-        lateralOffset: -segmentSize / 3,
+        lateralOffset: -(segmentSize / 3 + segmentSize / 2),
       });
       markings.push({
         ownerLinkId: link.id,
