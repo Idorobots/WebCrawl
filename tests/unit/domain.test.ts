@@ -1560,9 +1560,10 @@ describe("deterministic room contents", () => {
     const floorSevenCounts = combatRooms.map(room =>
       decorationSpecsForRoom(room, 7).filter(item => item.spawner).length
     );
-    const floorTenCounts = combatRooms.map(room =>
-      decorationSpecsForRoom(room, 10).filter(item => item.spawner).length
+    const floorTenSpawnersByRoom = combatRooms.map(room =>
+      decorationSpecsForRoom(room, 10).filter(item => item.spawner)
     );
+    const floorTenCounts = floorTenSpawnersByRoom.map(items => items.length);
     expect(floorOneCounts.every(count => count >= 0 && count <= 4)).toBe(true);
     expect(floorTenCounts.every(count => count >= 0 && count <= 4)).toBe(true);
     expect(floorOneCounts).toContain(0);
@@ -1574,6 +1575,13 @@ describe("deterministic room contents", () => {
     expect(totals[2]).toBeGreaterThan(totals[1]!);
     expect(totals[3]).toBeGreaterThan(totals[2]!);
     expect(floorOneCounts.every((count, index) => count === 0 || floorTenCounts[index]! > 0)).toBe(true);
+    const floorTenSpawners = floorTenSpawnersByRoom.flat();
+    const dropKinds = floorTenSpawners.map(item => item.dropKind);
+    expect(dropKinds).toContain(null);
+    expect(new Set(dropKinds.filter(kind => kind !== null)).size).toBeGreaterThan(1);
+    expect(floorTenSpawners.every(item =>
+      item.dropKind === sceneryDropKindForSeed(item.visualVariant!)
+    )).toBe(true);
 
     const combatRoom = combatRooms.find(room =>
       decorationSpecsForRoom(room, 1).some(item => item.spawner) &&
@@ -1597,7 +1605,7 @@ describe("deterministic room contents", () => {
       { hp: 2, destroyed: false, spawnedCount: 2 },
     ]]), 10);
     const restoredSpawner = restoredDecorations.find(item => item.id === spawner.id)!;
-    expect(restoredSpawner).toMatchObject({ hp: 2, spawnedCount: 2 });
+    expect(restoredSpawner).toMatchObject({ hp: 2, spawnedCount: 2, dropKind: spawner.dropKind });
 
     const reinforcement = monsterSpecForSpawner(restoredSpawner, 10, 0);
     expect(reinforcement).toMatchObject({

@@ -266,7 +266,7 @@ export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[]
       maxHp: hp,
       hp,
       destroyed: false,
-      dropKind: "core",
+      dropKind: sceneryDropKindForSeed(itemSeed),
       spawner: true,
       spawnIntervalMs: Math.max(10_000, 30_000 - difficulty * 1_000),
       spawnedCount: 0,
