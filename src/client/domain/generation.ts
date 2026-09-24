@@ -149,9 +149,18 @@ export function contentBrowserForRoom(room: GraphNode): Decoration | null {
   };
 }
 
-export function sceneryDropKindForSeed(seed: number): LootKind | null {
+const FAVORED_CRATE_LOOT: Readonly<Record<string, LootKind>> = {
+  [DECORATION_DEFINITIONS.crateMedical.definitionId]: "medkit",
+  [DECORATION_DEFINITIONS.crateAmmo.definitionId]: "core",
+  [DECORATION_DEFINITIONS.crateArmored.definitionId]: "energy",
+};
+
+export function sceneryDropKindForSeed(seed: number, definitionId?: string): LootKind | null {
   if (stableHash(`${seed}|drop`) % 100 >= 30) return null;
 
+  const favoredKind = definitionId ? FAVORED_CRATE_LOOT[definitionId] : undefined;
+  // Keep the scenery drop chance unchanged; bias only the contents of a successful crate drop.
+  if (favoredKind && stableHash(`${seed}|crate-drop-bias`) % 100 < 60) return favoredKind;
   return lootKindForRoll(stableHash(`${seed}|drop-kind`) % 100);
 }
 
@@ -297,7 +306,7 @@ export function decorationSpecsForRoom(room: GraphNode, floor = 1): Decoration[]
       maxHp: hp,
       hp,
       destroyed: false,
-      dropKind: type.destructible ? sceneryDropKindForSeed(itemSeed) : null,
+      dropKind: type.destructible ? sceneryDropKindForSeed(itemSeed, type.definitionId) : null,
     });
   }
 
@@ -356,7 +365,7 @@ export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decorat
       maxHp: hp,
       hp,
       destroyed: false,
-      dropKind: definition.destructible ? sceneryDropKindForSeed(itemSeed) : null,
+      dropKind: definition.destructible ? sceneryDropKindForSeed(itemSeed, definition.definitionId) : null,
     };
   });
 }

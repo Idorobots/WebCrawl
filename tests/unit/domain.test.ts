@@ -26,12 +26,14 @@ import {
   projectileHitsCircle,
   projectileHitsDecoration,
   steerDashDirection,
+  visiblePlayerHitPoint,
 } from "../../src/client/domain/combat";
 import {
   distanceSquared,
   pointInCorridor,
   pointInRoom,
   pointInRoomFloor,
+  roomContainingFloorPoint,
   slideAlongObstacles,
 } from "../../src/client/domain/geometry";
 import {
@@ -61,11 +63,12 @@ import {
 import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthogonal } from "../../src/client/domain/layout";
-import { aStarPath, monsterEscapeStep, revealedRoomPath } from "../../src/client/domain/pathfinding";
+import { aStarPath, chooseReachablePath, monsterEscapeStep, revealedRoomPath, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "../../src/client/domain/pathfinding";
 import { entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "../../src/client/domain/portals";
 import {
   BARREL_EXPLOSION_RADIUS,
   DECORATION_DEFINITIONS,
+  DEFAULT_BULLET_SPEC,
   HEAP_TITAN_WAVE,
   MAX_REGULAR_MONSTER_RADIUS,
   MINIBOSS_CHANCE_PERCENT,
@@ -366,7 +369,118 @@ describe("layout and geometry", () => {
         },
       );
       expect(path, `Expected route through ${JSON.stringify(link.points)}`).not.toBeNull();
+      expect(path!.slice(1).every((point, index) => walkableSegment(
+        path![index]!, point,
+        candidate => layout.nodes.some(room => pointInRoomFloor(candidate.x, candidate.y, room, MAX_REGULAR_MONSTER_RADIUS)) ||
+          layout.links.some(link => pointInCorridor(candidate.x, candidate.y, link, MAX_REGULAR_MONSTER_RADIUS)),
+      ))).toBe(true);
     }
+  });
+
+  it("crosses doorway openings from either side at the monster's actual grid size", () => {
+    for (const link of layout.links) {
+      const door = link.points[0]!;
+      const next = link.points[1]!;
+      const length = Math.hypot(next.x - door.x, next.y - door.y);
+      const unit = { x: (next.x - door.x) / length, y: (next.y - door.y) / length };
+      const shiftY = door.y === next.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
+      const radius = MAX_REGULAR_MONSTER_RADIUS;
+      const start = {
+        x: door.x - unit.x * (radius + world(30)),
+        y: door.y - unit.y * (radius + world(30)) + shiftY,
+      };
+      const goal = {
+        x: door.x + unit.x * (WORLD_GEOMETRY.wallThickness + world(30)),
+        y: door.y + unit.y * (WORLD_GEOMETRY.wallThickness + world(30)) + shiftY,
+      };
+      const walkable = (point: Point) =>
+        pointInRoomFloor(point.x, point.y, link.source, radius) ||
+        pointInCorridor(point.x, point.y, link, radius);
+      for (const [from, to] of [[start, goal], [goal, start]] as const) {
+        const path = aStarPath(from, to, walkable, WORLD_GEOMETRY.pathGridStep, 1800);
+        expect(path, `Expected ${link.direction} doorway to be passable from both sides`).not.toBeNull();
+        expect(path!.at(-1)).toEqual(to);
+        expect(path!.slice(1).every((point, index) =>
+          walkableSegment(path![index]!, point, walkable)
+        )).toBe(true);
+      }
+    }
+  });
+
+  it("routes larger monsters to players against northern room and corridor walls", () => {
+    const room = layout.nodes[0]!;
+    const corridor = {
+      ...layout.links[0]!,
+      width: WORLD_GEOMETRY.corridorHalfWidth * 2,
+      points: [{ x: 0, y: 0 }, { x: WORLD_GEOMETRY.segmentSize * 5, y: 0 }],
+    };
+    const scenarios = [
+      {
+        player: { x: room.x, y: room.y - room.height / 2 + PLAYER_SPEC.radius },
+        inside: (point: Point, radius: number) => pointInRoomFloor(point.x, point.y, room, radius),
+      },
+      {
+        player: { x: corridor.points[1]!.x / 2, y: -corridor.width / 2 + PLAYER_SPEC.radius },
+        inside: (point: Point, radius: number) => pointInCorridor(point.x, point.y, corridor, radius),
+      },
+    ];
+    for (const { player, inside } of scenarios) {
+      for (const [kind, visualKind] of [["melee-light", "scout"], ["melee-heavy", "heavy"]] as const) {
+        const spec = REGULAR_MONSTER_DEFINITIONS[kind];
+        const monster = { x: player.x + world(100), y: player.y + world(110) };
+        const walkable = (point: Point) => inside(point, spec.radius);
+        const bulletWalkable = (point: Point) => inside(point, DEFAULT_BULLET_SPEC.radius);
+        expect(inside(player, PLAYER_SPEC.radius)).toBe(true);
+        expect(walkable(player)).toBe(false);
+        const approach = walkableApproachPoint(player, monster, walkable,
+          point => walkableSegment(point, player, bulletWalkable), spec.radius + PLAYER_SPEC.radius);
+        expect(approach).not.toBeNull();
+        expect(Math.hypot(approach!.x - player.x, approach!.y - player.y)).toBeLessThan(spec.radius + PLAYER_SPEC.radius);
+        const path = aStarPath(monster, approach!, walkable, WORLD_GEOMETRY.pathGridStep, 1800);
+        expect(path).not.toBeNull();
+        expect(path!.at(-1)).toEqual(approach);
+        expect(path!.slice(1).every((point, index) => walkableSegment(path![index]!, point, walkable))).toBe(true);
+
+        const playerCenter = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+        const monsterCenter = actorCollisionCenter(monster, monsterVisualCenterOffsetY(spec.size, visualKind));
+        expect(walkableSegment(monsterCenter, playerCenter, bulletWalkable)).toBe(false);
+        const aim = visiblePlayerHitPoint(playerCenter, PLAYER_SPEC.radius,
+          point => walkableSegment(monsterCenter, point, bulletWalkable));
+        expect(aim).not.toBeNull();
+        expect(Math.hypot(aim!.x - playerCenter.x, aim!.y - playerCenter.y)).toBeLessThan(PLAYER_SPEC.radius);
+        const occluded = (point: Point) => bulletWalkable(point) &&
+          Math.abs(point.x - (player.x + world(50))) > WORLD_GEOMETRY.wallThickness / 2;
+        expect(visiblePlayerHitPoint(playerCenter, PLAYER_SPEC.radius,
+          point => walkableSegment(monsterCenter, point, occluded))).toBeNull();
+      }
+    }
+  });
+
+  it("recognizes the player's room at walkable corners of shaped rooms", () => {
+    for (const shape of ["capsule", "octagon"] as const) {
+      const room = { ...layout.nodes[0]!, shape };
+      const point = {
+        x: room.x + room.width / 2 - PLAYER_SPEC.radius,
+        y: room.y + room.height / 2 - PLAYER_SPEC.radius,
+      };
+      expect(pointInRoomFloor(point.x, point.y, room)).toBe(true);
+      expect(pointInRoom(point.x, point.y, room, 0)).toBe(false);
+      expect(roomContainingFloorPoint([room], point)).toBe(room);
+    }
+  });
+
+  it("does not aim through a wall crossed by the projectile's floor collision path", () => {
+    const from = { x: 0, y: 0 };
+    const target = { x: 60, y: 0 };
+    const clearAtVisualHeight = ({ x, y }: Point) => !(x >= 20 && x <= 30 && y >= 10 && y <= 30);
+    expect(walkableSegment(from, target, clearAtVisualHeight)).toBe(true);
+    expect(walkableProjectileLine(from, target, -20, clearAtVisualHeight)).toBe(false);
+    expect(visiblePlayerHitPoint(target, 15,
+      point => walkableProjectileLine(from, point, -20, clearAtVisualHeight))).toBeNull();
+    const outsideWall = { x: 0, y: -0.1 };
+    const insideFloor = ({ y }: Point) => y >= 0;
+    expect(walkableSegment(outsideWall, { x: 60, y: 25 }, insideFloor)).toBe(true);
+    expect(walkableProjectileLine(outsideWall, { x: 60, y: 25 }, -20, insideFloor)).toBe(false);
   });
 
   it("blocks every door edge across the combined room and corridor floor", () => {
@@ -451,6 +565,45 @@ describe("layout and geometry", () => {
     const forkLink = forkLayout.links[0]!;
     const forkPoint = forkLink.points[forkLink.forkPointIndex!]!;
     expect(pointInCorridor(forkPoint.x, forkPoint.y, forkLink, PLAYER_SPEC.radius)).toBe(true);
+    const end = forkLink.points.at(-1)!;
+    const playerInBranch = { x: forkPoint.x + (end.x - forkPoint.x) * 0.4, y: forkPoint.y + (end.y - forkPoint.y) * 0.4 };
+    const walkable = (point: Point) => forkLayout.nodes.some(room =>
+      pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_RADIUS)
+    ) || forkLayout.links.some(link => pointInCorridor(point.x, point.y, link, MAX_REGULAR_MONSTER_RADIUS));
+    const path = aStarPath(forkLink.source, playerInBranch, walkable, WORLD_GEOMETRY.pathGridStep, 1800);
+    expect(path).not.toBeNull();
+    expect(path!.at(-1)).toEqual(playerInBranch);
+    expect(path!.slice(1).every((point, index) =>
+      walkableSegment(path![index]!, point, walkable)
+    )).toBe(true);
+
+    const previousRoom = forkLink.target;
+    const playerRoom = forkLayout.links[4]!.target;
+    expect(walkableSegment(previousRoom, playerRoom, walkable)).toBe(false);
+    const door = forkLink.points.at(-1)!;
+    const beforeDoor = forkLink.points.at(-2)!;
+    const doorLength = Math.hypot(beforeDoor.x - door.x, beforeDoor.y - door.y);
+    const insideCorridor = {
+      x: door.x + (beforeDoor.x - door.x) / doorLength * world(80),
+      y: door.y + (beforeDoor.y - door.y) / doorLength * world(80),
+    };
+    for (const start of [previousRoom, insideCorridor]) {
+      expect(walkable(start)).toBe(true);
+      const route = chooseReachablePath(
+        start, [playerRoom, forkLink.source], walkable, WORLD_GEOMETRY.pathGridStep, 1800,
+        destination => ({
+          minX: Math.min(start.x, destination.x, forkLink.source.x) - WORLD_GEOMETRY.pathBoundsPadding,
+          maxX: Math.max(start.x, destination.x, forkLink.source.x) + WORLD_GEOMETRY.pathBoundsPadding,
+          minY: Math.min(start.y, destination.y, forkLink.source.y) - WORLD_GEOMETRY.pathBoundsPadding,
+          maxY: Math.max(start.y, destination.y, forkLink.source.y) + WORLD_GEOMETRY.pathBoundsPadding,
+        }),
+      );
+      expect(route?.targetIndex).toBe(0);
+      expect(route?.path.at(-1)).toEqual(playerRoom);
+      expect(route!.path.slice(1).every((point, index) =>
+        walkableSegment(route!.path[index]!, point, walkable)
+      )).toBe(true);
+    }
   });
 
   it("routes around blocked doorway geometry with A*", () => {
@@ -466,6 +619,28 @@ describe("layout and geometry", () => {
 
     expect(path).not.toBeNull();
     expect(path?.some(point => point.x === 18 && point.y === 18)).toBe(false);
+  });
+
+  it("does not jump a thin blocked doorway band between walkable grid points", () => {
+    const walkable = ({ x, y }: Point) => !(x >= 4 && x <= 13 && y <= 4);
+    const path = aStarPath({ x: 0, y: 0 }, { x: 36, y: 0 }, walkable, 18, 200);
+    expect(path).not.toBeNull();
+    expect(path!.slice(1).every((point, index) =>
+      walkableSegment(path![index]!, point, walkable)
+    )).toBe(true);
+    expect(path!.some(point => point.y > 0)).toBe(true);
+  });
+
+  it("reaches the doorway grid from a walkable position whose nearest cell is blocked", () => {
+    const walkable = ({ x }: Point) => x >= 4;
+    const start = { x: 6, y: 0 };
+    const goal = { x: 36, y: 0 };
+    const path = aStarPath(start, goal, walkable, 18, 200);
+    expect(path?.[0]).toEqual(start);
+    expect(path?.at(-1)).toEqual(goal);
+    expect(path!.slice(1).every((point, index) => walkableSegment(path![index]!, point, walkable))).toBe(true);
+    const returnPath = aStarPath(goal, start, walkable, 18, 200);
+    expect(returnPath?.at(-1)).toEqual(start);
   });
 
   it("sidesteps monsters away from blocked forward movement", () => {
@@ -1693,6 +1868,43 @@ describe("deterministic room contents", () => {
     expect(drops).toContain("medkit");
     expect(drops.some(kind => kind !== "medkit")).toBe(true);
     expect(sceneryDropKindForSeed(12345)).toBe(sceneryDropKindForSeed(12345));
+  });
+
+  it("favors the contents of dedicated crates without guaranteeing a drop", () => {
+    const seeds = Array.from({ length: 5_000 }, (_, index) => stableHash(`crate-drop-${index}`));
+    const generalDrops = seeds.map(seed => sceneryDropKindForSeed(seed));
+    expect(seeds.map(seed => sceneryDropKindForSeed(seed, DECORATION_DEFINITIONS.crateCargo.definitionId)))
+      .toEqual(generalDrops);
+
+    for (const [definitionId, favoredKind] of [
+      [DECORATION_DEFINITIONS.crateMedical.definitionId, "medkit"],
+      [DECORATION_DEFINITIONS.crateAmmo.definitionId, "core"],
+      [DECORATION_DEFINITIONS.crateArmored.definitionId, "energy"],
+    ] as const) {
+      const drops = seeds.map(seed => sceneryDropKindForSeed(seed, definitionId));
+      expect(drops.filter(kind => kind === null).length).toBe(generalDrops.filter(kind => kind === null).length);
+      expect(drops.filter(kind => kind === favoredKind).length)
+        .toBeGreaterThan(generalDrops.filter(kind => kind === favoredKind).length * 2);
+      expect(drops.some(kind => kind !== null && kind !== favoredKind)).toBe(true);
+    }
+  });
+
+  it("assigns dedicated crate drops from their own definition and seed", () => {
+    const crates = Array.from({ length: 240 }, (_, index) =>
+      decorationSpecsForRoom(node(index + 5_000, 0, 1, { lootSeed: stableHash(`crate-room-${index}`) }))
+    ).flat().filter(item => item.kind === "crate");
+    const dedicated = [
+      DECORATION_DEFINITIONS.crateMedical.definitionId,
+      DECORATION_DEFINITIONS.crateAmmo.definitionId,
+      DECORATION_DEFINITIONS.crateArmored.definitionId,
+    ];
+    for (const definitionId of dedicated) {
+      const matching = crates.filter(item => item.definitionId === definitionId);
+      expect(matching.length).toBeGreaterThan(0);
+      expect(matching.every(item =>
+        item.dropKind === sceneryDropKindForSeed(item.visualVariant!, definitionId)
+      )).toBe(true);
+    }
   });
 
   it("restores uncollected drops from destroyed scenery", () => {

@@ -153,3 +153,16 @@ export function actorAimDirection(anchor: Point, visualCenterOffsetY: number, ta
 export function actorCollisionCenter(anchor: Point, visualCenterOffsetY: number): Point {
   return { x: anchor.x, y: anchor.y + visualCenterOffsetY };
 }
+
+/** Aim within the player's hit area when its visual center is against a northern wall. */
+export function visiblePlayerHitPoint(
+  center: Point,
+  radius: number,
+  hasLineOfSight: (point: Point) => boolean,
+): Point | null {
+  for (const offsetY of [0, radius / 2, radius * 0.8]) {
+    const point = { x: center.x, y: center.y + offsetY };
+    if (hasLineOfSight(point)) return point;
+  }
+  return null;
+}

@@ -261,6 +261,7 @@ export interface Monster extends Point {
   path?: Point[];
   pathIndex?: number;
   pathTargetRoomId?: number | null;
+  pathPursuitRoomId?: number | null;
   pathTargetX?: number;
   pathTargetY?: number;
   nextPathRefreshAt?: number;

@@ -28,6 +28,11 @@ export function pointInRoomFloor(x: number, y: number, room: GraphNode, radius =
   return left <= right && top <= bottom && x >= left && x <= right && y >= top && y <= bottom;
 }
 
+/** Room ownership must agree with the rectangular floor used for movement. */
+export function roomContainingFloorPoint(rooms: readonly GraphNode[], point: Point): GraphNode | null {
+  return rooms.find(room => pointInRoomFloor(point.x, point.y, room, 0)) ?? null;
+}
+
 function pointInAxisAlignedSegment(point: Point, start: Point, end: Point, halfWidth: number, includeEnds = true): boolean {
   if (start.y === end.y) {
     const min = Math.min(start.x, end.x);

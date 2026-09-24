@@ -1,4 +1,5 @@
 import type { DungeonLayout, Point } from "../types";
+import { WORLD_GEOMETRY } from "./specs";
 
 interface Bounds {
   minX: number;
@@ -92,6 +93,87 @@ function popOpen(open: AStarNode[]): AStarNode | undefined {
   return first;
 }
 
+/** Check the space between waypoints, including thin doorway wall bands. */
+export function walkableSegment(
+  from: Point,
+  to: Point,
+  isWalkable: (point: Point) => boolean,
+  maxStep = WORLD_GEOMETRY.wallThickness / 2,
+): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const segments = Math.max(1, Math.ceil(Math.hypot(dx, dy) / maxStep));
+  for (let index = 1; index <= segments; index += 1) {
+    const fraction = index / segments;
+    if (!isWalkable({ x: from.x + dx * fraction, y: from.y + dy * fraction })) return false;
+  }
+  return true;
+}
+
+/** Projectiles are drawn at visual height, but collide with walls at floor height. */
+export function walkableProjectileLine(
+  from: Point,
+  to: Point,
+  visualOffsetY: number,
+  isWalkable: (point: Point) => boolean,
+): boolean {
+  const floorFrom = { x: from.x, y: from.y - visualOffsetY };
+  if (!isWalkable(from) || !isWalkable(floorFrom)) return false;
+  return walkableSegment(from, to, isWalkable) &&
+    walkableSegment(floorFrom, { x: to.x, y: to.y - visualOffsetY }, isWalkable);
+}
+
+/** Prefer a reachable player position over a graph-room waypoint. */
+export function chooseReachablePath(
+  start: Point,
+  targets: readonly Point[],
+  isWalkable: (point: Point) => boolean,
+  step: number,
+  maxIterations: number,
+  boundsFor: (target: Point) => Bounds,
+): { path: Point[]; targetIndex: number } | null {
+  for (let index = 0; index < targets.length; index += 1) {
+    const target = targets[index]!;
+    if (!isWalkable(target)) continue;
+    let path: Point[] | null = null;
+    if (walkableSegment(start, target, isWalkable)) {
+      path = [target];
+    } else {
+      const longRoute = Math.hypot(target.x - start.x, target.y - start.y) > step * 32;
+      if (longRoute) path = aStarPath(start, target, isWalkable, step * 2, maxIterations, boundsFor(target));
+      path ??= aStarPath(start, target, isWalkable, step,
+        index === 0 && longRoute ? Math.max(maxIterations, 6000) : maxIterations, boundsFor(target));
+    }
+    if (path) return { path, targetIndex: index };
+  }
+  return null;
+}
+
+/** Find a nearby position for a larger actor when the target hugs a wall. */
+export function walkableApproachPoint(
+  target: Point,
+  from: Point,
+  isWalkable: (point: Point) => boolean,
+  hasAccessToTarget: (point: Point) => boolean,
+  maxDistance: number,
+  step = WORLD_GEOMETRY.pathGridStep,
+): Point | null {
+  if (isWalkable(target)) return target;
+  const angle = Math.atan2(from.y - target.y, from.x - target.x);
+  for (let distance = step; distance <= maxDistance; distance += step) {
+    for (let index = 0; index < 16; index += 1) {
+      const offset = Math.ceil(index / 2) * (index % 2 ? 1 : -1);
+      const direction = angle + offset * Math.PI / 8;
+      const candidate = {
+        x: target.x + Math.cos(direction) * distance,
+        y: target.y + Math.sin(direction) * distance,
+      };
+      if (isWalkable(candidate) && hasAccessToTarget(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
 export function aStarPath(
   start: Point,
   goal: Point,
@@ -100,15 +182,7 @@ export function aStarPath(
   maxIterations = 2500,
   bounds?: Bounds,
 ): Point[] | null {
-  const snappedStart = {
-    x: Math.round(start.x / step) * step,
-    y: Math.round(start.y / step) * step,
-  };
-  const snappedGoal = {
-    x: Math.round(goal.x / step) * step,
-    y: Math.round(goal.y / step) * step,
-  };
-  if (!isWalkable(snappedStart) || !isWalkable(snappedGoal)) return null;
+  if (!isWalkable(goal)) return null;
 
   const inBounds = (point: Point): boolean => {
     if (!bounds) return true;
@@ -126,29 +200,40 @@ export function aStarPath(
     { x: 1, y: 1, cost: Math.SQRT2 },
   ];
 
-  const open: AStarNode[] = [{
-    x: snappedStart.x,
-    y: snappedStart.y,
-    g: 0,
-    f: Math.hypot(snappedGoal.x - snappedStart.x, snappedGoal.y - snappedStart.y) / step,
-  }];
-  const previous = new Map<string, string | null>([[pointKey(snappedStart.x, snappedStart.y), null]]);
-  const bestCost = new Map<string, number>([[pointKey(snappedStart.x, snappedStart.y), 0]]);
+  const open: AStarNode[] = [];
+  const previous = new Map<string, string | null>();
+  const bestCost = new Map<string, number>();
+  const gridX = Math.round(start.x / step) * step;
+  const gridY = Math.round(start.y / step) * step;
+  // An actor can stand near a wall while its nearest snapped grid point is
+  // blocked. Connect to any nearby cell it can actually reach instead.
+  for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+      const point = { x: gridX + offsetX * step, y: gridY + offsetY * step };
+      if (!inBounds(point) || !walkableSegment(start, point, isWalkable)) continue;
+      const key = pointKey(point.x, point.y);
+      const cost = Math.hypot(point.x - start.x, point.y - start.y) / step;
+      previous.set(key, null);
+      bestCost.set(key, cost);
+      pushOpen(open, { ...point, g: cost, f: cost + Math.hypot(goal.x - point.x, goal.y - point.y) / step });
+    }
+  }
 
   for (let iterations = 0; open.length && iterations < maxIterations; iterations += 1) {
     const current = popOpen(open);
     if (!current) break;
     const currentKey = pointKey(current.x, current.y);
     if (current.g > (bestCost.get(currentKey) ?? Infinity)) continue;
-    if (current.x === snappedGoal.x && current.y === snappedGoal.y) {
-      const path: Point[] = [{ x: current.x, y: current.y }];
+    if (Math.hypot(goal.x - current.x, goal.y - current.y) <= step * Math.SQRT2 &&
+      walkableSegment(current, goal, isWalkable)) {
+      const path: Point[] = [goal, { x: current.x, y: current.y }];
       let cursor = previous.get(currentKey) ?? null;
       while (cursor) {
         const [x = 0, y = 0] = cursor.split(",").map(Number);
         path.push({ x, y });
         cursor = previous.get(cursor) ?? null;
       }
-      return path.reverse();
+      return [start, ...path.reverse()];
     }
 
     for (const neighbor of neighbors) {
@@ -156,12 +241,14 @@ export function aStarPath(
         x: current.x + neighbor.x * step,
         y: current.y + neighbor.y * step,
       };
-      if (!inBounds(next) || !isWalkable(next)) continue;
+      if (!inBounds(next) || !walkableSegment(current, next, isWalkable)) continue;
 
       if (neighbor.x !== 0 && neighbor.y !== 0) {
         const horizontal = { x: current.x + neighbor.x * step, y: current.y };
         const vertical = { x: current.x, y: current.y + neighbor.y * step };
-        if (!inBounds(horizontal) || !inBounds(vertical) || !isWalkable(horizontal) || !isWalkable(vertical)) continue;
+        if (!inBounds(horizontal) || !inBounds(vertical) ||
+          !walkableSegment(current, horizontal, isWalkable) ||
+          !walkableSegment(current, vertical, isWalkable)) continue;
       }
 
       const nextKey = pointKey(next.x, next.y);
@@ -174,7 +261,7 @@ export function aStarPath(
         x: next.x,
         y: next.y,
         g: nextCost,
-        f: nextCost + Math.hypot(snappedGoal.x - next.x, snappedGoal.y - next.y) / step,
+        f: nextCost + Math.hypot(goal.x - next.x, goal.y - next.y) / step,
       });
     }
   }

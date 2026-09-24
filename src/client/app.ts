@@ -31,12 +31,13 @@ import {
   projectileHitsCircle,
   projectileHitsDecoration,
   steerDashDirection,
+  visiblePlayerHitPoint,
 } from "./domain/combat";
 import {
   distanceSquared,
   pointInCorridor,
-  pointInRoom,
   pointInRoomFloor,
+  roomContainingFloorPoint,
   slideAlongObstacles,
   type CircleObstacle,
 } from "./domain/geometry";
@@ -53,7 +54,7 @@ import {
 } from "./domain/generation";
 import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
-import { aStarPath, monsterEscapeStep } from "./domain/pathfinding";
+import { chooseReachablePath, monsterEscapeStep, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "./domain/pathfinding";
 import { entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
 import {
@@ -435,12 +436,7 @@ document.addEventListener("click", (event) => {
 
 function roomContainingPoint(x: number, y: number): GraphNode | null {
   if (!currentLayout) return null;
-
-  for (const room of currentLayout.nodes) {
-    if (pointInRoom(x, y, room, 0)) return room;
-  }
-
-  return null;
+  return roomContainingFloorPoint(currentLayout.nodes, { x, y });
 }
 
 function updateFogOfWar(): void {
@@ -465,18 +461,6 @@ function markVisited(room: GraphNode | null): void {
   activateMonstersInRoom(room.id);
   renderDecorations();
   renderInteractiveObjects();
-}
-
-function corridorContainingPoint(x: number, y: number): LayoutLink | null {
-  if (!currentLayout) return null;
-
-  for (const link of currentLayout.links) {
-    if (pointInCorridor(x, y, link, 0)) {
-      return link;
-    }
-  }
-
-  return null;
 }
 
 function pointInCommittedForkBranch(x: number, y: number, link: LayoutLink): boolean {
@@ -1592,10 +1576,9 @@ function rotatedDirection(direction: Point, angle: number): Point {
   };
 }
 
-function fireBossVolley(monster: Monster, timestamp: number): void {
+function fireBossVolley(monster: Monster, target: Point, timestamp: number): void {
   const sequence = monster.attackSequence ?? 0;
   const enraged = monster.hp <= monster.maxHp / 2;
-  const target = playerCollisionCenter();
   const aimed = actorAimDirection(
     monster,
     monsterVisualCenterOffsetY(monster.size, monster.visualKind),
@@ -1667,67 +1650,86 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
 }
 
 function hasWalkableLine(from: Point, to: Point, radius: number, step: number): boolean {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const distance = Math.hypot(dx, dy);
-  const segments = Math.max(1, Math.ceil(distance / step));
-
-  for (let index = 1; index <= segments; index += 1) {
-    const sample = {
-      x: from.x + dx * (index / segments),
-      y: from.y + dy * (index / segments),
-    };
-    if (!isWalkable(sample.x, sample.y, radius)) return false;
-  }
-
-  return true;
+  return walkableSegment(
+    from,
+    to,
+    point => isWalkable(point.x, point.y, radius),
+    Math.min(step, WORLD_GEOMETRY.wallThickness / 2),
+  );
 }
 
-function hasLineOfSight(from: Point, to: Point, step = WORLD_GEOMETRY.pathLineStep): boolean {
-  return hasWalkableLine(from, to, DEFAULT_BULLET_SPEC.radius, step);
+function hasLineOfSight(from: Point, to: Point): boolean {
+  return walkableProjectileLine(
+    from, to, PLAYER_SPEC.visualCenterOffsetY,
+    point => isWalkable(point.x, point.y, DEFAULT_BULLET_SPEC.radius),
+  );
 }
 
-function monsterPathBounds(monster: Monster, target: Point): {
+function visiblePlayerAimPoint(from: Point): Point | null {
+  return visiblePlayerHitPoint(
+    playerCollisionCenter(), PLAYER_SPEC.radius,
+    point => hasLineOfSight(from, point),
+  );
+}
+
+function monsterApproachPoint(monster: Monster): Point | null {
+  return walkableApproachPoint(
+    player,
+    monster,
+    point => isMonsterWalkable(monster, point.x, point.y),
+    point => hasWalkableLine(point, player, DEFAULT_BULLET_SPEC.radius, WORLD_GEOMETRY.pathLineStep),
+    monster.radius + PLAYER_SPEC.radius,
+  );
+}
+
+function monsterPathBounds(monster: Monster, target: Point, via?: Point): {
   minX: number;
   maxX: number;
   minY: number;
   maxY: number;
 } {
   return {
-    minX: Math.min(monster.x, target.x) - WORLD_GEOMETRY.pathBoundsPadding,
-    maxX: Math.max(monster.x, target.x) + WORLD_GEOMETRY.pathBoundsPadding,
-    minY: Math.min(monster.y, target.y) - WORLD_GEOMETRY.pathBoundsPadding,
-    maxY: Math.max(monster.y, target.y) + WORLD_GEOMETRY.pathBoundsPadding,
+    minX: Math.min(monster.x, target.x, via?.x ?? target.x) - WORLD_GEOMETRY.pathBoundsPadding,
+    maxX: Math.max(monster.x, target.x, via?.x ?? target.x) + WORLD_GEOMETRY.pathBoundsPadding,
+    minY: Math.min(monster.y, target.y, via?.y ?? target.y) - WORLD_GEOMETRY.pathBoundsPadding,
+    maxY: Math.max(monster.y, target.y, via?.y ?? target.y) + WORLD_GEOMETRY.pathBoundsPadding,
   };
 }
 
-function updateMonsterPath(monster: Monster, target: Point, targetRoomId: number | null, timestamp: number): void {
+function updateMonsterPath(
+  monster: Monster,
+  target: Point,
+  targetRoomId: number | null,
+  timestamp: number,
+  fallback?: GraphNode,
+): void {
   if (monster.speed === 0) return;
-  if (timestamp < (monster.nextPathRefreshAt ?? 0) && monster.path?.length) return;
+  if (monster.pathPursuitRoomId !== targetRoomId) monster.nextPathRefreshAt = 0;
+  if (timestamp < (monster.nextPathRefreshAt ?? 0)) return;
 
   const start = { x: monster.x, y: monster.y };
   const walkable = (point: Point): boolean => isMonsterWalkable(monster, point.x, point.y);
-  const path = hasWalkableLine(start, target, monster.radius, WORLD_GEOMETRY.pathLineStep)
-    ? [target]
-    : aStarPath(
-      start,
-      target,
-      walkable,
-      WORLD_GEOMETRY.pathGridStep,
-      1800,
-      monsterPathBounds(monster, target),
-    );
-
-  monster.path = path ?? [];
-  monster.pathIndex = path && path.length > 1 ? 1 : 0;
-  monster.pathTargetRoomId = targetRoomId;
-  monster.pathTargetX = target.x;
-  monster.pathTargetY = target.y;
+  const route = chooseReachablePath(
+    start, fallback ? [target, fallback] : [target], walkable,
+    WORLD_GEOMETRY.pathGridStep, 1800,
+    destination => monsterPathBounds(monster, destination, fallback),
+  );
+  const destination = route?.targetIndex === 1 ? fallback! : target;
+  monster.path = route?.path ?? [];
+  monster.pathIndex = route && route.path.length > 1 ? 1 : 0;
+  monster.pathPursuitRoomId = targetRoomId;
+  monster.pathTargetRoomId = route?.targetIndex === 1 ? fallback!.id : targetRoomId;
+  monster.pathTargetX = destination.x;
+  monster.pathTargetY = destination.y;
   monster.nextPathRefreshAt = timestamp + 420;
 }
 
 function moveMonsterTowards(monster: Monster, target: Point, dt: number, timestamp: number): void {
-  const waypoint = monster.path?.[monster.pathIndex ?? 0] ?? target;
+  const waypoint = monster.path?.[monster.pathIndex ?? 0];
+  if (!waypoint) {
+    monster.moveDir = null;
+    return;
+  }
   const dx = waypoint.x - monster.x;
   const dy = waypoint.y - monster.y;
   const distance = Math.hypot(dx, dy);
@@ -1756,7 +1758,8 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
       ? (dx < 0 ? "left" : "right")
       : (dy < 0 ? "up" : "down");
 
-  if (isMonsterWalkable(monster, nextX, nextY)) {
+  const walkable = (point: Point): boolean => isMonsterWalkable(monster, point.x, point.y);
+  if (walkableSegment(monster, { x: nextX, y: nextY }, walkable)) {
     monster.x = nextX;
     monster.y = nextY;
     monster.moving = true;
@@ -1771,7 +1774,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     : [verticalStep, horizontalStep];
   for (const candidate of axisSteps) {
     if (Math.hypot(candidate.x - monster.x, candidate.y - monster.y) <= 0.001) continue;
-    if (!isMonsterWalkable(monster, candidate.x, candidate.y)) continue;
+    if (!walkableSegment(monster, candidate, walkable)) continue;
     monster.moveDir = cardinalDirection(candidate.x - monster.x, candidate.y - monster.y);
     monster.x = candidate.x;
     monster.y = candidate.y;
@@ -1788,7 +1791,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     monster,
     { x: dx, y: dy },
     Math.max(step, world(6)),
-    point => isMonsterWalkable(monster, point.x, point.y),
+    point => walkableSegment(monster, point, walkable),
     monster.seed + monster.blockedMoveCount,
   );
   if (escaped) {
@@ -1806,40 +1809,40 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
   if (currentRoomId === null) return;
   const playerRoom = roomContainingPoint(player.x, player.y);
   const sharesPlayerRoom = playerRoom?.id === monster.roomId;
-  let target: Point = player;
-  let targetRoomId: number | null = playerRoom?.id ?? null;
+  let nextRoom: GraphNode | undefined;
   if (!sharesPlayerRoom && playerRoom) {
     const nextRoomId = nextRoomTowardPlayer.get(monster.roomId);
-    const nextRoom = nextRoomId === undefined ? undefined : currentRoomsById.get(nextRoomId);
+    nextRoom = nextRoomId === undefined ? undefined : currentRoomsById.get(nextRoomId);
     if (!nextRoom) return;
-    target = nextRoom;
-    targetRoomId = nextRoom.id;
   }
+  const approach = monsterApproachPoint(monster);
   if (monster.bossKind === "heap-titan") {
-    updateMonsterPath(monster, player, playerRoom?.id ?? null, timestamp);
-    moveMonsterTowards(monster, player, dt, timestamp);
+    if (approach || nextRoom) {
+      updateMonsterPath(monster, approach ?? nextRoom!, playerRoom?.id ?? currentRoomId, timestamp, nextRoom);
+      moveMonsterTowards(monster, approach ?? nextRoom!, dt, timestamp);
+    }
   } else if (!sharesPlayerRoom) {
-    updateMonsterPath(monster, target, targetRoomId, timestamp);
-    moveMonsterTowards(monster, target, dt, timestamp);
+    const destination = approach ?? nextRoom;
+    if (destination) {
+      updateMonsterPath(monster, destination, playerRoom?.id ?? currentRoomId, timestamp, nextRoom);
+      moveMonsterTowards(monster, destination, dt, timestamp);
+    }
   }
   const playerDistance = Math.hypot(player.x - monster.x, player.y - monster.y);
   monster.moveDir = cardinalDirection(player.x - monster.x, player.y - monster.y);
+  const aimPoint = playerDistance <= monster.projectileRange
+    ? visiblePlayerAimPoint(actorCollisionCenter(monster,
+      monsterVisualCenterOffsetY(monster.size, monster.visualKind))) : null;
 
   if (monster.bossKind === "packet-storm") {
-    if (
-      playerDistance <= monster.projectileRange &&
-      monsterAttackIsReady(monster, timestamp)
-    ) fireBossVolley(monster, timestamp);
+    if (aimPoint && monsterAttackIsReady(monster, timestamp)) fireBossVolley(monster, aimPoint, timestamp);
     return;
   }
 
   if (monster.bossKind === "fork-bomb") {
     if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 2_800;
     if (sharesPlayerRoom && timestamp >= monster.nextSpecialAt) summonBossMinions(monster, timestamp);
-    if (
-      playerDistance <= monster.projectileRange &&
-      monsterAttackIsReady(monster, timestamp)
-    ) fireBossVolley(monster, timestamp);
+    if (aimPoint && monsterAttackIsReady(monster, timestamp)) fireBossVolley(monster, aimPoint, timestamp);
     return;
   }
 
@@ -2110,19 +2113,6 @@ function gameTick(timestamp: number): void {
     const nextRoomId = nextRoomTowardPlayer.get(monster.roomId);
     if (nextRoomId === undefined) continue;
 
-    let targetX = player.x;
-    let targetY = player.y;
-
-    const playerIsInCorridor = corridorContainingPoint(player.x, player.y) !== null;
-    if (monster.roomId !== currentRoomId && !playerIsInCorridor) {
-      const nextRoom = currentRoomsById.get(nextRoomId);
-      if (!nextRoom) continue;
-      targetX = nextRoom.x;
-      targetY = nextRoom.y;
-    }
-
-    const targetRoomId = monster.roomId !== currentRoomId && !playerIsInCorridor ? nextRoomId : currentRoomId;
-
     if (monster.speed === 0) {
       const target = playerCollisionCenter();
       const monsterCenter = actorCollisionCenter(
@@ -2131,19 +2121,24 @@ function gameTick(timestamp: number): void {
       );
       monster.moveDir = cardinalDirection(target.x - monsterCenter.x, target.y - monsterCenter.y);
       const playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
+      const aimPoint = playerDistance <= monsterEngagementRange(monster)
+        ? visiblePlayerAimPoint(monsterCenter) : null;
       if (
-        playerDistance <= monsterEngagementRange(monster) &&
-        monsterAttackIsReady(monster, timestamp) &&
-        hasLineOfSight(monster, target)
+        aimPoint && monsterAttackIsReady(monster, timestamp)
       ) {
         shootEnemyVolley(monster, actorAimDirection(
           monster,
           monsterVisualCenterOffsetY(monster.size, monster.visualKind),
-          target,
+          aimPoint,
         ), timestamp);
       }
       continue;
     }
+
+    const approach = monsterApproachPoint(monster);
+    const targetPoint = approach ?? player;
+    const nextRoom = monster.roomId !== currentRoomId
+      ? currentRoomsById.get(nextRoomId) : undefined;
 
     const target = playerCollisionCenter();
     let monsterCenter = actorCollisionCenter(
@@ -2151,25 +2146,25 @@ function gameTick(timestamp: number): void {
       monsterVisualCenterOffsetY(monster.size, monster.visualKind),
     );
     let playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
-    const rangedInPosition =
-      monster.attackPattern !== "melee" &&
-      monster.roomId === currentRoomId &&
-      playerDistance <= monsterEngagementRange(monster) &&
-      hasLineOfSight(monsterCenter, target);
-    const targetPoint = { x: targetX, y: targetY };
-    if (!rangedInPosition) {
+    let aimPoint = monster.attackPattern !== "melee" && playerDistance <= monsterEngagementRange(monster)
+      ? visiblePlayerAimPoint(monsterCenter) : null;
+    if (!aimPoint) {
       const pathStale =
-        !monster.path?.length ||
-        monster.pathTargetRoomId !== targetRoomId ||
-        Math.hypot((monster.pathTargetX ?? targetX) - targetX, (monster.pathTargetY ?? targetY) - targetY) > 48;
+        monster.pathPursuitRoomId !== currentRoomId ||
+        ![targetPoint, ...(nextRoom ? [nextRoom] : [])].some(destination =>
+          Math.hypot((monster.pathTargetX ?? Infinity) - destination.x,
+            (monster.pathTargetY ?? Infinity) - destination.y) <= 48);
       if (pathStale) monster.nextPathRefreshAt = 0;
-      updateMonsterPath(monster, targetPoint, targetRoomId, timestamp);
+      updateMonsterPath(monster, targetPoint, currentRoomId, timestamp, nextRoom);
       moveMonsterTowards(monster, targetPoint, dt, timestamp);
       monsterCenter = actorCollisionCenter(
         monster,
         monsterVisualCenterOffsetY(monster.size, monster.visualKind),
       );
       playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
+      if (monster.attackPattern !== "melee" && playerDistance <= monsterEngagementRange(monster)) {
+        aimPoint = visiblePlayerAimPoint(monsterCenter);
+      }
     } else {
       monster.moveDir = cardinalDirection(target.x - monsterCenter.x, target.y - monsterCenter.y);
     }
@@ -2185,14 +2180,12 @@ function gameTick(timestamp: number): void {
       applyPlayerDamage(monster.attackDamage);
     } else if (
       monster.attackPattern !== "melee" &&
-      playerDistance <= monsterEngagementRange(monster) &&
-      monsterAttackIsReady(monster, timestamp) &&
-      hasLineOfSight(monsterCenter, target)
+      aimPoint && monsterAttackIsReady(monster, timestamp)
     ) {
       shootEnemyVolley(monster, actorAimDirection(
         monster,
         monsterVisualCenterOffsetY(monster.size, monster.visualKind),
-        target,
+        aimPoint,
       ), timestamp);
     }
   }
