@@ -2179,14 +2179,40 @@ body {
   border-radius: 2px;
 }
 
+.energy-track.is-full {
+  border-color: #b1eaff;
+  box-shadow: 0 0 7px #57bdff, 0 0 16px rgba(63, 176, 255, 0.65);
+}
+
 #hudEnergyFill,
 #hudEnergyFillMini {
   display: block;
+  position: relative;
+  overflow: hidden;
   width: 0%;
   height: 100%;
   background: linear-gradient(90deg, #2f7fe0, #4db3ff);
   border-radius: 2px;
   transition: width 140ms linear;
+}
+
+.energy-track.is-full #hudEnergyFill::after,
+.energy-track.is-full #hudEnergyFillMini::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, rgba(216, 249, 255, 0.35) 45%, #fff 50%, rgba(216, 249, 255, 0.35) 55%, transparent 65%);
+  animation: energyShine 1.6s ease-in-out infinite;
+}
+
+@keyframes energyShine {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .energy-track.is-full #hudEnergyFill::after,
+  .energy-track.is-full #hudEnergyFillMini::after { content: none; }
 }
 
 .loot-status-card {

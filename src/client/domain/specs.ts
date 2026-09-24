@@ -121,10 +121,11 @@ export const CRYSTAL_INVULNERABILITY_DURATION_MS = 10_000;
 export const CRYSTAL_INVULNERABILITY_BLINK_START_MS = 2_000;
 export const PLAYER_DAMAGE_INVULNERABILITY_MS = 200;
 
-export const PLAYER_ENERGY_MAX = 5;
-export const ENERGY_DASH_RANGE = world(330);
+export const PLAYER_ENERGY_MAX = 10;
+export const ENERGY_DASH_DISTANCE_PER_ENERGY = WORLD_GEOMETRY.segmentSize * 0.75;
 export const ENERGY_DASH_SPEED = world(1_300);
-export const ENERGY_DASH_DAMAGE = 23.5;
+export const ENERGY_DASH_DAMAGE_PER_ENERGY = 23.5 / 5;
+export const ENERGY_DASH_TURN_RATE = Math.PI * 2;
 
 interface MonsterDefinition {
   kind: RegularMonsterKind;

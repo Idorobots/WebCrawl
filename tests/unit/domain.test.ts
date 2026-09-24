@@ -19,11 +19,13 @@ import {
   actorCollisionCenter,
   actorProjectileOrigin,
   barrelExplosionTargets,
+  energyDashPower,
   enemyVolleyProjectiles,
   monsterAttackIsReady,
   monsterEngagementRange,
   projectileHitsCircle,
   projectileHitsDecoration,
+  steerDashDirection,
 } from "../../src/client/domain/combat";
 import {
   distanceSquared,
@@ -75,6 +77,7 @@ import {
   monsterHealthBarY,
   monsterWalkElapsed,
   monsterVisualCenterOffsetY,
+  PLAYER_ENERGY_MAX,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   REGULAR_MONSTER_DEFINITIONS,
@@ -1183,6 +1186,26 @@ describe("deterministic room contents", () => {
     expect(obstacle).toMatchObject({ hp: 7, destroyed: false });
     expect(applyObstacleDamage(obstacle, 8)).toBe(true);
     expect(obstacle).toMatchObject({ hp: 0, destroyed: true });
+  });
+
+  it("scales dash distance and damage per energy, including charges above the current cap", () => {
+    expect(PLAYER_ENERGY_MAX).toBe(10);
+    expect(energyDashPower(1)).toEqual({ maxDistance: WORLD_GEOMETRY.segmentSize * 0.75, damage: 4.7 });
+    expect(energyDashPower(5)).toEqual({ maxDistance: WORLD_GEOMETRY.segmentSize * 0.75 * 5, damage: 23.5 });
+    expect(energyDashPower(10)).toEqual({ maxDistance: WORLD_GEOMETRY.segmentSize * 0.75 * 10, damage: 47 });
+    expect(energyDashPower(15)).toEqual({ maxDistance: WORLD_GEOMETRY.segmentSize * 0.75 * 15, damage: 70.5 });
+  });
+
+  it("turns the dash toward the current cursor at a limited rate", () => {
+    const current = { x: 1, y: 0 };
+    const center = { x: 0, y: 0 };
+    const turn = steerDashDirection(current, center, { x: 0, y: 100 }, Math.PI / 6);
+    expect(turn.x).toBeCloseTo(Math.cos(Math.PI / 6));
+    expect(turn.y).toBeCloseTo(Math.sin(Math.PI / 6));
+    expect(steerDashDirection(turn, center, { x: 0, y: 100 }, Math.PI / 2).y).toBeCloseTo(1);
+    expect(steerDashDirection(current, center, center, Math.PI / 6)).toBe(current);
+    const crossing = steerDashDirection({ x: -1, y: 0.01 }, center, { x: -100, y: -1 }, 0.1);
+    expect(crossing.x).toBeLessThan(-0.99);
   });
 
   it("includes nearby destructible scenery, other barrels, and active monsters in a barrel blast", () => {

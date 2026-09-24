@@ -32,8 +32,8 @@ const BAILOUT_CONTROLS_TEXT = MOBILE_CONTROLS
   : " — press SPACE for a Government Bailout (10 seconds of invulnerability).";
 
 const CAPTURE_CONTROLS_TEXT = MOBILE_CONTROLS
-  ? " — press the Capture button for Regulatory Capture once the meter is full."
-  : " — right-click for Regulatory Capture once the meter is full.";
+  ? " — press Capture with any energy to dash toward your aim. More energy means a longer, stronger dash."
+  : " — right-click with any energy to dash toward the cursor. More energy means a longer, stronger dash.";
 
 const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   {

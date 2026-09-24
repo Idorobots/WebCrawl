@@ -23,12 +23,14 @@ import {
   actorProjectileOrigin,
   applyObstacleDamage,
   barrelExplosionTargets,
+  energyDashPower,
   enemyVolleyProjectiles,
   monsterAttackIsReady,
   MONSTER_ATTACK_WARMUP_MS,
   monsterEngagementRange,
   projectileHitsCircle,
   projectileHitsDecoration,
+  steerDashDirection,
 } from "./domain/combat";
 import {
   distanceSquared,
@@ -59,9 +61,8 @@ import {
   CRYSTAL_INVULNERABILITY_BLINK_START_MS,
   CRYSTAL_INVULNERABILITY_DURATION_MS,
   DEFAULT_BULLET_SPEC,
-  ENERGY_DASH_DAMAGE,
-  ENERGY_DASH_RANGE,
   ENERGY_DASH_SPEED,
+  ENERGY_DASH_TURN_RATE,
   HEAP_TITAN_WAVE,
   LOOT_DEFINITIONS,
   monsterVisualCenterOffsetY,
@@ -223,6 +224,7 @@ let energyDash: {
   dirY: number;
   traveled: number;
   maxDistance: number;
+  damage: number;
   hitTargets: Set<string>;
   playerInvulnerableBefore: boolean;
 } | null = null;
@@ -717,6 +719,9 @@ function updateEnergyUi(): void {
   const fill = Math.min(PLAYER_ENERGY_MAX, lootInventory.energy);
   hudEnergyFillEl.style.width = `${fill / PLAYER_ENERGY_MAX * 100}%`;
   hudEnergyFillMiniEl.style.width = `${fill / PLAYER_ENERGY_MAX * 100}%`;
+  const full = lootInventory.energy >= PLAYER_ENERGY_MAX;
+  hudEnergyFillEl.parentElement?.classList.toggle("is-full", full);
+  hudEnergyFillMiniEl.parentElement?.classList.toggle("is-full", full);
 }
 
 function isPlayerInvulnerable(now = performance.now()): boolean {
@@ -2059,9 +2064,9 @@ function gameTick(timestamp: number): void {
   lastGameTick = timestamp;
 
   updatePlayerProtectionVisual(timestamp);
-  updateEnergyDash(dt, timestamp);
   if (touchAimActive) updateTouchAim(dt);
-  else if (playerAimNeedsUpdate()) updatePlayerAimFromPointer();
+  updateEnergyDash(dt, timestamp);
+  if (!touchAimActive && playerAimNeedsUpdate()) updatePlayerAimFromPointer();
   if (!touchAimActive && (!pointerInViewport || !pointerClientPosition)) updateIdleFlashlight();
   if ((primaryPointerDown && pointerInViewport) || touchAimActive) shootBullet();
   updateBullets(dt);
@@ -2710,20 +2715,24 @@ function startEnergyDash(clientX: number, clientY: number): void {
 }
 
 function startEnergyDashTowards(target: Point): void {
-  if (!playerAlive || !currentLayout || energyDash || lootInventory.energy < PLAYER_ENERGY_MAX) return;
+  if (!playerAlive || !currentLayout || energyDash || lootInventory.energy <= 0) return;
   const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
   const dx = target.x - center.x;
   const dy = target.y - center.y;
   const magnitude = Math.hypot(dx, dy);
   if (magnitude < 1) return;
+  const power = energyDashPower(lootInventory.energy);
   energyDash = {
     dirX: dx / magnitude,
     dirY: dy / magnitude,
     traveled: 0,
-    maxDistance: ENERGY_DASH_RANGE,
+    maxDistance: power.maxDistance,
+    damage: power.damage,
     hitTargets: new Set(),
     playerInvulnerableBefore: playerInvulnerable,
   };
+  lootInventory.energy = 0;
+  updateLootUi();
   playerInvulnerable = true;
   renderer.setPlayerDashTint(true);
   renderer.playEnergyDashSound();
@@ -2737,8 +2746,6 @@ function endEnergyDash(): void {
   playerInvulnerable = dash.playerInvulnerableBefore;
   energyDash = null;
   renderer.setPlayerDashTint(false);
-  lootInventory.energy = 0;
-  updateLootUi();
   updatePlayerProtectionVisual();
 }
 
@@ -2755,14 +2762,14 @@ function applyEnergyDashDamage(): void {
       PLAYER_SPEC.radius,
     )) {
       dash.hitTargets.add(monster.id);
-      damageMonster(monster, ENERGY_DASH_DAMAGE);
+      damageMonster(monster, dash.damage);
     }
   }
   for (const item of damageableCells.get(spatialCellKey(player.x, player.y)) ?? []) {
     if (!item.destructible || item.destroyed || dash.hitTargets.has(item.id)) continue;
     if (projectileHitsDecoration(item, center, PLAYER_SPEC.radius)) {
       dash.hitTargets.add(item.id);
-      damageObstacle(item, ENERGY_DASH_DAMAGE);
+      damageObstacle(item, dash.damage);
     }
   }
 }
@@ -2774,18 +2781,39 @@ function updateEnergyDash(dt: number, timestamp: number): void {
     return;
   }
 
+  const target = touchAimActive ? touchAimCursor
+    : pointerInViewport && pointerClientPosition
+      ? renderer.worldPointAt(pointerClientPosition.x, pointerClientPosition.y)
+      : null;
+  if (target) {
+    const direction = steerDashDirection(
+      { x: dash.dirX, y: dash.dirY },
+      playerCollisionCenter(),
+      target,
+      ENERGY_DASH_TURN_RATE * dt,
+    );
+    dash.dirX = direction.x;
+    dash.dirY = direction.y;
+  }
+
   const remaining = dash.maxDistance - dash.traveled;
   const distance = Math.min(ENERGY_DASH_SPEED * dt, remaining);
   if (distance > 0) {
-    const next = {
-      x: player.x + dash.dirX * distance,
-      y: player.y + dash.dirY * distance,
-    };
-    if (isWalkable(next.x, next.y)) {
+    // Sweep short steps so a fast dash cannot pass through walls or damageable targets.
+    const steps = Math.ceil(distance / (PLAYER_SPEC.radius / 2));
+    const step = distance / steps;
+    for (let index = 0; index < steps; index += 1) {
+      const next = {
+        x: player.x + dash.dirX * step,
+        y: player.y + dash.dirY * step,
+      };
+      if (!isWalkable(next.x, next.y)) {
+        dash.traveled = dash.maxDistance;
+        break;
+      }
       player = next;
-      dash.traveled += distance;
-    } else {
-      dash.traveled = dash.maxDistance;
+      dash.traveled += step;
+      applyEnergyDashDamage();
     }
   } else {
     dash.traveled = dash.maxDistance;

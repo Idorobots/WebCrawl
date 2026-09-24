@@ -486,6 +486,28 @@ test("charges energy and launches an invulnerable energy dash with right click",
   await expect(game).toHaveAttribute("data-energy", "0");
 });
 
+test("a full energy meter shines and a single charge can launch a dash", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  await grantEnergy(page, 15);
+  await expect(game).toHaveAttribute("data-energy", "10");
+  await expect(page.locator("#energyLootCount")).toHaveText("10");
+  await expect(page.locator(".energy-track.is-full")).toHaveCount(2);
+  expect(await page.locator("#hudEnergyFill").evaluate(element =>
+    getComputedStyle(element, "::after").animationName
+  )).toBe("energyShine");
+
+  await grantEnergy(page, -9);
+  await expect(page.locator(".energy-track.is-full")).toHaveCount(0);
+  await expect(page.locator("#hudEnergyFill")).toHaveAttribute("style", /width: 10%/);
+  const before = await playerPosition(page);
+  const aim = await screenPositionFor(page, { x: before.x + world(120), y: before.y });
+  await page.mouse.move(aim.x, aim.y);
+  await page.mouse.click(aim.x, aim.y, { button: "right" });
+  await expect(game).toHaveAttribute("data-energy", "0");
+  await expect.poll(async () => (await playerPosition(page)).x, { timeout: 5_000 }).not.toBe(before.x);
+});
+
 test("restores the previous floor from its snapshot without re-fetching it", async ({ page }) => {
   await startGame(page);
   const game = page.locator("#gameCanvas");

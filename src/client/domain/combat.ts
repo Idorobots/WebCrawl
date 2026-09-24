@@ -1,5 +1,11 @@
 import type { Decoration, Monster, MonsterAttackPattern, Point } from "../types";
-import { BARREL_EXPLOSION_RADIUS, monsterVisualCenterOffsetY, PLAYER_SPEC } from "./specs";
+import {
+  BARREL_EXPLOSION_RADIUS,
+  ENERGY_DASH_DAMAGE_PER_ENERGY,
+  ENERGY_DASH_DISTANCE_PER_ENERGY,
+  monsterVisualCenterOffsetY,
+  PLAYER_SPEC,
+} from "./specs";
 
 export interface EnemyVolleyProjectile {
   direction: Point;
@@ -45,6 +51,24 @@ export function applyObstacleDamage(item: Decoration, damage: number): boolean {
   item.hp = Math.max(0, item.hp - damage);
   item.destroyed = item.hp === 0;
   return true;
+}
+
+export function energyDashPower(energy: number): { maxDistance: number; damage: number } {
+  return {
+    maxDistance: energy * ENERGY_DASH_DISTANCE_PER_ENERGY,
+    damage: energy * ENERGY_DASH_DAMAGE_PER_ENERGY,
+  };
+}
+
+export function steerDashDirection(direction: Point, from: Point, target: Point, maxTurn: number): Point {
+  const dx = target.x - from.x;
+  const dy = target.y - from.y;
+  if (Math.hypot(dx, dy) < 1) return direction;
+  const currentAngle = Math.atan2(direction.y, direction.x);
+  const targetAngle = Math.atan2(dy, dx);
+  const delta = Math.atan2(Math.sin(targetAngle - currentAngle), Math.cos(targetAngle - currentAngle));
+  const angle = currentAngle + Math.max(-maxTurn, Math.min(maxTurn, delta));
+  return { x: Math.cos(angle), y: Math.sin(angle) };
 }
 
 export function projectileHitsDecoration(
