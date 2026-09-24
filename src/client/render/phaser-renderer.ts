@@ -379,6 +379,7 @@ export class PhaserRenderer {
   private player: Phaser.GameObjects.Container | null = null;
   private cameraTarget: Phaser.GameObjects.Container | null = null;
   private playerSprite: Phaser.GameObjects.Image | null = null;
+  private playerShadow: Phaser.GameObjects.Image | null = null;
   private currentPlayer: Point = { x: 0, y: 0 };
   private currentCameraTarget: Point = { x: 0, y: 0 };
   private currentPlayerHp = 10;
@@ -625,6 +626,7 @@ export class PhaserRenderer {
     this.cameraTarget?.destroy(true);
     this.cameraTarget = null;
     this.playerSprite = null;
+    this.playerShadow = null;
     this.currentDecorations = [];
     this.currentStairs = [];
     this.currentLoot = [];
@@ -2305,15 +2307,18 @@ export class PhaserRenderer {
     if (!scene) return;
     const clip = this.playerClipForAsset(asset);
     if (!this.player) {
+      this.playerShadow = this.createShadow(asset);
       this.playerSprite = this.illuminate(scene.add.image(0, 0, textureKey(asset))
         .setOrigin(clip.origin.x, clip.origin.y));
-      this.applyClip(this.playerSprite, clip, PLAYER_SPEC.spriteSize, 0, asset);
-      this.player = scene.add.container(position.x, position.y, [this.playerSprite]).setDepth(yDepth(position.y));
+      this.player = scene.add.container(position.x, position.y, [this.playerShadow, this.playerSprite])
+        .setDepth(yDepth(position.y));
     }
     this.player.setPosition(position.x, position.y).setDepth(yDepth(position.y));
     this.syncPlayerFollowingEffects();
     if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
     this.applyClip(this.playerSprite!, clip, PLAYER_SPEC.spriteSize, 0, asset);
+    this.applyClip(this.playerShadow!, clip, PLAYER_SPEC.spriteSize, 0, asset);
+    this.applyShadowOffset(this.playerShadow!, position.x, position.y, PLAYER_SPEC.spriteSize);
     this.applyPlayerProtectionTint();
     this.syncPlayerStateLight();
     this.refreshLocalLightVisibility();
@@ -2483,8 +2488,10 @@ export class PhaserRenderer {
     this.currentPlayerAsset = asset;
     this.setHostData("playerAsset", asset);
     if (this.playerSprite && this.scene?.textures.exists(textureKey(asset))) {
+      const clip = this.playerClipForAsset(asset);
       this.playerSprite.setTexture(textureKey(asset));
-      this.applyClip(this.playerSprite, this.playerClipForAsset(asset), PLAYER_SPEC.spriteSize, 0, asset);
+      this.applyClip(this.playerSprite, clip, PLAYER_SPEC.spriteSize, 0, asset);
+      if (this.playerShadow) this.applyClip(this.playerShadow, clip, PLAYER_SPEC.spriteSize, 0, asset);
       this.applyPlayerProtectionTint();
     }
   }

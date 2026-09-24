@@ -820,6 +820,34 @@ test("displays every player walk frame", async ({ page }) => {
   expect(seen).toEqual(new Set(["01", "02", "03", "04"]));
 });
 
+test("updates the player shadow when aiming after walking", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  const shadowTexture = () => page.evaluate(() => {
+    const asset = document.querySelector<HTMLElement>("#gameCanvas")?.dataset.playerAsset;
+    const scene = (window as Window & {
+      __webcrawlScene?: {
+        children: { list: Array<{ list?: Array<{ name: string; texture?: { key: string } }> }> };
+      };
+    }).__webcrawlScene;
+    const player = scene?.children.list.find(container =>
+      container.list?.some(child => child.name !== "shadow" && child.texture?.key === `asset:${asset}`)
+    );
+    return player?.list?.find(child => child.name === "shadow")?.texture?.key ?? null;
+  });
+
+  await page.keyboard.down("ArrowRight");
+  await expect(game).toHaveAttribute("data-player-asset", /player\/walk\/[A-Z]+\/walk_/);
+  await page.keyboard.up("ArrowRight");
+
+  const position = await playerPosition(page);
+  const leftAim = await screenPositionFor(page, { x: position.x - world(160), y: position.y });
+  await page.mouse.move(leftAim.x, leftAim.y);
+  await expect(game).toHaveAttribute("data-player-asset", /player_left\.png$/);
+  const asset = await game.getAttribute("data-player-asset");
+  await expect.poll(shadowTexture).toBe(`asset:${asset}`);
+});
+
 test("aims with the cursor and repeatedly fires while moving backward", async ({ page }) => {
   await startGame(page);
 

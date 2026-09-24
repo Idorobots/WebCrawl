@@ -1120,11 +1120,13 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
 - Regulatory Capture should be triggerable whenever the energy bar is non-empty. The distance travelled and damage dealt should be proportional to the amount of energy spent at once (more energy used, the longer the player travels and deals more damage). The max energy should be increased to 10. When the bar is fully charged, make it annimate a "shine" animation (like in Street Fighter).
+- Portals should enable when all monsters on a floor are killed.
 
 * Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
-- Portals should enable when all monsters on a floor are killed.
+- Each floor should have at least one boss monster - if none are generated initially, the most distant room should be promoted to a boss arena. Portals should activate after all bosses on the level are defeated (not all enemies at all, just all bosses).
+- "Dedicated" crates should have a higher likelyhood of dropping a specific loot
 
 * Minimap overhaul
 - Minimap should be circular
@@ -1184,11 +1186,15 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Scenery and monsters are never placed near the top wall edge.
 
 * Bugs
+- Player has no shadow. The players shadow should behave the same as all other shadows.
+
+* Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+
 - Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
 - Monsters get stuck on doors again during pathfinding.
-- Spawners seem to always leave ammo crates as loot
-- Player has no shadow
+
+- Spawners seem to always leave ammo crates as loot, it should be randomized like the other scenery objects.
 
 * UI improvements
 - Annimate the health/energy/ammo bars.
