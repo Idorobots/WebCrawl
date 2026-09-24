@@ -572,8 +572,9 @@ export function buildCorridorRenderPlan(
 /**
  * Wall modules for a room perimeter. Door sprites replace wall modules on
  * their reserved cells: horizontal doors span the two cells flanking the
- * boundary line, vertical doors span their own cell plus the two cells above
- * (the sprite's frame content covers them).
+ * boundary line. Vertical door sprites are three cells tall, but their top
+ * cell is transparent and needs an overlapping wall module; reserve only
+ * the door cell and the one immediately above it.
  */
 export function buildRoomWalls(
   room: GraphNode,
@@ -593,10 +594,9 @@ export function buildRoomWalls(
     const axisStart = horizontal ? left : top;
     const axisPosition = horizontal ? door.position.x : door.position.y;
     const boundaryIndex = Math.round((axisPosition - axisStart) / s);
-    const span = horizontal ? 2 : 3;
-    const first = horizontal ? boundaryIndex - 1 : boundaryIndex - 2;
     const cells = occupied.get(door.side) ?? new Set<number>();
-    for (let index = 0; index < span; index += 1) cells.add(first + index);
+    cells.add(boundaryIndex - 1);
+    cells.add(boundaryIndex);
     occupied.set(door.side, cells);
   }
   const isDoorCell = (side: string, index: number): boolean => occupied.get(side)?.has(index) ?? false;

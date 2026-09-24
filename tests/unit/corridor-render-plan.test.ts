@@ -412,7 +412,7 @@ describe("wall module styles", () => {
 describe("room wall layout", () => {
   const door = (side: DoorModulePlan["side"], boundary: Point): DoorModulePlan => ({ position: boundary, side });
 
-  it("reserves two cells for horizontal doors and three for vertical doors", () => {
+  it("reserves two cells for horizontal doors and the opening of vertical doors", () => {
     // 4x4-segment room centered on the origin; boundaries at +-2 segments.
     const baseRoom = { ...room(0), x: 0, y: 0 };
     const modules = buildRoomWalls(baseRoom, [
@@ -433,7 +433,7 @@ describe("room wall layout", () => {
     expect(edgeWall("S", -SEGMENT_SIZE / 2, SEGMENT_SIZE * 1.5)).toBe(true);
     expect(edgeWall("S", SEGMENT_SIZE / 2, SEGMENT_SIZE * 1.5)).toBe(true);
 
-    // East column: the door cell plus the two above (rows 1..2) are reserved;
+    // East column: the door cell and the one above (rows 1..2) are reserved;
     // the top-right corner's extra vertical segment stays at the corner row.
     expect(edgeWall("E", SEGMENT_SIZE * 1.5, -SEGMENT_SIZE * 1.5)).toBe(true);
     expect(edgeWall("E", SEGMENT_SIZE * 1.5, -SEGMENT_SIZE / 2)).toBe(false);
@@ -442,6 +442,26 @@ describe("room wall layout", () => {
 
     // Corners are always placed regardless of reservations.
     expect(modules.filter(module => module.kind !== "wall")).toHaveLength(4);
+  });
+
+  it.each(["E", "W"] as const)("keeps the overlapping wall above centered and offset %s doors", side => {
+    const baseRoom = { ...room(0), height: SEGMENT_SIZE * 8 };
+    const x = side === "E" ? baseRoom.width / 2 : -baseRoom.width / 2;
+    const wallX = side === "E" ? x - SEGMENT_SIZE / 2 : x + SEGMENT_SIZE / 2;
+    const top = -baseRoom.height / 2;
+
+    for (const doorY of [-2, 0, 2].map(offset => offset * SEGMENT_SIZE)) {
+      const modules = buildRoomWalls(baseRoom, [door(side, { x, y: doorY })], SEGMENT_SIZE);
+      const boundaryIndex = Math.round((doorY - top) / SEGMENT_SIZE);
+      const hasWallAtRow = (row: number): boolean => modules.some(module =>
+        module.side === side && module.kind === "wall" &&
+        module.x === wallX && module.y === top + (row + 0.5) * SEGMENT_SIZE,
+      );
+
+      expect(hasWallAtRow(boundaryIndex - 2)).toBe(true);
+      expect(hasWallAtRow(boundaryIndex - 1)).toBe(false);
+      expect(hasWallAtRow(boundaryIndex)).toBe(false);
+    }
   });
 
   it("places plain wall modules on every unreserved perimeter cell", () => {
