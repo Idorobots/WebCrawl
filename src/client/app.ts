@@ -22,6 +22,7 @@ import {
   actorCollisionCenter,
   actorProjectileOrigin,
   applyObstacleDamage,
+  barrelExplosionTargets,
   enemyVolleyProjectiles,
   monsterAttackIsReady,
   MONSTER_ATTACK_WARMUP_MS,
@@ -54,6 +55,7 @@ import { aStarPath, monsterEscapeStep } from "./domain/pathfinding";
 import { entryPortalFor, initialPlayerPosition, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
 import {
+  BARREL_EXPLOSION_DAMAGE,
   CRYSTAL_INVULNERABILITY_BLINK_START_MS,
   CRYSTAL_INVULNERABILITY_DURATION_MS,
   DEFAULT_BULLET_SPEC,
@@ -1155,6 +1157,12 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
       if (drops.length) renderInteractiveObjects();
     }
     renderContentBrowser();
+    if (item.kind === "barrel") {
+      const targets = barrelExplosionTargets(item, currentDecorations, currentMonsters, player);
+      for (const decoration of targets.decorations) damageObstacle(decoration, BARREL_EXPLOSION_DAMAGE);
+      for (const monster of targets.monsters) damageMonster(monster, BARREL_EXPLOSION_DAMAGE);
+      if (targets.hitsPlayer) applyPlayerDamage(BARREL_EXPLOSION_DAMAGE);
+    }
   } else {
     renderer.spawnEffect(
       item.visual.animations?.damage,

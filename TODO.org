@@ -1118,8 +1118,9 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 
 * Gameplay mechanics
 - Exploding barrels should damage objects around them.
-- Regulatory Capture should be triggerable whenever the energy bar is non-empty. The distance travelled and damage dealt should be proportional to the amount of energy spent at once (more energy used, the longer the player travels and deals more damage). The max energy should be increased to 5.
-- Dash should stunn enemies that are hit but survive
+* Gameplay mechanics
+- Regulatory Capture should be triggerable whenever the energy bar is non-empty. The distance travelled and damage dealt should be proportional to the amount of energy spent at once (more energy used, the longer the player travels and deals more damage). The max energy should be increased to 10.
+- Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 
 * Minimap overhaul
 - Minimap should be circular
@@ -1148,10 +1149,10 @@ Whenever AI is mentioned in the content, render a special Samario content browse
 - Map update - shows the whole level layout on the minimap
 - Minimap radar - show a rotating bar that marks monsters on the minimap for a brief moment
 - Better minimap radar - shows monsters on the minimap all the time
+- Minimap locator - shows the player's location & portals on the minimap
 - Temporary Invisibility triggered with a button
 - Slowing bullets
 - Stun chance or regular shots
-
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:
@@ -1189,6 +1190,7 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Camera should zoom out to show the entire boss arena at once when the fight begins.
 - Should play one of the alert sounds while the boss fight is starting and then transition to the boss music.
 - Play boss music until the boss is killed (or player is killed).
+- Bosses should have multiple stages with different attack patterns depending on their HP.
 
 * Room layout
 We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.

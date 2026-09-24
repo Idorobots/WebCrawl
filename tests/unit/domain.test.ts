@@ -18,6 +18,7 @@ import {
   actorAimDirection,
   actorCollisionCenter,
   actorProjectileOrigin,
+  barrelExplosionTargets,
   enemyVolleyProjectiles,
   monsterAttackIsReady,
   monsterEngagementRange,
@@ -61,6 +62,7 @@ import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthog
 import { aStarPath, monsterEscapeStep, revealedRoomPath } from "../../src/client/domain/pathfinding";
 import { entryPortalFor, initialPlayerPosition, updatePortalContacts } from "../../src/client/domain/portals";
 import {
+  BARREL_EXPLOSION_RADIUS,
   DECORATION_DEFINITIONS,
   HEAP_TITAN_WAVE,
   MAX_REGULAR_MONSTER_RADIUS,
@@ -1181,6 +1183,77 @@ describe("deterministic room contents", () => {
     expect(obstacle).toMatchObject({ hp: 7, destroyed: false });
     expect(applyObstacleDamage(obstacle, 8)).toBe(true);
     expect(obstacle).toMatchObject({ hp: 0, destroyed: true });
+  });
+
+  it("includes nearby destructible scenery, other barrels, and active monsters in a barrel blast", () => {
+    const barrel: Decoration = {
+      ...DECORATION_DEFINITIONS.barrelRed,
+      id: "blast-barrel", roomId: room.id, x: 1000, y: 1000,
+      maxHp: 6, hp: 0, destroyed: true, dropKind: null,
+    };
+    const neighbor = { ...barrel, id: "neighbor", x: barrel.x + world(40), hp: 6, destroyed: false };
+    const crate: Decoration = {
+      ...DECORATION_DEFINITIONS.crateCargo,
+      id: "near-crate", roomId: room.id, x: barrel.x - world(50), y: barrel.y,
+      maxHp: 4, hp: 4, destroyed: false, dropKind: null,
+    };
+    const destroyed = { ...crate, id: "destroyed-crate", destroyed: true };
+    const indestructible = { ...crate, id: "pedestal", destructible: false };
+    const distant = { ...crate, id: "distant-crate", x: barrel.x + BARREL_EXPLOSION_RADIUS + crate.radius + 1 };
+    const monsterSpec = monsterSpecForSpawner(barrel, 1, 0);
+    const monster = {
+      ...monsterSpec,
+      active: true,
+      hp: 10,
+      y: barrel.y + barrel.hitOffsetY - monsterVisualCenterOffsetY(monsterSpec.size, monsterSpec.visualKind),
+    };
+    const dead = { ...monster, id: "dead-monster", dead: true };
+    const inactive = { ...monster, id: "inactive-monster", active: false };
+    const farMonster = { ...monster, id: "far-monster", x: barrel.x + BARREL_EXPLOSION_RADIUS + monster.radius + 1 };
+    const player = { x: barrel.x, y: barrel.y + barrel.hitOffsetY - PLAYER_SPEC.visualCenterOffsetY };
+
+    expect(barrelExplosionTargets(
+      barrel,
+      [barrel, neighbor, crate, destroyed, indestructible, distant],
+      [monster, dead, inactive, farMonster],
+      player,
+    )).toEqual({ decorations: [neighbor, crate], monsters: [monster], hitsPlayer: true });
+  });
+
+  it("uses collider edges and visible centers for barrel explosion range", () => {
+    const barrel: Decoration = {
+      ...DECORATION_DEFINITIONS.barrelHazard,
+      id: "blast-barrel", roomId: room.id, x: 1000, y: 1000,
+      maxHp: 6, hp: 0, destroyed: true, dropKind: null,
+    };
+    const crate: Decoration = {
+      ...DECORATION_DEFINITIONS.crateCargo,
+      id: "edge-crate", roomId: room.id,
+      x: barrel.x + BARREL_EXPLOSION_RADIUS + DECORATION_DEFINITIONS.crateCargo.radius,
+      y: barrel.y + barrel.hitOffsetY - DECORATION_DEFINITIONS.crateCargo.hitOffsetY,
+      maxHp: 4, hp: 4, destroyed: false, dropKind: null,
+    };
+    const player = {
+      x: barrel.x + BARREL_EXPLOSION_RADIUS + PLAYER_SPEC.radius,
+      y: barrel.y + barrel.hitOffsetY - PLAYER_SPEC.visualCenterOffsetY,
+    };
+    const monsterSpec = monsterSpecForSpawner(barrel, 1, 1);
+    const monster = {
+      ...monsterSpec,
+      active: true,
+      x: barrel.x + BARREL_EXPLOSION_RADIUS + monsterSpec.radius,
+      y: barrel.y + barrel.hitOffsetY - monsterVisualCenterOffsetY(monsterSpec.size, monsterSpec.visualKind),
+    };
+
+    expect(barrelExplosionTargets(barrel, [crate], [monster], player)).toMatchObject({
+      decorations: [crate], monsters: [monster], hitsPlayer: true,
+    });
+    expect(barrelExplosionTargets(
+      barrel,
+      [{ ...crate, x: crate.x + 1 }],
+      [{ ...monster, x: monster.x + 1 }],
+      { ...player, x: player.x + 1 },
+    )).toMatchObject({ decorations: [], monsters: [], hitsPlayer: false });
   });
 
   it("centers scenery projectile hitboxes on the visible object", () => {

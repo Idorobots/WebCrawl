@@ -1,4 +1,5 @@
 import type { Decoration, Monster, MonsterAttackPattern, Point } from "../types";
+import { BARREL_EXPLOSION_RADIUS, monsterVisualCenterOffsetY, PLAYER_SPEC } from "./specs";
 
 export interface EnemyVolleyProjectile {
   direction: Point;
@@ -64,6 +65,35 @@ export function projectileHitsCircle(
   projectileRadius: number,
 ): boolean {
   return Math.hypot(projectile.x - target.x, projectile.y - target.y) <= targetRadius + projectileRadius;
+}
+
+export function barrelExplosionTargets(
+  barrel: Decoration,
+  decorations: readonly Decoration[],
+  monsters: readonly Monster[],
+  player: Point,
+): { decorations: Decoration[]; monsters: Monster[]; hitsPlayer: boolean } {
+  const center = { x: barrel.x, y: barrel.y + barrel.hitOffsetY };
+  return {
+    decorations: decorations.filter(item =>
+      item !== barrel && item.destructible && !item.destroyed &&
+      projectileHitsDecoration(item, center, BARREL_EXPLOSION_RADIUS)
+    ),
+    monsters: monsters.filter(monster =>
+      monster.active && !monster.dead && projectileHitsCircle(
+        { x: monster.x, y: monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind) },
+        monster.radius,
+        center,
+        BARREL_EXPLOSION_RADIUS,
+      )
+    ),
+    hitsPlayer: projectileHitsCircle(
+      actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY),
+      PLAYER_SPEC.radius,
+      center,
+      BARREL_EXPLOSION_RADIUS,
+    ),
+  };
 }
 
 /** Grace period after a monster appears before it may start attacking. */
