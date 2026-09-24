@@ -62,7 +62,7 @@ import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, monsterEscapeStep, revealedRoomPath } from "../../src/client/domain/pathfinding";
-import { entryPortalFor, initialPlayerPosition, updatePortalContacts } from "../../src/client/domain/portals";
+import { entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "../../src/client/domain/portals";
 import {
   BARREL_EXPLOSION_RADIUS,
   DECORATION_DEFINITIONS,
@@ -513,12 +513,47 @@ describe("portal entry", () => {
     y: 100,
   };
 
+  it("locks both directions until every monster on the floor dies, then relocks for a new spawn", () => {
+    const down = { ...portal };
+    const up = { ...portal, id: "room-1::portal-up", type: "up" as const, url: "https://example.com/previous" };
+    const firstFloorUp = { ...up, id: "room-0::portal-up", url: null };
+    const stairs = [down, up, firstFloorUp];
+    const monsters = [{ dead: true }, { dead: false }];
+
+    expect(updatePortalAvailability(stairs, monsters)).toBe(true);
+    expect(stairs.map(stair => stair.enabled)).toEqual([false, false, false]);
+    expect(updatePortalAvailability(stairs, monsters)).toBe(false);
+
+    monsters[1]!.dead = true;
+    expect(updatePortalAvailability(stairs, monsters)).toBe(true);
+    expect(stairs.map(stair => stair.enabled)).toEqual([true, true, false]);
+
+    monsters.push({ dead: false });
+    expect(updatePortalAvailability(stairs, monsters)).toBe(true);
+    expect(stairs.map(stair => stair.enabled)).toEqual([false, false, false]);
+    monsters[2]!.dead = true;
+    expect(updatePortalAvailability(stairs, monsters)).toBe(true);
+    expect(stairs.map(stair => stair.enabled)).toEqual([true, true, false]);
+  });
+
+  it("opens destination portals immediately on floors without monsters", () => {
+    const stairs = [{ ...portal, enabled: false }, { ...portal, type: "up" as const, url: null }];
+    expect(updatePortalAvailability(stairs, [])).toBe(true);
+    expect(stairs.map(stair => stair.enabled)).toEqual([true, false]);
+  });
+
   it("requires leaving a portal occupied at spawn before it can activate", () => {
     const contacts = new Set<string>();
     updatePortalContacts([portal], portal, 56, contacts);
     expect(updatePortalContacts([portal], portal, 56, contacts)).toBeNull();
     expect(updatePortalContacts([portal], { x: 200, y: 100 }, 56, contacts)).toBeNull();
     expect(updatePortalContacts([portal], portal, 56, contacts)).toEqual(portal);
+  });
+
+  it("does not activate when walking through a disabled portal", () => {
+    const contacts = new Set<string>();
+    expect(updatePortalContacts([{ ...portal, enabled: false }], portal, 56, contacts)).toBeNull();
+    expect(contacts.size).toBe(0);
   });
 
   it("uses the portal energy ring rather than the low sprite anchor", () => {

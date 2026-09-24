@@ -1,4 +1,4 @@
-import type { Point, Stair } from "../types";
+import type { Monster, Point, Stair } from "../types";
 import { PORTAL_DEFINITION } from "./specs";
 
 export function entryPortalFor(
@@ -19,6 +19,21 @@ export function initialPlayerPosition(portal: Stair | null, fallback: Point): Po
   if (!portal) return { x: fallback.x, y: fallback.y };
   const offset = PORTAL_DEFINITION.spawnOffset;
   return { x: portal.x + offset.x, y: portal.y + offset.y };
+}
+
+export function updatePortalAvailability(
+  portals: Stair[],
+  monsters: readonly Pick<Monster, "dead">[],
+): boolean {
+  const floorCleared = monsters.every(monster => monster.dead);
+  let changed = false;
+  for (const portal of portals) {
+    const enabled = floorCleared && portal.url !== null;
+    if (portal.enabled === enabled) continue;
+    portal.enabled = enabled;
+    changed = true;
+  }
+  return changed;
 }
 
 export function updatePortalContacts(

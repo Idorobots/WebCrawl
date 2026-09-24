@@ -1211,3 +1211,5 @@ There should be no doors generated leading to these hidden rooms, only walls wit
 
 * Ambush rooms
 Look empty, but monsters lurk in large scenery crates and burst out of it a few seconds after the player enters the room.
+* Vending machines
+- Use RAM sticks to purchase medkits, ammo and energy.

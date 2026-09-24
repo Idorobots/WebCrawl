@@ -75,8 +75,8 @@ async function alignPlayerToDoor(
   door: { x: number; y: number },
   direction: string | null,
 ): Promise<void> {
-  // Start inside the doorway, beyond any obstacle in the middle of the room
-  // (including the disabled up portal), then walk through the opening.
+  // Start inside the doorway, beyond obstacles in the middle of the room,
+  // then walk through the opening.
   const inset = PLAYER_SPEC.radius + WORLD_GEOMETRY.wallThickness + world(20);
   const target = direction === "N" ? { x: door.x, y: door.y + inset }
     : direction === "S" ? { x: door.x, y: door.y - inset }
@@ -544,7 +544,7 @@ test("restores the previous floor from its snapshot without re-fetching it", asy
   await expect(game).toHaveAttribute("data-floor", "2", { timeout: 10_000 });
 });
 
-test("spawns on an enabled entry portal without immediately retriggering it", async ({ page }) => {
+test("spawns beside the up portal and enables it after clearing the floor", async ({ page }) => {
   await startGame(page);
   const game = page.locator("#gameCanvas");
   const position = await playerPosition(page);
@@ -562,7 +562,7 @@ test("spawns on an enabled entry portal without immediately retriggering it", as
   const state = await page.evaluate(() => {
     const testApi = (window as Window & {
       __webcrawlTest?: {
-        stairs: () => Array<{ id: string; type: "up" | "down"; x: number; y: number }>;
+        stairs: () => Array<{ id: string; type: "up" | "down"; x: number; y: number; enabled: boolean }>;
         portalContacts: () => string[];
       };
     }).__webcrawlTest;
@@ -579,6 +579,18 @@ test("spawns on an enabled entry portal without immediately retriggering it", as
     y: Math.round(entryPortal.y + PORTAL_DEFINITION.spawnOffset.y),
   });
   expect(state.contacts).not.toContain(entryPortal.id);
+  expect(entryPortal.enabled).toBe(false);
+  const clearedUpPortal = await page.evaluate(() => {
+    const api = (window as Window & {
+      __webcrawlTest?: {
+        defeatAllMonsters: () => void;
+        stairs: () => Array<{ type: string; enabled: boolean }>;
+      };
+    }).__webcrawlTest;
+    api?.defeatAllMonsters();
+    return api?.stairs().find(stair => stair.type === "up")?.enabled;
+  });
+  expect(clearedUpPortal).toBe(true);
   await page.waitForTimeout(500);
   await expect(game).toHaveAttribute("data-floor", "2");
 });
@@ -1108,22 +1120,53 @@ test("pauses the game while teleporting through a portal", async ({ page }) => {
   const game = page.locator("#gameCanvas");
   await setPlayerInvulnerable(page, true);
 
-  const portal = await page.evaluate(() => {
+  const stairs = await page.evaluate(() => {
     const api = (window as Window & {
       __webcrawlTest?: {
-        stairs: () => Array<{ id: string; type: string; x: number; y: number }>;
+        stairs: () => Array<{ id: string; type: string; x: number; y: number; enabled: boolean }>;
       };
     }).__webcrawlTest;
-    return (api?.stairs() ?? []).find(stair => stair.type === "down") ?? null;
+    return api?.stairs() ?? [];
   });
-  if (!portal) throw new Error("Expected an enabled down portal on floor one");
+  expect(stairs.find(stair => stair.type === "up")?.enabled).toBe(false);
+  const portal = stairs.find(stair => stair.type === "down") ?? null;
+  if (!portal) throw new Error("Expected a down portal on floor one");
+  expect(portal.enabled).toBe(false);
 
   const contactX = portal.x + PORTAL_DEFINITION.contactOffset.x;
   const contactY = portal.y + PORTAL_DEFINITION.contactOffset.y;
+  await teleportPlayer(page, { x: contactX, y: contactY });
+  await expect.poll(async () => {
+    const position = await playerPosition(page);
+    return Math.hypot(position.x - contactX, position.y - contactY);
+  }).toBeLessThan(2);
+  await expect(game).toHaveAttribute("data-floor", "1");
+
+  await page.evaluate(() => {
+    (window as Window & { __webcrawlTest?: { defeatAllMonsters: () => void } }).__webcrawlTest?.defeatAllMonsters();
+  });
+  const unlocked = await page.evaluate(() => {
+    const api = (window as Window & {
+      __webcrawlTest?: { stairs: () => Array<{ type: string; enabled: boolean }> };
+    }).__webcrawlTest;
+    return api?.stairs() ?? [];
+  });
+  expect(unlocked.find(stair => stair.type === "up")?.enabled).toBe(false);
+  expect(unlocked.find(stair => stair.type === "down")?.enabled).toBe(true);
+
   await teleportPlayer(page, {
     x: contactX,
     y: contactY + PORTAL_DEFINITION.contactRadius.y + 12,
   });
+  expect(await playerPosition(page)).toEqual({
+    x: Math.round(contactX),
+    y: Math.round(contactY + PORTAL_DEFINITION.contactRadius.y + 12),
+  });
+  await page.keyboard.down("ArrowDown");
+  await expect.poll(async () => page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: { portalContacts: () => string[] } }).__webcrawlTest?.portalContacts() ?? []
+  )).not.toContain(portal.id);
+  await page.keyboard.up("ArrowDown");
   await page.keyboard.down("ArrowUp");
 
   await expect.poll(

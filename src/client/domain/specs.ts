@@ -964,12 +964,9 @@ export const PORTAL_DEFINITION = {
   // near the pedestal base render in front of the portal.
   orderingOffsetY: -world(30),
   // The player materializes this far in front of (below) the portal sprite;
-  // the contact area and footprint shift down by the same amount.
+  // the contact area shifts down by the same amount.
   spawnOffset: { x: 0, y: world(40) },
   contactOffset: { x: 0, y: -world(56) + world(40) },
-  // Deactivated portals keep this much space blocked around the energy ring;
-  // sized so the player still spawns in front of a deactivated entry portal.
-  blockingFootprint: world(0.1),
 } as const;
 
 export function weaponAsset(kind: WeaponKind): string {

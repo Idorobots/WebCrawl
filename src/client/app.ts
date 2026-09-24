@@ -54,7 +54,7 @@ import {
 import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { aStarPath, monsterEscapeStep } from "./domain/pathfinding";
-import { entryPortalFor, initialPlayerPosition, updatePortalContacts } from "./domain/portals";
+import { entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
 import {
   BARREL_EXPLOSION_DAMAGE,
@@ -1263,13 +1263,8 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string): Monster[] {
   return monsters;
 }
 
-function updateBossGates(): void {
-  const lockedRooms = new Set(currentMonsters
-    .filter(monster => isBoss(monster) && !monster.dead)
-    .map(monster => monster.spawnRoomId));
-  for (const stair of currentStairs) {
-    if (stair.type === "down") stair.enabled = !lockedRooms.has(stair.roomId);
-  }
+function updateFloorPortals(): boolean {
+  const changed = updatePortalAvailability(currentStairs, currentMonsters);
   updatePortalContacts(
     currentStairs,
     player,
@@ -1277,6 +1272,7 @@ function updateBossGates(): void {
     portalContacts,
     PORTAL_DEFINITION.contactOffset,
   );
+  return changed;
 }
 
 function activateMonstersInRoom(roomId: number): void {
@@ -1355,7 +1351,10 @@ function updateMonsterSpawners(timestamp: number): void {
     renderer.playSpawnerSpawnSound();
   }
   renderer.updateDecorationAnimations(currentSpawners, timestamp);
-  if (spawned) renderMonsters();
+  if (spawned) {
+    renderMonsters();
+    if (updateFloorPortals()) renderInteractiveObjects();
+  }
 }
 
 function findSpawnerSpawnPosition(monster: Monster, spawner: Decoration): Point | null {
@@ -1444,7 +1443,6 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
 
     if (isBoss(monster)) {
       runStats.bossKills = (runStats.bossKills ?? 0) + 1;
-      updateBossGates();
     } else if (monster.speed === 0) {
       runStats.sentryKills = (runStats.sentryKills ?? 0) + 1;
     } else if (monster.fast) {
@@ -1452,6 +1450,7 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
     } else {
       runStats.slowKills += 1;
     }
+    updateFloorPortals();
 
     if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
     updateHudPanels();
@@ -1661,7 +1660,10 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
   boss.summonedCount = summonedCount + added;
   boss.nextSpecialAt = timestamp + Math.max(2_800, 6_500 - floorNumber() * 260);
   saveMonsterState(boss);
-  if (added) renderMonsters();
+  if (added) {
+    renderMonsters();
+    if (updateFloorPortals()) renderInteractiveObjects();
+  }
 }
 
 function hasWalkableLine(from: Point, to: Point, radius: number, step: number): boolean {
@@ -2309,35 +2311,11 @@ function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_SPEC.rad
   return false;
 }
 
-/**
- * Deactivated portals act as blocking, indestructible scenery: a circular
- * space inside the energy ring cannot be entered by the player or monsters.
- */
-function portalFootprintBlocks(x: number, y: number, radius: number): boolean {
-  for (const stair of currentStairs) {
-    if (stair.enabled) continue;
-    const distance = Math.hypot(
-      x - stair.x,
-      y - (stair.y + PORTAL_DEFINITION.contactOffset.y),
-    );
-    if (distance < radius + PORTAL_DEFINITION.blockingFootprint) return true;
-  }
-  return false;
-}
-
-/** Circle obstacles for the sliding movement solver, including blocked portals. */
+/** Circle obstacles for the sliding movement solver. */
 function slideObstaclesNear(x: number, y: number): CircleObstacle[] {
-  const decorations = [...(obstacleCells.get(spatialCellKey(x, y)) ?? [])]
+  return [...(obstacleCells.get(spatialCellKey(x, y)) ?? [])]
     .filter(item => item.obstacle && !item.destroyed)
     .map(item => ({ x: item.x, y: item.y, radius: item.footprint ?? item.radius }));
-  const portals = currentStairs
-    .filter(stair => !stair.enabled)
-    .map(stair => ({
-      x: stair.x,
-      y: stair.y + PORTAL_DEFINITION.contactOffset.y,
-      radius: PORTAL_DEFINITION.blockingFootprint,
-    }));
-  return [...decorations, ...portals];
 }
 
 function isGeometryWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): boolean {
@@ -2357,14 +2335,12 @@ function isGeometryWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): 
 function isWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): boolean {
   return (
     isGeometryWalkable(x, y, radius) &&
-    !pointBlockedByDecoration(x, y, radius) &&
-    !portalFootprintBlocks(x, y, radius)
+    !pointBlockedByDecoration(x, y, radius)
   );
 }
 
 function isMonsterWalkable(monster: Monster, x: number, y: number): boolean {
   if (!isGeometryWalkable(x, y, monster.radius)) return false;
-  if (portalFootprintBlocks(x, y, monster.radius)) return false;
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
     if (!item.obstacle || item.destroyed) continue;
     const extent = monster.radius + (item.footprint ?? item.radius);
@@ -2381,7 +2357,6 @@ function isMonsterWalkable(monster: Monster, x: number, y: number): boolean {
 
 function monsterSpawnPositionIsClear(monster: Monster, spawner: Decoration, position: Point): boolean {
   if (!isGeometryWalkable(position.x, position.y, monster.radius)) return false;
-  if (portalFootprintBlocks(position.x, position.y, monster.radius)) return false;
   for (const item of currentDecorations) {
     if (item.id === spawner.id || !item.obstacle || item.destroyed) continue;
     if (Math.hypot(position.x - item.x, position.y - item.y) <
@@ -2861,7 +2836,8 @@ function teleportPlayerTo(x: number, y: number): void {
     playerFacing: () => Point;
     damagePlayer: (amount: number) => void;
     spawnHealingEffect: () => void;
-    stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y">>;
+    stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y" | "enabled">>;
+    defeatAllMonsters: () => void;
     contentPoints: () => Array<{
       id: string;
       x: number;
@@ -2912,7 +2888,12 @@ function teleportPlayerTo(x: number, y: number): void {
   spawnHealingEffect(): void {
     renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize, { followPlayer: true });
   },
-    stairs: () => currentStairs.map(({ id, type, x, y }) => ({ id, type, x, y })),
+    stairs: () => currentStairs.map(({ id, type, x, y, enabled }) => ({ id, type, x, y, enabled })),
+    defeatAllMonsters(): void {
+      for (const monster of currentMonsters) {
+        if (!monster.dead) damageMonster(monster, monster.hp);
+      }
+    },
     contentPoints: () => currentDecorations
       .filter(item => item.contentPoint)
       .map(item => ({
@@ -3309,7 +3290,7 @@ function renderGraph(
   currentLoot.push(...createSceneryDrops(currentDecorations, floorIdentity(pageUrl), collectedLoot));
 
   currentMonsters = MONSTERS_ENABLED ? buildMonsters(layout, pageUrl) : [];
-  updateBossGates();
+  updateFloorPortals();
 
   const root =
     layout.nodes.find(node => node.isRoot) ||
