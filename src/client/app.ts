@@ -658,10 +658,33 @@ function floorIdentity(pageUrl: string): string {
   return currentStateId ?? stateIdForPage(pageUrl);
 }
 
+const hudBarPulseAnimations = new WeakMap<HTMLElement, Animation>();
+
+function updateHudBarFill(fill: HTMLElement, miniFill: HTMLElement, ratio: number): void {
+  const width = `${ratio * 100}%`;
+  const changed = fill.style.width !== "" && fill.style.width !== width;
+  const reduceMotion = changed && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  for (const element of [fill, miniFill]) {
+    element.style.width = width;
+    if (!changed) continue;
+
+    const track = element.parentElement;
+    if (!track) continue;
+    hudBarPulseAnimations.get(track)?.cancel();
+    if (reduceMotion) continue;
+
+    hudBarPulseAnimations.set(track, track.animate([
+      { filter: "brightness(1)" },
+      { filter: "brightness(1.65)" },
+      { filter: "brightness(1)" },
+    ], { duration: 380, easing: "ease-out" }));
+  }
+}
+
 function updateHealthUi(): void {
   const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_MAX_HP));
-  hudHealthFillEl.style.width = `${ratio * 100}%`;
-  hudHealthFillMiniEl.style.width = `${ratio * 100}%`;
+  updateHudBarFill(hudHealthFillEl, hudHealthFillMiniEl, ratio);
   gameCanvasHost.dataset.playerHp = String(playerHp);
 
   renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
@@ -673,8 +696,7 @@ function updateWeaponUi(): void {
   const ammoRatio = currentWeaponAmmo === null
     ? 1
     : Math.max(0, Math.min(1, currentWeaponAmmo / Math.max(1, currentWeapon.maxAmmo ?? currentWeaponAmmo)));
-  hudAmmoFillEl.style.width = `${ammoRatio * 100}%`;
-  hudAmmoFillMiniEl.style.width = `${ammoRatio * 100}%`;
+  updateHudBarFill(hudAmmoFillEl, hudAmmoFillMiniEl, ammoRatio);
   gameCanvasHost.dataset.weaponKind = currentWeapon.kind;
   gameCanvasHost.dataset.weaponAmmo = currentWeaponAmmo === null ? "infinite" : String(currentWeaponAmmo);
 }
@@ -701,8 +723,7 @@ function updateLootUi(): void {
 
 function updateEnergyUi(): void {
   const fill = Math.min(PLAYER_ENERGY_MAX, lootInventory.energy);
-  hudEnergyFillEl.style.width = `${fill / PLAYER_ENERGY_MAX * 100}%`;
-  hudEnergyFillMiniEl.style.width = `${fill / PLAYER_ENERGY_MAX * 100}%`;
+  updateHudBarFill(hudEnergyFillEl, hudEnergyFillMiniEl, fill / PLAYER_ENERGY_MAX);
   const full = lootInventory.energy >= PLAYER_ENERGY_MAX;
   hudEnergyFillEl.parentElement?.classList.toggle("is-full", full);
   hudEnergyFillMiniEl.parentElement?.classList.toggle("is-full", full);

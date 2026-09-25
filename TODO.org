@@ -1131,6 +1131,8 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
 - Each floor should have at least one boss monster - if none are generated initially, the most distant room should be promoted to a boss arena. Portals should activate after all bosses on the level are defeated (not all enemies at all, just all bosses).
 - Up portals should be available always.
+- Show the link URL when player comes close to a portal.
+- Play a sound when portals activate
 
 * Minimap overhaul
 - Minimap should be circular
@@ -1204,6 +1206,7 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 
 * UI improvements
 - Annimate the health/energy/ammo bars whenever they change.
+- Health bar should blink when almost depleted.
 
 * Boss fights
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
@@ -1215,7 +1218,10 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Bosses should have multiple stages with different attack patterns depending on their HP.
 
 * Room layout
-We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
+- We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
+
+- Lax the max rooms/max subcorridors limits for larger layouts
+- Add content browsers for combined rooms
 
 * Hidden rooms
 `display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.

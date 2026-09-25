@@ -2157,7 +2157,7 @@ body {
   width: 100%;
   height: 100%;
   background: linear-gradient(90deg, #f3484e, #ff6b61);
-  transition: width 140ms linear;
+  transition: width 320ms cubic-bezier(.22, 1, .36, 1);
 }
 
 .energy-line {
@@ -2193,7 +2193,7 @@ body {
   height: 100%;
   background: linear-gradient(90deg, #2f7fe0, #4db3ff);
   border-radius: 2px;
-  transition: width 140ms linear;
+  transition: width 320ms cubic-bezier(.22, 1, .36, 1);
 }
 
 .energy-track.is-full #hudEnergyFill::after,
@@ -2303,7 +2303,16 @@ body {
   height: 100%;
   background: linear-gradient(90deg, #2f9e63, #66e6a3);
   box-shadow: 0 0 10px rgba(90, 230, 150, 0.55);
-  transition: width 140ms linear;
+  transition: width 320ms cubic-bezier(.22, 1, .36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #hudHealthFill,
+  #hudHealthFillMini,
+  #hudEnergyFill,
+  #hudEnergyFillMini,
+  #hudAmmoFill,
+  #hudAmmoFillMini { transition: none; }
 }
 
 .floor-status-card {
