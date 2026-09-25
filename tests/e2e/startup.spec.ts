@@ -1228,7 +1228,7 @@ test("starts a lucky crawl after an error returns to the welcome screen", async 
 
   const modal = page.locator("#fetchErrorModal");
   await expect(modal).toBeVisible();
-  await page.getByRole("button", { name: "UNDERSTOOD" }).click();
+  await page.getByRole("button", { name: "Reject Optional Cookies" }).click();
   await expect(modal).not.toBeVisible();
   await expect(page.locator("#welcomeScreen")).toBeVisible();
 
@@ -1295,7 +1295,7 @@ test("shows the could-not-load modal when every fetch route fails", async ({ pag
   await expect(modal).toBeVisible();
   await expect(page.locator("#loadingScreen")).not.toBeVisible();
   await expect(page.locator("#fetchErrorMessage")).toContainText("https://example.com/start");
-  await page.getByRole("button", { name: "UNDERSTOOD" }).click();
+  await page.getByRole("button", { name: "Reject Optional Cookies" }).click();
   await expect(modal).not.toBeVisible();
   await expect(page.locator("#welcomeScreen")).toBeVisible();
   await expect(page.locator("#gameUi")).not.toBeVisible();
