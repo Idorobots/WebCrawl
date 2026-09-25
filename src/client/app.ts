@@ -183,6 +183,7 @@ let currentRequest = 0;
 let currentPageUrl: string | null = null;
 let currentStateId: string | null = null;
 let gameStarted = false;
+let initialFloorPortalIntroPending = true;
 const navigationHistory: string[] = [];
 const navigationReturnRooms: Array<number | null> = [];
 
@@ -277,6 +278,10 @@ let lastAimCamera: Point | null = null;
 let portalTransitioning = false;
 let teleportPauseActive = false;
 const portalContacts = new Set<string>();
+const PORTAL_INTRO_DURATION_MS = 2_000;
+const PORTAL_INTRO_SOUND_DELAY_MS = 1_000;
+let portalIntroTimer: number | null = null;
+let portalIntroSoundTimer: number | null = null;
 const PORTAL_ACTIVATION_SOUND_DELAY_MS = 1_000;
 let portalActivationSoundTimer: number | null = null;
 
@@ -944,7 +949,10 @@ fetchErrorDismissButton.addEventListener("click", () => {
 });
 
 function resetRunState(): void {
+  cancelPortalIntro();
+  renderer?.setPortalStartupPreview(false);
   cancelPortalActivationSound();
+  initialFloorPortalIntroPending = true;
   currentPageUrl = null;
   currentStateId = null;
   navigationHistory.length = 0;
@@ -1318,6 +1326,29 @@ function cancelPortalActivationSound(): void {
   portalActivationSoundTimer = null;
 }
 
+function cancelPortalIntro(): void {
+  if (portalIntroTimer !== null) window.clearTimeout(portalIntroTimer);
+  if (portalIntroSoundTimer !== null) window.clearTimeout(portalIntroSoundTimer);
+  portalIntroTimer = null;
+  portalIntroSoundTimer = null;
+}
+
+function schedulePortalIntroEnd(playSound: boolean): void {
+  if (playSound) {
+    portalIntroSoundTimer = window.setTimeout(() => {
+      portalIntroSoundTimer = null;
+      if (currentMonsters.some(monster => !monster.dead) &&
+          currentStairs.some(stair => stair.url !== null && !stair.enabled)) {
+        renderer.playPortalShutdownSound();
+      }
+    }, PORTAL_INTRO_SOUND_DELAY_MS);
+  }
+  portalIntroTimer = window.setTimeout(() => {
+    portalIntroTimer = null;
+    renderer.setPortalStartupPreview(false);
+  }, PORTAL_INTRO_DURATION_MS);
+}
+
 function schedulePortalActivationSound(): void {
   cancelPortalActivationSound();
   portalActivationSoundTimer = window.setTimeout(() => {
@@ -1454,6 +1485,8 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
 
   if (playerHp <= 0) {
     playerAlive = false;
+    cancelPortalIntro();
+    renderer.setPortalStartupPreview(false);
     cancelPortalActivationSound();
     renderer.playPlayerDeathSound();
     renderer.stopMovementSounds();
@@ -3323,6 +3356,7 @@ function renderGraph(
   }: Pick<LoadPageOptions, "spawnRoomId" | "stateId"> & { spawnPortalUrl?: string | null } = {},
   preparedLayout: DungeonLayout | null = null,
 ): void {
+  cancelPortalIntro();
   cancelPortalActivationSound();
   currentStateId = stateId ?? stateIdForPage(pageUrl);
   renderer.clear();
@@ -3358,6 +3392,7 @@ function renderGraph(
 
   currentMonsters = MONSTERS_ENABLED ? buildMonsters(layout, pageUrl) : [];
   updateFloorPortals();
+  renderer.setPortalStartupPreview(true);
 
   const root =
     layout.nodes.find(node => node.isRoot) ||
@@ -3410,6 +3445,9 @@ function renderGraph(
   updateCameraForPlayer(true);
   updateLootUi();
   startGameLoop();
+  const playIntroSound = initialFloorPortalIntroPending && floorNumber() === 1;
+  initialFloorPortalIntroPending = false;
+  schedulePortalIntroEnd(playIntroSound);
 
   setStatus(
     `Map: ${layout.nodes.length} visible rooms · ${layout.links.length} corridors` +
@@ -3447,6 +3485,8 @@ async function loadPage(
     setStatus("That does not look like a valid URL.", true);
     return;
   }
+  cancelPortalIntro();
+  renderer?.setPortalStartupPreview(false);
   cancelPortalActivationSound();
 
   const snapshot = stateId ? floorSnapshots.get(stateId) ?? null : null;

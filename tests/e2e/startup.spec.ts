@@ -310,6 +310,144 @@ test("starts a crawl and renders a playable floor", async ({ page }) => {
   await expect(minimap).toBeVisible();
 });
 
+test("briefly lights the starting up portal without enabling travel", async ({ page }) => {
+  await page.addInitScript(() => {
+    const snapshots: Array<{ state: string; texture: string | null; enabled: boolean; time: number }> = [];
+    const turnOffFrames: string[] = [];
+    (window as Window & { __portalIntroSnapshots?: typeof snapshots }).__portalIntroSnapshots = snapshots;
+    (window as Window & { __portalTurnOffFrames?: typeof turnOffFrames }).__portalTurnOffFrames = turnOffFrames;
+    new MutationObserver(() => {
+      const state = document.querySelector<HTMLElement>("#gameCanvas")?.dataset.portalIntro;
+      if (state !== "true" && state !== "false") return;
+      const portal = (window as Window & {
+        __webcrawlTest?: { stairs: () => Array<{ type: string; x: number; y: number; enabled: boolean }> };
+      }).__webcrawlTest?.stairs().find(stair => stair.type === "up");
+      if (!portal) return;
+      const scene = (window as Window & {
+        __webcrawlScene?: { children: { list: Array<{
+          x: number; y: number; list?: Array<{
+            name: string; texture?: { key: string }; setTexture?: (key: string) => unknown;
+          }>;
+        }> } };
+      }).__webcrawlScene;
+      const container = scene?.children.list.find(item => item.x === portal.x && item.y === portal.y &&
+        item.list?.some(child => child.name === "sprite" && child.texture?.key.includes("portal_up_")));
+      const sprite = container?.list?.find(child => child.name === "sprite");
+      if (state === "true" && sprite?.setTexture) {
+        const setTexture = sprite.setTexture.bind(sprite);
+        sprite.setTexture = (key: string) => {
+          turnOffFrames.push(key);
+          return setTexture(key);
+        };
+      }
+      snapshots.push({
+        state,
+        texture: sprite?.texture?.key ?? null,
+        enabled: portal.enabled,
+        time: performance.now(),
+      });
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ["data-portal-intro"] });
+  });
+
+  await startGame(page);
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-portal-intro", "false");
+  const snapshots = await page.evaluate(() =>
+    (window as Window & { __portalIntroSnapshots?: Array<{
+      state: string; texture: string | null; enabled: boolean; time: number;
+    }> }).__portalIntroSnapshots ?? []
+  );
+  expect(snapshots.map(snapshot => snapshot.state)).toEqual(["true", "false"]);
+  expect(snapshots[0]?.texture).toContain("portal_up_active.png");
+  expect(snapshots[0]?.enabled).toBe(false);
+  expect(snapshots[1]!.time - snapshots[0]!.time).toBeGreaterThanOrEqual(1_950);
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __portalTurnOffFrames?: string[] }).__portalTurnOffFrames ?? []
+  )).toHaveLength(4);
+  const frames = await page.evaluate(() =>
+    (window as Window & { __portalTurnOffFrames?: string[] }).__portalTurnOffFrames ?? []
+  );
+  expect(frames.map(frame => frame.split("/").pop())).toEqual([
+    "portal_up_active.png", "portal_up_activation_02.png",
+    "portal_up_activation_01.png", "portal_up_inactive.png",
+  ]);
+  await expect.poll(() => page.evaluate(() => {
+    const scene = (window as Window & {
+      __webcrawlScene?: { children: { list: Array<{
+        list?: Array<{ name: string; texture?: { key: string } }>;
+      }> } };
+    }).__webcrawlScene;
+    return scene?.children.list.flatMap(container => container.list ?? [])
+      .find(child => child.name === "sprite" && child.texture?.key.includes("portal_up_"))?.texture?.key ?? null;
+  })).toContain("portal_up_inactive.png");
+});
+
+test("sounds the portal warning only on the first floor of a run", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => {
+    const calls: Array<{ time: number; intro: string | undefined }> = [];
+    const transitions: Array<{ state: string; time: number }> = [];
+    (window as Window & { __portalShutdownSounds?: typeof calls }).__portalShutdownSounds = calls;
+    (window as Window & { __portalIntroTransitions?: typeof transitions }).__portalIntroTransitions = transitions;
+    new MutationObserver(() => {
+      const state = document.querySelector<HTMLElement>("#gameCanvas")?.dataset.portalIntro;
+      if (state === "true" || state === "false") transitions.push({ state, time: performance.now() });
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ["data-portal-intro"] });
+    Object.defineProperty(window, "__webcrawlScene", {
+      configurable: true,
+      set(scene: { sound: { add: (key: string, ...args: unknown[]) => unknown } }) {
+        Object.defineProperty(window, "__webcrawlScene", { configurable: true, writable: true, value: scene });
+        const sound = scene.sound;
+        const add = sound.add.bind(sound);
+        sound.add = (key, ...args) => {
+          if (key === "sfx-portal-shutdown") {
+            calls.push({
+              time: performance.now(),
+              intro: document.querySelector<HTMLElement>("#gameCanvas")?.dataset.portalIntro,
+            });
+          }
+          return add(key, ...args);
+        };
+      },
+    });
+  });
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  const soundCount = () => page.evaluate(() =>
+    (window as Window & { __portalShutdownSounds?: Array<{ time: number }> }).__portalShutdownSounds?.length ?? 0
+  );
+  await expect.poll(soundCount).toBe(1);
+  const firstSound = await page.evaluate(() => {
+    const state = window as Window & {
+      __portalShutdownSounds?: Array<{ time: number; intro: string | undefined }>;
+      __portalIntroTransitions?: Array<{ state: string; time: number }>;
+    };
+    return {
+      sound: state.__portalShutdownSounds?.[0],
+      startedAt: state.__portalIntroTransitions?.find(transition => transition.state === "true")?.time,
+    };
+  });
+  expect(firstSound.sound?.intro).toBe("true");
+  expect(firstSound.sound!.time - firstSound.startedAt!).toBeGreaterThanOrEqual(900);
+
+  await page.evaluate(() => {
+    void (window as Window & { __webcrawlTest?: { navigate: (url: string) => Promise<void> } })
+      .__webcrawlTest?.navigate("https://example.com/next");
+  });
+  await expect(game).toHaveAttribute("data-floor", "2", { timeout: 20_000 });
+  await expect(game).toHaveAttribute("data-portal-intro", "false", { timeout: 10_000 });
+  await page.evaluate(() => {
+    void (window as Window & { __webcrawlTest?: { goBack: () => Promise<void> } })
+      .__webcrawlTest?.goBack();
+  });
+  await expect(game).toHaveAttribute("data-floor", "1", { timeout: 20_000 });
+  await expect(game).toHaveAttribute("data-portal-intro", "false", { timeout: 10_000 });
+  expect(await soundCount()).toBe(1);
+  expect(await page.evaluate(() =>
+    (window as Window & { __portalIntroTransitions?: Array<{ state: string }> })
+      .__portalIntroTransitions?.map(transition => transition.state) ?? []
+  )).toEqual(["true", "false", "true", "false", "true", "false"]);
+});
+
 test("loads the server-hosted three-room test level", async ({ page }) => {
   const levelUrl = "http://127.0.0.1:3000/test-level.html";
   await page.goto("/");
@@ -560,6 +698,7 @@ test("restores the previous floor from its snapshot without re-fetching it", asy
 });
 
 test("spawns beside the up portal and enables it after clearing the floor", async ({ page }) => {
+  test.setTimeout(90_000);
   await startGame(page);
   const game = page.locator("#gameCanvas");
   const position = await playerPosition(page);

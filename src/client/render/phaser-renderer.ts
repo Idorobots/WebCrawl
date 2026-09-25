@@ -179,6 +179,7 @@ const ONE_SHOT_SOUNDS: Readonly<Record<string, string>> = {
   "sfx-portal-up": "sounds/scenery/portal/teleport_up.mp3",
   "sfx-portal-down": "sounds/scenery/portal/teleport_down.mp3",
   "sfx-portal-activation": "sounds/alerts/access_granted.mp3",
+  "sfx-portal-shutdown": "sounds/alerts/system_infiltrated.mp3",
   "sfx-spawner-spawn": "sounds/scenery/spawner/spawn.mp3",
   "sfx-content-toggle": "sounds/scenery/content/toggle.mp3",
   "sfx-lights-flicker": "sounds/scenery/lights/flicker.mp3",
@@ -374,6 +375,7 @@ export class PhaserRenderer {
   private objects: Phaser.GameObjects.Container[] = [];
   private lootSprites = new Map<string, Phaser.GameObjects.Image>();
   private portals = new Map<string, Phaser.GameObjects.Container>();
+  private portalStartupPreview = false;
   private monsters = new Map<string, Phaser.GameObjects.Container>();
   private monsterHealthBars = new Map<string, Phaser.GameObjects.Container>();
   private decorationHealthBars = new Map<string, Phaser.GameObjects.Container>();
@@ -582,6 +584,8 @@ export class PhaserRenderer {
   }
 
   clear(): void {
+    this.portalStartupPreview = false;
+    delete this.host.dataset.portalIntro;
     this.layout = null;
     this.cameraRoom = null;
     this.cameraRoomId = null;
@@ -709,6 +713,17 @@ export class PhaserRenderer {
   playPortalActivationSound(): void {
     // A non-positional sound stays centered on the player, regardless of portal distance.
     this.playOneShot("sfx-portal-activation", 1);
+  }
+
+  playPortalShutdownSound(): void {
+    this.playOneShot("sfx-portal-shutdown", 1);
+  }
+
+  setPortalStartupPreview(preview: boolean): void {
+    if (this.portalStartupPreview === preview) return;
+    this.portalStartupPreview = preview;
+    this.host.dataset.portalIntro = String(preview);
+    if (!preview) this.syncPortals(this.currentStairs, this.visited);
   }
 
   playSpawnerSpawnSound(): void {
@@ -1924,6 +1939,7 @@ export class PhaserRenderer {
 
     for (const stair of stairs) {
       if (!visible.has(stair.id)) continue;
+      const visualEnabled = stair.enabled || this.portalStartupPreview;
       let container = this.portals.get(stair.id);
       if (!container) {
         const frame = PORTAL_DEFINITION.frames[stair.type][0];
@@ -1944,10 +1960,10 @@ export class PhaserRenderer {
           stair.y,
           stair.type === "down" ? PORTAL_DOWN_AURA_COLOR : PORTAL_UP_AURA_COLOR,
           PORTAL_DEFINITION.size * 0.82,
-          stair.enabled ? 0.82 : 0.3,
+          visualEnabled ? 0.82 : 0.3,
         );
         if (portalAura) this.portalAuras.set(stair.id, portalAura);
-        this.animatePortal(container, stair.type, stair.enabled, true);
+        this.animatePortal(container, stair.type, visualEnabled, true);
         continue;
       }
       container.setPosition(stair.x, stair.y);
@@ -1955,10 +1971,10 @@ export class PhaserRenderer {
       if (aura) {
         aura.x = stair.x;
         aura.y = stair.y;
-        aura.setIntensity(stair.enabled ? 0.82 : 0.3);
+        aura.setIntensity(visualEnabled ? 0.82 : 0.3);
       }
-      if (Boolean(container.getData("enabled")) !== stair.enabled) {
-        this.animatePortal(container, stair.type, stair.enabled, false);
+      if (Boolean(container.getData("enabled")) !== visualEnabled) {
+        this.animatePortal(container, stair.type, visualEnabled, false);
       }
     }
   }
@@ -1969,7 +1985,6 @@ export class PhaserRenderer {
     enabled: boolean,
     initial: boolean,
   ): void {
-    const scene = this.scene!;
     const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
     const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
     const frames = PORTAL_DEFINITION.frames[type];
@@ -1988,12 +2003,16 @@ export class PhaserRenderer {
       applyFrame(frames[0]);
       return;
     }
+    if (initial && this.portalStartupPreview) {
+      applyFrame(frames[frames.length - 1]!);
+      return;
+    }
     const sequence = enabled ? frames : [...frames].reverse();
     sequence.forEach((asset, index) => {
-      scene.time.delayedCall(index * PORTAL_FRAME_MS, () => {
+      window.setTimeout(() => {
         if (!container.active || Number(container.getData("animationToken")) !== token) return;
         applyFrame(asset);
-      });
+      }, index * PORTAL_FRAME_MS);
     });
   }
 
