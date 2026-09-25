@@ -1,5 +1,10 @@
 # WebCrawl
 
+    The year is 2067.
+    Super Intelligence reigns supreme. Humanity ascended and then quickly collapsed. Nations reduced to a handful of oligarchs forever locked in a capitalistic war of profit maximization.
+    Agents are scouring the old Web in search of the last remnants of the human civilization...
+    Will you help them to maximize the shareholder value?
+
 WebCrawl turns a remote page's HTML structure into a deterministic sci-fi dungeon. Explore rooms generated from DOM elements, follow links to descend through floors, collect loot, and fight robots. The goal is to survive.
 
 The game was AI generated with some (much needed) guidance to make it playable and, well, "fun" (spoiler alert, it's still not very fun). All game assets were also AI-generated and some needed a bit of retouching. Expect weird animations and disappearing or mutating limbs. AI also had a surprisingly hard time figuring out the floors and walls in the game. I guess it backed itself into a corner. :shrug:

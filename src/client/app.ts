@@ -55,7 +55,7 @@ import {
 import { domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { chooseReachablePath, monsterEscapeStep, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "./domain/pathfinding";
-import { entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
+import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
 import {
   BARREL_EXPLOSION_DAMAGE,
@@ -132,8 +132,12 @@ const prefixFontReady = document.fonts?.load(`900 ${world(34)}px Prefix`).catch(
 let renderer!: PhaserRenderer;
 const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
 const contentBrowserEl = requireElement<HTMLElement>("#contentBrowser");
+const portalPreviewEl = requireElement<HTMLElement>("#portalPreview");
+const portalPreviewUrlEl = requireElement<HTMLElement>("#portalPreviewUrl");
 const CONTENT_BROWSER_RADIUS = world(112);
+const PORTAL_PREVIEW_RADIUS = world(112);
 let visibleContentPointId: string | null = null;
+let visiblePortalId: string | null = null;
 
 const welcomeScreen = requireElement<HTMLDivElement>("#welcomeScreen");
 const welcomeForm = requireElement<HTMLFormElement>("#welcomeForm");
@@ -366,6 +370,28 @@ function hideContentBrowser(): void {
   contentBrowserEl.hidden = true;
   visibleContentPointId = null;
   dismissedContentPointId = null;
+}
+
+function hidePortalPreview(): void {
+  portalPreviewEl.hidden = true;
+  visiblePortalId = null;
+}
+
+function renderPortalPreview(): void {
+  const closest = closestPortalWithUrl(
+    currentStairs.filter(stair => visitedRooms.has(stair.roomId)),
+    player,
+    PORTAL_PREVIEW_RADIUS,
+  );
+  if (!closest) {
+    hidePortalPreview();
+    return;
+  }
+  if (visiblePortalId !== closest.id) {
+    portalPreviewUrlEl.textContent = closest.url;
+    visiblePortalId = closest.id;
+  }
+  portalPreviewEl.hidden = false;
 }
 
 function renderContentBrowser(): void {
@@ -947,6 +973,7 @@ function returnToWelcome(): void {
   renderer?.stopStationAmbient();
   hideLinkMenu();
   hideContentBrowser();
+  hidePortalPreview();
   urlBar.hidden = true;
   gameUi.hidden = true;
   gameUi.classList.remove("game-ui-ready");
@@ -1532,6 +1559,7 @@ function updateContentPoints(timestamp: number): void {
   }
   if (changed) renderDecorations();
   renderContentBrowser();
+  renderPortalPreview();
 }
 
 function queueEnemyBullet(
@@ -2852,7 +2880,7 @@ function teleportPlayerTo(x: number, y: number): void {
     playerFacing: () => Point;
     damagePlayer: (amount: number) => void;
     spawnHealingEffect: () => void;
-    stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y" | "enabled">>;
+    stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y" | "url" | "enabled">>;
     defeatAllMonsters: () => void;
     contentPoints: () => Array<{
       id: string;
@@ -2904,7 +2932,7 @@ function teleportPlayerTo(x: number, y: number): void {
   spawnHealingEffect(): void {
     renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize, { followPlayer: true });
   },
-    stairs: () => currentStairs.map(({ id, type, x, y, enabled }) => ({ id, type, x, y, enabled })),
+    stairs: () => currentStairs.map(({ id, type, x, y, url, enabled }) => ({ id, type, x, y, url, enabled })),
     defeatAllMonsters(): void {
       for (const monster of currentMonsters) {
         if (!monster.dead) damageMonster(monster, monster.hp);
@@ -3282,6 +3310,7 @@ function renderGraph(
   bullets = [];
   hideLinkMenu();
   hideContentBrowser();
+  hidePortalPreview();
 
   const layout = preparedLayout ?? layoutOrthogonal(graph);
   currentGraph = graph;

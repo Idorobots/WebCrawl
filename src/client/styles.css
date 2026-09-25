@@ -832,10 +832,10 @@ button:hover {
   box-shadow: inset 0 0 12px rgba(38, 150, 255, 0.15);
 }
 
-#contentBrowser {
+#contentBrowser,
+#portalPreview {
   position: fixed;
   z-index: 40;
-  right: 24px;
   bottom: 126px;
   width: min(390px, calc(100vw - 48px));
   max-height: min(48vh, 480px);
@@ -851,14 +851,26 @@ button:hover {
   scrollbar-color: #91c8d8 rgba(8, 22, 31, 0.6);
 }
 
-#contentBrowser[hidden] { display: none; }
+#contentBrowser { right: 24px; }
+#portalPreview { left: 24px; }
 
-#contentBrowser h2 {
+#contentBrowser[hidden],
+#portalPreview[hidden] { display: none; }
+
+#contentBrowser h2,
+#portalPreview h2 {
   margin: 0 0 10px;
   color: #f0ece0;
   font-size: 15px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+#portalPreviewUrl {
+  overflow-wrap: anywhere;
+  color: #d9f3ff;
+  font-size: 14px;
+  line-height: 1.48;
 }
 
 .content-browser-close {
@@ -2549,12 +2561,15 @@ body {
   #bottomHud {
     display: none;
   }
-  #contentBrowser {
+  #contentBrowser,
+  #portalPreview {
     right: 8px;
     bottom: 8px;
     width: calc(100vw - 16px);
     max-height: 38vh;
   }
+  #portalPreview { left: 8px; }
+  #contentBrowser:not([hidden]) + #portalPreview { bottom: calc(38vh + 16px); }
 }
 
 @media (max-width: 720px) {

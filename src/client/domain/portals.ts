@@ -21,6 +21,21 @@ export function initialPlayerPosition(portal: Stair | null, fallback: Point): Po
   return { x: portal.x + offset.x, y: portal.y + offset.y };
 }
 
+export function closestPortalWithUrl(portals: readonly Stair[], position: Point, radius: number): Stair | null {
+  let closest: Stair | null = null;
+  let closestDistance = radius * radius;
+  for (const portal of portals) {
+    if (!portal.url) continue;
+    const dx = position.x - portal.x;
+    const dy = position.y - portal.y;
+    const distance = dx * dx + dy * dy;
+    if (distance > closestDistance || (closest && distance === closestDistance)) continue;
+    closest = portal;
+    closestDistance = distance;
+  }
+  return closest;
+}
+
 export function updatePortalAvailability(
   portals: Stair[],
   monsters: readonly Pick<Monster, "dead">[],

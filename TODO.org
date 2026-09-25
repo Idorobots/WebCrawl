@@ -1127,12 +1127,14 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - "Dedicated" crates should have a higher likelyhood of dropping a specific loot - medical crates should have a higher likelyhood of dropping medkits, etc.
 
 * Gameplay mechanics
+- Show the link URL when player comes close to a portal (similarly to how the content browser shows its content).
+- Play a sound when portals activate once all enemies are destroyed - alerts/access_granted
+* Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
 - Each floor should have at least one boss monster - if none are generated initially, the most distant room should be promoted to a boss arena. Portals should activate after all bosses on the level are defeated (not all enemies at all, just all bosses).
-- Up portals should be available always.
-- Show the link URL when player comes close to a portal.
-- Play a sound when portals activate
+
+- Up portals should be active always (except in the initial room on floor 1).
 
 * Minimap overhaul
 - Minimap should be circular

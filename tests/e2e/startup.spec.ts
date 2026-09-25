@@ -595,6 +595,48 @@ test("spawns beside the up portal and enables it after clearing the floor", asyn
   await expect(game).toHaveAttribute("data-floor", "2");
 });
 
+test("previews portal URLs by proximity even before portals are active", async ({ page }) => {
+  test.setTimeout(90_000);
+  await startGame(page);
+  const preview = page.locator("#portalPreview");
+  const previewUrl = page.locator("#portalPreviewUrl");
+  const game = page.locator("#gameCanvas");
+  const start = await playerPosition(page);
+  const firstFloorStairs = await page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: {
+      stairs: () => Array<{ type: string; x: number; y: number; url: string | null; enabled: boolean }>;
+    } }).__webcrawlTest?.stairs() ?? []
+  );
+  const firstDown = firstFloorStairs.find(stair => stair.type === "down");
+  if (!firstDown) throw new Error("Expected a down portal on floor one");
+  expect(firstDown.enabled).toBe(false);
+  await expect(preview).toBeHidden();
+
+  await teleportPlayer(page, { x: firstDown.x, y: firstDown.y + world(40) });
+  await expect(previewUrl).toHaveText(firstDown.url!);
+  await expect(preview).toBeVisible();
+  await expect(game).toHaveAttribute("data-floor", "1");
+  await teleportPlayer(page, start);
+  await expect(preview).toBeHidden();
+
+  await page.evaluate(() => {
+    void (window as Window & { __webcrawlTest?: { navigate: (url: string) => Promise<void> } })
+      .__webcrawlTest?.navigate("https://example.com/next");
+  });
+  await expect(game).toHaveAttribute("data-floor", "2");
+  const secondFloorStairs = await page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: {
+      stairs: () => Array<{ type: string; x: number; y: number; url: string | null; enabled: boolean }>;
+    } }).__webcrawlTest?.stairs() ?? []
+  );
+  const up = secondFloorStairs.find(stair => stair.type === "up");
+  if (!up) throw new Error("Expected an up portal on floor two");
+  expect(up.enabled).toBe(false);
+  expect(up.url).toBe("https://example.com/start");
+  await expect(previewUrl).toHaveText(up.url!);
+  await expect(game).toHaveAttribute("data-floor", "2");
+});
+
 test("keeps the Phaser viewport playable on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 720 });
   await startGame(page);

@@ -64,7 +64,7 @@ import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, chooseReachablePath, monsterEscapeStep, revealedRoomPath, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "../../src/client/domain/pathfinding";
-import { entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "../../src/client/domain/portals";
+import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "../../src/client/domain/portals";
 import {
   BARREL_EXPLOSION_RADIUS,
   DECORATION_DEFINITIONS,
@@ -687,6 +687,17 @@ describe("portal entry", () => {
     x: 100,
     y: 100,
   };
+
+  it("previews the closest URL-bearing portal in range even when portals are inactive", () => {
+    const first: Stair = { ...portal, enabled: false };
+    const second: Stair = { ...portal, id: "room-1::portal-down-1", x: 160, url: "https://example.com/other", enabled: false };
+    const noUrl: Stair = { ...portal, id: "room-1::portal-up", x: 140, url: null };
+    const portals = [first, second, noUrl];
+
+    expect(closestPortalWithUrl(portals, { x: 125, y: 100 }, 80)).toBe(first);
+    expect(closestPortalWithUrl(portals, { x: 145, y: 100 }, 80)).toBe(second);
+    expect(closestPortalWithUrl(portals, { x: 300, y: 100 }, 80)).toBeNull();
+  });
 
   it("locks both directions until every monster on the floor dies, then relocks for a new spawn", () => {
     const down = { ...portal };
