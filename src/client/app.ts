@@ -685,6 +685,8 @@ function updateHudBarFill(fill: HTMLElement, miniFill: HTMLElement, ratio: numbe
 function updateHealthUi(): void {
   const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_MAX_HP));
   updateHudBarFill(hudHealthFillEl, hudHealthFillMiniEl, ratio);
+  hudHealthFillEl.parentElement?.classList.toggle("is-critical", ratio < 0.2);
+  hudHealthFillMiniEl.parentElement?.classList.toggle("is-critical", ratio < 0.2);
   gameCanvasHost.dataset.playerHp = String(playerHp);
 
   renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);

@@ -1204,9 +1204,12 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Sentries sometimes don't shoot even though there's a clear line of sight to the player. Scenery should be ignored by monster line-of-sight computation for shooting.
 
-* UI improvements
+* DONE UI improvements
+:LOGBOOK:
+- State "DONE"       from              [2026-09-25 Fri 12:53]
+:END:
 - Annimate the health/energy/ammo bars whenever they change.
-- Health bar should blink when almost depleted.
+- Player's health bar should flash when almost depleted (< 20%).
 
 * Boss fights
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
