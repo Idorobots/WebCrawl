@@ -277,6 +277,8 @@ let lastAimCamera: Point | null = null;
 let portalTransitioning = false;
 let teleportPauseActive = false;
 const portalContacts = new Set<string>();
+const PORTAL_ACTIVATION_SOUND_DELAY_MS = 1_000;
+let portalActivationSoundTimer: number | null = null;
 
 function setTeleportPaused(active: boolean): void {
   teleportPauseActive = active;
@@ -942,6 +944,7 @@ fetchErrorDismissButton.addEventListener("click", () => {
 });
 
 function resetRunState(): void {
+  cancelPortalActivationSound();
   currentPageUrl = null;
   currentStateId = null;
   navigationHistory.length = 0;
@@ -1299,6 +1302,7 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string): Monster[] {
 
 function updateFloorPortals(): boolean {
   const changed = updatePortalAvailability(currentStairs, currentMonsters);
+  if (changed && !currentStairs.some(stair => stair.enabled)) cancelPortalActivationSound();
   updatePortalContacts(
     currentStairs,
     player,
@@ -1307,6 +1311,20 @@ function updateFloorPortals(): boolean {
     PORTAL_DEFINITION.contactOffset,
   );
   return changed;
+}
+
+function cancelPortalActivationSound(): void {
+  if (portalActivationSoundTimer !== null) window.clearTimeout(portalActivationSoundTimer);
+  portalActivationSoundTimer = null;
+}
+
+function schedulePortalActivationSound(): void {
+  cancelPortalActivationSound();
+  portalActivationSoundTimer = window.setTimeout(() => {
+    portalActivationSoundTimer = null;
+    if (!playerAlive || gameUi.hidden || !currentStairs.some(stair => stair.enabled)) return;
+    renderer.playPortalActivationSound();
+  }, PORTAL_ACTIVATION_SOUND_DELAY_MS);
 }
 
 function activateMonstersInRoom(roomId: number): void {
@@ -1436,6 +1454,7 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
 
   if (playerHp <= 0) {
     playerAlive = false;
+    cancelPortalActivationSound();
     renderer.playPlayerDeathSound();
     renderer.stopMovementSounds();
     resetPlayerInput();
@@ -1484,7 +1503,9 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
     } else {
       runStats.slowKills += 1;
     }
-    updateFloorPortals();
+    if (updateFloorPortals() && currentStairs.some(stair => stair.enabled)) {
+      schedulePortalActivationSound();
+    }
 
     if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
     updateHudPanels();
@@ -3302,6 +3323,7 @@ function renderGraph(
   }: Pick<LoadPageOptions, "spawnRoomId" | "stateId"> & { spawnPortalUrl?: string | null } = {},
   preparedLayout: DungeonLayout | null = null,
 ): void {
+  cancelPortalActivationSound();
   currentStateId = stateId ?? stateIdForPage(pageUrl);
   renderer.clear();
   if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
@@ -3425,6 +3447,7 @@ async function loadPage(
     setStatus("That does not look like a valid URL.", true);
     return;
   }
+  cancelPortalActivationSound();
 
   const snapshot = stateId ? floorSnapshots.get(stateId) ?? null : null;
   let resolvedUrl = url;

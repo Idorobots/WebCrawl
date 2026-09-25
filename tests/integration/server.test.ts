@@ -15,6 +15,7 @@ beforeEach(async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), "webcrawl-test-"));
   await fs.mkdir(path.join(directory, "assets"));
   await fs.writeFile(path.join(directory, "index.html"), "<!doctype html><html><head><title>WebCrawl</title></head></html>");
+  await fs.copyFile(path.resolve("public/test-level.html"), path.join(directory, "test-level.html"));
   await fs.writeFile(path.join(directory, "assets", "app.js"), "export {};\n");
   await fs.writeFile(path.join(directory, "assets", "sprite.png"), Buffer.from([137, 80, 78, 71]));
   await fs.mkdir(path.join(directory, "sounds", "ui", "welcome"), { recursive: true });
@@ -63,6 +64,15 @@ describe("WebCrawl server", () => {
     const sound = await fetch(`${baseUrl}/sounds/ui/welcome/ambient.mp3`);
     expect(sound.status).toBe(200);
     expect(sound.headers.get("content-type")).toBe("audio/mpeg");
+  });
+
+  it("serves the three-room test level at its public URL", async () => {
+    const baseUrl = await start();
+    const level = await fetch(`${baseUrl}/test-level.html?path=left`);
+    expect(level.status).toBe(200);
+    expect(level.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(await level.text()).toContain('href="?path=right"');
+    expect((await fetch(`${baseUrl}/another-level.html`)).status).toBe(404);
   });
 
   it("injects server debug mode into the client runtime config", async () => {

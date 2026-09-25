@@ -1126,7 +1126,10 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Portals should enable when all monsters on a floor are killed.
 - "Dedicated" crates should have a higher likelyhood of dropping a specific loot - medical crates should have a higher likelyhood of dropping medkits, etc.
 
-* Gameplay mechanics
+* DONE Gameplay mechanics
+:LOGBOOK:
+- State "DONE"       from              [2026-09-25 Fri 14:34]
+:END:
 - Show the link URL when player comes close to a portal (similarly to how the content browser shows its content).
 - Play a sound when portals activate once all enemies are destroyed - alerts/access_granted
 * Gameplay mechanics

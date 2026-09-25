@@ -310,6 +310,21 @@ test("starts a crawl and renders a playable floor", async ({ page }) => {
   await expect(minimap).toBeVisible();
 });
 
+test("loads the server-hosted three-room test level", async ({ page }) => {
+  const levelUrl = "http://127.0.0.1:3000/test-level.html";
+  await page.goto("/");
+  await signIn(page);
+  await page.locator("#welcomeUrlInput").fill(levelUrl);
+  await page.getByRole("button", { name: "Go" }).click();
+
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", "3", { timeout: 30_000 });
+  const links = await page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: { stairs: () => Array<{ type: string; url: string | null }> } })
+      .__webcrawlTest?.stairs().filter(stair => stair.type === "down").map(stair => stair.url) ?? []
+  );
+  expect(links).toEqual([`${levelUrl}?path=left`, `${levelUrl}?path=right`]);
+});
+
 test("starts with 1000 HP when server debug mode is enabled", async ({ page }) => {
   await startGame(page, true);
   const game = page.locator("#gameCanvas");

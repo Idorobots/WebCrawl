@@ -178,6 +178,7 @@ const ONE_SHOT_SOUNDS: Readonly<Record<string, string>> = {
   "sfx-pickup-weapon": "sounds/pickup/weapon.mp3",
   "sfx-portal-up": "sounds/scenery/portal/teleport_up.mp3",
   "sfx-portal-down": "sounds/scenery/portal/teleport_down.mp3",
+  "sfx-portal-activation": "sounds/alerts/access_granted.mp3",
   "sfx-spawner-spawn": "sounds/scenery/spawner/spawn.mp3",
   "sfx-content-toggle": "sounds/scenery/content/toggle.mp3",
   "sfx-lights-flicker": "sounds/scenery/lights/flicker.mp3",
@@ -703,6 +704,11 @@ export class PhaserRenderer {
 
   playPortalSound(type: "up" | "down"): void {
     this.playOneShot(`sfx-portal-${type}`);
+  }
+
+  playPortalActivationSound(): void {
+    // A non-positional sound stays centered on the player, regardless of portal distance.
+    this.playOneShot("sfx-portal-activation", 1);
   }
 
   playSpawnerSpawnSound(): void {
