@@ -1226,10 +1226,18 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Bosses should have multiple stages with different attack patterns depending on their HP.
 
 * Room layout
-- We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
-
 - Lax the max rooms/max subcorridors limits for larger layouts
 - Add content browsers for combined rooms
+
+* Room layout
+- We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
+- Zero length corridors - make rooms attach directly to the neighbouring rooms.
+
+* Bugs
+- All monsters in a room seem to be dropping the same loot.
+- Destroyed content browsers should not "work" - currently they are still playing the sound and show the content browser popup.
+- Script rooms don't need a content browser. Omit content browsers when there's no readable content.
+- When a floor has no links at all, add a random link (same as I'm feeling lucky button) to one of the rooms. If there is a boss arena, place the link in that arena.
 
 * Hidden rooms
 `display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.

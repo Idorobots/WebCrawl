@@ -1063,8 +1063,9 @@ export class PhaserRenderer {
     const scene = this.scene;
     if (!scene) return;
     const floorContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_FLOOR_DEPTH).setAlpha(alpha));
+    const junctionContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_FLOOR_DEPTH + 0.1).setAlpha(alpha));
     const markingContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_MARKING_DEPTH).setAlpha(alpha));
-    const statics: StaticObject[] = [floorContainer, markingContainer];
+    const statics: StaticObject[] = [floorContainer, junctionContainer, markingContainer];
     this.corridorBounds.set(link.id, link.points.reduce<WorldBounds>((bounds, point) => ({
       left: Math.min(bounds.left, point.x - link.width / 2),
       right: Math.max(bounds.right, point.x + link.width / 2),
@@ -1084,7 +1085,7 @@ export class PhaserRenderer {
     for (const floorPlan of plan.junctionFloors.filter(candidate => candidate.ownerLinkId === link.id)) {
       const floor = this.createCorridorJunctionFloor(floorPlan.x, floorPlan.y, floorPlan.seed);
       this.illuminate(floor);
-      floorContainer.add(floor);
+      junctionContainer.add(floor);
     }
     for (const wall of plan.walls.filter(candidate => candidate.ownerLinkId === link.id)) {
       statics.push(this.rememberStatic(this.createEnvironmentModule(wall).setAlpha(alpha)));

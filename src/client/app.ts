@@ -33,6 +33,7 @@ import {
   steerDashDirection,
   visiblePlayerHitPoint,
 } from "./domain/combat";
+import { connectedRoomAdjacency, corridorJunctions, junctionRoomsAtPoint, type CorridorJunction } from "./domain/corridor-junctions";
 import {
   distanceSquared,
   pointInCorridor,
@@ -188,6 +189,7 @@ const navigationHistory: string[] = [];
 const navigationReturnRooms: Array<number | null> = [];
 
 let currentLayout: DungeonLayout | null = null;
+let currentCorridorJunctions: CorridorJunction[] = [];
 let currentGraph: DungeonGraph | null = null;
 interface FloorSnapshot {
   graph: DungeonGraph;
@@ -405,11 +407,10 @@ function renderContentBrowser(): void {
   const point = currentDecorations.find(item =>
     item.contentPoint &&
     item.contentEnabled &&
-    !item.destroyed &&
     distanceSquared(player, item) <= CONTENT_BROWSER_RADIUS * CONTENT_BROWSER_RADIUS
   );
   const room = point ? currentRoomsById.get(point.roomId) : undefined;
-  if (!point || !room?.contentHtml) {
+  if (!point || !room) {
     hideContentBrowser();
     return;
   }
@@ -428,10 +429,32 @@ function renderContentBrowser(): void {
   heading.textContent = room.floorLabel;
   const content = document.createElement("div");
   content.className = "content-browser-body";
-  // contentHtml is reduced to a fixed allowlist while the fetched page is parsed.
-  content.innerHTML = room.contentHtml;
+  const pages = room.contentChunks ?? (room.contentHtml
+    ? [{ order: 0, html: room.contentHtml, label: room.floorLabel }] : []);
+  const navigation = document.createElement("nav");
+  navigation.className = "content-browser-pages";
+  const previous = document.createElement("button");
+  previous.type = "button";
+  previous.textContent = "Previous";
+  const status = document.createElement("span");
+  const next = document.createElement("button");
+  next.type = "button";
+  next.textContent = "Next";
+  let page = 0;
+  const showPage = (): void => {
+    // Chunks use the same fixed allowlist as the old contentHtml preview.
+    content.innerHTML = pages[page]?.html ?? "<p>No readable content in this section.</p>";
+    status.textContent = `${pages[page]?.label ?? room.floorLabel} · ${page + 1}/${Math.max(1, pages.length)}`;
+    previous.disabled = page === 0;
+    next.disabled = page >= pages.length - 1;
+  };
+  previous.addEventListener("click", () => { page -= 1; showPage(); });
+  next.addEventListener("click", () => { page += 1; showPage(); });
+  navigation.append(previous, status, next);
+  navigation.hidden = pages.length <= 1;
+  showPage();
   closeButton.addEventListener("click", dismissContentBrowser);
-  contentBrowserEl.replaceChildren(closeButton, heading, content);
+  contentBrowserEl.replaceChildren(closeButton, heading, content, navigation);
   contentBrowserEl.hidden = false;
   visibleContentPointId = point.id;
   dismissedContentPointId = null;
@@ -512,20 +535,18 @@ function pointInCommittedForkBranch(x: number, y: number, link: LayoutLink): boo
 }
 
 function revealRoomsFromCorridor(x: number, y: number): void {
-  const link = currentLayout?.links.find(candidate => pointInCommittedForkBranch(x, y, candidate)) ?? null;
-  if (!link) return;
-
   // If either end of this corridor is already known, reveal the other end.
   // This lets the player see/activate the destination before crossing a
   // doorway that might be obstructed by generated room props.
-  const sourceVisited = visitedRooms.has(link.source.id);
-  const targetVisited = visitedRooms.has(link.target.id);
-
-  if (sourceVisited && !targetVisited) {
-    markVisited(link.target);
-  } else if (targetVisited && !sourceVisited) {
-    markVisited(link.source);
+  for (const link of currentLayout?.links ?? []) {
+    if (!pointInCommittedForkBranch(x, y, link)) continue;
+    const sourceVisited = visitedRooms.has(link.source.id);
+    const targetVisited = visitedRooms.has(link.target.id);
+    if (sourceVisited && !targetVisited) markVisited(link.target);
+    else if (targetVisited && !sourceVisited) markVisited(link.source);
   }
+  // Crossings reveal both corridors without requiring a room doorway.
+  if (currentLayout) for (const room of junctionRoomsAtPoint(currentLayout, currentCorridorJunctions, { x, y })) markVisited(room);
 }
 
 function updateCurrentRoom(): void {
@@ -1588,7 +1609,7 @@ function updateContentPoints(timestamp: number): void {
   let changed = false;
   const occupiedRoomId = roomContainingPoint(player.x, player.y)?.id ?? null;
   for (const item of currentDecorations) {
-    if (!item.contentPoint || item.destroyed) continue;
+    if (!item.contentPoint) continue;
     const playerInRoom = occupiedRoomId === item.roomId;
     if (
       !item.contentUnlocked &&
@@ -1609,7 +1630,7 @@ function updateContentPoints(timestamp: number): void {
       item.contentTurningOff = false;
       item.spawnAnimationStartedAt = timestamp - CONTENT_TOGGLE_FRAME_MS;
     }
-    renderer.applyDecorationFrame(item, contentPointFrameFor(item, timestamp));
+    if (!item.destroyed) renderer.applyDecorationFrame(item, contentPointFrameFor(item, timestamp));
   }
   if (changed) renderDecorations();
   renderContentBrowser();
@@ -2128,15 +2149,7 @@ function rebuildRoomRouting(): void {
   if (!roomRoutingDirty || !currentLayout || currentRoomId === null) return;
   roomRoutingDirty = false;
   nextRoomTowardPlayer = new Map([[currentRoomId, currentRoomId]]);
-  const adjacency = new Map<number, number[]>();
-  for (const room of currentLayout.nodes) {
-    if (visitedRooms.has(room.id)) adjacency.set(room.id, []);
-  }
-  for (const link of currentLayout.links) {
-    if (!visitedRooms.has(link.source.id) || !visitedRooms.has(link.target.id)) continue;
-    adjacency.get(link.source.id)?.push(link.target.id);
-    adjacency.get(link.target.id)?.push(link.source.id);
-  }
+  const adjacency = connectedRoomAdjacency(currentLayout, visitedRooms);
   const queue = [currentRoomId];
   for (let index = 0; index < queue.length; index += 1) {
     const roomId = queue[index]!;
@@ -2936,6 +2949,7 @@ function teleportPlayerTo(x: number, y: number): void {
     spawnHealingEffect: () => void;
     stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y" | "url" | "enabled">>;
     defeatAllMonsters: () => void;
+    destroyContentPoint: (id: string) => void;
     contentPoints: () => Array<{
       id: string;
       x: number;
@@ -2991,6 +3005,10 @@ function teleportPlayerTo(x: number, y: number): void {
       for (const monster of currentMonsters) {
         if (!monster.dead) damageMonster(monster, monster.hp);
       }
+    },
+    destroyContentPoint(id: string): void {
+      const point = currentDecorations.find(item => item.id === id && item.contentPoint);
+      if (point) damageObstacle(point, point.hp);
     },
     contentPoints: () => currentDecorations
       .filter(item => item.contentPoint)
@@ -3371,6 +3389,7 @@ function renderGraph(
   const layout = preparedLayout ?? layoutOrthogonal(graph);
   currentGraph = graph;
   currentLayout = layout;
+  currentCorridorJunctions = corridorJunctions(layout.links);
   currentRoomsById = new Map(layout.nodes.map(room => [room.id, room]));
   roomRoutingDirty = true;
   nextRoomTowardPlayer = new Map();

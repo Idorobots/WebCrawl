@@ -4,7 +4,7 @@ import {
   ROOM_HEIGHT,
   ROOM_WIDTH,
 } from "../config";
-import type { DungeonGraph, GraphNode } from "../types";
+import type { ContentChunk, DungeonGraph, GraphNode } from "../types";
 import { stableHash } from "./hash";
 
 const MAX_ROOM_CONTENT_LENGTH = 48_000;
@@ -36,31 +36,66 @@ function safeUrl(rawUrl: string | null, pageUrl: string): string | null {
   }
 }
 
-function contentMarkup(node: Node, pageUrl: string): string {
-  if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.textContent || "");
-  if (!(node instanceof Element)) return "";
-
-  const tag = node.tagName.toLowerCase();
-  if (CONTENT_OMIT_TAGS.has(tag)) return "";
-  const children = Array.from(node.childNodes).map(child => contentMarkup(child, pageUrl)).join("");
-  if (!CONTENT_TAGS.has(tag)) return children;
-  if (tag === "br") return "<br>";
-  if (tag === "img") {
-    const src = safeUrl(node.getAttribute("src"), pageUrl);
-    return src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(node.getAttribute("alt") || "")}">` : "";
-  }
+function contentWrapper(element: Element, pageUrl: string): { open: string; close: string } | null {
+  const tag = element.tagName.toLowerCase();
+  if (!CONTENT_TAGS.has(tag) || tag === "img" || tag === "br") return null;
   if (tag === "a") {
-    const href = safeUrl(node.getAttribute("href"), pageUrl);
+    const href = safeUrl(element.getAttribute("href"), pageUrl);
     return href
-      ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${children}</a>`
-      : `<span>${children}</span>`;
+      ? { open: `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">`, close: "</a>" }
+      : { open: "<span>", close: "</span>" };
   }
-  return `<${tag}>${children}</${tag}>`;
+  return { open: `<${tag}>`, close: `</${tag}>` };
 }
 
-function roomContent(element: Element, pageUrl: string): string | null {
-  const markup = contentMarkup(element, pageUrl).slice(0, MAX_ROOM_CONTENT_LENGTH);
-  return markup.replace(/<[^>]+>/g, "").trim() || /<img\b/i.test(markup) ? markup : null;
+function collectContent(body: Element, byElement: ReadonlyMap<Element, GraphNode>, pageUrl: string): void {
+  let order = 0;
+  let lastOwner: GraphNode | null = null;
+  const add = (owner: GraphNode, html: string): void => {
+    if (!html) return;
+    const chunks = owner.contentChunks!;
+    const last = chunks.at(-1);
+    if (last && lastOwner === owner && last.html.length + html.length <= MAX_ROOM_CONTENT_LENGTH) {
+      last.html += html;
+    } else {
+      chunks.push({ order, html, label: owner.floorLabel });
+    }
+    order += 1;
+    lastOwner = owner;
+  };
+  const visit = (element: Element, inheritedOwner: GraphNode, open: string, close: string): void => {
+    if (CONTENT_OMIT_TAGS.has(element.tagName.toLowerCase())) return;
+    const owner = byElement.get(element) ?? inheritedOwner;
+    const wrapper = contentWrapper(element, pageUrl);
+    const prefix = open + (wrapper?.open ?? "");
+    const suffix = (wrapper?.close ?? "") + close;
+    for (const child of Array.from(element.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const text = child.textContent || "";
+        // Retain spaces between inline elements and literal whitespace inside pre/code.
+        if (!text.trim() && /[\r\n]/.test(text) && !element.closest("pre, code")) continue;
+        // Split raw text before escaping so neither an entity nor an HTML tag is cut in half.
+        const pieceSize = Math.max(1, Math.floor((MAX_ROOM_CONTENT_LENGTH - prefix.length - suffix.length) / 6));
+        for (let start = 0; start < text.length;) {
+          let end = Math.min(text.length, start + pieceSize);
+          if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1]!)) end -= 1;
+          end = Math.max(start + 1, end);
+          add(owner, prefix + escapeHtml(text.slice(start, end)) + suffix);
+          start = end;
+        }
+      } else if (child instanceof Element) {
+        const tag = child.tagName.toLowerCase();
+        if (CONTENT_OMIT_TAGS.has(tag)) continue;
+        if (tag === "br") add(byElement.get(child) ?? owner, prefix + "<br>" + suffix);
+        else if (tag === "img") {
+          const src = safeUrl(child.getAttribute("src"), pageUrl);
+          if (src) add(byElement.get(child) ?? owner,
+            `${prefix}<img src="${escapeHtml(src)}" alt="${escapeHtml(child.getAttribute("alt") || "")}">${suffix}`);
+        } else visit(child, owner, prefix, suffix);
+      }
+    }
+  };
+  visit(body, byElement.get(body)!, "", "");
 }
 
 function nodeLootSeed(
@@ -133,6 +168,7 @@ export function domToGraph(html: string, pageUrl: string, floor = 1): DungeonGra
   if (!body) throw new Error("The fetched page did not contain a body element.");
 
   const nodes: GraphNode[] = [];
+  const byElement = new Map<Element, GraphNode>();
   let nextId = 0;
   let truncated = false;
 
@@ -145,7 +181,7 @@ export function domToGraph(html: string, pageUrl: string, floor = 1): DungeonGra
     const tag = element.tagName.toLowerCase();
     const text = (element.textContent || "").replace(/\s+/g, " ").trim();
     const hrefs = collectLinks(element, pageUrl);
-    return {
+    const node: GraphNode = {
       id: nextId++,
       parentId: parent?.id ?? null,
       tag,
@@ -155,7 +191,8 @@ export function domToGraph(html: string, pageUrl: string, floor = 1): DungeonGra
       label: makeLabel(element, text),
       floorLabel: makeFloorLabel(element),
       title: makeTitle(element, text, hrefs[0] ?? null),
-      contentHtml: roomContent(element, pageUrl),
+      contentHtml: null,
+      contentChunks: [],
       width: ROOM_WIDTH,
       height: ROOM_HEIGHT,
       lootSeed: nodeLootSeed(element, text, structuralPath, pageUrl, floor),
@@ -170,6 +207,8 @@ export function domToGraph(html: string, pageUrl: string, floor = 1): DungeonGra
       shape: "rectangle",
       childCount: 0,
     };
+    byElement.set(element, node);
+    return node;
   };
 
   const rootNode = makeNode(body, null, 0, "body");
@@ -196,6 +235,25 @@ export function domToGraph(html: string, pageUrl: string, floor = 1): DungeonGra
   }
 
   if (queue.length) truncated = true;
+  collectContent(body, byElement, pageUrl);
+  // Keep the bounded preview used by older consumers without dropping the full chunks.
+  const previewById = new Map<number, ContentChunk[]>();
+  for (const node of [...nodes].reverse()) {
+    const preview = [...node.contentChunks!];
+    for (const child of nodes.filter(child => child.parentId === node.id)) {
+      preview.push(...previewById.get(child.id) ?? []);
+    }
+    preview.sort((left, right) => left.order - right.order);
+    const bounded: ContentChunk[] = [];
+    let length = 0;
+    for (const chunk of preview) {
+      if (length + chunk.html.length > MAX_ROOM_CONTENT_LENGTH) break;
+      bounded.push(chunk);
+      length += chunk.html.length;
+    }
+    previewById.set(node.id, bounded);
+    node.contentHtml = bounded.length ? bounded.map(chunk => chunk.html).join("") : null;
+  }
   const originalCount = nodes.length;
   const coalescedNodes = coalesceLeaves(nodes, MAX_ROOMS_AFTER_COALESCE);
   const survivingIds = new Set(coalescedNodes.map((node) => node.id));
@@ -215,7 +273,9 @@ export function domToGraph(html: string, pageUrl: string, floor = 1): DungeonGra
 export function coalesceLeaves(inputNodes: GraphNode[], limit: number): GraphNode[] {
   if (inputNodes.length <= limit) return inputNodes;
 
-  const nodes = inputNodes.map((node) => ({ ...node, hrefs: [...node.hrefs] }));
+  const nodes: GraphNode[] = inputNodes.map((node) => ({
+    ...node, hrefs: [...node.hrefs], contentChunks: node.contentChunks?.map(chunk => ({ ...chunk })),
+  }));
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const alive = new Set(nodes.map((node) => node.id));
 
@@ -252,6 +312,10 @@ export function coalesceLeaves(inputNodes: GraphNode[], limit: number): GraphNod
       if (!parent || !alive.has(parent.id)) continue;
       parent.coalescedCount += 1 + leaf.coalescedCount;
       parent.hrefs = [...new Set([...parent.hrefs, ...leaf.hrefs])];
+      if (parent.contentChunks && leaf.contentChunks) {
+        parent.contentChunks.push(...leaf.contentChunks);
+        parent.contentChunks.sort((left, right) => left.order - right.order);
+      }
 
       if (leaf.hrefs.length || leaf.coalescedCount) {
         const extra: string[] = [];

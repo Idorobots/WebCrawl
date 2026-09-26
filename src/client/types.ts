@@ -103,6 +103,8 @@ export interface GraphNode extends Point {
   floorLabel: string;
   title: string;
   contentHtml: string | null;
+  /** Disjoint, document-ordered readable content; absent on older hand-built graphs. */
+  contentChunks?: ContentChunk[];
   width: number;
   height: number;
   lootSeed: number;
@@ -112,6 +114,12 @@ export interface GraphNode extends Point {
   directionFromParent: Direction | null;
   shape: RoomShape;
   childCount: number;
+}
+
+export interface ContentChunk {
+  order: number;
+  html: string;
+  label: string;
 }
 
 export interface GraphLink {

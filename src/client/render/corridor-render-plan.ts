@@ -1,5 +1,6 @@
 import { ASSETS } from "../config";
 import type { Direction, DungeonLayout, GraphNode, LayoutLink, Point } from "../types";
+import { segmentIntersectionPoints } from "../domain/corridor-junctions";
 
 export type CorridorCornerKind = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type WallModuleKind = "wall" | CorridorCornerKind;
@@ -139,7 +140,31 @@ function buildPhysicalSegments(layout: DungeonLayout): CorridorSegmentPlan[] {
     }
   }
 
-  return [...segments.values()];
+  // Crossings in the middle of two runs must become explicit endpoints, just
+  // like a fork's branch mouth, so walls and corners see all four arms.
+  const physical = [...segments.values()];
+  const cuts = physical.map(segment => [segment.start, segment.end]);
+  for (let left = 0; left < physical.length; left += 1) {
+    for (let right = left + 1; right < physical.length; right += 1) {
+      for (const point of segmentIntersectionPoints(physical[left]!, physical[right]!)) {
+        cuts[left]!.push(point);
+        cuts[right]!.push(point);
+      }
+    }
+  }
+  const split = new Map<string, CorridorSegmentPlan>();
+  for (const [index, segment] of physical.entries()) {
+    const horizontal = segment.start.y === segment.end.y;
+    const ordered = [...new Map(cuts[index]!.map(point => [pointKey(point), point])).values()]
+      .sort((left, right) => horizontal ? left.x - right.x : left.y - right.y);
+    for (let part = 1; part < ordered.length; part += 1) {
+      const start = ordered[part - 1]!;
+      const end = ordered[part]!;
+      const key = segmentKey(start, end);
+      if (!split.has(key)) split.set(key, { ...segment, start, end });
+    }
+  }
+  return [...split.values()];
 }
 
 function wallIsInterior(
@@ -397,6 +422,15 @@ function buildJunctions(
       .sort((left, right) => left.ownerLinkId.localeCompare(right.ownerLinkId));
     const owner = owners[0];
     if (!owner) continue;
+    if (directions.size === 4) {
+      for (const dx of [-segmentSize / 2, segmentSize / 2]) {
+        for (const dy of [-segmentSize / 2, segmentSize / 2]) {
+          junctionFloors.push({
+            ownerLinkId: owner.ownerLinkId, x: point.x + dx, y: point.y + dy, seed: owner.seed,
+          });
+        }
+      }
+    }
     const namedCell = (cornerKind: CorridorCornerKind): Point => ({
       x: point.x + (cornerKind.endsWith("left") ? -segmentSize / 2 : segmentSize / 2),
       y: point.y + (cornerKind.startsWith("top") ? -segmentSize / 2 : segmentSize / 2),
@@ -453,7 +487,7 @@ function buildJunctions(
           side: innerKind.endsWith("left") ? "W" : "E",
           kind: innerKind,
         });
-        if (innerKind === "bottom-right") {
+        if (innerKind === "bottom-right" && directions.size !== 4) {
           junctionFloors.push({
             ownerLinkId: owner.ownerLinkId,
             x: outerCell.x + innerShift.x + segmentSize/2,

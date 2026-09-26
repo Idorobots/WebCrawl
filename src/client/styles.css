@@ -928,6 +928,27 @@ button:hover {
   object-fit: contain;
 }
 
+.content-browser-pages {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.content-browser-pages[hidden] { display: none; }
+
+.content-browser-pages button {
+  border: 1px solid rgba(188, 224, 237, 0.58);
+  background: rgba(38, 150, 255, 0.18);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.content-browser-pages button:disabled { opacity: 0.4; cursor: default; }
+
 .legend {
   position: fixed;
   right: 12px;

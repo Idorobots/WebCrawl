@@ -62,7 +62,7 @@ import {
 } from "../../src/client/domain/generation";
 import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
-import { corridorEndpoints, corridorIntersectsRoom, corridorLength, layoutOrthogonal } from "../../src/client/domain/layout";
+import { corridorEndpoints, corridorIntersectsRoom, corridorLength, doorCapacity, doorPositionForSlot, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, chooseReachablePath, monsterEscapeStep, revealedRoomPath, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "../../src/client/domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "../../src/client/domain/portals";
 import {
@@ -127,6 +127,16 @@ const node = (id: number, parentId: number | null, depth: number, overrides: Par
   childCount: 0,
   ...overrides,
 });
+
+const forkGroups = (links: readonly LayoutLink[]): Map<string, LayoutLink[]> => {
+  const groups = new Map<string, LayoutLink[]>();
+  for (const link of links) {
+    const group = groups.get(link.forkId!) ?? [];
+    group.push(link);
+    groups.set(link.forkId!, group);
+  }
+  return groups;
+};
 
 describe("DOM graph generation", () => {
   it("uses stable hashes", () => {
@@ -197,6 +207,68 @@ describe("DOM graph generation", () => {
     expect(result.map(({ id }) => id)).toEqual([0, 1, 2]);
     expect(result[2]?.hrefs).toEqual(["https://example.com/deep"]);
     expect(result[2]?.coalescedCount).toBe(1);
+  });
+
+  it("assigns each readable piece to one browser, including root text and folded descendants", () => {
+    const html = `<body>Root text<main>Before <p>Inner <b>bold</b></p> After
+      <img src="/picture.png" alt="Picture"><script>secret()</script></main></body>`;
+    const graph = domToGraph(html, "https://example.com/page");
+    const main = graph.nodes.find(room => room.tag === "main")!;
+    const leaf = graph.nodes.find(room => room.tag === "b")!;
+    expect(contentBrowserForRoom(graph.nodes[0]!)).not.toBeNull();
+    expect(contentBrowserForRoom(main)).not.toBeNull();
+    expect(contentBrowserForRoom(leaf)).not.toBeNull();
+    const content = graph.nodes.flatMap(room => room.contentChunks ?? []).sort((a, b) => a.order - b.order)
+      .map(chunk => chunk.html).join("");
+    const rendered = document.createElement("div");
+    rendered.innerHTML = content;
+    expect(rendered.textContent).toBe("Root textBefore Inner bold After\n      ");
+    expect(rendered.querySelectorAll("img")).toHaveLength(1);
+    expect(rendered.querySelector("img")?.getAttribute("src")).toBe("https://example.com/picture.png");
+    expect(content).not.toContain("secret()");
+
+    const folded = coalesceLeaves(graph.nodes, 2);
+    const foldedLeaf = folded.find(room => room.tag === "main")!;
+    expect(foldedLeaf.contentChunks?.map(chunk => chunk.html).join("")).toContain("bold");
+    expect(contentBrowserForRoom(foldedLeaf)).not.toBeNull();
+    expect(folded.flatMap(room => room.contentChunks ?? []).map(chunk => chunk.order).sort((a, b) => a - b))
+      .toEqual(graph.nodes.flatMap(room => room.contentChunks ?? []).map(chunk => chunk.order).sort((a, b) => a - b));
+  });
+
+  it("retains every readable chunk beyond the room cap and across long text pages", () => {
+    const items = Array.from({ length: 500 }, (_, index) => `<span>Item${index}!</span>`).join("");
+    const text = `${"A".repeat(110_000)}END`;
+    const graph = domToGraph(`<body><main>${items}<p>${text}</p></main></body>`, "https://example.com/page");
+    expect(graph.originalCount).toBe(450);
+    expect(graph.nodes).toHaveLength(100);
+    expect(graph.truncated).toBe(true);
+    const layout = layoutOrthogonal(graph);
+    const pages = layout.nodes.flatMap(room => room.contentChunks ?? []);
+    expect(layout.nodes.filter(room => room.contentChunks?.length).every(room => contentBrowserForRoom(room))).toBe(true);
+    const rendered = document.createElement("div");
+    rendered.innerHTML = pages.sort((a, b) => a.order - b.order).map(page => page.html).join("");
+    expect([...rendered.textContent!.matchAll(/Item(\d+)!/g)].map(match => Number(match[1])))
+      .toEqual(Array.from({ length: 500 }, (_, index) => index));
+    expect(rendered.textContent).toContain(text);
+    expect(pages.length).toBeGreaterThan(2);
+    expect(pages.every(page => page.html.length <= 48_000)).toBe(true);
+  });
+
+  it("gives empty leaves a browser and reserves room for one on the root beside the up portal", () => {
+    const emptyLeaf = domToGraph("<body><script>ignored()</script></body>", "https://example.com/")
+      .nodes.find(room => room.tag === "script")!;
+    expect(emptyLeaf.contentChunks).toEqual([]);
+    expect(contentBrowserForRoom(emptyLeaf)).not.toBeNull();
+
+    const root = node(0, null, 0, {
+      contentChunks: [{ order: 0, html: "<p>Readable root</p>", label: "BODY" }],
+      hrefs: Array.from({ length: 8 }, (_, index) => `https://example.com/${index}`),
+    });
+    const layout = { nodes: [root], links: [], hiddenCount: 0 };
+    expect(contentBrowserForRoom(root)).not.toBeNull();
+    const stairs = buildInteractiveObjects(layout, "https://example.com/page", null, new Set()).stairs;
+    expect(stairs.filter(stair => stair.type === "up")).toHaveLength(1);
+    expect(stairs.filter(stair => stair.type === "down")).toHaveLength(6);
   });
 });
 
@@ -533,7 +605,7 @@ describe("layout and geometry", () => {
     expect(monsters.every(item => item.spawnRoomId === link.source.id)).toBe(true);
   });
 
-  it("routes up to eight siblings through one shared fork corridor", () => {
+  it("spreads eight siblings across four two-branch forks", () => {
     const nodes = [
       node(0, null, 0),
       ...Array.from({ length: 8 }, (_, index) => node(index + 1, 0, 1)),
@@ -549,9 +621,10 @@ describe("layout and geometry", () => {
     expect(forkLayout.nodes).toHaveLength(nodes.length);
     expect(forkLayout.hiddenCount).toBe(0);
     expect(forkLayout.links).toHaveLength(8);
-    expect(new Set(forkLayout.links.map(link => link.forkId)).size).toBe(1);
-    expect(new Set(forkLayout.links.map(link => JSON.stringify(link.points[0]))).size).toBe(1);
+    expect(new Set(forkLayout.links.map(link => link.forkId)).size).toBe(4);
+    expect(new Set(forkLayout.links.map(link => JSON.stringify(link.points[0]))).size).toBe(4);
     expect(new Set(forkLayout.links.map(link => `${link.points[1]!.x}:${link.points[1]!.y}`)).size).toBe(4);
+    expect([...forkGroups(forkLayout.links).values()].map(links => links.length)).toEqual([2, 2, 2, 2]);
     for (const link of forkLayout.links) {
       expect(link.points).toHaveLength(3);
       expect(link.forkPointIndex).toBe(1);
@@ -570,7 +643,7 @@ describe("layout and geometry", () => {
     const walkable = (point: Point) => forkLayout.nodes.some(room =>
       pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_RADIUS)
     ) || forkLayout.links.some(link => pointInCorridor(point.x, point.y, link, MAX_REGULAR_MONSTER_RADIUS));
-    const path = aStarPath(forkLink.source, playerInBranch, walkable, WORLD_GEOMETRY.pathGridStep, 1800);
+    const path = aStarPath(forkLink.source, playerInBranch, walkable, WORLD_GEOMETRY.pathGridStep, 6000);
     expect(path).not.toBeNull();
     expect(path!.at(-1)).toEqual(playerInBranch);
     expect(path!.slice(1).every((point, index) =>
@@ -590,7 +663,7 @@ describe("layout and geometry", () => {
     for (const start of [previousRoom, insideCorridor]) {
       expect(walkable(start)).toBe(true);
       const route = chooseReachablePath(
-        start, [playerRoom, forkLink.source], walkable, WORLD_GEOMETRY.pathGridStep, 1800,
+        start, [playerRoom, forkLink.source], walkable, WORLD_GEOMETRY.pathGridStep, 6000,
         destination => ({
           minX: Math.min(start.x, destination.x, forkLink.source.x) - WORLD_GEOMETRY.pathBoundsPadding,
           maxX: Math.max(start.x, destination.x, forkLink.source.x) + WORLD_GEOMETRY.pathBoundsPadding,
@@ -604,6 +677,93 @@ describe("layout and geometry", () => {
         walkableSegment(route!.path[index]!, point, walkable)
       )).toBe(true);
     }
+  });
+
+  it("keeps one door per small side and three distinct slots per long side", () => {
+    const small = node(0, null, 0);
+    const wide = { ...small, ...ROOM_DEFINITIONS.wide };
+    const large = { ...small, ...ROOM_DEFINITIONS.boss };
+    expect(["N", "E", "S", "W"].map(side => doorCapacity(small, side as "N" | "E" | "S" | "W")))
+      .toEqual([1, 1, 1, 1]);
+    expect(["N", "E", "S", "W"].map(side => doorCapacity(wide, side as "N" | "E" | "S" | "W")))
+      .toEqual([3, 1, 3, 1]);
+    expect(["N", "E", "S", "W"].map(side => doorCapacity(large, side as "N" | "E" | "S" | "W")))
+      .toEqual([3, 3, 3, 3]);
+    expect([0, 1, 2].map(slot => doorPositionForSlot(large, "N", slot).x))
+      .toEqual([0, -2 * WORLD_GEOMETRY.segmentSize, 2 * WORLD_GEOMETRY.segmentSize]);
+  });
+
+  it.each([5, 7, 8, 9, 16, 32, 40])("routes up to 32 root children through balanced fork entrances (%i children)", count => {
+    const nodes = [node(0, null, 0), ...Array.from({ length: count }, (_, index) => node(index + 1, 0, 1))];
+    const forkLayout = layoutOrthogonal({ nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false });
+    const placedCount = Math.min(count, 32);
+    expect(forkLayout.links).toHaveLength(placedCount);
+    expect(forkLayout.hiddenCount).toBe(count - placedCount);
+    const groups = forkGroups(forkLayout.links);
+    expect(groups.size).toBe(Math.min(4, Math.ceil(placedCount / 2)));
+    for (const links of groups.values()) {
+      expect(links.length).toBeLessThanOrEqual(8);
+      expect(new Set(links.map(link => JSON.stringify(link.points[0]))).size).toBe(1);
+    }
+    expect(new Set([...groups.values()].map(links => JSON.stringify(links[0]!.points[0]))).size).toBe(groups.size);
+    for (const link of forkLayout.links) {
+      for (const room of forkLayout.nodes) {
+        if (room.id !== link.source.id && room.id !== link.target.id) {
+          expect(corridorIntersectsRoom(link, room)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("uses a second door on a long side rather than forking through a non-root room's incoming corridor", () => {
+    const nodes = [node(0, null, 0), node(1, 0, 1),
+      ...Array.from({ length: 32 }, (_, index) => node(index + 2, 1, 2))];
+    const forkLayout = layoutOrthogonal({ nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false });
+    const incoming = forkLayout.links.find(link => link.target.id === 1)!;
+    const children = forkLayout.links.filter(link => link.source.id === 1);
+    expect(children).toHaveLength(32);
+    expect(forkLayout.hiddenCount).toBe(0);
+    const groups = forkGroups(children);
+    expect(groups.size).toBe(4);
+    expect([...groups.values()].map(links => links[0]!.direction)).not.toContain(incoming.targetDirection);
+    const entrances = [...groups.values()].map(links => links[0]!.points[0]!);
+    expect(new Set(entrances.map(point => `${point.x}:${point.y}`)).size).toBe(4);
+    expect(entrances).not.toContainEqual(incoming.points.at(-1));
+    expect(new Set([...groups.values()].map(links => links[0]!.direction)).size).toBe(3);
+  });
+
+  it("uses a spare long-side slot when a wide room's incoming door occupies a short side", () => {
+    const nodes = [node(0, null, 0), node(1, 0, 1, { lootSeed: 11 }),
+      ...Array.from({ length: 7 }, (_, index) => node(index + 2, 1, 2))];
+    const layout = layoutOrthogonal({ nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false });
+    const parent = layout.nodes.find(room => room.id === 1)!;
+    const children = layout.links.filter(link => link.source.id === 1);
+    expect(parent.width).toBe(ROOM_DEFINITIONS.wide.width);
+    expect(children).toHaveLength(7);
+    const groups = forkGroups(children);
+    expect(groups.size).toBe(4);
+    const byDirection = [...groups.values()].map(links => links[0]!.direction);
+    expect(byDirection.filter(direction => direction === "N" || direction === "S")).toHaveLength(3);
+    expect(byDirection).not.toContain(parent.parentSide);
+  });
+
+  it("promotes an unplaceable subtree's content to a browser on its placed ancestor", () => {
+    const nodes = [
+      node(0, null, 0, { contentChunks: [{ order: 0, html: "<p>Root</p>", label: "ROOT" }] }),
+      ...Array.from({ length: 40 }, (_, index) => node(index + 1, 0, 1, {
+        contentChunks: [{ order: index + 1, html: `<p>Child${index + 1}</p>`, label: `CHILD${index + 1}` }],
+      })),
+      node(41, 40, 2, { contentChunks: [{ order: 41, html: "<p>Grandchild</p>", label: "GRANDCHILD" }] }),
+    ];
+    const layout = layoutOrthogonal({ nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false });
+    const root = layout.nodes[0]!;
+    expect(layout.hiddenCount).toBe(9);
+    expect(root.contentChunks?.map(chunk => chunk.label)).toContain("GRANDCHILD");
+    expect(root.contentChunks?.map(chunk => chunk.label)).toContain("CHILD40");
+    expect(contentBrowserForRoom(root)).not.toBeNull();
+    expect(layout.nodes.flatMap(room => room.contentChunks ?? []).map(chunk => chunk.order).sort((a, b) => a - b))
+      .toEqual(Array.from({ length: 42 }, (_, index) => index));
+    expect(nodes[0]!.contentChunks).toHaveLength(1);
   });
 
   it("routes around blocked doorway geometry with A*", () => {

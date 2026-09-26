@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
 import { WORLD_GEOMETRY } from "../../src/client/domain/specs";
+import { connectedRoomAdjacency, corridorJunctions, junctionRoomsAtPoint } from "../../src/client/domain/corridor-junctions";
+import { pointInCorridor } from "../../src/client/domain/geometry";
+import { aStarPath, revealedRoomPath } from "../../src/client/domain/pathfinding";
 import {
   buildCorridorRenderPlan,
   buildRoomWalls,
@@ -158,7 +161,7 @@ describe("corridor render planning", () => {
         `${corner.y < 0 ? "top" : "bottom"}-${corner.x < 0 ? "left" : "right"}`,
       ));
     }
-    expect(plan.junctionFloors).toHaveLength(1);
+    expect(plan.junctionFloors).toHaveLength(4);
     expect(plan.walls).toHaveLength(4);
     expect(plan.walls.some(wall =>
       Math.abs(wall.x) <= SEGMENT_SIZE / 2 &&
@@ -202,6 +205,103 @@ describe("corridor render planning", () => {
     expect(hasWall("E", SEGMENT_SIZE / 2, -SEGMENT_SIZE / 2)).toBe(true);
   });
 
+  it("opens and routes through two four-way crossings inside corridor runs", () => {
+    const s = SEGMENT_SIZE;
+    const rooms = Array.from({ length: 6 }, (_, index) => room(index));
+    const links: LayoutLink[] = [
+      { id: "across", source: rooms[0]!, target: rooms[1]!, ownerRoomId: 0, direction: "E",
+        width: CORRIDOR_WIDTH, points: [{ x: -6 * s, y: 0 }, { x: 6 * s, y: 0 }] },
+      { id: "left", source: rooms[2]!, target: rooms[3]!, ownerRoomId: 2, direction: "S",
+        width: CORRIDOR_WIDTH, points: [{ x: -2 * s, y: -4 * s }, { x: -2 * s, y: 4 * s }] },
+      { id: "right", source: rooms[4]!, target: rooms[5]!, ownerRoomId: 4, direction: "S",
+        width: CORRIDOR_WIDTH, points: [{ x: 2 * s, y: -4 * s }, { x: 2 * s, y: 4 * s }] },
+    ];
+    const layout = { nodes: rooms, links, hiddenCount: 0 };
+    const plan = buildCorridorRenderPlan(layout, s);
+
+    expect(corridorJunctions(links).map(junction => junction.point)).toEqual([
+      { x: -2 * s, y: 0 }, { x: 2 * s, y: 0 },
+    ]);
+    expect(junctionRoomsAtPoint(layout, corridorJunctions(links), { x: -2 * s, y: 0 }).map(room => room.id))
+      .toEqual([0, 1, 2, 3]);
+    expect(junctionRoomsAtPoint(layout, corridorJunctions(links), { x: 2 * s, y: 0 }).map(room => room.id))
+      .toEqual([0, 1, 4, 5]);
+    expect(junctionRoomsAtPoint(layout, corridorJunctions(links), { x: 0, y: 0 })).toEqual([]);
+    expect(plan.segments).toHaveLength(7);
+    expect(plan.corners.filter(corner => corner.kind !== "wall")).toHaveLength(8);
+    expect(plan.junctionFloors).toHaveLength(8);
+    expect(new Set(plan.junctionFloors.map(tile => `${tile.x}:${tile.y}`)).size).toBe(8);
+    for (const x of [-2 * s, 2 * s]) {
+      expect(plan.walls.some(wall => Math.abs(wall.x - x) < s && Math.abs(wall.y) < s)).toBe(false);
+    }
+    const visited = new Set(rooms.map(candidate => candidate.id));
+    expect(connectedRoomAdjacency(layout, visited).get(0)).toContain(3);
+    expect(connectedRoomAdjacency(layout, visited).get(0)).toContain(5);
+    expect(revealedRoomPath(layout, visited, 0, 3)).toEqual([0, 3]);
+    const walkable = (point: Point): boolean => links.some(link => pointInCorridor(point.x, point.y, link, 0));
+    const path = aStarPath({ x: -4 * s, y: 0 }, { x: -2 * s, y: 2 * s }, walkable, s / 5, 5000);
+    expect(path).not.toBeNull();
+    expect(path!.some(point => Math.abs(point.x + 2 * s) <= s && Math.abs(point.y) <= s)).toBe(true);
+  });
+
+  it("deduplicates collinear overlap and concurrent junctions at the same point", () => {
+    const s = SEGMENT_SIZE;
+    const rooms = Array.from({ length: 6 }, (_, index) => room(index));
+    const links: LayoutLink[] = [
+      { id: "long", source: rooms[0]!, target: rooms[1]!, ownerRoomId: 0, direction: "E",
+        width: CORRIDOR_WIDTH, points: [{ x: -6 * s, y: 0 }, { x: 6 * s, y: 0 }] },
+      { id: "shared", source: rooms[2]!, target: rooms[3]!, ownerRoomId: 2, direction: "E",
+        width: CORRIDOR_WIDTH, points: [{ x: -4 * s, y: 0 }, { x: 4 * s, y: 0 }] },
+      { id: "cross", source: rooms[4]!, target: rooms[5]!, ownerRoomId: 4, direction: "S",
+        width: CORRIDOR_WIDTH, points: [{ x: 0, y: -4 * s }, { x: 0, y: 4 * s }] },
+    ];
+    const layout = { nodes: rooms, links, hiddenCount: 0 };
+    const plan = buildCorridorRenderPlan(layout, s);
+    expect(corridorJunctions(links)).toHaveLength(3);
+    expect(junctionRoomsAtPoint(layout, corridorJunctions(links), { x: 0, y: 0 })).toHaveLength(6);
+    expect(plan.segments).toHaveLength(6);
+    expect(plan.corners.filter(corner => corner.kind !== "wall")).toHaveLength(4);
+    expect(plan.junctionFloors).toHaveLength(4);
+    expect(revealedRoomPath(layout, new Set([0, 2, 4]), 0, 4)).toEqual([0, 4]);
+    expect(revealedRoomPath(layout, new Set([0, 4]), 0, 4)).toEqual([0, 4]);
+    expect(revealedRoomPath(layout, new Set([0, 1]), 0, 4)).toBeNull();
+  });
+
+  it("keeps distinct corridors separate in a dense generated layout", () => {
+    let seed = 1;
+    const nodes = [room(0)];
+    for (let index = 1; index < 80; index += 1) {
+      seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
+      nodes.push({ ...room(index, seed % index), lootSeed: (index * 65_537 + 3_917) >>> 0 });
+    }
+    nodes[0]!.lootSeed = 3_917;
+    const layout = layoutOrthogonal({
+      nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false,
+    });
+    expect(layout.links.length).toBeGreaterThan(20);
+    expect(layout.links.some(link => link.forkId !== undefined)).toBe(true);
+    expect(corridorJunctions(layout.links)).toEqual([]);
+    const bounds = (start: Point, end: Point, halfWidth: number) => ({
+      left: Math.min(start.x, end.x) - halfWidth,
+      right: Math.max(start.x, end.x) + halfWidth,
+      top: Math.min(start.y, end.y) - halfWidth,
+      bottom: Math.max(start.y, end.y) + halfWidth,
+    });
+    for (const [index, link] of layout.links.entries()) {
+      for (const other of layout.links.slice(index + 1)) {
+        if (link.forkId && link.forkId === other.forkId) continue;
+        for (let a = 1; a < link.points.length; a += 1) {
+          for (let b = 1; b < other.points.length; b += 1) {
+            const left = bounds(link.points[a - 1]!, link.points[a]!, link.width / 2);
+            const right = bounds(other.points[b - 1]!, other.points[b]!, other.width / 2);
+            expect(left.right <= right.left || left.left >= right.right ||
+              left.bottom <= right.top || left.top >= right.bottom, `${link.id} intersects ${other.id}`).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
   it("keeps the shared wall between adjacent parallel corridors that do not connect", () => {
     const south = { x: 0, y: 0 };
     const links: LayoutLink[] = [
@@ -225,6 +325,7 @@ describe("corridor render planning", () => {
       },
     ];
     const plan = buildCorridorRenderPlan({ nodes: [room(0), room(2)], links, hiddenCount: 0 }, SEGMENT_SIZE);
+    expect(corridorJunctions(links)).toEqual([]);
     const hasWall = (side: Direction, x: number, y: number): boolean => plan.walls.some(wall =>
       wall.side === side && wall.x === x && wall.y === y
     );
@@ -273,7 +374,7 @@ describe("corridor render planning", () => {
     expect(hasWall("N", SEGMENT_SIZE * 2 + SEGMENT_SIZE / 2, -SEGMENT_SIZE / 2)).toBe(true);
   });
 
-  it("deduplicates a fork trunk and gives its entrance and branches distinct signs", () => {
+  it("deduplicates four fork trunks and gives their entrances and branches distinct signs", () => {
     const nodes = [
       room(0),
       ...Array.from({ length: 8 }, (_, index) => room(index + 1, 0)),
@@ -304,13 +405,12 @@ describe("corridor render planning", () => {
     }));
 
     expect(new Set(segmentKeys).size).toBe(segmentKeys.length);
-    expect(plan.segments).toHaveLength(layout.links.length + 1);
-    expect(entrySigns).toHaveLength(1);
-    expect(entrySigns[0]!.lateralOffset).toBe(0);
-    expect(Math.hypot(
-      entrySigns[0]!.end.x - entrySigns[0]!.start.x,
-      entrySigns[0]!.end.y - entrySigns[0]!.start.y,
-    )).toBe(nearestForkDistance);
+    expect(plan.segments).toHaveLength(layout.links.length + 4);
+    expect(entrySigns).toHaveLength(4);
+    expect(entrySigns.every(sign => sign.lateralOffset === 0)).toBe(true);
+    expect(entrySigns.every(sign => Math.hypot(
+      sign.end.x - sign.start.x, sign.end.y - sign.start.y,
+    ) === nearestForkDistance)).toBe(true);
     expect(Math.hypot(
       entrySigns[0]!.position.x - entrySigns[0]!.start.x,
       entrySigns[0]!.position.y - entrySigns[0]!.start.y,
@@ -330,6 +430,49 @@ describe("corridor render planning", () => {
       marking.position.x - marking.start.x,
       marking.position.y - marking.start.y,
     ) === SEGMENT_SIZE / 2)).toBe(true);
+  });
+
+  it("renders four independent fork entrances and reserves both doors on a shared side", () => {
+    const nodes = [room(0), room(1, 0), ...Array.from({ length: 32 }, (_, index) => room(index + 2, 1))];
+    const layout = layoutOrthogonal({
+      nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false,
+    });
+    const children = layout.links.filter(link => link.source.id === 1);
+    const groups = new Map<string, LayoutLink[]>();
+    for (const link of children) {
+      const group = groups.get(link.forkId!) ?? [];
+      group.push(link);
+      groups.set(link.forkId!, group);
+    }
+    const plan = buildCorridorRenderPlan(layout, SEGMENT_SIZE);
+    const segmentKeys = plan.segments.map(segment => [
+      Math.min(segment.start.x, segment.end.x), Math.min(segment.start.y, segment.end.y),
+      Math.max(segment.start.x, segment.end.x), Math.max(segment.start.y, segment.end.y),
+    ].join(":"));
+
+    expect(groups.size).toBe(4);
+    expect(new Set(segmentKeys).size).toBe(plan.segments.length);
+    expect(plan.markings.filter(marking => marking.label === "")).toHaveLength(4);
+    expect(plan.markings.filter(marking => children.some(link => marking.label === link.target.floorLabel))).toHaveLength(32);
+
+    const shared = [...groups.values()].map(links => links[0]!)
+      .filter(link => [...groups.values()].filter(group => group[0]!.direction === link.direction).length === 2);
+    expect(shared).toHaveLength(2);
+    const hub = layout.nodes.find(candidate => candidate.id === 1)!;
+    const walls = buildRoomWalls(hub, layout.links.flatMap(link => [
+      ...(link.source.id === hub.id ? [{ side: link.direction, position: link.points[0]! }] : []),
+      ...(link.target.id === hub.id ? [{ side: link.targetDirection!, position: link.points.at(-1)! }] : []),
+    ]), SEGMENT_SIZE);
+    for (const link of shared) {
+      const start = link.points[0]!;
+      const sideWalls = walls.filter(wall => wall.side === link.direction && wall.kind === "wall");
+      expect(sideWalls.length).toBeGreaterThan(0);
+      expect(sideWalls.every(wall =>
+        link.direction === "N" || link.direction === "S"
+          ? Math.abs(wall.x - start.x) >= SEGMENT_SIZE
+          : Math.abs(wall.y - start.y) >= SEGMENT_SIZE
+      )).toBe(true);
+    }
   });
 
   it("places signs just inside both entrances of a straight corridor", () => {

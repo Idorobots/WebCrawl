@@ -2,6 +2,7 @@ import type {
   Direction,
   DungeonGraph,
   DungeonLayout,
+  ContentChunk,
   GraphNode,
   LayoutLink,
   Point,
@@ -18,8 +19,10 @@ interface Bounds {
 const CARDINALS: Direction[] = ["N", "E", "S", "W"];
 const SEGMENT_SIZE = WORLD_GEOMETRY.segmentSize;
 const MAX_FORK_BRANCHES = 8;
+const MAX_FORKS_PER_ROOM = 4;
 const MAX_CORRIDOR_GAP_SEGMENTS = 48;
 const FORK_TRUNK_SEGMENTS = 3;
+const MULTI_FORK_TRUNK_SEGMENTS = 9;
 const FORK_BRANCH_SPACING_SEGMENTS = 6;
 const FORK_BRANCH_GAP_SEGMENTS = 3;
 
@@ -135,8 +138,29 @@ function routeIsClear(points: readonly Point[], rooms: readonly GraphNode[], sou
   );
 }
 
+function routeOverlapsOtherCorridor(
+  points: readonly Point[],
+  links: readonly LayoutLink[],
+  forkId?: string,
+): boolean {
+  return links.some(link => {
+    // Branches of the same fork deliberately share a trunk and junctions.
+    if (forkId && link.forkId === forkId) return false;
+    for (let index = 1; index < points.length; index += 1) {
+      const candidate = segmentBounds(points[index - 1]!, points[index]!);
+      for (let otherIndex = 1; otherIndex < link.points.length; otherIndex += 1) {
+        const existing = segmentBounds(link.points[otherIndex - 1]!, link.points[otherIndex]!, link.width / 2);
+        if (boundsOverlap(candidate, existing)) return true;
+      }
+    }
+    return false;
+  });
+}
+
 export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
-  const nodes = graph.nodes.map(node => ({ ...node, hrefs: [...node.hrefs] }));
+  const nodes = graph.nodes.map(node => ({
+    ...node, hrefs: [...node.hrefs], contentChunks: node.contentChunks?.map(chunk => ({ ...chunk })),
+  }));
   const childrenByParent = new Map<number, GraphNode[]>();
   for (const node of nodes) {
     if (node.parentId === null) continue;
@@ -157,6 +181,7 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
   const links: LayoutLink[] = [];
   const sideSlots = new Map<string, number>();
   const promotedHrefMap = new Map<number, Set<string>>();
+  const promotedContentMap = new Map<number, ContentChunk[]>();
 
   const addPromotedHrefs = (target: GraphNode, hrefs: readonly string[]): void => {
     if (!hrefs.length) return;
@@ -164,9 +189,16 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
     for (const href of hrefs) promoted.add(href);
     promotedHrefMap.set(target.id, promoted);
   };
-  const collectSubtreeHrefs = (node: GraphNode, target: GraphNode): void => {
+  const collectSubtreeContent = (node: GraphNode, target: GraphNode): void => {
     addPromotedHrefs(target, node.hrefs);
-    for (const child of childrenByParent.get(node.id) ?? []) collectSubtreeHrefs(child, target);
+    const chunks = node.contentChunks ?? (node.contentHtml
+      ? [{ order: node.id, html: node.contentHtml, label: node.floorLabel }] : []);
+    if (chunks.length) {
+      const promoted = promotedContentMap.get(target.id) ?? [];
+      promoted.push(...chunks);
+      promotedContentMap.set(target.id, promoted);
+    }
+    for (const child of childrenByParent.get(node.id) ?? []) collectSubtreeContent(child, target);
   };
   const roomPlacementIsClear = (node: GraphNode, point: Point): boolean => {
     const candidate = roomBounds(node, point.x, point.y, WORLD_GEOMETRY.roomCollisionMargin);
@@ -198,6 +230,7 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
         const end = doorPositionForSlot(node, targetSide, 0);
         const points = [start, end];
         if (!routeIsClear(points, placed, parent.id, node.id)) continue;
+        if (routeOverlapsOtherCorridor(points, links)) continue;
         node.directionFromParent = direction;
         node.parentSide = targetSide;
         sideSlots.set(sideKey, slot + 1);
@@ -222,15 +255,21 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
     parent: GraphNode,
     mainDirection: Direction,
     index: number,
+    slot: number,
+    singleSide: boolean,
+    trunkSegments: number,
+    branchSpacing: number,
   ): LayoutLink | null => {
     const sideKey = `${parent.id}:${mainDirection}`;
-    const slot = 0;
     if (slot >= doorCapacity(parent, mainDirection)) return null;
     const start = doorPositionForSlot(parent, mainDirection, slot);
     const main = directionVector(mainDirection);
-    const branchDirection = forkBranchDirection(mainDirection, index);
+    // Parallel fork trunks branch away from each other, never across the other trunk.
+    const branchDirection = singleSide
+      ? forkBranchDirection(mainDirection, slot === 0 ? 1 : 0)
+      : forkBranchDirection(mainDirection, index);
     const branch = directionVector(branchDirection);
-    const branchOffset = FORK_TRUNK_SEGMENTS + Math.floor(index / 2) * FORK_BRANCH_SPACING_SEGMENTS;
+    const branchOffset = trunkSegments + (singleSide ? index : Math.floor(index / 2)) * branchSpacing;
     const fork = {
       x: start.x + main.x * branchOffset * SEGMENT_SIZE,
       y: start.y + main.y * branchOffset * SEGMENT_SIZE,
@@ -249,9 +288,11 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
     const end = doorPositionForSlot(node, targetSide, 0);
     const points = [start, fork, end];
     if (!routeIsClear(points, placed, parent.id, node.id)) return null;
+    const forkId = `${parent.id}:${mainDirection}:${slot}`;
+    if (routeOverlapsOtherCorridor(points, links, forkId)) return null;
     node.directionFromParent = branchDirection;
     node.parentSide = targetSide;
-    sideSlots.set(sideKey, 1);
+    sideSlots.set(sideKey, Math.max(sideSlots.get(sideKey) ?? 0, slot + 1));
     sideSlots.set(`${node.id}:${targetSide}`, 1);
     return {
       id: `${parent.id}->${node.id}`,
@@ -262,7 +303,7 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
       ownerRoomId: parent.id,
       width: WORLD_GEOMETRY.corridorHalfWidth * 2,
       points,
-      forkId: `${parent.id}:${mainDirection}`,
+      forkId,
       forkPointIndex: 1,
     };
   };
@@ -270,27 +311,72 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
   const placeChildren = (parent: GraphNode): void => {
     const children = childrenByParent.get(parent.id) ?? [];
     const useFork = children.length > 4;
-    const forkDirection = CARDINALS[(parent.lootSeed + parent.id) % CARDINALS.length]!;
+    const rotation = (parent.lootSeed + parent.id) % CARDINALS.length;
+    const directions = CARDINALS.map((_, index) => CARDINALS[(index + rotation) % CARDINALS.length]!)
+      .filter(direction => direction !== parent.parentSide);
+    const forkCount = useFork
+      ? Math.min(MAX_FORKS_PER_ROOM, Math.ceil(Math.min(children.length, MAX_FORKS_PER_ROOM * MAX_FORK_BRANCHES) / 2))
+      : 0;
+    if (forkCount > directions.length) {
+      const oppositeSide = opposite(parent.parentSide!);
+      const extra = [...directions]
+        .filter(direction => (sideSlots.get(`${parent.id}:${direction}`) ?? 0) + 1 < doorCapacity(parent, direction))
+        .sort((left, right) =>
+          (right === oppositeSide ? 1 : 0) - (left === oppositeSide ? 1 : 0) ||
+          doorCapacity(parent, right) - doorCapacity(parent, left)
+        )[0];
+      if (extra) directions.push(extra);
+    }
+    const forkSides = directions.slice(0, forkCount);
+    const reservedSlots = new Map<string, number>();
+    const forkSlots = forkSides.map(direction => {
+      const sideKey = `${parent.id}:${direction}`;
+      const slot = reservedSlots.get(sideKey) ?? sideSlots.get(sideKey) ?? 0;
+      reservedSlots.set(sideKey, slot + 1);
+      return slot;
+    });
+    const maxChildSegments = Math.ceil(Math.max(0, ...children.map(child => Math.max(child.width, child.height))) / SEGMENT_SIZE);
+    const trunkSegments = (forkCount > 1 ? MULTI_FORK_TRUNK_SEGMENTS : FORK_TRUNK_SEGMENTS)
+      + Math.max(0, maxChildSegments - 4);
+    const branchSpacing = Math.max(FORK_BRANCH_SPACING_SEGMENTS, maxChildSegments + 2);
+    const placedChildren: GraphNode[] = [];
+    const forkBranchCounts = forkSides.map(() => 0);
     for (const [index, child] of children.entries()) {
-      const link = useFork && index < MAX_FORK_BRANCHES
-        ? tryPlaceForkChild(child, parent, forkDirection, index)
-        : useFork
-          ? null
-          : tryPlace(child, parent);
+      let link: LayoutLink | null = null;
+      if (useFork && index < MAX_FORKS_PER_ROOM * MAX_FORK_BRANCHES) {
+        // Prefer a new room exit, then use another fork if that entrance cannot fit.
+        for (let attempt = 0; attempt < forkSides.length && !link; attempt += 1) {
+          const forkIndex = (index + attempt) % forkSides.length;
+          const direction = forkSides[forkIndex]!;
+          const branchIndex = forkBranchCounts[forkIndex]!;
+          if (branchIndex >= MAX_FORK_BRANCHES) continue;
+          link = tryPlaceForkChild(
+            child, parent, direction, branchIndex, forkSlots[forkIndex]!,
+            forkSides.indexOf(direction) !== forkSides.lastIndexOf(direction),
+            trunkSegments, branchSpacing,
+          );
+          if (link) forkBranchCounts[forkIndex] = branchIndex + 1;
+        }
+      } else if (!useFork) link = tryPlace(child, parent);
       if (!link) {
-        collectSubtreeHrefs(child, parent);
+        collectSubtreeContent(child, parent);
         continue;
       }
       placed.push(child);
       links.push(link);
-      placeChildren(child);
+      if (useFork) placedChildren.push(child);
+      else placeChildren(child);
     }
+    for (const child of placedChildren) placeChildren(child);
   };
   placeChildren(root);
 
   for (const room of placed) {
     const promoted = promotedHrefMap.get(room.id);
     if (promoted) room.hrefs = [...promoted].slice(0, 10);
+    const content = promotedContentMap.get(room.id);
+    if (content) room.contentChunks = [...room.contentChunks ?? [], ...content]
+      .sort((left, right) => left.order - right.order);
   }
   return { nodes: placed, links, hiddenCount: nodes.length - placed.length };
 }

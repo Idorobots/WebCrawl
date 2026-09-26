@@ -1,4 +1,5 @@
 import type { DungeonLayout, Point } from "../types";
+import { connectedRoomAdjacency } from "./corridor-junctions";
 import { WORLD_GEOMETRY } from "./specs";
 
 interface Bounds {
@@ -17,16 +18,7 @@ export function revealedRoomPath(
   if (!layout || fromRoomId === null || toRoomId === null) return null;
   if (fromRoomId === toRoomId) return [fromRoomId];
 
-  const adjacency = new Map<number, number[]>();
-  for (const room of layout.nodes) if (visitedRooms.has(room.id)) adjacency.set(room.id, []);
-  for (const link of layout.links) {
-    const source = link.source.id;
-    const target = link.target.id;
-    if (visitedRooms.has(source) && visitedRooms.has(target)) {
-      adjacency.get(source)?.push(target);
-      adjacency.get(target)?.push(source);
-    }
-  }
+  const adjacency = connectedRoomAdjacency(layout, visitedRooms);
   if (!adjacency.has(fromRoomId) || !adjacency.has(toRoomId)) return null;
 
   const queue = [fromRoomId];

@@ -117,12 +117,13 @@ export function weaponPedestalForRoom(room: GraphNode, pageUrl: string): Decorat
   };
 }
 
-function hasContentBrowser(room: Pick<GraphNode, "contentHtml" | "isRoot" | "childCount">): boolean {
+function hasContentBrowser(room: Pick<GraphNode, "contentHtml" | "contentChunks" | "isRoot" | "childCount">): boolean {
+  if (room.contentChunks !== undefined) return room.childCount === 0 || room.contentChunks.length > 0;
   return !room.isRoot && room.childCount === 0 && Boolean(room.contentHtml);
 }
 
-function portalCountForRoom(room: Pick<GraphNode, "hrefs" | "isRoot" | "contentHtml" | "childCount">): number {
-  const cap = room.isRoot ? 7 : hasContentBrowser(room) ? 7 : 8;
+function portalCountForRoom(room: Pick<GraphNode, "hrefs" | "isRoot" | "contentHtml" | "contentChunks" | "childCount">): number {
+  const cap = 8 - (room.isRoot ? 1 : 0) - (hasContentBrowser(room) ? 1 : 0);
   return Math.min(cap, room.hrefs.length);
 }
 

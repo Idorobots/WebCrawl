@@ -1510,3 +1510,40 @@ test("shows the could-not-load modal when every fetch route fails", async ({ pag
   await expect(page.locator("#gameUi")).not.toBeVisible();
   await expect(page.locator("#welcomeUrlInput")).toHaveValue("https://example.com/start");
 });
+
+test("pages through long root content in a reachable browser", async ({ page }) => {
+  const fixture = `<body>${"A".repeat(55_000)}END<main><p>Another room</p></main></body>`;
+  await stubRemoteFetchFallbacks(page, fixture);
+  await page.route("**/api/fetch?**", route => route.fulfill({
+    status: 200, contentType: "text/html", body: fixture,
+  }));
+  await page.goto("/");
+  await signIn(page);
+  await page.locator("#welcomeUrlInput").fill("https://example.com/start");
+  await page.getByRole("button", { name: "Go" }).click();
+  await expect(page.locator("#gameCanvas canvas")).toBeVisible({ timeout: 30_000 });
+  await expect.poll(async () => page.evaluate(() =>
+    (window as Window & {
+      __webcrawlTest?: { contentPoints: () => Array<{ id: string; x: number; y: number }> };
+    }).__webcrawlTest?.contentPoints().find(point => point.id === "0::content-browser") ?? null
+  ), { timeout: 30_000 }).not.toBeNull();
+  const point = await page.evaluate(() =>
+    (window as Window & {
+      __webcrawlTest?: { contentPoints: () => Array<{ id: string; x: number; y: number }> };
+    }).__webcrawlTest?.contentPoints().find(item => item.id === "0::content-browser")
+  );
+  expect(point).toBeDefined();
+  await teleportPlayer(page, point!);
+  await expect(page.locator("#contentBrowser")).toBeVisible();
+  await expect(page.locator(".content-browser-pages")).toContainText("1/2");
+  await page.locator(".content-browser-pages button").last().click();
+  await expect(page.locator(".content-browser-pages")).toContainText("2/2");
+  await expect(page.locator(".content-browser-body")).toContainText("END");
+  await page.evaluate(() => {
+    (window as Window & {
+      __webcrawlTest?: { destroyContentPoint: (id: string) => void };
+    }).__webcrawlTest?.destroyContentPoint("0::content-browser");
+  });
+  await expect(page.locator("#contentBrowser")).toBeVisible();
+  await expect(page.locator(".content-browser-body")).toContainText("END");
+});
