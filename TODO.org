@@ -1082,9 +1082,13 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Use point lights for room/corridor lighting.
 - Batch point light rendering together.
 
+* DONE Performance optimization, again
+:LOGBOOK:
+- State "DONE"       from              [2026-09-26 Sat 20:27]
+:END:
+- Cull discovered rooms that are far away
 * Performance optimization, again
 - Phaser 4 update?
-- Cull discovered rooms that are far away
 - WebWorkers for pathing/collision detection, etc?
 
 * DONE UX improvements, again
@@ -1252,9 +1256,10 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Script rooms don't need a content browser. Omit content browsers when there's no readable content.
 - All monsters in a room seem to be dropping the same loot.
 - Floor signage should appear below any debris floor tiles.
-* Bugs
-- Multiple spawners can appear on the same spot
 - Directly-connected rooms should reveal as soon as player walks up 0.5 segment away from the door.
+
+- Multiple spawners can appear on the same spot
+
 * Hidden rooms
 `display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.
 There should be no doors generated leading to these hidden rooms, only walls with a passable section (essentially a "holographic" wall), to maintain the illusion of those rooms being hidden.

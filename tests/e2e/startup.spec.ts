@@ -1147,6 +1147,37 @@ test("ignores manual pan and zoom gestures", async ({ page }) => {
   expect(await playerPosition(page)).toEqual(initialPosition);
 });
 
+test("reveals a directly connected room half a segment before its doorway", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  const direction = await game.getAttribute("data-first-exit");
+  const door = {
+    x: Number(await game.getAttribute("data-first-door-x")),
+    y: Number(await game.getAttribute("data-first-door-y")),
+  };
+  const normal = direction === "E" ? { x: 1, y: 0 } : direction === "W" ? { x: -1, y: 0 }
+    : direction === "S" ? { x: 0, y: 1 } : { x: 0, y: -1 };
+  const center = {
+    x: door.x,
+    y: door.y + (normal.x ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
+  };
+  const approach = (distance: number) => ({
+    x: center.x - normal.x * distance,
+    y: center.y - normal.y * distance,
+  });
+  const range = WORLD_GEOMETRY.segmentSize / 2;
+
+  await teleportPlayer(page, approach(range + 2));
+  await expect.poll(async () => {
+    const position = await playerPosition(page);
+    return Math.hypot(position.x - approach(range + 2).x, position.y - approach(range + 2).y);
+  }).toBeLessThan(2);
+  await expect(game).toHaveAttribute("data-visited-rooms", "1");
+
+  await teleportPlayer(page, approach(range - 2));
+  await expect.poll(async () => Number(await game.getAttribute("data-visited-rooms"))).toBeGreaterThanOrEqual(2);
+});
+
 test("spawns multiple enemies once another room is revealed", async ({ page }) => {
   test.setTimeout(90_000);
   const pageErrors: string[] = [];

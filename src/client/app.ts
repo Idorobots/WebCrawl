@@ -37,6 +37,7 @@ import { connectedRoomAdjacency, corridorJunctions, junctionRoomsAtPoint, type C
 import {
   distanceSquared,
   pointInCorridor,
+  pointNearDirectDoor,
   pointInRoomFloor,
   roomContainingFloorPoint,
   slideAlongObstacles,
@@ -551,15 +552,17 @@ function pointInCommittedForkBranch(x: number, y: number, link: LayoutLink): boo
 }
 
 function revealRoomsFromCorridor(x: number, y: number): void {
-  // If either end of this corridor is already known, reveal the other end.
-  // This lets the player see/activate the destination before crossing a
-  // doorway that might be obstructed by generated room props.
+  // Reveal attached rooms on approach; spaced corridors still require the
+  // player to enter a committed branch before their destination is known.
   for (const link of currentLayout?.links ?? []) {
-    if (!pointInCommittedForkBranch(x, y, link)) continue;
     const sourceVisited = visitedRooms.has(link.source.id);
     const targetVisited = visitedRooms.has(link.target.id);
-    if (sourceVisited && !targetVisited) markVisited(link.target);
-    else if (targetVisited && !sourceVisited) markVisited(link.source);
+    if (sourceVisited === targetVisited) continue;
+    const knownRoom = sourceVisited ? link.source : link.target;
+    const nearby = link.direct
+      ? pointNearDirectDoor({ x, y }, knownRoom, link)
+      : pointInCommittedForkBranch(x, y, link);
+    if (nearby) markVisited(sourceVisited ? link.target : link.source);
   }
   // Crossings reveal both corridors without requiring a room doorway.
   if (currentLayout) for (const room of junctionRoomsAtPoint(currentLayout, currentCorridorJunctions, { x, y })) markVisited(room);

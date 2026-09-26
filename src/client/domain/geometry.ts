@@ -33,6 +33,17 @@ export function roomContainingFloorPoint(rooms: readonly GraphNode[], point: Poi
   return rooms.find(room => pointInRoomFloor(point.x, point.y, room, 0)) ?? null;
 }
 
+/** Reveal an attached room when approaching its shared doorway from the known side. */
+export function pointNearDirectDoor(point: Point, room: GraphNode, link: LayoutLink): boolean {
+  if (!link.direct || (room.id !== link.source.id && room.id !== link.target.id)) return false;
+  if (!pointInRoomFloor(point.x, point.y, room, 0)) return false;
+  const door = link.points[0]!;
+  const offsetY = link.direction === "E" || link.direction === "W"
+    ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
+  const range = WORLD_GEOMETRY.segmentSize / 2;
+  return (point.x - door.x) ** 2 + (point.y - door.y - offsetY) ** 2 <= range ** 2;
+}
+
 function pointInAxisAlignedSegment(point: Point, start: Point, end: Point, halfWidth: number, includeEnds = true): boolean {
   if (start.y === end.y) {
     const min = Math.min(start.x, end.x);

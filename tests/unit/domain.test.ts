@@ -31,6 +31,7 @@ import {
 import {
   distanceSquared,
   pointInCorridor,
+  pointNearDirectDoor,
   pointInRoom,
   pointInRoomFloor,
   roomContainingFloorPoint,
@@ -421,6 +422,36 @@ describe("layout and geometry", () => {
       const outsideDoor = { x: door.x - normal.y * across, y: door.y + shift + normal.x * across };
       expect(pointInCorridor(outsideDoor.x, outsideDoor.y, link, radius)).toBe(false);
     }
+  });
+
+  it.each([
+    [12, "N"], [13, "E"], [6, "S"], [23, "W"],
+  ] as const)("reveals a directly attached %s room half a segment before its doorway", (lootSeed, direction) => {
+    const adjacent = layoutOrthogonal({
+      nodes: [node(0, null, 0), node(1, 0, 1, { lootSeed })],
+      links: [], originalCount: 2, coalescedCount: 0, truncated: false,
+    });
+    const link = adjacent.links[0]!;
+    const door = link.points[0]!;
+    const normal = direction === "E" ? { x: 1, y: 0 } : direction === "W" ? { x: -1, y: 0 }
+      : direction === "S" ? { x: 0, y: 1 } : { x: 0, y: -1 };
+    const center = {
+      x: door.x,
+      y: door.y + (normal.x ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
+    };
+    const range = WORLD_GEOMETRY.segmentSize / 2;
+    for (const [room, side] of [[link.source, -1], [link.target, 1]] as const) {
+      const approach = (distance: number): Point => ({
+        x: center.x + normal.x * side * distance,
+        y: center.y + normal.y * side * distance,
+      });
+      expect(pointNearDirectDoor(approach(range + 1), room, link)).toBe(false);
+      expect(pointNearDirectDoor(approach(range), room, link)).toBe(true);
+      expect(pointNearDirectDoor(approach(range / 2), room, link)).toBe(true);
+      expect(pointNearDirectDoor(approach(-range / 2), room, link)).toBe(false);
+      expect(pointNearDirectDoor(approach(range), room, { ...link, direct: undefined })).toBe(false);
+    }
+    expect(pointNearDirectDoor(center, node(2, null, 0), link)).toBe(false);
   });
 
   it("keeps spaced corridors when direct attachment is not selected", () => {
