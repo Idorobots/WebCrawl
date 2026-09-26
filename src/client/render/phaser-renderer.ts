@@ -1031,8 +1031,9 @@ export class PhaserRenderer {
       .setTileScale(FLOOR_TILE_SCALE);
     this.illuminate(floor);
     floorContainer.add(floor);
-    this.addRoomFloorDetails(floorContainer, room);
+    const damagedFloorTiles = this.addRoomFloorDetails(floorContainer, room);
     this.addRoomFloorMarking(floorContainer, room);
+    floorContainer.add(damagedFloorTiles);
     const statics: StaticObject[] = [floorContainer];
     const doors = this.roomDoors(room);
     for (const module of buildRoomWalls(room, doors, SEGMENT_SIZE)) {
@@ -1104,8 +1105,9 @@ export class PhaserRenderer {
   private addRoomFloorDetails(
     container: Phaser.GameObjects.Container,
     room: GraphNode,
-  ): void {
+  ): Phaser.GameObjects.Image[] {
     const scene = this.scene!;
+    const damagedFloorTiles: Phaser.GameObjects.Image[] = [];
     const columns = Math.max(1, Math.floor(room.width / FLOOR_TILE_SIZE));
     const rows = Math.max(1, Math.floor(room.height / FLOOR_TILE_SIZE));
     const count = Math.min(5, 2 + room.lootSeed % 4);
@@ -1129,8 +1131,10 @@ export class PhaserRenderer {
         textureKey(asset),
       ).setDisplaySize(FLOOR_TILE_SIZE, FLOOR_TILE_SIZE);
       this.illuminate(detail);
-      container.add(detail);
+      if (damaged) damagedFloorTiles.push(detail);
+      else container.add(detail);
     }
+    return damagedFloorTiles;
   }
 
   private addRoomFloorMarking(container: Phaser.GameObjects.Container, room: GraphNode): void {
