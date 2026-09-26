@@ -147,7 +147,8 @@ describe("corridor render planning", () => {
   });
 
   it("encloses a four-way junction with the opposite construction on every corner", () => {
-    const plan = buildCorridorRenderPlan(layoutForArms(["N", "E", "S", "W"]), SEGMENT_SIZE);
+    const layout = layoutForArms(["N", "E", "S", "W"]);
+    const plan = buildCorridorRenderPlan(layout, SEGMENT_SIZE);
     const cornerModules = plan.corners.filter(corner => corner.kind !== "wall");
 
     expect(cornerModules.map(corner => corner.kind).sort()).toEqual([
@@ -161,7 +162,12 @@ describe("corridor render planning", () => {
         `${corner.y < 0 ? "top" : "bottom"}-${corner.x < 0 ? "left" : "right"}`,
       ));
     }
-    expect(plan.junctionFloors).toHaveLength(4);
+    expect(plan.junctionFloors).toHaveLength(5);
+    expect(plan.junctionFloors).toContainEqual(expect.objectContaining({
+      x: -SEGMENT_SIZE,
+      y: -SEGMENT_SIZE,
+      seed: layout.nodes[0]!.lootSeed,
+    }));
     expect(plan.walls).toHaveLength(4);
     expect(plan.walls.some(wall =>
       Math.abs(wall.x) <= SEGMENT_SIZE / 2 &&
@@ -229,8 +235,11 @@ describe("corridor render planning", () => {
     expect(junctionRoomsAtPoint(layout, corridorJunctions(links), { x: 0, y: 0 })).toEqual([]);
     expect(plan.segments).toHaveLength(7);
     expect(plan.corners.filter(corner => corner.kind !== "wall")).toHaveLength(8);
-    expect(plan.junctionFloors).toHaveLength(8);
-    expect(new Set(plan.junctionFloors.map(tile => `${tile.x}:${tile.y}`)).size).toBe(8);
+    expect(plan.junctionFloors).toHaveLength(10);
+    expect(new Set(plan.junctionFloors.map(tile => `${tile.x}:${tile.y}`)).size).toBe(10);
+    for (const x of [-2 * s, 2 * s]) {
+      expect(plan.junctionFloors).toContainEqual(expect.objectContaining({ x: x - s, y: -s }));
+    }
     for (const x of [-2 * s, 2 * s]) {
       expect(plan.walls.some(wall => Math.abs(wall.x - x) < s && Math.abs(wall.y) < s)).toBe(false);
     }
@@ -261,10 +270,32 @@ describe("corridor render planning", () => {
     expect(junctionRoomsAtPoint(layout, corridorJunctions(links), { x: 0, y: 0 })).toHaveLength(6);
     expect(plan.segments).toHaveLength(6);
     expect(plan.corners.filter(corner => corner.kind !== "wall")).toHaveLength(4);
-    expect(plan.junctionFloors).toHaveLength(4);
+    expect(plan.junctionFloors).toHaveLength(5);
     expect(revealedRoomPath(layout, new Set([0, 2, 4]), 0, 4)).toEqual([0, 4]);
     expect(revealedRoomPath(layout, new Set([0, 4]), 0, 4)).toEqual([0, 4]);
     expect(revealedRoomPath(layout, new Set([0, 1]), 0, 4)).toBeNull();
+  });
+
+  it("fills the top-left notch at each four-way fork along a generated corridor", () => {
+    const source = { ...room(0), lootSeed: 12 };
+    const nodes = [source, ...Array.from({ length: 8 }, (_, index) => room(index + 1, 0))];
+    const layout = layoutOrthogonal({
+      nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false,
+    });
+    expect(new Set(layout.links.map(link => link.forkId)).size).toBe(1);
+    const plan = buildCorridorRenderPlan(layout, SEGMENT_SIZE);
+    const forks = [...new Map(layout.links.map(link => {
+      const point = link.points[link.forkPointIndex!]!;
+      return [`${point.x}:${point.y}`, point] as const;
+    })).values()];
+    expect(forks).toHaveLength(4);
+    for (const point of forks.slice(0, -1)) {
+      expect(plan.junctionFloors).toContainEqual(expect.objectContaining({
+        x: point.x - SEGMENT_SIZE,
+        y: point.y - SEGMENT_SIZE,
+        seed: source.lootSeed,
+      }));
+    }
   });
 
   it("keeps distinct corridors separate in a dense generated layout", () => {
@@ -376,7 +407,7 @@ describe("corridor render planning", () => {
 
   it("deduplicates four fork trunks and gives their entrances and branches distinct signs", () => {
     const nodes = [
-      room(0),
+      { ...room(0), lootSeed: 10 },
       ...Array.from({ length: 8 }, (_, index) => room(index + 1, 0)),
     ];
     const layout = layoutOrthogonal({

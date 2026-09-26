@@ -487,11 +487,13 @@ function buildJunctions(
           side: innerKind.endsWith("left") ? "W" : "E",
           kind: innerKind,
         });
-        if (innerKind === "bottom-right" && directions.size !== 4) {
+        // The top-left quadrant needs this tile even at a four-way fork:
+        // the four center tiles do not reach beneath the corner's notch.
+        if (innerKind === "bottom-right") {
           junctionFloors.push({
             ownerLinkId: owner.ownerLinkId,
-            x: outerCell.x + innerShift.x + segmentSize/2,
-            y: outerCell.y + innerShift.y + segmentSize/2,
+            x: outerCell.x + innerShift.x + segmentSize / 2,
+            y: outerCell.y + innerShift.y + segmentSize / 2,
             seed: owner.seed,
           });
         }

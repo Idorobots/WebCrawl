@@ -1084,6 +1084,8 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 
 * Performance optimization, again
 - Phaser 4 update?
+- Cull discovered rooms that are far away
+- WebWorkers for pathing etc?
 
 * DONE UX improvements, again
 :LOGBOOK:
@@ -1235,9 +1237,12 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 
 * Bugs
 - All monsters in a room seem to be dropping the same loot.
+- When a floor has no links at all, add a random link (same as I'm feeling lucky button) to one of the rooms. If there is a boss arena, place the link in that arena.
+- Barel damage should also cause the player to emit damage sound
+
 - Destroyed content browsers should not "work" - currently they are still playing the sound and show the content browser popup.
 - Script rooms don't need a content browser. Omit content browsers when there's no readable content.
-- When a floor has no links at all, add a random link (same as I'm feeling lucky button) to one of the rooms. If there is a boss arena, place the link in that arena.
+- When all children are coalesced into a node, its content should be coalesced as well - use the current nodes HTML instead of an array of its children HTML contents.
 
 * Hidden rooms
 `display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.

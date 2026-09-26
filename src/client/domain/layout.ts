@@ -7,6 +7,7 @@ import type {
   LayoutLink,
   Point,
 } from "../types";
+import { stableHash } from "./hash";
 import { ROOM_DEFINITIONS, WORLD_GEOMETRY } from "./specs";
 
 interface Bounds {
@@ -310,12 +311,15 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
 
   const placeChildren = (parent: GraphNode): void => {
     const children = childrenByParent.get(parent.id) ?? [];
-    const useFork = children.length > 4;
+    // Choose the sibling layout per room, independently of its room dimensions.
+    const preferCorridorForks = ((stableHash(`${parent.lootSeed}|fork-style`) >>> 16) & 1) === 0;
+    const useFork = preferCorridorForks ? children.length > 1 : children.length > 4;
     const rotation = (parent.lootSeed + parent.id) % CARDINALS.length;
     const directions = CARDINALS.map((_, index) => CARDINALS[(index + rotation) % CARDINALS.length]!)
       .filter(direction => direction !== parent.parentSide);
     const forkCount = useFork
-      ? Math.min(MAX_FORKS_PER_ROOM, Math.ceil(Math.min(children.length, MAX_FORKS_PER_ROOM * MAX_FORK_BRANCHES) / 2))
+      ? Math.min(MAX_FORKS_PER_ROOM, Math.ceil(Math.min(children.length, MAX_FORKS_PER_ROOM * MAX_FORK_BRANCHES)
+        / (preferCorridorForks ? MAX_FORK_BRANCHES : 2)))
       : 0;
     if (forkCount > directions.length) {
       const oppositeSide = opposite(parent.parentSide!);
@@ -344,9 +348,9 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
     for (const [index, child] of children.entries()) {
       let link: LayoutLink | null = null;
       if (useFork && index < MAX_FORKS_PER_ROOM * MAX_FORK_BRANCHES) {
-        // Prefer a new room exit, then use another fork if that entrance cannot fit.
+        // Room forks spread children over entrances; corridor forks fill a long trunk first.
         for (let attempt = 0; attempt < forkSides.length && !link; attempt += 1) {
-          const forkIndex = (index + attempt) % forkSides.length;
+          const forkIndex = ((preferCorridorForks ? Math.floor(index / MAX_FORK_BRANCHES) : index) + attempt) % forkSides.length;
           const direction = forkSides[forkIndex]!;
           const branchIndex = forkBranchCounts[forkIndex]!;
           if (branchIndex >= MAX_FORK_BRANCHES) continue;

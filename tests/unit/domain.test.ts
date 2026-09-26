@@ -679,6 +679,48 @@ describe("layout and geometry", () => {
     }
   });
 
+  it("chooses a long shared corridor or multiple room exits from the parent room hash", () => {
+    const graphForSeed = (lootSeed: number): DungeonGraph => {
+      const nodes = [node(0, null, 0, { lootSeed }),
+        ...Array.from({ length: 8 }, (_, index) => node(index + 1, 0, 1))];
+      return { nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false };
+    };
+    const roomForks = layoutOrthogonal(graphForSeed(10));
+    const corridorForks = layoutOrthogonal(graphForSeed(12));
+    expect(roomForks.hiddenCount).toBe(0);
+    expect(corridorForks.hiddenCount).toBe(0);
+    expect([...forkGroups(roomForks.links).values()].map(group => group.length)).toEqual([2, 2, 2, 2]);
+    expect([...forkGroups(corridorForks.links).values()].map(group => group.length)).toEqual([8]);
+    expect(new Set(corridorForks.links.map(link => JSON.stringify(link.points[0]))).size).toBe(1);
+    const forks = corridorForks.links.map(link => link.points[1]!);
+    expect(new Set(forks.map(point => `${point.x}:${point.y}`)).size).toBe(4);
+    const start = corridorForks.links[0]!.points[0]!;
+    expect(Math.hypot(forks[7]!.x - start.x, forks[7]!.y - start.y))
+      .toBeGreaterThan(Math.hypot(forks[0]!.x - start.x, forks[0]!.y - start.y) + 10 * WORLD_GEOMETRY.segmentSize);
+    expect(layoutOrthogonal(graphForSeed(12)).links.map(link => link.points))
+      .toEqual(corridorForks.links.map(link => link.points));
+  });
+
+  it("uses each room's fork preference independently, including small sibling groups", () => {
+    const nodes = [node(0, null, 0, { lootSeed: 10 }),
+      node(1, 0, 1, { lootSeed: 12 }), node(2, 0, 1, { lootSeed: 10 }),
+      ...Array.from({ length: 8 }, (_, index) => node(index + 3, 1, 2)),
+      ...Array.from({ length: 8 }, (_, index) => node(index + 11, 2, 2))];
+    const mixed = layoutOrthogonal({ nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false });
+    expect(mixed.hiddenCount).toBe(0);
+    expect(mixed.links.filter(link => link.source.id === 0).every(link => link.forkId === undefined)).toBe(true);
+    expect(forkGroups(mixed.links.filter(link => link.source.id === 1)).size).toBe(1);
+    expect(forkGroups(mixed.links.filter(link => link.source.id === 2)).size).toBe(4);
+
+    const corridorRoot = [node(0, null, 0, { lootSeed: 12 }),
+      ...Array.from({ length: 3 }, (_, index) => node(index + 1, 0, 1))];
+    const shortFork = layoutOrthogonal({
+      nodes: corridorRoot, links: [], originalCount: corridorRoot.length, coalescedCount: 0, truncated: false,
+    });
+    expect(shortFork.links).toHaveLength(3);
+    expect(forkGroups(shortFork.links).size).toBe(1);
+  });
+
   it("keeps one door per small side and three distinct slots per long side", () => {
     const small = node(0, null, 0);
     const wide = { ...small, ...ROOM_DEFINITIONS.wide };
@@ -713,6 +755,18 @@ describe("layout and geometry", () => {
         }
       }
     }
+  });
+
+  it.each([2, 4, 8, 9, 16, 24, 32])("fills long corridor trunks before opening another entrance (%i children)", count => {
+    const nodes = [node(0, null, 0, { lootSeed: 12 }),
+      ...Array.from({ length: count }, (_, index) => node(index + 1, 0, 1))];
+    const layout = layoutOrthogonal({ nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false });
+    expect(layout.hiddenCount).toBe(0);
+    const groups = [...forkGroups(layout.links).values()];
+    expect(groups).toHaveLength(Math.ceil(count / 8));
+    expect(groups.map(group => group.length)).toEqual(Array.from({ length: Math.ceil(count / 8) },
+      (_, index) => Math.min(8, count - index * 8)));
+    expect(groups.every(group => new Set(group.map(link => JSON.stringify(link.points[0]))).size === 1)).toBe(true);
   });
 
   it("uses a second door on a long side rather than forking through a non-root room's incoming corridor", () => {
