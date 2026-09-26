@@ -340,6 +340,7 @@ function pointAlongCorridor(link: LayoutLink, fraction: number, lateral = 0): Po
 }
 
 export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decoration[] {
+  if (link.direct) return [];
   const seed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|decor`);
   const difficulty = floorDifficulty(floor);
   const expected = corridorSegmentLength(link) * sceneryDensityForFloor(floor);

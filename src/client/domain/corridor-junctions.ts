@@ -43,8 +43,10 @@ export function corridorJunctions(links: readonly LayoutLink[]): CorridorJunctio
   const seen = new Set<string>();
   for (let left = 0; left < links.length; left += 1) {
     const first = links[left]!;
+    if (first.direct) continue;
     for (let right = left + 1; right < links.length; right += 1) {
       const second = links[right]!;
+      if (second.direct) continue;
       if (first.forkId && first.forkId === second.forkId) continue;
       for (let a = 1; a < first.points.length; a += 1) {
         for (let b = 1; b < second.points.length; b += 1) {

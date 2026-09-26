@@ -145,6 +145,7 @@ function routeOverlapsOtherCorridor(
   forkId?: string,
 ): boolean {
   return links.some(link => {
+    if (link.direct) return false;
     // Branches of the same fork deliberately share a trunk and junctions.
     if (forkId && link.forkId === forkId) return false;
     for (let index = 1; index < points.length; index += 1) {
@@ -201,16 +202,23 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
     }
     for (const child of childrenByParent.get(node.id) ?? []) collectSubtreeContent(child, target);
   };
-  const roomPlacementIsClear = (node: GraphNode, point: Point): boolean => {
-    const candidate = roomBounds(node, point.x, point.y, WORLD_GEOMETRY.roomCollisionMargin);
-    if (placed.some(other => boundsOverlap(candidate, roomBounds(other, other.x, other.y, WORLD_GEOMETRY.roomCollisionMargin)))) return false;
-    return links.every(link => !corridorIntersectsBounds(link.points, candidate));
+  const roomPlacementIsClear = (node: GraphNode, point: Point, touchingParent?: GraphNode): boolean => {
+    const margin = WORLD_GEOMETRY.roomCollisionMargin;
+    const candidate = roomBounds(node, point.x, point.y, margin);
+    if (placed.some(other => other.id === touchingParent?.id
+      ? boundsOverlap(roomBounds(node, point.x, point.y), roomBounds(other))
+      : boundsOverlap(candidate, roomBounds(other, other.x, other.y, margin)))) return false;
+    return links.every(link => link.direct || !corridorIntersectsBounds(link.points, candidate));
   };
 
   const tryPlace = (node: GraphNode, parent: GraphNode): LayoutLink | null => {
     const rotation = node.lootSeed % CARDINALS.length;
     const directions = CARDINALS.map((_, index) => CARDINALS[(index + rotation) % CARDINALS.length]!);
-    for (let gapSegments = 2; gapSegments <= MAX_CORRIDOR_GAP_SEGMENTS; gapSegments += 1) {
+    // Short one-to-one links usually look better as shared doorways. Long
+    // forked corridors still come from the parent's separate fork preference.
+    const preferDirect = (stableHash(`${parent.lootSeed}|${node.lootSeed}|direct`) >>> 16) % 5 < 4;
+    for (let gapSegments = preferDirect ? 0 : 2; gapSegments <= MAX_CORRIDOR_GAP_SEGMENTS;
+      gapSegments += gapSegments === 0 ? 2 : 1) {
       for (const direction of directions) {
         const sideKey = `${parent.id}:${direction}`;
         const slot = sideSlots.get(sideKey) ?? 0;
@@ -224,13 +232,15 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
           x: horizontal ? parent.x + (direction === "E" ? distance : -distance) : start.x,
           y: horizontal ? start.y : parent.y + (direction === "S" ? distance : -distance),
         };
-        if (!roomPlacementIsClear(node, point)) continue;
+        const direct = gapSegments === 0;
+        if (!roomPlacementIsClear(node, point, direct ? parent : undefined)) continue;
         node.x = point.x;
         node.y = point.y;
         const targetSide = opposite(direction);
         const end = doorPositionForSlot(node, targetSide, 0);
         const points = [start, end];
-        if (!routeIsClear(points, placed, parent.id, node.id)) continue;
+        if (direct && (start.x !== end.x || start.y !== end.y)) continue;
+        if (!direct && !routeIsClear(points, placed, parent.id, node.id)) continue;
         if (routeOverlapsOtherCorridor(points, links)) continue;
         node.directionFromParent = direction;
         node.parentSide = targetSide;
@@ -245,6 +255,7 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
           ownerRoomId: parent.id,
           width: WORLD_GEOMETRY.corridorHalfWidth * 2,
           points,
+          ...(direct ? { direct: true } : {}),
         };
       }
     }

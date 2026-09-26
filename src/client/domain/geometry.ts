@@ -62,6 +62,15 @@ function pointInCorridorBody(point: Point, start: Point, end: Point, width: numb
 }
 
 export function pointInCorridor(x: number, y: number, link: LayoutLink, radius = PLAYER_SPEC.radius): boolean {
+  if (link.direct) {
+    const door = link.points[0]!;
+    const along = radius + WORLD_GEOMETRY.wallThickness;
+    const across = WORLD_GEOMETRY.doorOpeningWidth / 2 - radius;
+    if (across < 0) return false;
+    return link.direction === "E" || link.direction === "W"
+      ? Math.abs(x - door.x) <= along && Math.abs(y - door.y - WORLD_GEOMETRY.verticalDoorPassableOffsetY) <= across
+      : Math.abs(y - door.y) <= along && Math.abs(x - door.x) <= across;
+  }
   const width = link.width || WORLD_GEOMETRY.corridorHalfWidth * 2;
   for (let index = 1; index < link.points.length; index += 1) {
     const originalStart = link.points[index - 1]!;

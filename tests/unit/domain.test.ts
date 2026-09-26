@@ -274,7 +274,7 @@ describe("DOM graph generation", () => {
 
 describe("layout and geometry", () => {
   const graph: DungeonGraph = {
-    nodes: [node(0, null, 0), node(1, 0, 1), node(2, 0, 1)],
+    nodes: [node(0, null, 0), node(1, 0, 1), node(2, 0, 1, { lootSeed: 16 })],
     links: [{ source: 0, target: 1 }, { source: 0, target: 2 }],
     originalCount: 3,
     coalescedCount: 0,
@@ -335,6 +335,68 @@ describe("layout and geometry", () => {
       x2: layout.links[0]!.points.at(-1)!.x,
       y2: layout.links[0]!.points.at(-1)!.y,
     });
+  });
+
+  it.each([
+    [12, "N"], [13, "E"], [6, "S"], [23, "W"],
+  ] as const)("attaches rooms directly through a shared %s doorway when selected by their hashes", (lootSeed, direction) => {
+    const nodes = [node(0, null, 0), node(1, 0, 1, { lootSeed })];
+    const adjacent = layoutOrthogonal({ nodes, links: [], originalCount: 2, coalescedCount: 0, truncated: false });
+    const link = adjacent.links[0]!;
+    const door = link.points[0]!;
+    expect(adjacent.hiddenCount).toBe(0);
+    expect(link.direction).toBe(direction);
+    expect(link.direct).toBe(true);
+    expect(link.points).toEqual([door, door]);
+    expect(corridorLength(link.points)).toBe(0);
+    expect(decorationSpecsForCorridor(link)).toEqual([]);
+    expect(revealedRoomPath(adjacent, new Set([0, 1]), 0, 1)).toEqual([0, 1]);
+
+    const normal = direction === "E" ? { x: 1, y: 0 } : direction === "W" ? { x: -1, y: 0 }
+      : direction === "S" ? { x: 0, y: 1 } : { x: 0, y: -1 };
+    const shift = normal.x ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
+    const walkable = (point: Point, radius: number) => adjacent.nodes.some(room =>
+      pointInRoomFloor(point.x, point.y, room, radius)
+    ) || pointInCorridor(point.x, point.y, link, radius);
+    for (const radius of [PLAYER_SPEC.radius, MAX_REGULAR_MONSTER_RADIUS]) {
+      const start = { x: door.x - normal.x * (radius + world(30)), y: door.y - normal.y * (radius + world(30)) + shift };
+      const goal = { x: door.x + normal.x * (radius + world(30)), y: door.y + normal.y * (radius + world(30)) + shift };
+      expect(walkable({ x: door.x, y: door.y + shift }, radius)).toBe(true);
+      for (const [from, to] of [[start, goal], [goal, start]] as const) {
+        const path = aStarPath(from, to, point => walkable(point, radius), WORLD_GEOMETRY.pathGridStep, 1800);
+        expect(path).not.toBeNull();
+        expect(path!.slice(1).every((point, index) =>
+          walkableSegment(path![index]!, point, candidate => walkable(candidate, radius))
+        )).toBe(true);
+      }
+      const across = WORLD_GEOMETRY.doorOpeningWidth / 2 - radius + 1;
+      const outsideDoor = { x: door.x - normal.y * across, y: door.y + shift + normal.x * across };
+      expect(pointInCorridor(outsideDoor.x, outsideDoor.y, link, radius)).toBe(false);
+    }
+  });
+
+  it("keeps spaced corridors when direct attachment is not selected", () => {
+    const nodes = [node(0, null, 0), node(1, 0, 1, { lootSeed: 11 })];
+    const spaced = layoutOrthogonal({ nodes, links: [], originalCount: 2, coalescedCount: 0, truncated: false });
+    expect(spaced.links[0]!.direct).toBeUndefined();
+    expect(corridorLength(spaced.links[0]!.points)).toBeGreaterThan(0);
+  });
+
+  it("mixes direct attachments and spaced corridors across nested rooms", () => {
+    const nodes = Array.from({ length: 16 }, (_, index) =>
+      node(index, index ? index - 1 : null, index)
+    );
+    const mixed = layoutOrthogonal({ nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false });
+    expect(mixed.hiddenCount).toBe(0);
+    expect(mixed.links.filter(link => link.direct).length)
+      .toBeGreaterThan(mixed.links.filter(link => !link.direct).length);
+    expect(mixed.links.some(link => !link.direct)).toBe(true);
+    for (const link of mixed.links.filter(link => link.direct)) {
+      for (const room of mixed.nodes) {
+        if (room.id === link.source.id || room.id === link.target.id) continue;
+        expect(corridorIntersectsRoom(link, room, 0)).toBe(false);
+      }
+    }
   });
 
   it("recognizes rooms, corridors, and point distances", () => {
@@ -702,7 +764,7 @@ describe("layout and geometry", () => {
   });
 
   it("uses each room's fork preference independently, including small sibling groups", () => {
-    const nodes = [node(0, null, 0, { lootSeed: 10 }),
+    const nodes = [node(0, null, 0, { lootSeed: 98 }),
       node(1, 0, 1, { lootSeed: 12 }), node(2, 0, 1, { lootSeed: 10 }),
       ...Array.from({ length: 8 }, (_, index) => node(index + 3, 1, 2)),
       ...Array.from({ length: 8 }, (_, index) => node(index + 11, 2, 2))];

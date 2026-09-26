@@ -92,6 +92,7 @@ function buildPhysicalSegments(layout: DungeonLayout): CorridorSegmentPlan[] {
   const forkGroups = new Map<string, LayoutLink[]>();
 
   for (const link of layout.links) {
+    if (link.direct) continue;
     if (validForkLink(link)) {
       const group = forkGroups.get(link.forkId!) ?? [];
       group.push(link);
@@ -518,6 +519,7 @@ function buildMarkings(layout: DungeonLayout, segmentSize: number): CorridorMark
   const markings: CorridorMarkingPlan[] = [];
   const forkGroups = new Map<string, LayoutLink[]>();
   for (const link of layout.links) {
+    if (link.direct) continue;
     if (validForkLink(link)) {
       const group = forkGroups.get(link.forkId!) ?? [];
       group.push(link);

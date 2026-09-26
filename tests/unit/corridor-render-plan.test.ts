@@ -298,6 +298,23 @@ describe("corridor render planning", () => {
     }
   });
 
+  it("reserves a shared doorway without drawing corridor floors, walls or signs", () => {
+    const nodes = [{ ...room(0), lootSeed: 10 }, { ...room(1, 0), lootSeed: 12 }];
+    const layout = layoutOrthogonal({ nodes, links: [], originalCount: 2, coalescedCount: 0, truncated: false });
+    const link = layout.links[0]!;
+    expect(link.direct).toBe(true);
+    const plan = buildCorridorRenderPlan(layout, SEGMENT_SIZE);
+    expect(plan).toEqual({ segments: [], walls: [], junctionFloors: [], corners: [], markings: [] });
+    expect(corridorJunctions(layout.links)).toEqual([]);
+    const door = link.points[0]!;
+    const sourceWalls = buildRoomWalls(link.source, [{ position: door, side: link.direction }], SEGMENT_SIZE);
+    const targetWalls = buildRoomWalls(link.target, [{ position: door, side: link.targetDirection! }], SEGMENT_SIZE);
+    expect(sourceWalls.filter(wall => wall.side === link.direction && wall.kind === "wall" &&
+      Math.abs(wall.x - door.x) < SEGMENT_SIZE && Math.abs(wall.y - door.y) < SEGMENT_SIZE)).toEqual([]);
+    expect(targetWalls.filter(wall => wall.side === link.targetDirection && wall.kind === "wall" &&
+      Math.abs(wall.x - door.x) < SEGMENT_SIZE && Math.abs(wall.y - door.y) < SEGMENT_SIZE)).toEqual([]);
+  });
+
   it("keeps distinct corridors separate in a dense generated layout", () => {
     let seed = 1;
     const nodes = [room(0)];

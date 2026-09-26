@@ -921,43 +921,11 @@ export class PhaserRenderer {
     this.background?.destroy();
     this.background = null;
     this.destroyStaticObjects();
-    const worldBounds = this.layout.nodes.reduce((bounds, room) => ({
-      left: Math.min(bounds.left, room.x - room.width / 2),
-      right: Math.max(bounds.right, room.x + room.width / 2),
-      top: Math.min(bounds.top, room.y - room.height / 2),
-      bottom: Math.max(bounds.bottom, room.y + room.height / 2),
-    }), {
-      left: Infinity,
-      right: -Infinity,
-      top: Infinity,
-      bottom: -Infinity,
-    });
-    for (const link of this.layout.links) {
-      for (const point of link.points) {
-        worldBounds.left = Math.min(worldBounds.left, point.x - link.width / 2);
-        worldBounds.right = Math.max(worldBounds.right, point.x + link.width / 2);
-        worldBounds.top = Math.min(worldBounds.top, point.y - link.width / 2);
-        worldBounds.bottom = Math.max(worldBounds.bottom, point.y + link.width / 2);
-      }
-    }
-    const pad = world(384);
-    const backgroundWidth = Math.max(world(1024), worldBounds.right - worldBounds.left + pad * 2);
-    const backgroundHeight = Math.max(world(1024), worldBounds.bottom - worldBounds.top + pad * 2);
-    this.background = scene.add.tileSprite(
-      worldBounds.left - pad,
-      worldBounds.top - pad,
-      backgroundWidth,
-      backgroundHeight,
-      textureKey(ASSETS.backgroundTechTile),
-    )
-      .setOrigin(0)
-      .setTileScale(WORLD_SCALE)
-      .setScrollFactor(1)
-      .setDepth(-10);
-    this.illuminate(this.background);
+    this.updateBackground();
 
     const corridorPlan = buildCorridorRenderPlan(this.layout, SEGMENT_SIZE);
     for (const link of this.layout.links) {
+      if (link.direct) continue;
       const visible = this.visited.has(link.source.id) || this.visited.has(link.target.id);
       this.renderCorridor(link, corridorPlan, visible ? 1 : HIDDEN_WORLD_ALPHA);
       this.addCorridorLights(link, corridorPlan, visible);
@@ -991,6 +959,7 @@ export class PhaserRenderer {
     const layout = this.layout;
     if (!camera || !layout) return;
 
+    this.updateBackground();
     const view = camera.worldView;
     const padding = world(128);
     const bounds: WorldBounds = {
@@ -1025,6 +994,26 @@ export class PhaserRenderer {
     }
   }
 
+  private updateBackground(): void {
+    const scene = this.scene;
+    if (!scene) return;
+    const view = scene.cameras.main.worldView;
+    const pad = world(192);
+    // TileSprite allocates a canvas of its full display size. Bound that canvas
+    // to the camera rather than the whole level, which can span tens of thousands of pixels.
+    const width = Math.ceil(view.width + pad * 2);
+    const height = Math.ceil(view.height + pad * 2);
+    if (!this.background || this.background.width < width || this.background.height < height) {
+      this.background?.destroy();
+      this.background = this.illuminate(scene.add.tileSprite(
+        0, 0, width, height, textureKey(ASSETS.backgroundTechTile),
+      ).setOrigin(0).setTileScale(WORLD_SCALE).setDepth(-10));
+    }
+    const left = Math.floor(view.x - pad);
+    const top = Math.floor(view.y - pad);
+    this.background.setPosition(left, top).setTilePosition(left / WORLD_SCALE, top / WORLD_SCALE);
+  }
+
   private setStaticVisible(object: StaticObject | undefined, visible: boolean): void {
     if (!object || this.staticVisibility.get(object) === visible) return;
     object.setVisible(visible);
@@ -1049,7 +1038,7 @@ export class PhaserRenderer {
     for (const module of buildRoomWalls(room, doors, SEGMENT_SIZE)) {
       statics.push(this.rememberStatic(this.createEnvironmentModule(module).setAlpha(alpha)));
     }
-    for (const door of doors) {
+    for (const door of doors.filter(door => !door.sharedTarget)) {
       statics.push(this.rememberStatic(this.createDoor(door).setAlpha(alpha).setDepth(doorDepth(door))));
     }
     this.roomStatics.set(room.id, statics);
@@ -1299,8 +1288,8 @@ export class PhaserRenderer {
     );
   }
 
-  private roomDoors(room: GraphNode): DoorModulePlan[] {
-    const doors: DoorModulePlan[] = [];
+  private roomDoors(room: GraphNode): (DoorModulePlan & { sharedTarget?: boolean })[] {
+    const doors: (DoorModulePlan & { sharedTarget?: boolean })[] = [];
     for (const link of this.layout?.links ?? []) {
       if (link.source.id === room.id) doors.push({
         position: link.points[0]!,
@@ -1309,6 +1298,7 @@ export class PhaserRenderer {
       if (link.target.id === room.id) doors.push({
         position: link.points[link.points.length - 1]!,
         side: link.targetDirection ?? this.opposite(link.direction),
+        sharedTarget: link.direct,
       });
     }
     return doors;

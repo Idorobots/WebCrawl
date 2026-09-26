@@ -144,6 +144,8 @@ export interface LayoutLink {
   ownerRoomId: number;
   width: number;
   points: Point[];
+  /** Rooms share a doorway; both points coincide and there is no corridor floor. */
+  direct?: boolean;
   forkId?: string;
   forkPointIndex?: number;
 }
