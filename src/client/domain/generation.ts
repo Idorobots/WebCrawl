@@ -413,15 +413,24 @@ function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly
     { x: room.x, y: room.y + room.height * 0.32 },
     { x: room.x, y: room.y - room.height * 0.32 },
   ];
-  return items.map(item => {
-    if (!doors.some(door => blocksDoorApproach(item, room, door))) return item;
-    if (item.spawner) {
-      const position = spawnerCandidates.find(candidate =>
-        !doors.some(door => blocksDoorApproach({ ...item, ...candidate }, room, door))
-      );
-      if (position) return { ...item, ...position };
+  const cleared: Decoration[] = [];
+  for (const [index, item] of items.entries()) {
+    if (!doors.some(door => blocksDoorApproach(item, room, door))) {
+      cleared.push(item);
+      continue;
     }
-    return {
+    if (item.spawner) {
+      const occupied = [...cleared, ...items.slice(index + 1)];
+      const position = spawnerCandidates.find(candidate =>
+        !doors.some(door => blocksDoorApproach({ ...item, ...candidate }, room, door)) &&
+        decorationFits(candidate, DECORATION_DEFINITIONS.spawner, room, occupied)
+      );
+      if (position) {
+        cleared.push({ ...item, ...position });
+        continue;
+      }
+    }
+    cleared.push({
       ...item,
       ...DECORATION_DEFINITIONS.debrisCircuit,
       kind: "doorway-debris",
@@ -430,8 +439,9 @@ function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly
       dropKind: null,
       spawner: false,
       spawnedCount: undefined,
-    };
-  });
+    });
+  }
+  return cleared;
 }
 
 export function buildDecorations(

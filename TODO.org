@@ -1248,7 +1248,10 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 * Room layout
 - We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
 
-* Bugs
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-26 Sat 20:54]
+:END:
 - Barel damage should also cause the player to emit damage sound
 - Lights in undiscovered rooms are active. These should only activate after discovery.
 - Destroyed content browsers should not "work" - currently they are still playing the sound and show the content browser popup.
@@ -1257,7 +1260,6 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - All monsters in a room seem to be dropping the same loot.
 - Floor signage should appear below any debris floor tiles.
 - Directly-connected rooms should reveal as soon as player walks up 0.5 segment away from the door.
-
 - Multiple spawners can appear on the same spot
 
 * Hidden rooms

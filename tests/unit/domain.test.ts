@@ -2266,6 +2266,57 @@ describe("deterministic room contents", () => {
     )).toBe(true);
   });
 
+  it("keeps relocated doorway spawners separate from each other and room decorations", () => {
+    const room = node(2_500, 0, 1, {
+      tag: "section",
+      width: ROOM_WIDTH * 2,
+      height: ROOM_HEIGHT * 2,
+      lootSeed: stableHash("crowded-spawner-doorways"),
+    });
+    const original = decorationSpecsForRoom(room, 10).filter(item => item.spawner);
+    expect(original.length).toBeGreaterThanOrEqual(3);
+    const doorwayFor = (item: Decoration): Point => {
+      const dx = item.x - room.x;
+      const dy = item.y - room.y;
+      return Math.abs(dx) > Math.abs(dy)
+        ? { x: room.x + Math.sign(dx) * room.width / 2, y: item.y }
+        : { x: item.x, y: room.y + Math.sign(dy) * room.height / 2 };
+    };
+    const links: LayoutLink[] = original.slice(0, 3).map((item, index) => {
+      const door = doorwayFor(item);
+      return {
+        id: `${room.id}->${index}`,
+        source: room,
+        target: node(3_000 + index, room.id, 2),
+        direction: door.x !== item.x
+          ? (item.x > room.x ? "E" : "W")
+          : (item.y > room.y ? "S" : "N"),
+        ownerRoomId: room.id,
+        width: WORLD_GEOMETRY.corridorHalfWidth * 2,
+        points: [door, door],
+        direct: true,
+      };
+    });
+    const layout = { nodes: [room], links, hiddenCount: 0 };
+    const placed = buildDecorations(layout, new Map(), 10);
+    const spawners = placed.filter(item => item.spawner);
+    const relocated = original.slice(0, 3).filter(item => {
+      const moved = spawners.find(candidate => candidate.id === item.id);
+      return moved && (moved.x !== item.x || moved.y !== item.y);
+    });
+    expect(relocated.length).toBeGreaterThanOrEqual(2);
+    expect(buildDecorations(layout, new Map(), 10)).toEqual(placed);
+    for (const spawner of spawners) {
+      for (const other of placed) {
+        if (spawner.id === other.id) continue;
+        expect(Math.hypot(spawner.x - other.x, spawner.y - other.y)).toBeGreaterThanOrEqual(
+          Math.max(world(10), spawner.footprint ?? 0) +
+          Math.max(world(10), other.footprint ?? 0) + world(8),
+        );
+      }
+    }
+  });
+
   it("namespaces collected loot to a specific floor instance", () => {
     const imageRoom = node(9_001, null, 0, {
       x: 500,
