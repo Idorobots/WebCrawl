@@ -120,6 +120,8 @@ export interface ContentChunk {
   order: number;
   html: string;
   label: string;
+  /** Direct child subtree folded into the room displaying this chunk. */
+  sourceSubtreeId?: number;
 }
 
 export interface GraphLink {

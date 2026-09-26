@@ -16,6 +16,58 @@ const CONTENT_TAGS = new Set([
 ]);
 const CONTENT_OMIT_TAGS = new Set(["script", "style", "noscript", "template"]);
 
+type RoomContent = Pick<GraphNode, "id" | "contentHtml" | "contentChunks" | "floorLabel">;
+
+export function hasReadableRoomContent(room: Pick<GraphNode, "contentHtml" | "contentChunks">): boolean {
+  const chunks = room.contentChunks ?? (room.contentHtml ? [{ html: room.contentHtml }] : []);
+  return chunks.some(({ html }) => /<img(?:\s|>)/i.test(html) ||
+    html.replace(/<[^>]*>/g, "").replace(/&(?:nbsp|#0*160|#x0*a0);/gi, " ").trim().length > 0);
+}
+
+export function contentPagesForRoom(room: RoomContent, rooms: readonly GraphNode[] = []): ContentChunk[] {
+  const chunks = room.contentChunks ?? (room.contentHtml
+    ? [{ order: 0, html: room.contentHtml, label: room.floorLabel }] : []);
+  const pages: ContentChunk[] = [];
+  const bySubtree = new Map<number, ContentChunk>();
+  for (const chunk of [...chunks].sort((left, right) => left.order - right.order)) {
+    if (chunk.sourceSubtreeId === undefined) {
+      pages.push(chunk);
+      continue;
+    }
+    const page = bySubtree.get(chunk.sourceSubtreeId);
+    if (page) page.html += chunk.html;
+    else {
+      const first = { ...chunk };
+      bySubtree.set(chunk.sourceSubtreeId, first);
+      pages.push(first);
+    }
+  }
+
+  const childrenByParent = new Map<number, GraphNode[]>();
+  for (const node of rooms) {
+    if (node.parentId === null) continue;
+    const children = childrenByParent.get(node.parentId) ?? [];
+    children.push(node);
+    childrenByParent.set(node.parentId, children);
+  }
+  const collectSubtree = (node: GraphNode): ContentChunk[] => [
+    ...(node.contentChunks ?? (node.contentHtml
+      ? [{ order: node.id, html: node.contentHtml, label: node.floorLabel }] : [])),
+    ...(childrenByParent.get(node.id) ?? []).flatMap(collectSubtree),
+  ];
+  for (const child of childrenByParent.get(room.id) ?? []) {
+    const subtree = collectSubtree(child).sort((left, right) => left.order - right.order);
+    if (!subtree.length) continue;
+    pages.push({
+      order: subtree[0]!.order,
+      html: subtree.map(chunk => chunk.html).join(""),
+      label: child.floorLabel,
+      sourceSubtreeId: child.id,
+    });
+  }
+  return pages.sort((left, right) => left.order - right.order);
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'\"]/g, char => ({
     "&": "&amp;",
@@ -313,7 +365,9 @@ export function coalesceLeaves(inputNodes: GraphNode[], limit: number): GraphNod
       parent.coalescedCount += 1 + leaf.coalescedCount;
       parent.hrefs = [...new Set([...parent.hrefs, ...leaf.hrefs])];
       if (parent.contentChunks && leaf.contentChunks) {
-        parent.contentChunks.push(...leaf.contentChunks);
+        parent.contentChunks.push(...leaf.contentChunks.map(chunk => ({
+          ...chunk, sourceSubtreeId: leaf.id, label: leaf.floorLabel,
+        })));
         parent.contentChunks.sort((left, right) => left.order - right.order);
       }
 

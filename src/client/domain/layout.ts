@@ -191,16 +191,18 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
     for (const href of hrefs) promoted.add(href);
     promotedHrefMap.set(target.id, promoted);
   };
-  const collectSubtreeContent = (node: GraphNode, target: GraphNode): void => {
+  const collectSubtreeContent = (node: GraphNode, target: GraphNode, subtree = node): void => {
     addPromotedHrefs(target, node.hrefs);
     const chunks = node.contentChunks ?? (node.contentHtml
       ? [{ order: node.id, html: node.contentHtml, label: node.floorLabel }] : []);
     if (chunks.length) {
       const promoted = promotedContentMap.get(target.id) ?? [];
-      promoted.push(...chunks);
+      promoted.push(...chunks.map(chunk => ({
+        ...chunk, sourceSubtreeId: subtree.id, label: subtree.floorLabel,
+      })));
       promotedContentMap.set(target.id, promoted);
     }
-    for (const child of childrenByParent.get(node.id) ?? []) collectSubtreeContent(child, target);
+    for (const child of childrenByParent.get(node.id) ?? []) collectSubtreeContent(child, target, subtree);
   };
   const roomPlacementIsClear = (node: GraphNode, point: Point, touchingParent?: GraphNode): boolean => {
     const margin = WORLD_GEOMETRY.roomCollisionMargin;

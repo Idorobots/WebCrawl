@@ -53,7 +53,7 @@ import {
   monsterSpecForSpawner,
   weaponPedestalForRoom,
 } from "./domain/generation";
-import { domToGraph } from "./domain/graph";
+import { contentPagesForRoom, domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { chooseReachablePath, monsterEscapeStep, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "./domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
@@ -407,6 +407,7 @@ function renderPortalPreview(): void {
 function renderContentBrowser(): void {
   const point = currentDecorations.find(item =>
     item.contentPoint &&
+    !item.destroyed &&
     item.contentEnabled &&
     distanceSquared(player, item) <= CONTENT_BROWSER_RADIUS * CONTENT_BROWSER_RADIUS
   );
@@ -430,8 +431,7 @@ function renderContentBrowser(): void {
   heading.textContent = room.floorLabel;
   const content = document.createElement("div");
   content.className = "content-browser-body";
-  const pages = room.contentChunks ?? (room.contentHtml
-    ? [{ order: 0, html: room.contentHtml, label: room.floorLabel }] : []);
+  const pages = contentPagesForRoom(room, currentLayout?.nodes);
   const navigation = document.createElement("nav");
   navigation.className = "content-browser-pages";
   const previous = document.createElement("button");
@@ -445,6 +445,21 @@ function renderContentBrowser(): void {
   const showPage = (): void => {
     // Chunks use the same fixed allowlist as the old contentHtml preview.
     content.innerHTML = pages[page]?.html ?? "<p>No readable content in this section.</p>";
+    for (const image of content.querySelectorAll("img")) {
+      const showUnavailableImage = (): void => {
+        if (!image.parentElement) return;
+        const fallback = document.createElement("p");
+        const source = document.createElement("a");
+        source.href = image.src;
+        source.target = "_blank";
+        source.rel = "noopener noreferrer";
+        source.textContent = image.alt.trim() || image.src;
+        fallback.append("Image unavailable: ", source);
+        image.replaceWith(fallback);
+      };
+      image.addEventListener("error", showUnavailableImage, { once: true });
+      if (image.complete && image.naturalWidth === 0) showUnavailableImage();
+    }
     status.textContent = `${pages[page]?.label ?? room.floorLabel} · ${page + 1}/${Math.max(1, pages.length)}`;
     previous.disabled = page === 0;
     next.disabled = page >= pages.length - 1;
@@ -1219,6 +1234,11 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
 
   if (item.hp <= 0) {
     item.destroyed = true;
+    if (item.contentPoint) {
+      item.contentEnabled = false;
+      item.contentTurningOff = false;
+      item.spawnAnimationStartedAt = undefined;
+    }
     saveObstacleState(item);
     renderer.spawnEffect(item.visual.animations?.destroy, item.x, item.y, item.size);
     renderer.playExplosionSound();
@@ -1610,7 +1630,7 @@ function updateContentPoints(timestamp: number): void {
   let changed = false;
   const occupiedRoomId = roomContainingPoint(player.x, player.y)?.id ?? null;
   for (const item of currentDecorations) {
-    if (!item.contentPoint) continue;
+    if (!item.contentPoint || item.destroyed) continue;
     const playerInRoom = occupiedRoomId === item.roomId;
     if (
       !item.contentUnlocked &&
@@ -1631,7 +1651,7 @@ function updateContentPoints(timestamp: number): void {
       item.contentTurningOff = false;
       item.spawnAnimationStartedAt = timestamp - CONTENT_TOGGLE_FRAME_MS;
     }
-    if (!item.destroyed) renderer.applyDecorationFrame(item, contentPointFrameFor(item, timestamp));
+    renderer.applyDecorationFrame(item, contentPointFrameFor(item, timestamp));
   }
   if (changed) renderDecorations();
   renderContentBrowser();

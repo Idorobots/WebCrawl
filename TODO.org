@@ -1085,7 +1085,7 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 * Performance optimization, again
 - Phaser 4 update?
 - Cull discovered rooms that are far away
-- WebWorkers for pathing etc?
+- WebWorkers for pathing/collision detection, etc?
 
 * DONE UX improvements, again
 :LOGBOOK:
@@ -1245,13 +1245,14 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
 
 * Bugs
-- All monsters in a room seem to be dropping the same loot.
 - Barel damage should also cause the player to emit damage sound
 - Lights in undiscovered rooms are active. These should only activate after discovery.
-
 - Destroyed content browsers should not "work" - currently they are still playing the sound and show the content browser popup.
-- Script rooms don't need a content browser. Omit content browsers when there's no readable content.
 - When all children are coalesced into a node, its content should be coalesced as well - use the current nodes HTML instead of an array of its children HTML contents.
+- Script rooms don't need a content browser. Omit content browsers when there's no readable content.
+
+- All monsters in a room seem to be dropping the same loot.
+- Floor signage should appear below any debris floor tiles.
 
 * Hidden rooms
 `display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.

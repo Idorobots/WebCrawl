@@ -60,7 +60,7 @@ import {
   weaponPedestalForRoom,
   sceneryDropKindForSeed,
 } from "../../src/client/domain/generation";
-import { coalesceLeaves, domToGraph } from "../../src/client/domain/graph";
+import { coalesceLeaves, contentPagesForRoom, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, doorCapacity, doorPositionForSlot, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, chooseReachablePath, monsterEscapeStep, revealedRoomPath, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "../../src/client/domain/pathfinding";
@@ -228,12 +228,45 @@ describe("DOM graph generation", () => {
     expect(rendered.querySelector("img")?.getAttribute("src")).toBe("https://example.com/picture.png");
     expect(content).not.toContain("secret()");
 
+    const rootPages = contentPagesForRoom(graph.nodes[0]!, graph.nodes);
+    const mainSubtree = rootPages.find(page => page.label === "MAIN");
+    expect(mainSubtree?.html).toContain("Inner");
+    expect(mainSubtree?.html).toContain("<b>bold</b>");
+    expect(mainSubtree?.html).toContain("picture.png");
+    expect(contentPagesForRoom(main, graph.nodes).find(page => page.label === "P")?.html)
+      .toContain("<b>bold</b>");
+
     const folded = coalesceLeaves(graph.nodes, 2);
     const foldedLeaf = folded.find(room => room.tag === "main")!;
     expect(foldedLeaf.contentChunks?.map(chunk => chunk.html).join("")).toContain("bold");
     expect(contentBrowserForRoom(foldedLeaf)).not.toBeNull();
+    const foldedPages = contentPagesForRoom(foldedLeaf);
+    expect(foldedPages.filter(page => page.sourceSubtreeId !== undefined).map(page => page.label))
+      .toEqual(["P", "IMG"]);
+    expect(foldedPages.find(page => page.label === "P")?.html).toContain("<b>bold</b>");
+    expect(foldedPages.find(page => page.label === "IMG")?.html).toContain("picture.png");
+    expect(foldedPages.filter(page => page.sourceSubtreeId === undefined).every(page => page.label === "MAIN"))
+      .toBe(true);
     expect(folded.flatMap(room => room.contentChunks ?? []).map(chunk => chunk.order).sort((a, b) => a - b))
       .toEqual(graph.nodes.flatMap(room => room.contentChunks ?? []).map(chunk => chunk.order).sort((a, b) => a - b));
+  });
+
+  it("shows every child subtree's complete HTML on one page, even beyond the chunk limit", () => {
+    const text = `${"A".repeat(110_000)}END`;
+    const graph = domToGraph(`<body>Root text<main><p>${text}</p><section>Another child</section></main></body>`,
+      "https://example.com/page");
+    const parentPage = contentPagesForRoom(graph.nodes[0]!, graph.nodes).find(page => page.label === "MAIN");
+    expect(parentPage?.html).toContain("END");
+    expect(parentPage!.html.length).toBeGreaterThan(110_000);
+    const folded = coalesceLeaves(graph.nodes, 2).find(room => room.tag === "main")!;
+    const pages = contentPagesForRoom(folded);
+    expect(pages).toHaveLength(2);
+    expect(pages.map(page => page.label)).toEqual(["P", "SECTION"]);
+    const content = document.createElement("div");
+    content.innerHTML = pages[0]!.html;
+    expect(content.textContent).toBe(text);
+    expect(pages[0]!.html.length).toBeGreaterThan(110_000);
+    expect(pages[1]?.html).toContain("Another child");
   });
 
   it("retains every readable chunk beyond the room cap and across long text pages", () => {
@@ -255,12 +288,25 @@ describe("DOM graph generation", () => {
     expect(pages.every(page => page.html.length <= 48_000)).toBe(true);
   });
 
-  it("gives empty leaves a browser and reserves room for one on the root beside the up portal", () => {
-    const emptyLeaf = domToGraph("<body><script>ignored()</script></body>", "https://example.com/")
-      .nodes.find(room => room.tag === "script")!;
-    expect(emptyLeaf.contentChunks).toEqual([]);
-    expect(contentBrowserForRoom(emptyLeaf)).not.toBeNull();
+  it("omits browsers for script rooms and rooms with no readable content", () => {
+    const graph = domToGraph("<body><script>ignored()</script><main> &nbsp; </main></body>", "https://example.com/");
+    expect(graph.nodes.filter(room => room.tag === "script" || room.tag === "main")
+      .every(room => contentBrowserForRoom(room) === null)).toBe(true);
+    expect(buildDecorations(layoutOrthogonal(graph), new Map()).filter(item => item.contentPoint)).toEqual([]);
 
+    const scriptRoom = node(10, 0, 1, {
+      tag: "script",
+      hrefs: Array.from({ length: 8 }, (_, index) => `https://example.com/${index}`),
+      contentChunks: [{ order: 0, html: "<p>Ignored</p>", label: "SCRIPT" }],
+    });
+    expect(contentBrowserForRoom(scriptRoom)).toBeNull();
+    expect(buildInteractiveObjects({ nodes: [scriptRoom], links: [], hiddenCount: 0 },
+      "https://example.com/page", null, new Set()).stairs).toHaveLength(8);
+    expect(contentBrowserForRoom(domToGraph("<body><img src='/image.png'></body>", "https://example.com/")
+      .nodes.find(room => room.tag === "img")!)).not.toBeNull();
+  });
+
+  it("reserves a browser slot on the root when it has readable content", () => {
     const root = node(0, null, 0, {
       contentChunks: [{ order: 0, html: "<p>Readable root</p>", label: "BODY" }],
       hrefs: Array.from({ length: 8 }, (_, index) => `https://example.com/${index}`),
@@ -875,8 +921,10 @@ describe("layout and geometry", () => {
     const layout = layoutOrthogonal({ nodes, links: [], originalCount: nodes.length, coalescedCount: 0, truncated: false });
     const root = layout.nodes[0]!;
     expect(layout.hiddenCount).toBe(9);
-    expect(root.contentChunks?.map(chunk => chunk.label)).toContain("GRANDCHILD");
-    expect(root.contentChunks?.map(chunk => chunk.label)).toContain("CHILD40");
+    const lastChildPage = contentPagesForRoom(root).find(page => page.sourceSubtreeId === 40);
+    expect(lastChildPage?.label).toBe(nodes[40]!.floorLabel);
+    expect(lastChildPage?.html).toContain("Child40");
+    expect(lastChildPage?.html).toContain("Grandchild");
     expect(contentBrowserForRoom(root)).not.toBeNull();
     expect(layout.nodes.flatMap(room => room.contentChunks ?? []).map(chunk => chunk.order).sort((a, b) => a - b))
       .toEqual(Array.from({ length: 42 }, (_, index) => index));

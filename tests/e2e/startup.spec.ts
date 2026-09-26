@@ -1531,7 +1531,7 @@ test("shows the could-not-load modal when every fetch route fails", async ({ pag
   await expect(page.locator("#welcomeUrlInput")).toHaveValue("https://example.com/start");
 });
 
-test("pages through long root content in a reachable browser", async ({ page }) => {
+test("pages through long root content and closes the browser when destroyed", async ({ page }) => {
   const fixture = `<body>${"A".repeat(55_000)}END<main><p>Another room</p></main></body>`;
   await stubRemoteFetchFallbacks(page, fixture);
   await page.route("**/api/fetch?**", route => route.fulfill({
@@ -1555,15 +1555,71 @@ test("pages through long root content in a reachable browser", async ({ page }) 
   expect(point).toBeDefined();
   await teleportPlayer(page, point!);
   await expect(page.locator("#contentBrowser")).toBeVisible();
-  await expect(page.locator(".content-browser-pages")).toContainText("1/2");
+  await expect(page.locator(".content-browser-pages")).toContainText("1/3");
   await page.locator(".content-browser-pages button").last().click();
-  await expect(page.locator(".content-browser-pages")).toContainText("2/2");
+  await expect(page.locator(".content-browser-pages")).toContainText("2/3");
   await expect(page.locator(".content-browser-body")).toContainText("END");
+  await page.locator(".content-browser-pages button").last().click();
+  await expect(page.locator(".content-browser-pages")).toContainText("MAIN · 3/3");
+  await expect(page.locator(".content-browser-body")).toContainText("Another room");
   await page.evaluate(() => {
     (window as Window & {
       __webcrawlTest?: { destroyContentPoint: (id: string) => void };
     }).__webcrawlTest?.destroyContentPoint("0::content-browser");
   });
+  await expect(page.locator("#contentBrowser")).toBeHidden();
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & {
+      __webcrawlTest?: { contentPoints: () => Array<{ id: string; enabled: boolean }> };
+    }).__webcrawlTest?.contentPoints().find(item => item.id === "0::content-browser")?.enabled
+  )).toBe(false);
+});
+
+test("does not create content browsers for script-only pages", async ({ page }) => {
+  const fixture = "<body><script>ignored()</script></body>";
+  await stubRemoteFetchFallbacks(page, fixture);
+  await page.route("**/api/fetch?**", route => route.fulfill({
+    status: 200, contentType: "text/html", body: fixture,
+  }));
+  await page.goto("/");
+  await signIn(page);
+  await page.locator("#welcomeUrlInput").fill("https://example.com/start");
+  await page.getByRole("button", { name: "Go" }).click();
+  await expect(page.locator("#gameCanvas canvas")).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: { stairs: () => Array<{ id: string }> } })
+      .__webcrawlTest?.stairs().length ?? 0
+  ), { timeout: 30_000 }).toBeGreaterThan(0);
+  expect(await page.evaluate(() =>
+    (window as Window & {
+      __webcrawlTest?: { contentPoints: () => Array<{ id: string }> };
+    }).__webcrawlTest?.contentPoints()
+  )).toEqual([]);
+});
+
+test("shows a source link when an image room cannot load its image", async ({ page }) => {
+  const fixture = '<body><img src="/vanished.png" alt=""></body>';
+  await stubRemoteFetchFallbacks(page, fixture);
+  await page.route("https://example.com/vanished.png", route => route.abort());
+  await page.route("**/api/fetch?**", route => route.fulfill({
+    status: 200, contentType: "text/html", body: fixture,
+  }));
+  await page.goto("/");
+  await signIn(page);
+  await page.locator("#welcomeUrlInput").fill("https://example.com/start");
+  await page.getByRole("button", { name: "Go" }).click();
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & {
+      __webcrawlTest?: { contentPoints: () => Array<{ id: string; x: number; y: number }> };
+    }).__webcrawlTest?.contentPoints().find(item => item.id === "1::content-browser") ?? null
+  ), { timeout: 30_000 }).not.toBeNull();
+  const point = await page.evaluate(() =>
+    (window as Window & {
+      __webcrawlTest?: { contentPoints: () => Array<{ id: string; x: number; y: number }> };
+    }).__webcrawlTest?.contentPoints().find(item => item.id === "1::content-browser")
+  );
+  await teleportPlayer(page, point!);
   await expect(page.locator("#contentBrowser")).toBeVisible();
-  await expect(page.locator(".content-browser-body")).toContainText("END");
+  await expect(page.locator(".content-browser-body")).toContainText("Image unavailable");
+  await expect(page.locator(".content-browser-body a")).toHaveAttribute("href", "https://example.com/vanished.png");
 });

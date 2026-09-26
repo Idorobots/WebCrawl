@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import { stableHash } from "./hash";
 import { pointInCorridor, pointInRoomFloor } from "./geometry";
+import { hasReadableRoomContent } from "./graph";
 import {
   BOSS_DEFINITIONS,
   DECORATION_DEFINITIONS,
@@ -117,12 +118,12 @@ export function weaponPedestalForRoom(room: GraphNode, pageUrl: string): Decorat
   };
 }
 
-function hasContentBrowser(room: Pick<GraphNode, "contentHtml" | "contentChunks" | "isRoot" | "childCount">): boolean {
-  if (room.contentChunks !== undefined) return room.childCount === 0 || room.contentChunks.length > 0;
-  return !room.isRoot && room.childCount === 0 && Boolean(room.contentHtml);
+function hasContentBrowser(room: Pick<GraphNode, "tag" | "contentHtml" | "contentChunks" | "isRoot" | "childCount">): boolean {
+  if (room.tag === "script" || !hasReadableRoomContent(room)) return false;
+  return room.contentChunks !== undefined || (!room.isRoot && room.childCount === 0);
 }
 
-function portalCountForRoom(room: Pick<GraphNode, "hrefs" | "isRoot" | "contentHtml" | "contentChunks" | "childCount">): number {
+function portalCountForRoom(room: Pick<GraphNode, "tag" | "hrefs" | "isRoot" | "contentHtml" | "contentChunks" | "childCount">): number {
   const cap = 8 - (room.isRoot ? 1 : 0) - (hasContentBrowser(room) ? 1 : 0);
   return Math.min(cap, room.hrefs.length);
 }
