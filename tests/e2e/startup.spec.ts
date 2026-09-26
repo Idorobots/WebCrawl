@@ -506,8 +506,8 @@ test("renders ambient lighting and aims the elliptical flashlight at the cursor"
   await expect(game).toHaveAttribute("data-flashlight-color", "ffffff");
   await expect(game).toHaveAttribute("data-flashlight-radius-scale", "0.8");
   await expect(game).toHaveAttribute("data-player-light", "true");
-  await expect.poll(async () => Number(await game.getAttribute("data-room-lights"))).toBeGreaterThanOrEqual(2);
-  await expect.poll(async () => Number(await game.getAttribute("data-corridor-lights"))).toBeGreaterThan(0);
+  await expect(game).toHaveAttribute("data-visited-rooms", "1");
+  await expect.poll(async () => Number(await game.getAttribute("data-room-lights"))).toBe(1);
   const roomIntensities = (await game.getAttribute("data-room-light-intensities") ?? "").split(",");
   expect(new Set(roomIntensities).size).toBeGreaterThan(1);
   expect(Number(await game.getAttribute("data-full-room-lights"))).toBeGreaterThanOrEqual(roomIntensities.length / 2);
@@ -568,6 +568,26 @@ test("renders ambient lighting and aims the elliptical flashlight at the cursor"
   expect(movedEffect.playerX).toBeGreaterThan(movedEffect.beforeX);
   expect(movedEffect.effectX).toBe(movedEffect.playerX);
   expect(movedEffect.effectY).toBe(movedEffect.playerY);
+
+  await setPlayerInvulnerable(page, true);
+  const direction = await game.getAttribute("data-first-exit");
+  const door = {
+    x: Number(await game.getAttribute("data-first-door-x")),
+    y: Number(await game.getAttribute("data-first-door-y")),
+  };
+  await alignPlayerToDoor(page, door, direction);
+  const key = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
+  await page.keyboard.down(key);
+  try {
+    await expect.poll(async () => Number(await game.getAttribute("data-visited-rooms")), {
+      timeout: 15_000,
+    }).toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => Number(await game.getAttribute("data-room-lights")), {
+      timeout: 15_000,
+    }).toBeGreaterThanOrEqual(2);
+  } finally {
+    await page.keyboard.up(key);
+  }
 });
 
 test("uses crystals for temporary invulnerability without counting supplies as score loot", async ({ page }) => {

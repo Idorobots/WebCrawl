@@ -1494,7 +1494,7 @@ export class PhaserRenderer {
       if (link.target.id === currentRoom.id) localRooms.add(link.source.id);
     }
     for (const [roomId, profile] of this.roomLights) {
-      profile.enabled = localRooms.has(roomId);
+      profile.enabled = this.visited.has(roomId) && localRooms.has(roomId);
       profile.light.setVisible(profile.enabled && this.lightOnScreen(profile));
     }
     for (const link of layout.links) {
