@@ -1140,6 +1140,11 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Each floor should have at least one boss monster - if none are generated initially, the most distant room should be promoted to a boss arena. Portals should activate after all bosses on the level are defeated (not all enemies at all, just all bosses).
 - When a floor has no links at all, add a random link (same as I'm feeling lucky button) to one of the rooms. If there is a boss arena, place the link in that arena.
 
+* CANCELLED Gameplay mechanics
+:LOGBOOK:
+- State "CANCELLED"  from              [2026-09-26 Sat 17:30] \\
+  nah
+:END:
 - Up portals should be active always (except in the initial room on floor 1).
 
 * Minimap overhaul

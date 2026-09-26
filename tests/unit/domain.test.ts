@@ -65,6 +65,7 @@ import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, doorCapacity, doorPositionForSlot, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, chooseReachablePath, monsterEscapeStep, revealedRoomPath, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "../../src/client/domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "../../src/client/domain/portals";
+import { indexMonsterHitboxes, monsterCollisionCandidates } from "../../src/client/domain/spatial";
 import {
   BARREL_EXPLOSION_RADIUS,
   DECORATION_DEFINITIONS,
@@ -1774,6 +1775,33 @@ describe("deterministic room contents", () => {
       [{ ...monster, x: monster.x + 1 }],
       { ...player, x: player.x + 1 },
     )).toMatchObject({ decorations: [], monsters: [], hitsPlayer: false });
+  });
+
+  it("finds monster hitboxes across spatial cell boundaries and refreshes after movement", () => {
+    const template = monsterSpecsForRoom(node(9_001, 0, 1, { isRoot: false }))[0]!;
+    const cellSize = WORLD_GEOMETRY.spatialCellSize;
+    const centerOffsetY = monsterVisualCenterOffsetY(template.size, template.visualKind);
+    const near = {
+      ...template,
+      x: cellSize - template.radius / 2,
+      y: cellSize - template.radius / 2 - centerOffsetY,
+      active: false,
+    };
+    const far = { ...template, id: "far-monster", x: cellSize * 6 };
+    const dead = { ...near, id: "dead-monster", dead: true };
+    const hit = { x: cellSize + template.radius / 2, y: cellSize + template.radius / 2 };
+
+    const cells = indexMonsterHitboxes([near, far, dead]);
+    // Index inactive monsters so discovering a room during a tick can activate them immediately.
+    expect(monsterCollisionCandidates(cells, hit, 0)).toEqual(new Set([near]));
+    expect(monsterCollisionCandidates(cells, { x: cellSize, y: cellSize }, cellSize)).toEqual(new Set([near]));
+
+    near.x = cellSize * 3;
+    near.y = cellSize * 3 - centerOffsetY;
+    const movedCells = indexMonsterHitboxes([near, far, dead]);
+    expect(monsterCollisionCandidates(movedCells, hit, 0)).toEqual(new Set());
+    expect(monsterCollisionCandidates(movedCells, { x: near.x, y: near.y + centerOffsetY }, 0))
+      .toEqual(new Set([near]));
   });
 
   it("centers scenery projectile hitboxes on the visible object", () => {

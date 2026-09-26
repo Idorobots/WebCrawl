@@ -58,6 +58,7 @@ import { layoutOrthogonal } from "./domain/layout";
 import { chooseReachablePath, monsterEscapeStep, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "./domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
+import { forSpatialCells, indexMonsterHitboxes, monsterCollisionCandidates, spatialCellKey } from "./domain/spatial";
 import {
   BARREL_EXPLOSION_DAMAGE,
   CRYSTAL_INVULNERABILITY_BLINK_START_MS,
@@ -207,7 +208,6 @@ const destroyedObstaclesByPage = new Map<string, Map<string, ObstacleState>>();
 let visitedRooms = new Set<number>();
 let roomRoutingDirty = true;
 let nextRoomTowardPlayer = new Map<number, number>();
-const SPATIAL_CELL_SIZE = WORLD_GEOMETRY.spatialCellSize;
 interface GeometryCell {
   rooms: Set<GraphNode>;
   links: Set<LayoutLink>;
@@ -215,6 +215,7 @@ interface GeometryCell {
 let geometryCells = new Map<string, GeometryCell>();
 let obstacleCells = new Map<string, Set<Decoration>>();
 let damageableCells = new Map<string, Set<Decoration>>();
+let monsterCells = new Map<string, Set<Monster>>();
 const discoveredRoomsByPage = new Map<string, Set<number>>();
 const monsterStatesByPage = new Map<string, Map<string, MonsterState>>();
 
@@ -2101,7 +2102,7 @@ function updateBullets(dt: number): void {
       }
 
       if (bullet.owner === "player") {
-        for (const monster of currentMonsters) {
+        for (const monster of monsterCollisionCandidates(monsterCells, bullet, bulletRadius)) {
           if (!monster.active || monster.dead) continue;
 
           if (projectileHitsCircle(
@@ -2185,6 +2186,8 @@ function gameTick(timestamp: number): void {
 
   const dt = Math.min(0.05, Math.max(0, (timestamp - lastGameTick) / 1000));
   lastGameTick = timestamp;
+  // Monster movement happens after dash and bullet collisions; refresh their hitboxes each tick.
+  monsterCells = indexMonsterHitboxes(currentMonsters);
 
   updatePlayerProtectionVisual(timestamp);
   if (touchAimActive) updateTouchAim(dt);
@@ -2330,26 +2333,6 @@ function resumeGameLoop(): void {
   if (!playerAlive || !gameLoopSuspended) return;
   gameLoopSuspended = false;
   startGameLoop();
-}
-
-function spatialCellKey(x: number, y: number): string {
-  return `${Math.floor(x / SPATIAL_CELL_SIZE)},${Math.floor(y / SPATIAL_CELL_SIZE)}`;
-}
-
-function forSpatialCells(
-  minX: number,
-  maxX: number,
-  minY: number,
-  maxY: number,
-  visit: (key: string) => void,
-): void {
-  const firstX = Math.floor(minX / SPATIAL_CELL_SIZE);
-  const lastX = Math.floor(maxX / SPATIAL_CELL_SIZE);
-  const firstY = Math.floor(minY / SPATIAL_CELL_SIZE);
-  const lastY = Math.floor(maxY / SPATIAL_CELL_SIZE);
-  for (let cellX = firstX; cellX <= lastX; cellX += 1) {
-    for (let cellY = firstY; cellY <= lastY; cellY += 1) visit(`${cellX},${cellY}`);
-  }
 }
 
 function rebuildSpatialIndexes(): void {
@@ -2839,7 +2822,7 @@ function applyEnergyDashDamage(): void {
   const dash = energyDash;
   if (!dash) return;
   const center = playerCollisionCenter();
-  for (const monster of currentMonsters) {
+  for (const monster of monsterCollisionCandidates(monsterCells, center, PLAYER_SPEC.radius)) {
     if (!monster.active || monster.dead || dash.hitTargets.has(monster.id)) continue;
     if (projectileHitsCircle(
       { x: monster.x, y: monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind) },
@@ -3410,6 +3393,7 @@ function renderGraph(
   currentLoot.push(...createSceneryDrops(currentDecorations, floorIdentity(pageUrl), collectedLoot));
 
   currentMonsters = MONSTERS_ENABLED ? buildMonsters(layout, pageUrl) : [];
+  monsterCells = indexMonsterHitboxes(currentMonsters);
   updateFloorPortals();
   renderer.setPortalStartupPreview(true);
 
