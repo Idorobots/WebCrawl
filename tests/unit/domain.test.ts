@@ -49,6 +49,7 @@ import {
   decorationSpecsForRoom,
   lootCountForRoom,
   lootPositions,
+  monsterLootKindForSeed,
   monsterSpecsForCorridor,
   monsterSpecsForRoom,
   monsterPositionIsClear,
@@ -2012,6 +2013,34 @@ describe("deterministic room contents", () => {
     const weapon = weaponForMonster("sentry-light", seeds[0]!);
     expect(weapon).toEqual(weaponForMonster("sentry-light", seeds[0]!));
     expect(weapon.maxAmmo).toBeGreaterThan(0);
+  });
+
+  it("varies regular monster loot across adjacent seeds from one room", () => {
+    // The former (seed >>> 3) % 100 roll produced four medkits for these IDs.
+    const roomSeed = stableHash("35|monsters");
+    const seeds = Array.from({ length: 4 }, (_, index) => stableHash(`${roomSeed}|1|${index}`));
+    const kinds = seeds.map(monsterLootKindForSeed);
+
+    expect(new Set(kinds).size).toBeGreaterThanOrEqual(3);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      expect(seeds.map(monsterLootKindForSeed)).toEqual(kinds);
+    }
+  });
+
+  it("keeps regular monster loot weights across many room seeds", () => {
+    const byRoom = Array.from({ length: 1_000 }, (_, roomSeed) => {
+      const monstersSeed = stableHash(`${roomSeed}|monsters`);
+      return Array.from({ length: 6 }, (_, index) =>
+        monsterLootKindForSeed(stableHash(`${monstersSeed}|1|${index}`)));
+    });
+    expect(byRoom.filter(drops => new Set(drops.slice(0, 4)).size === 1).length).toBeLessThan(40);
+    const kinds = byRoom.flat();
+    for (const [kind, chance] of [
+      ["credit", 0.30], ["energy", 0.30], ["core", 0.20], ["medkit", 0.15], ["crystal", 0.05],
+    ] as const) {
+      expect(Math.abs(kinds.filter(drop => drop === kind).length / kinds.length - chance))
+        .toBeLessThan(0.025);
+    }
   });
 
   it("preserves dropped weapon ammo inside weapon loot payloads", () => {

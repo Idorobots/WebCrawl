@@ -43,6 +43,15 @@ export function lootKindForSeed(seed: number): LootKind {
   return lootKindForRoll((seed >>> 3) % 100);
 }
 
+export function monsterLootKindForSeed(seed: number): LootKind {
+  // Adjacent monster IDs produce correlated hashes. Mix a loot-specific seed
+  // before rolling so nearby monsters do not inherit the same loot streak.
+  let mixed = stableHash(`${seed}|monster-loot`);
+  mixed = Math.imul(mixed ^ (mixed >>> 16), 0x85ebca6b);
+  mixed = Math.imul(mixed ^ (mixed >>> 13), 0xc2b2ae35);
+  return lootKindForRoll(((mixed ^ (mixed >>> 16)) >>> 0) % 100);
+}
+
 function lootKindForRoll(roll: number): LootKind {
   if (roll < 30) return "credit";
   if (roll < 60) return "energy";

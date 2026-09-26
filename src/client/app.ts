@@ -48,7 +48,7 @@ import {
   buildMonsters as createMonsters,
   buildSceneryDrops as createSceneryDrops,
   bossLootDrops,
-  lootKindForSeed,
+  monsterLootKindForSeed,
   monsterSpecForBossSummon,
   monsterSpecForSpawner,
   weaponPedestalForRoom,
@@ -1552,7 +1552,7 @@ function monsterDrop(monster: Monster): void {
   monster.dropY = monster.y;
   if (!isBoss(monster)) {
     monster.dropId = `${floorIdentity(currentPageUrl)}::${monster.id}::monster-drop`;
-    monster.dropKind = dropsWeapon ? "weapon" : lootKindForSeed(monster.seed);
+    monster.dropKind = dropsWeapon ? "weapon" : monsterLootKindForSeed(monster.seed);
   }
   currentLoot.push(...lootDropsForMonster(monster).filter(item => !collectedLoot.has(item.id)));
 }
