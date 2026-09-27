@@ -1022,6 +1022,29 @@ test("moves continuously with WASD and arrow keys", async ({ page }) => {
   }
 });
 
+test("buffers a quick click during cooldown and fires it after release", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  const immediateShots = await page.evaluate(() => {
+    const viewport = document.querySelector<HTMLElement>("#gameViewport")!;
+    const rect = viewport.getBoundingClientRect();
+    const click = () => {
+      viewport.dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true, button: 0, clientX: rect.left + rect.width * 0.7, clientY: rect.top + rect.height / 2,
+      }));
+      window.dispatchEvent(new PointerEvent("pointerup", { button: 0 }));
+    };
+    click();
+    click();
+    return Number(document.querySelector<HTMLElement>("#gameCanvas")!.dataset.shotsFired);
+  });
+
+  expect(immediateShots).toBe(1);
+  await expect(game).toHaveAttribute("data-shots-fired", "2");
+  await page.waitForTimeout(300);
+  await expect(game).toHaveAttribute("data-shots-fired", "2");
+});
+
 test("centers the camera one third of the way from the player to the cursor", async ({ page }) => {
   await startGame(page);
   await expect.poll(async () => await cameraState(page), { timeout: 15_000 }).not.toBeNull();

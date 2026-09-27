@@ -272,6 +272,7 @@ const GAME_TICK_INTERVAL_MS = 1_000 / 60;
 let gameAnimationFrame: number | null = null;
 let lastGameTick: number | null = null;
 let nextGameTick: number | null = null;
+let lastPlayerInputFrameAt: number | null = null;
 let gameLoopSuspended = false;
 
 const lootInventory: LootInventory = { credits: 0, crystals: 0, cores: 0, energy: 0, medkits: 0 };
@@ -293,6 +294,7 @@ let playerMoving = false;
 let playerShooting = false;
 let currentPlayerSpriteAsset = PLAYER_DEFAULT_ASSETS.up;
 let primaryPointerDown = false;
+let queuedPlayerShot = false;
 let pointerInViewport = false;
 let pointerClientPosition: Point | null = null;
 let playerAimDirty = false;
@@ -309,6 +311,7 @@ let portalActivationSoundTimer: number | null = null;
 
 function setTeleportPaused(active: boolean): void {
   teleportPauseActive = active;
+  if (active) queuedPlayerShot = false;
   gameCanvasHost.dataset.gamePaused = String(active);
 }
 const heldMovementKeys = new Set<string>();
@@ -2258,11 +2261,11 @@ function renderBullets(): void {
   renderer.renderBullets(bullets);
 }
 
-function shootBullet(): void {
-  if (!playerAlive) return;
+function shootBullet(): boolean {
+  if (!playerAlive || teleportPauseActive) return false;
 
   const now = performance.now();
-  if (now - lastPlayerShotAt < currentWeapon.fireCooldownMs) return;
+  if (now - lastPlayerShotAt < currentWeapon.fireCooldownMs) return false;
   lastPlayerShotAt = now;
   lastPlayerActivityAt = now;
   runStats.shotsFired += 1;
@@ -2307,6 +2310,11 @@ function shootBullet(): void {
   }
 
   renderBullets();
+  return true;
+}
+
+function requestPlayerShot(): void {
+  queuedPlayerShot = !shootBullet();
 }
 
 function updateBullets(dt: number): void {
@@ -2438,11 +2446,7 @@ function gameTick(timestamp: number): void {
   monsterCells = indexMonsterHitboxes(currentMonsters);
 
   updatePlayerProtectionVisual(timestamp);
-  if (touchAimActive) updateTouchAim(dt);
-  updateEnergyDash(dt, timestamp);
-  if (!touchAimActive && playerAimNeedsUpdate()) updatePlayerAimFromPointer();
-  if (!touchAimActive && (!pointerInViewport || !pointerClientPosition)) updateIdleFlashlight();
-  if ((primaryPointerDown && pointerInViewport) || touchAimActive) shootBullet();
+  updateEnergyDash(dt);
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
   updateContentPoints(timestamp);
@@ -2565,10 +2569,35 @@ function gameTick(timestamp: number): void {
   updateMonsterPositions();
 }
 
+function updatePlayerInputFrame(): void {
+  const now = performance.now();
+  if (gameAnimationFrame === null || teleportPauseActive || !playerAlive || !currentLayout) {
+    lastPlayerInputFrameAt = null;
+    return;
+  }
+
+  const dt = lastPlayerInputFrameAt === null
+    ? 0
+    : Math.min(0.05, Math.max(0, (now - lastPlayerInputFrameAt) / 1000));
+  lastPlayerInputFrameAt = now;
+  if (!energyDash) updatePlayerMovement(dt, now);
+  if (teleportPauseActive) return; // Movement can enter a portal.
+  if (touchAimActive) updateTouchAim(dt);
+  else {
+    if (playerAimNeedsUpdate()) updatePlayerAimFromPointer();
+    if (!pointerInViewport || !pointerClientPosition) updateIdleFlashlight();
+  }
+
+  if (queuedPlayerShot || (primaryPointerDown && pointerInViewport) || touchAimActive) {
+    if (shootBullet()) queuedPlayerShot = false;
+  }
+}
+
 function startGameLoop(): void {
   if (gameAnimationFrame !== null) cancelAnimationFrame(gameAnimationFrame);
   lastGameTick = null;
   nextGameTick = null;
+  lastPlayerInputFrameAt = performance.now();
   playerAimDirty = true;
   gameAnimationFrame = requestAnimationFrame(gameTick);
 }
@@ -2577,6 +2606,7 @@ function pauseGameLoop(): void {
   if (gameAnimationFrame === null) return;
   cancelAnimationFrame(gameAnimationFrame);
   gameAnimationFrame = null;
+  lastPlayerInputFrameAt = null;
   gameLoopSuspended = true;
 }
 
@@ -3095,12 +3125,9 @@ function applyEnergyDashDamage(): void {
   }
 }
 
-function updateEnergyDash(dt: number, timestamp: number): void {
+function updateEnergyDash(dt: number): void {
   const dash = energyDash;
-  if (!dash) {
-    updatePlayerMovement(dt, timestamp);
-    return;
-  }
+  if (!dash) return;
 
   const target = touchAimActive ? touchAimCursor
     : pointerInViewport && pointerClientPosition
@@ -3416,6 +3443,7 @@ function updatePlayerAim(clientX: number, clientY: number): void {
 function resetPlayerInput(): void {
   heldMovementKeys.clear();
   primaryPointerDown = false;
+  queuedPlayerShot = false;
   pointerClientPosition = null;
   playerAimDirty = true;
   lastAimCamera = null;
@@ -3466,7 +3494,7 @@ gameViewport.addEventListener("pointerdown", event => {
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   if (mobileLayoutQuery.matches) return;
   primaryPointerDown = true;
-  shootBullet();
+  requestPlayerShot();
 });
 
 gameViewport.addEventListener("contextmenu", event => {
@@ -3560,7 +3588,8 @@ aimStick.addEventListener("pointerdown", event => {
   setStickKnob(aimStick, touchAimVector);
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   if (teleportPauseActive || !currentLayout || !playerAlive) return;
-  shootBullet();
+  updateTouchAim(0);
+  requestPlayerShot();
 });
 
 aimStick.addEventListener("pointermove", event => {
@@ -3855,6 +3884,7 @@ async function loadRenderer(): Promise<void> {
 function startRenderer(): Promise<void> {
   return new Promise((resolve) => {
     renderer.start({
+      onFrame: updatePlayerInputFrame,
       onBootComplete: () => {
         window.clearTimeout(loadingBootGuardTimer);
         loadingBootGuardTimer = undefined;

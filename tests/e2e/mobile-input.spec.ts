@@ -175,3 +175,78 @@ test("fires with the aim stick", async ({ page }) => {
 
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 });
+
+test("moves with the movement stick", async ({ page }) => {
+  await startMobileGame(page);
+
+  const game = page.locator("#gameCanvas");
+  const startX = Number(await game.getAttribute("data-player-x"));
+  const stick = await page.locator("#moveStick").boundingBox();
+  if (!stick) throw new Error("Movement stick unavailable");
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: stick.x + stick.width / 2 + 40, y: stick.y + stick.height / 2, id: 1 }],
+  });
+  try {
+    await expect.poll(async () => Number(await game.getAttribute("data-player-x")))
+      .toBeGreaterThan(startX + 5);
+  } finally {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  }
+});
+
+test("aims the first stick shot in the pressed direction", async ({ page }) => {
+  await startMobileGame(page);
+
+  const game = page.locator("#gameCanvas");
+  const stick = await page.locator("#aimStick").boundingBox();
+  if (!stick) throw new Error("Aim stick unavailable");
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: stick.x + stick.width / 2 + 40, y: stick.y + stick.height / 2, id: 1 }],
+  });
+  try {
+    await expect(game).toHaveAttribute("data-shots-fired", "1");
+    const shotAngle = await page.evaluate(() => {
+      const scene = (window as Window & {
+        __webcrawlScene?: { children: { list: Array<{ texture?: { key: string }; rotation?: number }> } };
+      }).__webcrawlScene;
+      return scene?.children.list.find(child => child.texture?.key === "asset:assets/bullet.png")?.rotation;
+    });
+    expect(shotAngle).toBeCloseTo(Math.PI / 2, 1);
+  } finally {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  }
+});
+
+test("fires a quick second aim-stick tap after its cooldown", async ({ page }) => {
+  await startMobileGame(page);
+
+  const game = page.locator("#gameCanvas");
+  const immediateShots = await page.evaluate(() => {
+    const stick = document.querySelector<HTMLElement>("#aimStick")!;
+    const rect = stick.getBoundingClientRect();
+    const capture = stick.setPointerCapture;
+    stick.setPointerCapture = () => {}; // Synthetic pointers cannot be captured.
+    try {
+      const tap = () => {
+        const event = { bubbles: true, pointerId: 1, pointerType: "touch", button: 0,
+          clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+        stick.dispatchEvent(new PointerEvent("pointerdown", event));
+        stick.dispatchEvent(new PointerEvent("pointerup", event));
+      };
+      tap();
+      tap();
+      return Number(document.querySelector<HTMLElement>("#gameCanvas")!.dataset.shotsFired);
+    } finally {
+      stick.setPointerCapture = capture;
+    }
+  });
+
+  expect(immediateShots).toBe(1);
+  await expect(game).toHaveAttribute("data-shots-fired", "2");
+  await page.waitForTimeout(300);
+  await expect(game).toHaveAttribute("data-shots-fired", "2");
+});

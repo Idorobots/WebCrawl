@@ -449,6 +449,7 @@ export class PhaserRenderer {
 
   start(options?: {
     onBootComplete?: () => void;
+    onFrame?: () => void;
   }): void {
     if (this.game) return;
     this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
@@ -483,6 +484,10 @@ export class PhaserRenderer {
       create(): void {
         renderer.attach(this);
         options?.onBootComplete?.();
+      }
+
+      override update(): void {
+        options?.onFrame?.();
       }
     }
 
