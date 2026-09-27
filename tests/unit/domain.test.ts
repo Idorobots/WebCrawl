@@ -75,9 +75,10 @@ import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePort
 import { indexMonsterHitboxes, monsterCollisionCandidates } from "../../src/client/domain/spatial";
 import {
   BARREL_EXPLOSION_RADIUS,
+  BOSS_DEFINITIONS,
   DECORATION_DEFINITIONS,
   DEFAULT_BULLET_SPEC,
-  HEAP_TITAN_WAVE,
+  GLM_HUNTER_ATTACKS,
   MAX_REGULAR_MONSTER_RADIUS,
   MINIBOSS_CHANCE_PERCENT,
   MINIBOSS_DAMAGE_MULTIPLIER,
@@ -1090,7 +1091,7 @@ describe("portal entry", () => {
     const stairs = [down, up, firstFloorUp];
     const monsters = [
       { dead: false, spawnRoomId: 0, roomId: 0, bossKind: undefined },
-      { dead: false, spawnRoomId: 1, roomId: 1, bossKind: "fork-bomb" as const },
+      { dead: false, spawnRoomId: 1, roomId: 1, bossKind: "qwen-teleporter" as const },
       { dead: false, spawnRoomId: 2, roomId: 2, bossKind: undefined },
       { dead: false, spawnRoomId: 3, roomId: 3, bossKind: undefined },
     ];
@@ -1790,13 +1791,11 @@ describe("deterministic room contents", () => {
     expect(earlyLoot.some(item => item.kind === "core")).toBe(true);
     expect(new Set(earlyLoot.map(item => item.id)).size).toBe(earlyLoot.length);
 
-    const heapTitan = bossSpecForRoom(arena, 1, "heap-titan");
-    expect(heapTitan.maxHp).toBeGreaterThan(150);
-    expect(heapTitan.projectileRange).toBeGreaterThanOrEqual(world(780));
-    expect(HEAP_TITAN_WAVE.initialDelayMs).toBeLessThan(2_000);
-    expect(HEAP_TITAN_WAVE.baseIntervalMs).toBeLessThan(3_000);
-    expect(HEAP_TITAN_WAVE.bulletCount).toBeGreaterThanOrEqual(12);
-    expect(HEAP_TITAN_WAVE.enragedBulletCount).toBeGreaterThan(HEAP_TITAN_WAVE.bulletCount);
+    const glmHunter = bossSpecForRoom(arena, 1, "glm-hunter");
+    expect(glmHunter.maxHp).toBeGreaterThan(150);
+    expect(glmHunter.attackRange).toBeGreaterThanOrEqual(glmHunter.radius + PLAYER_SPEC.radius);
+    expect(GLM_HUNTER_ATTACKS.chargeWindupMs).toBeGreaterThanOrEqual(500);
+    expect(GLM_HUNTER_ATTACKS.initialChargeDelayMs).toBeGreaterThan(GLM_HUNTER_ATTACKS.chargeWindupMs);
 
     const sampledScripts = Array.from({ length: 200 }, (_, index) => node(index + 3_000, 0, 1, {
       tag: "script",
@@ -1804,8 +1803,9 @@ describe("deterministic room contents", () => {
       isRoot: false,
     }));
     expect(new Set(sampledScripts.map(bossKindForRoom))).toEqual(
-      new Set(["packet-storm", "fork-bomb", "heap-titan", "kimi-swarm", "llama-herd"]),
+      new Set(["deepseek-summoner", "qwen-teleporter", "glm-hunter", "kimi-spiral", "hy4-wave"]),
     );
+    expect(BOSS_DEFINITIONS["hy4-wave"].label).toBe("Hy4");
     const rosterRoot = node(5_000, null, 0, { lootSeed: stableHash("boss-roster-root") });
     const rosterScripts = Array.from({ length: 20 }, (_, index) => node(5_001 + index, rosterRoot.id, 1, {
       tag: "section",
@@ -1821,7 +1821,7 @@ describe("deterministic room contents", () => {
       1,
     ).filter(monster => monster.bossKind);
     expect(new Set(roster.map(monster => monster.bossKind))).toEqual(
-      new Set(["packet-storm", "fork-bomb", "heap-titan", "kimi-swarm", "llama-herd"]),
+      new Set(["deepseek-summoner", "qwen-teleporter", "glm-hunter", "kimi-spiral", "hy4-wave"]),
     );
     const reorderedRoster = buildMonsters(
       { nodes: [rosterRoot, ...rosterScripts].reverse(), links: [], hiddenCount: 0 },
@@ -1835,7 +1835,7 @@ describe("deterministic room contents", () => {
     expect(sampledScripts.some(room => decorationSpecsForRoom(room, 10).some(item => item.spawner))).toBe(true);
   });
 
-  it("reconstructs deterministic Fork Bomb summons from boss state", () => {
+  it("reconstructs deterministic DeepSeek summons from boss state", () => {
     const scriptRooms = Array.from({ length: 100 }, (_, index) => node(index + 4_000, 0, 1, {
       tag: "script",
       lootSeed: stableHash(`summoner-boss-${index}`),
@@ -1843,14 +1843,13 @@ describe("deterministic room contents", () => {
       x: 500,
       y: 400,
     }));
-    const room = scriptRooms.find(candidate => bossKindForRoom(candidate) === "fork-bomb")!;
+    const room = scriptRooms.find(candidate => bossKindForRoom(candidate) === "deepseek-summoner")!;
     room.isBossArena = true;
     const boss = bossSpecForRoom(room, 6);
     const firstSummon = monsterSpecForBossSummon(boss, 6, 0);
     expect(firstSummon).toEqual(monsterSpecForBossSummon(boss, 6, 0));
-    const monsters = buildMonsters(
-      { nodes: [room], links: [], hiddenCount: 0 },
-      new Map([[
+    const layout = { nodes: [room], links: [], hiddenCount: 0 };
+    const savedStates = new Map([[
         boss.id,
         {
           x: boss.x,
@@ -1867,10 +1866,8 @@ describe("deterministic room contents", () => {
           attackSequence: 3,
           summonedCount: 3,
         },
-      ]]),
-      new Set([room.id]),
-      6,
-    );
+      ]]);
+    const monsters = buildMonsters(layout, savedStates, new Set([room.id]), 6);
     expect(monsters.filter(monster => monster.id.startsWith(`${boss.id}::summon-`))).toHaveLength(3);
     expect(monsters.find(monster => monster.id === boss.id)).toMatchObject({
       hp: Math.floor(boss.maxHp / 4),
@@ -1878,6 +1875,10 @@ describe("deterministic room contents", () => {
       summonedCount: 3,
     });
     expect(bossStage(monsters.find(monster => monster.id === boss.id)!.hp, boss.maxHp)).toBe(3);
+
+    savedStates.set(`${boss.id}::summon-1`, { ...savedStates.get(boss.id)!, hp: 0, dead: true });
+    expect(buildMonsters(layout, savedStates, new Set([room.id]), 6)
+      .filter(monster => monster.id.startsWith(`${boss.id}::summon-`))).toHaveLength(2);
   });
 
   it("preserves boss positions after they pursue the player out of their arena", () => {

@@ -53,6 +53,26 @@ export function applyObstacleDamage(item: Decoration, damage: number): boolean {
   return true;
 }
 
+/** Sweep the boss's footprint across one movement step so fast charges cannot skip scenery. */
+export function bossCrushedScenery<T extends Pick<Decoration, "x" | "y" | "radius" | "footprint" | "destructible" | "destroyed">>(
+  from: Point,
+  to: Point,
+  bossRadius: number,
+  decorations: readonly T[],
+): T[] {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const lengthSquared = dx * dx + dy * dy;
+  return decorations.filter(item => {
+    if (!item.destructible || item.destroyed) return false;
+    const projection = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1,
+      ((item.x - from.x) * dx + (item.y - from.y) * dy) / lengthSquared,
+    ));
+    return Math.hypot(item.x - from.x - projection * dx, item.y - from.y - projection * dy) <=
+      bossRadius + (item.footprint || item.radius);
+  });
+}
+
 export function energyDashPower(energy: number): { maxDistance: number; damage: number } {
   return {
     maxDistance: energy * ENERGY_DASH_DISTANCE_PER_ENERGY,

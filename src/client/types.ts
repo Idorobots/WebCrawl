@@ -10,7 +10,7 @@ export type PlayerDirection =
   | "upLeft";
 export type PlayerAnimation = "normal" | "walk";
 export type LootKind = "credit" | "crystal" | "core" | "medkit" | "energy" | "weapon";
-export type BossKind = "packet-storm" | "fork-bomb" | "heap-titan" | "kimi-swarm" | "llama-herd";
+export type BossKind = "deepseek-summoner" | "qwen-teleporter" | "glm-hunter" | "kimi-spiral" | "hy4-wave";
 export type RegularMonsterKind =
   | "melee-heavy"
   | "melee-light"
@@ -286,6 +286,12 @@ export interface Monster extends Point {
   spawnSourceId?: string;
   summonedCount?: number;
   nextSpecialAt?: number;
+  nextVolleyAt?: number;
+  chargeWindupUntil?: number;
+  chargeUntil?: number;
+  chargeRecoverUntil?: number;
+  chargeDirection?: Point;
+  chargeHit?: boolean;
   droppedLoot?: boolean;
   dropId?: string | null;
   dropX?: number | null;

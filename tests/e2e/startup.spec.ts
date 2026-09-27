@@ -917,7 +917,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await page.keyboard.up(exitKey);
 
   await expect(game).toHaveAttribute("data-active-bosses", "1");
-  await expect(game).toHaveAttribute("data-active-boss-kind", /^(packet-storm|fork-bomb|heap-titan|kimi-swarm|llama-herd)$/);
+  await expect(game).toHaveAttribute("data-active-boss-kind", /^(deepseek-summoner|qwen-teleporter|glm-hunter|kimi-spiral|hy4-wave)$/);
   await expect(game).toHaveAttribute("data-active-boss-stage", "1");
   await expect(bossHud).toBeVisible();
   const bossKind = await game.getAttribute("data-active-boss-kind") as keyof typeof BOSS_DEFINITIONS;

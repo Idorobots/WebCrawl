@@ -582,7 +582,7 @@ function monsterKindForSeed(seed: number, difficulty = 0): RegularMonsterKind {
   return "shooter-heavy";
 }
 
-const BOSS_KINDS: BossKind[] = ["packet-storm", "fork-bomb", "heap-titan", "kimi-swarm", "llama-herd"];
+const BOSS_KINDS: BossKind[] = ["deepseek-summoner", "qwen-teleporter", "glm-hunter", "kimi-spiral", "hy4-wave"];
 
 export function bossKindForRoom(room: GraphNode): BossKind {
   return BOSS_KINDS[stableHash(`${room.lootSeed}|boss-kind`) % BOSS_KINDS.length]!;
@@ -812,11 +812,11 @@ export function buildMonsters(
 ): Monster[] {
   const roomSpecs = layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor));
   const bossSummons = roomSpecs
-    .filter(monster => monster.bossKind === "fork-bomb")
+    .filter(monster => monster.bossKind === "deepseek-summoner")
     .flatMap(boss => Array.from(
       { length: savedStates.get(boss.id)?.summonedCount ?? 0 },
       (_, index) => monsterSpecForBossSummon(boss, floor, index),
-    ));
+    ).filter(monster => !savedStates.get(monster.id)?.dead));
   const specs = [
     ...roomSpecs,
     ...decorations

@@ -209,11 +209,11 @@ const ENEMY_SHOT_SOUNDS: Readonly<Record<string, string>> = {
   "sentry-light": "sounds/shots/weapon/blaster1.mp3",
   "sentry-heavy": "sounds/shots/weapon/blaster9.mp3",
   "sentry-scatter": "sounds/shots/weapon/blaster11.mp3",
-  "packet-storm": "sounds/shots/weapon/blaster12.mp3",
-  "fork-bomb": "sounds/shots/weapon/blaster12.mp3",
-  "heap-titan": "sounds/shots/weapon/blaster9.mp3",
-  "kimi-swarm": "sounds/shots/weapon/blaster8.mp3",
-  "llama-herd": "sounds/shots/weapon/blaster11.mp3",
+  "deepseek-summoner": "sounds/shots/weapon/blaster12.mp3",
+  "qwen-teleporter": "sounds/shots/weapon/blaster12.mp3",
+  "glm-hunter": "sounds/shots/weapon/blaster9.mp3",
+  "kimi-spiral": "sounds/shots/weapon/blaster8.mp3",
+  "hy4-wave": "sounds/shots/weapon/blaster11.mp3",
 };
 const DEFAULT_ENEMY_SHOT_SOUND = ENEMY_SHOT_SOUNDS["shooter-light"]!;
 const DAMAGE_SOUNDS: readonly string[] = [
@@ -706,6 +706,10 @@ export class PhaserRenderer {
 
   playPortalSound(type: "up" | "down"): void {
     this.playOneShot(`sfx-portal-${type}`);
+  }
+
+  playTeleportSound(): void {
+    this.playOneShot("sfx-portal-down");
   }
 
   playPortalActivationSound(): void {

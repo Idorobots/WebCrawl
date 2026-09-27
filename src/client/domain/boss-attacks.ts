@@ -1,3 +1,4 @@
+import { world } from "../config";
 import type { BossKind, Point } from "../types";
 
 export type BossStage = 1 | 2 | 3;
@@ -5,6 +6,7 @@ export type BossStage = 1 | 2 | 3;
 export interface BossProjectile {
   direction: Point;
   lateralOffset?: number;
+  forwardOffset?: number;
 }
 
 export function bossStage(hp: number, maxHp: number): BossStage {
@@ -14,7 +16,65 @@ export function bossStage(hp: number, maxHp: number): BossStage {
 }
 
 export function bossStageCooldown(baseMs: number, stage: BossStage): number {
-  return Math.round(baseMs * [1, 0.82, 0.65][stage - 1]!);
+  return Math.round(baseMs * [1, 0.9, 0.82][stage - 1]!);
+}
+
+export function bossTeleportCooldown(stage: BossStage): number {
+  return [5_000, 3_500, 2_400][stage - 1]!;
+}
+
+export function bossRingCooldown(stage: BossStage): number {
+  return [3_600, 2_700, 2_000][stage - 1]!;
+}
+
+export function hy4RingCooldown(stage: BossStage): number {
+  return bossRingCooldown(stage) * 2;
+}
+
+export function bossChargeCooldown(stage: BossStage): number {
+  return [4_200, 3_100, 2_300][stage - 1]!;
+}
+
+export function bossChargeSpeedMultiplier(stage: BossStage): number {
+  return [4.4, 5.2, 6][stage - 1]!;
+}
+
+export function kimiSpiralCooldown(stage: BossStage): number {
+  return [170, 130, 105][stage - 1]!;
+}
+
+export function bossSummonAliveLimit(stage: BossStage): number {
+  return [3, 5, 7][stage - 1]!;
+}
+
+export function bossSummonCount(stage: BossStage, alive: number): number {
+  return alive < bossSummonAliveLimit(stage) ? 1 : 0;
+}
+
+export function bossSummonCooldown(stage: BossStage): number {
+  return [2_000, 1_500, 1_100][stage - 1]!;
+}
+
+/** Ordered, deterministic candidates around the player; callers reject obstructed or occupied points. */
+export function bossTeleportCandidates(player: Point, sequence: number, distance: number): Point[] {
+  return [1, 1.4].flatMap(scale => Array.from({ length: 8 }, (_, index) => {
+    const angle = sequence * 1.13 + index * Math.PI / 4;
+    return {
+      x: player.x + Math.cos(angle) * distance * scale,
+      y: player.y + Math.sin(angle) * distance * scale,
+    };
+  }));
+}
+
+export function bossTeleportDestination(
+  player: Point,
+  sequence: number,
+  distance: number,
+  isClear: (point: Point) => boolean,
+  hasSight: (point: Point) => boolean,
+): Point | undefined {
+  const valid = bossTeleportCandidates(player, sequence, distance).filter(isClear);
+  return valid.find(hasSight) ?? valid[0];
 }
 
 function rotate(direction: Point, angle: number): Point {
@@ -26,9 +86,9 @@ function rotate(direction: Point, angle: number): Point {
   };
 }
 
-function fan(aimed: Point, count: number, spacing: number, center = 0): BossProjectile[] {
+function fan(aimed: Point, count: number, spacing: number): BossProjectile[] {
   return Array.from({ length: count }, (_, index) => ({
-    direction: rotate(aimed, center + (index - (count - 1) / 2) * spacing),
+    direction: rotate(aimed, (index - (count - 1) / 2) * spacing),
   }));
 }
 
@@ -38,62 +98,54 @@ function ring(count: number, rotation: number): BossProjectile[] {
   }));
 }
 
-/** Deterministic shot geometry: the saved attack sequence also preserves pattern rotation across room reloads. */
+export function bossRingProjectiles(kind: "glm-hunter" | "hy4-wave", stage: BossStage, sequence: number): BossProjectile[] {
+  return ring((kind === "glm-hunter" ? 6 : 8) + stage * 2, sequence * 0.23);
+}
+
+/** Prefer retreat/approach outside the firing band, and orbit within it. Kimi pauses between short walks. */
+export function bossRangedMovement(
+  kind: "kimi-spiral" | "hy4-wave",
+  boss: Point,
+  player: Point,
+  timestamp: number,
+  seed: number,
+): Point[] {
+  const dx = player.x - boss.x;
+  const dy = player.y - boss.y;
+  const distance = Math.hypot(dx, dy);
+  const toward = distance > 0 ? { x: dx / distance, y: dy / distance } : { x: 1, y: 0 };
+  const side = Math.floor((timestamp + seed % 3_000) / 4_000) % 2 === 0 ? 1 : -1;
+  const tangent = { x: -toward.y * side, y: toward.x * side };
+  const otherTangent = { x: -tangent.x, y: -tangent.y };
+  const near = kind === "hy4-wave" ? world(340) : world(260);
+  const far = kind === "hy4-wave" ? world(510) : world(450);
+  if (distance < near) return [{ x: -toward.x, y: -toward.y }, tangent, otherTangent];
+  if (kind === "kimi-spiral" && (timestamp + seed % 3_000) % 3_000 >= 2_000) return [];
+  if (distance > far) return [toward, tangent, otherTangent];
+  return [tangent, otherTangent];
+}
+
+/** Qwen's two parallel lanes have a longer tail at each stage. */
+function doubleLines(aimed: Point, stage: BossStage): BossProjectile[] {
+  return [-1, 1].flatMap(lane => Array.from({ length: stage + 1 }, (_, index) => ({
+    direction: aimed,
+    lateralOffset: lane * world(28),
+    forwardOffset: -index * world(38),
+  })));
+}
+
+/** Kimi builds a continuous rotating spiral over successive shots. */
 export function bossVolleyProjectiles(
   kind: BossKind,
   stage: BossStage,
   sequence: number,
   aimed: Point,
-  floor: number,
-  laneWidth: number,
 ): BossProjectile[] {
-  if (kind === "packet-storm") {
-    const rotation = sequence * 0.19;
-    if (stage === 1) return sequence % 2 === 0
-      ? ring(10 + Math.min(6, floor), rotation)
-      : fan(aimed, 5, 0.14);
-    if (stage === 2) return sequence % 2 === 0
-      ? [...ring(14 + Math.min(6, floor), rotation), ...fan(aimed, 3, 0.14)]
-      : [...ring(9, rotation + 0.15), ...fan(aimed, 7, 0.14)];
-    return [
-      ...ring(16 + Math.min(6, floor), rotation),
-      ...ring(12, rotation + Math.PI / 12),
-      ...fan(aimed, 7, 0.13),
-    ];
-  }
+  if (kind === "deepseek-summoner") return fan(aimed, stage, 0.25);
+  if (kind === "qwen-teleporter") return doubleLines(aimed, stage);
+  if (kind === "glm-hunter") return bossRingProjectiles(kind, stage, sequence);
+  if (kind === "hy4-wave") return fan(aimed, stage * 2 + 1, [0.22, 0.20, 0.18][stage - 1]!);
 
-  if (kind === "fork-bomb") {
-    if (stage === 1) return fan(aimed, 3, 0.19);
-    if (stage === 2) return [
-      ...fan(aimed, 5, 0.17),
-      ...fan(aimed, 2, 0.12, sequence % 2 ? 0.55 : -0.55),
-    ];
-    return [
-      ...fan(aimed, 3, 0.13, -0.55),
-      ...fan(aimed, 3, 0.13, 0.55),
-      ...fan(aimed, 3, 0.13),
-    ];
-  }
-
-  if (kind === "heap-titan") {
-    if (stage === 1) return ring(12, 0);
-    if (stage === 2) return [...ring(16, sequence * 0.17), ...fan(aimed, 3, 0.18)];
-    return [...ring(20, sequence * 0.21), ...ring(10, sequence * 0.21 + Math.PI / 10), ...fan(aimed, 5, 0.16)];
-  }
-
-  if (kind === "kimi-swarm") {
-    if (stage === 1) return fan(aimed, 5, 0.23);
-    if (stage === 2) return [...ring(10, sequence * 0.35), ...fan(aimed, 3, 0.18)];
-    return [...ring(18, sequence * 0.42), ...ring(9, -sequence * 0.42), ...fan(aimed, 5, 0.18)];
-  }
-
-  // Llama Herd: parallel charges become crossing lanes, then a full stampede.
-  const lanes = stage === 1 ? [-1, 0, 1] : stage === 2 ? [-2, -1, 0, 1, 2] : [-3, -2, -1, 0, 1, 2, 3];
-  const forward = lanes.map(lane => ({ direction: aimed, lateralOffset: lane * laneWidth }));
-  if (stage === 1) return forward;
-  const crossing = lanes.filter(lane => lane !== 0).map(lane => ({
-    direction: rotate(aimed, (sequence % 2 === 0 ? 1 : -1) * (lane < 0 ? -0.28 : 0.28)),
-    lateralOffset: lane * laneWidth,
-  }));
-  return stage === 2 ? [...forward, ...crossing] : [...forward, ...crossing, ...ring(10, sequence * 0.16)];
+  const rotation = sequence * [0.55, 0.40, 0.28][stage - 1]!;
+  return ring(stage === 3 ? 3 : 2, rotation);
 }

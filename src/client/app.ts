@@ -17,7 +17,23 @@ import {
   WEAPON_ASSETS,
   world,
 } from "./config";
-import { bossStage, bossStageCooldown, bossVolleyProjectiles } from "./domain/boss-attacks";
+import {
+  bossChargeCooldown,
+  bossChargeSpeedMultiplier,
+  bossRangedMovement,
+  bossRingCooldown,
+  bossRingProjectiles,
+  bossStage,
+  bossStageCooldown,
+  bossSummonCooldown,
+  bossSummonCount,
+  bossTeleportCooldown,
+  bossTeleportDestination,
+  bossVolleyProjectiles,
+  hy4RingCooldown,
+  kimiSpiralCooldown,
+  type BossStage,
+} from "./domain/boss-attacks";
 import { signageFontForUrl } from "./domain/level-style";
 import {
   actorAimDirection,
@@ -25,6 +41,7 @@ import {
   actorProjectileOrigin,
   applyObstacleDamage,
   barrelExplosionTargets,
+  bossCrushedScenery,
   energyDashPower,
   enemyVolleyProjectiles,
   monsterAttackIsReady,
@@ -70,7 +87,7 @@ import {
   DEFAULT_BULLET_SPEC,
   ENERGY_DASH_SPEED,
   ENERGY_DASH_TURN_RATE,
-  HEAP_TITAN_WAVE,
+  GLM_HUNTER_ATTACKS,
   LOOT_DEFINITIONS,
   monsterVisualCenterOffsetY,
   PLAYER_DAMAGE_INVULNERABILITY_MS,
@@ -1274,6 +1291,23 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
   }
 }
 
+function crushSceneryUnderBoss(monster: Monster, from: Point): void {
+  const nearby = new Set<Decoration>();
+  const radius = monster.radius;
+  forSpatialCells(
+    Math.min(from.x, monster.x) - radius,
+    Math.max(from.x, monster.x) + radius,
+    Math.min(from.y, monster.y) - radius,
+    Math.max(from.y, monster.y) + radius,
+    key => {
+      for (const item of damageableCells.get(key) ?? []) nearby.add(item);
+    },
+  );
+  for (const item of bossCrushedScenery(from, monster, radius, [...nearby])) {
+    damageObstacle(item, item.hp);
+  }
+}
+
 function monsterStateMapForPage(pageUrl: string): Map<string, MonsterState> {
   const key = currentStateId ?? stateIdForPage(pageUrl);
   if (!monsterStatesByPage.has(key)) {
@@ -1586,9 +1620,20 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
 
   const previousStage = monster.bossKind ? bossStage(monster.hp, monster.maxHp) : null;
   monster.hp = Math.max(0, monster.hp - amount);
-  if (previousStage && monster.bossKind !== "packet-storm" && monster.hp > 0 &&
-    bossStage(monster.hp, monster.maxHp) > previousStage) {
-    monster.nextSpecialAt = Math.min(monster.nextSpecialAt ?? Infinity, performance.now() + 500);
+  if (previousStage && monster.hp > 0 && bossStage(monster.hp, monster.maxHp) > previousStage) {
+    const stage = bossStage(monster.hp, monster.maxHp);
+    const now = performance.now();
+    if (monster.bossKind === "deepseek-summoner" || monster.bossKind === "qwen-teleporter" ||
+      monster.bossKind === "glm-hunter") {
+      monster.nextSpecialAt = Math.min(monster.nextSpecialAt ?? Infinity, now + 500);
+    }
+    if (monster.bossKind === "glm-hunter") {
+      monster.nextVolleyAt = Math.min(monster.nextVolleyAt ?? Infinity, now + bossRingCooldown(stage));
+    } else if (monster.bossKind === "hy4-wave") {
+      monster.nextVolleyAt = Math.min(monster.nextVolleyAt ?? Infinity, now + hy4RingCooldown(stage));
+    } else if (monster.bossKind === "kimi-spiral") {
+      monster.nextVolleyAt = Math.min(monster.nextVolleyAt ?? Infinity, now + kimiSpiralCooldown(stage));
+    }
   }
 
   if (monster.hp <= 0) {
@@ -1698,6 +1743,7 @@ function queueEnemyBullet(
     maxDistance = monster.projectileRange,
     style = "enemy",
     lateralOffset = 0,
+    forwardOffset = 0,
   }: {
     speed?: number;
     damage?: number;
@@ -1705,6 +1751,7 @@ function queueEnemyBullet(
     maxDistance?: number;
     style?: BulletStyle;
     lateralOffset?: number;
+    forwardOffset?: number;
   } = {},
 ): void {
   const muzzleDistance = Math.max(monster.radius + radius + world(5), monster.size * 0.42);
@@ -1719,7 +1766,8 @@ function queueEnemyBullet(
     id: `${monster.id}-${performance.now()}-${bullets.length}`,
     owner: "enemy",
     damage,
-    ...origin,
+    x: origin.x + direction.x * forwardOffset,
+    y: origin.y + direction.y * forwardOffset,
     vx: direction.x * speed,
     vy: direction.y * speed,
     depthOffsetY: -monsterVisualCenterOffsetY(monster.size, monster.visualKind),
@@ -1744,64 +1792,75 @@ function shootEnemyVolley(monster: Monster, direction: Point, timestamp: number)
   renderBullets();
 }
 
-function fireBossVolley(monster: Monster, target: Point, timestamp: number): void {
+function fireBossVolley(monster: Monster, target: Point, timestamp: number, ring = false): void {
   const sequence = monster.attackSequence ?? 0;
   const aimed = actorAimDirection(
     monster,
     monsterVisualCenterOffsetY(monster.size, monster.visualKind),
     target,
   );
-  for (const projectile of bossVolleyProjectiles(
-    monster.bossKind!, bossStage(monster.hp, monster.maxHp), sequence, aimed, floorNumber(), world(16),
-  )) {
+  const stage = bossStage(monster.hp, monster.maxHp);
+  const projectiles = ring
+    ? bossRingProjectiles(monster.bossKind === "hy4-wave" ? "hy4-wave" : "glm-hunter", stage, sequence)
+    : bossVolleyProjectiles(monster.bossKind!, stage, sequence, aimed);
+  for (const projectile of projectiles) {
     queueEnemyBullet(monster, projectile.direction, {
       lateralOffset: projectile.lateralOffset,
-      damage: monster.bossKind === "heap-titan" || monster.bossKind === "kimi-swarm" || monster.bossKind === "llama-herd"
+      forwardOffset: projectile.forwardOffset,
+      damage: monster.bossKind === "glm-hunter" || monster.bossKind === "kimi-spiral" || monster.bossKind === "hy4-wave"
         ? Math.max(1, Math.floor(monster.attackDamage / 2)) : monster.attackDamage,
-      radius: monster.bossKind === "heap-titan" ? world(8) : world(6),
-      style: monster.bossKind === "heap-titan" ? "shockwave" : "boss",
+      radius: monster.bossKind === "glm-hunter" ? world(8) : world(6),
+      style: monster.bossKind === "glm-hunter" ? "shockwave" : "boss",
     });
   }
   monster.attackSequence = sequence + 1;
   monster.attackKind = "ranged";
-  monster.lastAttackAt = timestamp;
+  if (!ring) monster.lastAttackAt = timestamp;
   saveMonsterState(monster);
   renderer.playEnemyShotSound(monster.kind);
   renderBullets();
 }
 
 function summonBossMinions(boss: Monster, timestamp: number): void {
-  const totalLimit = 7 + Math.min(9, floorNumber());
-  const aliveLimit = 3 + Math.min(4, Math.floor(floorNumber() / 3));
+  const stage = bossStage(boss.hp, boss.maxHp);
   const prefix = `${boss.id}::summon-`;
   const alive = currentMonsters.filter(monster => monster.id.startsWith(prefix) && !monster.dead).length;
   const summonedCount = boss.summonedCount ?? 0;
-  if (alive >= aliveLimit || summonedCount >= totalLimit) {
-    boss.nextSpecialAt = timestamp + 1_500;
-    return;
-  }
-  const stage = bossStage(boss.hp, boss.maxHp);
-  const waveSize = stage;
+  const count = bossSummonCount(stage, alive);
   let added = 0;
-  for (let offset = 0; offset < waveSize && alive + added < aliveLimit && summonedCount + added < totalLimit; offset += 1) {
+  for (let offset = 0; offset < count; offset += 1) {
     const index = summonedCount + added;
     const minion = monsterSpecForBossSummon(boss, floorNumber(), index);
-    if (!isWalkable(minion.x, minion.y, minion.radius)) continue;
-    if (currentMonsters.some(other => !other.dead &&
-      Math.hypot(minion.x - other.x, minion.y - other.y) < minion.radius + other.radius)
-    ) continue;
+    const angle = Math.atan2(minion.y - boss.y, minion.x - boss.x);
+    const distance = Math.hypot(minion.x - boss.x, minion.y - boss.y);
+    const position = [1, 1.45, 1.9].flatMap(scale => Array.from({ length: 12 }, (_, slot) => ({
+      x: boss.x + Math.cos(angle + slot * Math.PI / 6) * distance * scale,
+      y: boss.y + Math.sin(angle + slot * Math.PI / 6) * distance * scale,
+    }))).find(point =>
+      roomContainingPoint(point.x, point.y)?.id === boss.roomId &&
+      isWalkable(point.x, point.y, minion.radius) &&
+      Math.hypot(point.x - player.x, point.y - player.y) >= minion.radius + PLAYER_SPEC.radius &&
+      currentMonsters.every(other => other.dead ||
+        Math.hypot(point.x - other.x, point.y - other.y) >= minion.radius + other.radius)
+    );
+    if (!position) break;
+    minion.x = position.x;
+    minion.y = position.y;
+    minion.roomId = boss.roomId;
     minion.hp = minion.maxHp;
     minion.active = true;
     minion.attackWarmupUntil = timestamp + MONSTER_ATTACK_WARMUP_MS;
     currentMonsters.push(minion);
     saveMonsterState(minion);
-    renderer.spawnEffect(minion.visual.effects?.destroy, minion.x, minion.y, minion.size);
+    renderer.spawnEffect(PLAYER_SPEC.visual.effects?.teleport, minion.x,
+      minion.y + monsterVisualCenterOffsetY(minion.size, minion.visualKind), minion.size);
     added += 1;
   }
   boss.summonedCount = summonedCount + added;
-  boss.nextSpecialAt = timestamp + bossStageCooldown(Math.max(2_800, 6_500 - floorNumber() * 260), stage);
+  boss.nextSpecialAt = timestamp + bossSummonCooldown(stage);
   saveMonsterState(boss);
   if (added) {
+    renderer.playTeleportSound();
     renderMonsters();
     if (updateFloorPortals()) renderInteractiveObjects();
   }
@@ -1835,7 +1894,11 @@ function monsterApproachPoint(monster: Monster): Point | null {
     player,
     monster,
     point => isMonsterWalkable(monster, point.x, point.y),
-    point => hasWalkableLine(point, player, DEFAULT_BULLET_SPEC.radius, WORLD_GEOMETRY.pathLineStep),
+    point => monster.bossKind
+      ? walkableSegment(point, player, position => isGeometryWalkable(
+        position.x, position.y, DEFAULT_BULLET_SPEC.radius,
+      ), WORLD_GEOMETRY.pathLineStep)
+      : hasWalkableLine(point, player, DEFAULT_BULLET_SPEC.radius, WORLD_GEOMETRY.pathLineStep),
     monster.radius + PLAYER_SPEC.radius,
   );
 }
@@ -1963,7 +2026,146 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
   }
 }
 
-function updateBoss(monster: Monster, dt: number, timestamp: number): void {
+function teleportBoss(monster: Monster, playerRoom: GraphNode, timestamp: number, stage: BossStage): boolean {
+  const clear = (point: Point): boolean =>
+    roomContainingPoint(point.x, point.y)?.id === playerRoom.id &&
+    isMonsterWalkable(monster, point.x, point.y) &&
+    Math.hypot(point.x - monster.x, point.y - monster.y) >= world(140) &&
+    Math.hypot(point.x - player.x, point.y - player.y) >= monster.radius + PLAYER_SPEC.radius + world(120) &&
+    currentMonsters.every(other => other === monster || other.dead ||
+      Math.hypot(point.x - other.x, point.y - other.y) >= monster.radius + other.radius + world(12));
+  const destination = bossTeleportDestination(player, monster.attackSequence ?? 0, world(320), clear,
+    point => hasLineOfSight(
+      actorCollisionCenter(point, monsterVisualCenterOffsetY(monster.size, monster.visualKind)),
+      playerCollisionCenter(),
+    ));
+  if (!destination) {
+    monster.nextSpecialAt = timestamp + 800;
+    return false;
+  }
+
+  const effect = PLAYER_SPEC.visual.effects?.teleport;
+  const visualOffset = monsterVisualCenterOffsetY(monster.size, monster.visualKind);
+  renderer.spawnEffect(effect, monster.x, monster.y + visualOffset, monster.size);
+  monster.x = destination.x;
+  monster.y = destination.y;
+  monster.roomId = playerRoom.id;
+  monster.path = [];
+  monster.pathIndex = 0;
+  monster.nextPathRefreshAt = 0;
+  monster.moving = false;
+  monster.attackWarmupUntil = timestamp + 650;
+  monster.lastAttackAt = timestamp - bossStageCooldown(monster.attackCooldownMs, stage) + 650;
+  monster.nextSpecialAt = timestamp + bossTeleportCooldown(stage);
+  renderer.spawnEffect(effect, monster.x, monster.y + visualOffset, monster.size);
+  renderer.playTeleportSound();
+  saveMonsterState(monster);
+  return true;
+}
+
+function retreatBoss(monster: Monster, playerRoom: GraphNode, dt: number): void {
+  const dx = monster.x - player.x;
+  const dy = monster.y - player.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 0.001 || distance >= world(360)) return;
+  const step = monster.speed * dt;
+  for (const angle of [0, 0.7, -0.7]) {
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const point = {
+      x: monster.x + (dx * cosine - dy * sine) / distance * step,
+      y: monster.y + (dx * sine + dy * cosine) / distance * step,
+    };
+    if (roomContainingPoint(point.x, point.y)?.id !== playerRoom.id ||
+      !walkableSegment(monster, point, position => isMonsterWalkable(monster, position.x, position.y)) ||
+      currentMonsters.some(other => other !== monster && !other.dead &&
+        Math.hypot(point.x - other.x, point.y - other.y) < monster.radius + other.radius)) continue;
+    monster.x = point.x;
+    monster.y = point.y;
+    monster.moving = true;
+    return;
+  }
+}
+
+function strafeBoss(
+  monster: Monster,
+  playerRoom: GraphNode,
+  dt: number,
+  timestamp: number,
+  kind: "kimi-spiral" | "hy4-wave",
+): void {
+  for (const direction of bossRangedMovement(kind, monster, player, timestamp, monster.seed)) {
+    const point = {
+      x: monster.x + direction.x * monster.speed * dt,
+      y: monster.y + direction.y * monster.speed * dt,
+    };
+    if (roomContainingPoint(point.x, point.y)?.id !== playerRoom.id ||
+      !walkableSegment(monster, point, position => isMonsterWalkable(monster, position.x, position.y)) ||
+      currentMonsters.some(other => other !== monster && !other.dead &&
+        Math.hypot(point.x - other.x, point.y - other.y) < monster.radius + other.radius)) continue;
+    monster.x = point.x;
+    monster.y = point.y;
+    monster.moving = true;
+    return;
+  }
+}
+
+/** Returns true while the telegraphed charge or its recovery replaces normal pursuit. */
+function updateGlmCharge(monster: Monster, dt: number, timestamp: number, stage: BossStage, sharesPlayerRoom: boolean): boolean {
+  if (monster.chargeWindupUntil !== undefined) {
+    if (timestamp < monster.chargeWindupUntil) return true;
+    monster.chargeWindupUntil = undefined;
+    monster.chargeUntil = timestamp + GLM_HUNTER_ATTACKS.chargeDurationMs;
+  }
+
+  if (monster.chargeUntil !== undefined) {
+    if (timestamp < monster.chargeUntil && monster.chargeDirection) {
+      const next = {
+        x: monster.x + monster.chargeDirection.x * monster.speed * bossChargeSpeedMultiplier(stage) * dt,
+        y: monster.y + monster.chargeDirection.y * monster.speed * bossChargeSpeedMultiplier(stage) * dt,
+      };
+      if (walkableSegment(monster, next, point => isMonsterWalkable(monster, point.x, point.y))) {
+        monster.x = next.x;
+        monster.y = next.y;
+        monster.moving = true;
+      } else {
+        monster.chargeUntil = timestamp;
+      }
+      if (!monster.chargeHit && Math.hypot(monster.x - player.x, monster.y - player.y) <= monster.attackRange &&
+        hasWalkableLine(monster, player, DEFAULT_BULLET_SPEC.radius, WORLD_GEOMETRY.pathLineStep)) {
+        monster.chargeHit = true;
+        monster.attackKind = "melee";
+        monster.lastAttackAt = timestamp;
+        renderer.playMeleeSound();
+        applyPlayerDamage(monster.attackDamage);
+      }
+      if (timestamp < monster.chargeUntil) return true;
+    }
+    monster.chargeUntil = undefined;
+    monster.chargeDirection = undefined;
+    monster.chargeRecoverUntil = timestamp + GLM_HUNTER_ATTACKS.chargeRecoveryMs;
+    return true;
+  }
+
+  if (monster.chargeRecoverUntil !== undefined) {
+    if (timestamp < monster.chargeRecoverUntil) return true;
+    monster.chargeRecoverUntil = undefined;
+  }
+  if (!sharesPlayerRoom) return false;
+  if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + GLM_HUNTER_ATTACKS.initialChargeDelayMs;
+  const distance = Math.hypot(player.x - monster.x, player.y - monster.y);
+  if (timestamp < monster.nextSpecialAt || distance < monster.attackRange * 1.5 || distance > world(800)) return false;
+
+  monster.chargeDirection = { x: (player.x - monster.x) / distance, y: (player.y - monster.y) / distance };
+  monster.chargeHit = false;
+  monster.chargeWindupUntil = timestamp + GLM_HUNTER_ATTACKS.chargeWindupMs;
+  monster.nextSpecialAt = timestamp + bossChargeCooldown(stage);
+  monster.moveDir = cardinalDirection(player.x - monster.x, player.y - monster.y);
+  renderer.spawnEffect(monster.visual.effects?.damage, monster.x, monster.y, monster.size, { lightColor: 0xff8b4d });
+  return true;
+}
+
+function updateBoss(monster: Monster, dt: number, timestamp: number): boolean | void {
   if (currentRoomId === null) return;
   const stage = bossStage(monster.hp, monster.maxHp);
   const attackReady =
@@ -1977,8 +2179,11 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
     nextRoom = nextRoomId === undefined ? undefined : currentRoomsById.get(nextRoomId);
     if (!nextRoom) return;
   }
+  const charging = monster.bossKind === "glm-hunter" &&
+    updateGlmCharge(monster, dt, timestamp, stage, sharesPlayerRoom);
+  if (charging) return;
   const approach = monsterApproachPoint(monster);
-  if (monster.bossKind === "heap-titan") {
+  if (monster.bossKind === "glm-hunter") {
     if (approach || nextRoom) {
       updateMonsterPath(monster, approach ?? nextRoom!, playerRoom?.id ?? currentRoomId, timestamp, nextRoom);
       moveMonsterTowards(monster, approach ?? nextRoom!, dt, timestamp);
@@ -1989,6 +2194,10 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
       updateMonsterPath(monster, destination, playerRoom?.id ?? currentRoomId, timestamp, nextRoom);
       moveMonsterTowards(monster, destination, dt, timestamp);
     }
+  } else if (monster.bossKind === "deepseek-summoner" && playerRoom) {
+    retreatBoss(monster, playerRoom, dt);
+  } else if (playerRoom && (monster.bossKind === "kimi-spiral" || monster.bossKind === "hy4-wave")) {
+    strafeBoss(monster, playerRoom, dt, timestamp, monster.bossKind);
   }
   const playerDistance = Math.hypot(player.x - monster.x, player.y - monster.y);
   monster.moveDir = cardinalDirection(player.x - monster.x, player.y - monster.y);
@@ -1996,49 +2205,52 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
     ? visiblePlayerAimPoint(actorCollisionCenter(monster,
       monsterVisualCenterOffsetY(monster.size, monster.visualKind))) : null;
 
-  if (monster.bossKind === "packet-storm") {
-    if (aimPoint && attackReady) fireBossVolley(monster, aimPoint, timestamp);
-    return;
-  }
-
-  if (monster.bossKind === "fork-bomb") {
-    if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 2_800;
+  if (monster.bossKind === "deepseek-summoner") {
+    if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 1_300;
     if (sharesPlayerRoom && timestamp >= monster.nextSpecialAt) summonBossMinions(monster, timestamp);
     if (aimPoint && attackReady) fireBossVolley(monster, aimPoint, timestamp);
     return;
   }
 
-  if (playerDistance <= monster.attackRange && attackReady) {
+  if (monster.bossKind === "qwen-teleporter") {
+    if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 3_200;
+    if (sharesPlayerRoom && playerRoom && timestamp >= monster.nextSpecialAt) {
+      return teleportBoss(monster, playerRoom, timestamp, stage);
+    }
+    if (aimPoint && attackReady) fireBossVolley(monster, aimPoint, timestamp);
+    return;
+  }
+
+  if (monster.bossKind === "kimi-spiral") {
+    if (monster.nextVolleyAt === undefined) monster.nextVolleyAt = timestamp + 650;
+    if (aimPoint && timestamp >= monster.nextVolleyAt) {
+      fireBossVolley(monster, aimPoint, timestamp);
+      monster.nextVolleyAt = timestamp + kimiSpiralCooldown(stage);
+    }
+    return;
+  }
+
+  if (monster.bossKind === "hy4-wave") {
+    if (aimPoint && attackReady) fireBossVolley(monster, aimPoint, timestamp);
+    if (monster.nextVolleyAt === undefined) monster.nextVolleyAt = timestamp + GLM_HUNTER_ATTACKS.initialRingDelayMs * 2;
+    if (aimPoint && timestamp >= monster.nextVolleyAt) {
+      fireBossVolley(monster, aimPoint, timestamp, true);
+      monster.nextVolleyAt = timestamp + hy4RingCooldown(stage);
+    }
+    return;
+  }
+
+  if (playerDistance <= monster.attackRange && attackReady &&
+    hasWalkableLine(monster, player, DEFAULT_BULLET_SPEC.radius, WORLD_GEOMETRY.pathLineStep)) {
     monster.attackKind = "melee";
     monster.lastAttackAt = timestamp;
     renderer.playMeleeSound();
     applyPlayerDamage(monster.attackDamage);
   }
-  if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + HEAP_TITAN_WAVE.initialDelayMs;
-  if (timestamp >= monster.nextSpecialAt && aimPoint) {
-    const aimed = actorAimDirection(monster,
-      monsterVisualCenterOffsetY(monster.size, monster.visualKind), aimPoint);
-    for (const projectile of bossVolleyProjectiles(
-      monster.bossKind!, stage, monster.attackSequence ?? 0, aimed, floorNumber(), world(16),
-    )) {
-      queueEnemyBullet(monster, projectile.direction, {
-        damage: Math.max(1, Math.floor(monster.attackDamage / 2)),
-        radius: world(8),
-        maxDistance: monster.projectileRange,
-        style: monster.bossKind === "heap-titan" ? "shockwave" : "boss",
-        lateralOffset: projectile.lateralOffset,
-      });
-    }
-    monster.nextSpecialAt = timestamp + bossStageCooldown(Math.max(
-      HEAP_TITAN_WAVE.minIntervalMs,
-      HEAP_TITAN_WAVE.baseIntervalMs - floorNumber() * HEAP_TITAN_WAVE.floorReductionMs,
-    ), stage);
-    monster.attackSequence = (monster.attackSequence ?? 0) + 1;
-    monster.attackKind = "ranged";
-    monster.lastAttackAt = timestamp;
-    saveMonsterState(monster);
-    renderer.playEnemyShotSound(monster.kind);
-    renderBullets();
+  if (monster.nextVolleyAt === undefined) monster.nextVolleyAt = timestamp + GLM_HUNTER_ATTACKS.initialRingDelayMs;
+  if (timestamp >= monster.nextVolleyAt && aimPoint) {
+    fireBossVolley(monster, aimPoint, timestamp, true);
+    monster.nextVolleyAt = timestamp + bossRingCooldown(stage);
   }
 }
 
@@ -2263,7 +2475,10 @@ function gameTick(timestamp: number): void {
     }
 
     if (isBoss(monster)) {
-      updateBoss(monster, dt, timestamp);
+      const from = { x: monster.x, y: monster.y };
+      const teleported = updateBoss(monster, dt, timestamp);
+      if (teleported) crushSceneryUnderBoss(monster, monster);
+      else if (from.x !== monster.x || from.y !== monster.y) crushSceneryUnderBoss(monster, from);
       continue;
     }
 
@@ -2471,6 +2686,7 @@ function isWalkable(x: number, y: number, radius = PLAYER_SPEC.radius): boolean 
 
 function isMonsterWalkable(monster: Monster, x: number, y: number): boolean {
   if (!isGeometryWalkable(x, y, monster.radius)) return false;
+  if (isBoss(monster)) return true;
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
     if (!item.obstacle || item.destroyed) continue;
     const extent = monster.radius + (item.footprint ?? item.radius);
