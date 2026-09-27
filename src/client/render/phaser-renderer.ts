@@ -30,7 +30,6 @@ import { bossStage } from "../domain/boss-attacks";
 import { signageFontForUrl, stationAmbientForUrl, STATION_AMBIENT_TRACKS } from "../domain/level-style";
 import { WEAPON_COLORS } from "../domain/weapons";
 import {
-  BOSS_DEFINITIONS,
   DEFAULT_BULLET_SPEC,
   LOOT_DEFINITIONS,
   MONSTER_WALK_REFERENCE_SPEED,
@@ -2098,50 +2097,34 @@ export class PhaserRenderer {
         this.applyClip(sprite, frame.clip, item.size, frame.elapsed);
         this.applyClip(shadow, frame.clip, item.size, frame.elapsed);
         this.applyShadowOffset(shadow, item.x, item.y, item.size);
-        const barWidth = item.bossKind ? item.size * 0.68 : item.miniboss ? item.size * 0.72 : world(44);
+        const barWidth = item.miniboss ? item.size * 0.72 : world(44);
         const barY = monsterHealthBarY(item.size, item.visualKind);
         const children: Phaser.GameObjects.GameObject[] = [shadow, sprite];
-        if (item.bossKind && !item.dead) {
-          const color = BOSS_DEFINITIONS[item.bossKind].color;
-          children.unshift(scene.add.circle(
-            0,
-            monsterVisualCenterOffsetY(item.size, item.visualKind),
-            item.radius + world(11),
-            color,
-            0.16,
-          )
-            .setStrokeStyle(world(3), color, 0.8));
-        }
         container = scene.add.container(item.x, item.y, children)
           .setDepth(this.monsterDepth(item));
         container.setData("hpWidth", barWidth);
         container.setData("dead", item.dead);
         this.monsters.set(item.id, container);
-        if (!item.dead) {
-          const barHeight = item.bossKind ? world(9) : item.miniboss ? world(7) : world(5);
-          const fillHeight = item.bossKind ? world(7) : item.miniboss ? world(6) : world(5);
-          const fillColor = item.bossKind ? 0xf09cff : item.miniboss ? 0xffc857 : item.speed === 0 ? 0xc07cff : 0xff6b6b;
+        if (!item.dead && !item.bossKind) {
+          const barHeight = item.miniboss ? world(7) : world(5);
+          const fillHeight = item.miniboss ? world(6) : world(5);
+          const fillColor = item.miniboss ? 0xffc857 : item.speed === 0 ? 0xc07cff : 0xff6b6b;
           const barChildren: Phaser.GameObjects.GameObject[] = [
             scene.add.rectangle(-barWidth / 2, barY, barWidth, barHeight, 0x071018).setOrigin(0, 0.5),
             scene.add.rectangle(-barWidth / 2, barY, barWidth, fillHeight, fillColor).setOrigin(0, 0.5).setName("hp"),
           ];
-          if (item.bossKind) {
-            barChildren.push(scene.add.text(0, barY - world(9), BOSS_DEFINITIONS[item.bossKind].label, {
-              color: "#f7ddff", fontSize: `${world(11)}px`, fontStyle: "bold",
-            }).setOrigin(0.5).setName("bossStageLabel"));
-          }
           const bar = scene.add.container(item.x, item.y, barChildren).setDepth(HEALTH_BAR_DEPTH);
           this.monsterHealthBars.set(item.id, bar);
         }
-        if (!item.dead) {
-          const auraRadius = item.radius + world(item.bossKind ? 110 : 64);
+        if (!item.dead && !item.bossKind) {
+          const auraRadius = item.radius + world(64);
           const auraY = item.y + monsterVisualCenterOffsetY(item.size, item.visualKind);
           const aura = this.createAuraLight(
             item.x,
             auraY,
             ENEMY_AURA_COLOR,
             auraRadius,
-            item.bossKind ? 1.05 : 0.62,
+            0.62,
           );
           if (aura) this.monsterAuras.set(item.id, aura);
         }
@@ -2158,12 +2141,6 @@ export class PhaserRenderer {
       }
       const hp = (barContainer ?? container).getByName("hp") as Phaser.GameObjects.Rectangle | null;
       if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
-      if (item.bossKind && hp) {
-        const stage = bossStage(item.hp, item.maxHp);
-        hp.fillColor = [0xf09cff, 0xffc857, 0xff5e75][stage - 1]!;
-        const label = barContainer?.getByName("bossStageLabel") as Phaser.GameObjects.Text | null;
-        label?.setText(`${BOSS_DEFINITIONS[item.bossKind].label} · STAGE ${stage}`);
-      }
       if (item === activeBoss) {
         this.host.dataset.activeBossDisplayWidth = String(sprite.displayWidth);
         this.host.dataset.activeBossDisplayHeight = String(sprite.displayHeight);
@@ -2199,11 +2176,7 @@ export class PhaserRenderer {
       const hp = this.monsterHealthBars.get(item.id)?.getByName("hp") as Phaser.GameObjects.Rectangle | null;
       if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
       if (item.bossKind && item.active && !item.dead) {
-        const stage = bossStage(item.hp, item.maxHp);
-        this.setHostData("activeBossStage", String(stage));
-        if (hp) hp.fillColor = [0xf09cff, 0xffc857, 0xff5e75][stage - 1]!;
-        const label = this.monsterHealthBars.get(item.id)?.getByName("bossStageLabel") as Phaser.GameObjects.Text | null;
-        label?.setText(`${BOSS_DEFINITIONS[item.bossKind].label} · STAGE ${stage}`);
+        this.setHostData("activeBossStage", String(bossStage(item.hp, item.maxHp)));
       }
       if (item.bossKind && item.active && !item.dead) {
         this.setHostData("activeBossX", String(Math.round(item.x)));

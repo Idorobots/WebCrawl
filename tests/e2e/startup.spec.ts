@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { BOSS_CAMERA_SCALE, CAMERA_SCALE, MOBILE_CAMERA_SCALE, world } from "../../src/client/config";
 import {
+  BOSS_DEFINITIONS,
   PLAYER_DAMAGE_INVULNERABILITY_MS,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
@@ -898,6 +899,8 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await expect(game).toHaveAttribute("data-rooms", /^\d+$/, { timeout: 30_000 });
   await setPlayerInvulnerable(page, true);
   await expect(game).toHaveAttribute("data-active-bosses", "0");
+  const bossHud = page.locator("#bossHud");
+  await expect(bossHud).toBeHidden();
 
   const direction = await game.getAttribute("data-first-exit");
   const door = {
@@ -916,6 +919,14 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await expect(game).toHaveAttribute("data-active-bosses", "1");
   await expect(game).toHaveAttribute("data-active-boss-kind", /^(packet-storm|fork-bomb|heap-titan|kimi-swarm|llama-herd)$/);
   await expect(game).toHaveAttribute("data-active-boss-stage", "1");
+  await expect(bossHud).toBeVisible();
+  const bossKind = await game.getAttribute("data-active-boss-kind") as keyof typeof BOSS_DEFINITIONS;
+  await expect(page.locator("#bossHudName")).toHaveText(BOSS_DEFINITIONS[bossKind].label);
+  await expect(page.locator("#bossHudHealth")).toHaveAttribute("aria-valuenow", /^\d+$/);
+  const desktopHud = await bossHud.boundingBox();
+  const bottomHud = await page.locator("#bottomHud").boundingBox();
+  if (!desktopHud || !bottomHud) throw new Error("Desktop boss HUD or bottom panels unavailable");
+  expect(desktopHud.y + desktopHud.height).toBeLessThan(bottomHud.y);
   await expect.poll(
     async () => Number(await game.getAttribute("data-active-boss-display-width")),
     { timeout: 15_000 },
@@ -940,6 +951,11 @@ test("keeps an active boss sized consistently while it follows the player out", 
     };
   }).toEqual({ zoomedOut: true, bossRoom: true });
   await page.setViewportSize({ width: 390, height: 720 });
+  await expect(bossHud).toBeVisible();
+  const mobileHud = await bossHud.boundingBox();
+  const mobileAbilities = await page.locator(".mobile-abilities").boundingBox();
+  if (!mobileHud || !mobileAbilities) throw new Error("Mobile boss HUD or controls unavailable");
+  expect(mobileHud.y + mobileHud.height).toBeLessThan(mobileAbilities.y);
   await expect.poll(async () => {
     const camera = await cameraState(page);
     return camera && {
@@ -957,6 +973,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
     W: { x: door.x + world(90), y: door.y },
   }[direction ?? "N"] ?? { x: door.x, y: door.y + world(90) };
   await teleportPlayer(page, entranceSide);
+  await expect(bossHud).toBeVisible();
   await expect(game).toHaveAttribute("data-current-room-tag", "body");
   await expect.poll(async () => await cameraState(page)).toMatchObject({ zoom: MOBILE_CAMERA_SCALE, bossRoomId: null });
   await expect.poll(async () => {
@@ -972,6 +989,10 @@ test("keeps an active boss sized consistently while it follows the player out", 
   };
   expect(Math.abs(finalBoss.width - initialBossSize.width) / initialBossSize.width).toBeLessThan(0.12);
   expect(Math.abs(finalBoss.height - initialBossSize.height) / initialBossSize.height).toBeLessThan(0.12);
+  await page.evaluate(() => {
+    (window as Window & { __webcrawlTest?: { defeatAllMonsters: () => void } }).__webcrawlTest?.defeatAllMonsters();
+  });
+  await expect(bossHud).toBeHidden();
 });
 
 test("moves continuously with WASD and arrow keys", async ({ page }) => {

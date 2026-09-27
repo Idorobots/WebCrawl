@@ -2162,6 +2162,58 @@ body {
   gap: 8px;
 }
 
+#bossHud {
+  position: fixed;
+  left: 50%;
+  bottom: 104px;
+  z-index: 39;
+  width: min(680px, calc(100vw - 32px));
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  padding: 10px 18px 12px;
+  display: grid;
+  gap: 8px;
+  text-align: center;
+  pointer-events: none;
+  border: 1px solid rgba(240, 156, 255, 0.5);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(25, 12, 38, 0.88), rgba(8, 10, 22, 0.92));
+  box-shadow: 0 0 20px rgba(217, 117, 255, 0.2), inset 0 0 18px rgba(217, 117, 255, 0.1);
+}
+
+#bossHud[hidden] { display: none; }
+
+#bossHudName {
+  color: #f7ddff;
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 12px rgba(240, 156, 255, 0.65);
+}
+
+#bossHudHealth {
+  height: 14px;
+  border: 1px solid rgba(240, 156, 255, 0.5);
+  background: #071018;
+  overflow: hidden;
+}
+
+#bossHudHealthFill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #a45fd3, #f09cff);
+  transition: width 180ms ease;
+}
+
+#bossHud[data-stage="2"] #bossHudHealthFill {
+  background: linear-gradient(90deg, #de823e, #ffc857);
+}
+
+#bossHud[data-stage="3"] #bossHudHealthFill {
+  background: linear-gradient(90deg, #bb345c, #ff5e75);
+}
+
 #bottomHud > section {
   border: 1px solid #1e719d;
   background: linear-gradient(180deg, rgba(7,22,34,.98), rgba(3,11,18,.98));
@@ -2505,6 +2557,11 @@ body {
 }
 
 @media (max-width: 1230px) {
+  #bossHud {
+    bottom: 214px;
+    width: min(560px, calc(100vw - 24px));
+    padding: 8px 12px 10px;
+  }
   #mobileControls {
     display: block;
   }

@@ -1273,12 +1273,11 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Portals should activate after all bosses & revealed monsters on the level are defeated.
 
 * Boss rebalance
-- All bosses are pretty easy to kill. Make them faster.
 - Bosses should have multiple stages with different attack patterns depending on their HP. Let's go for three stages, with the final one being the most "intense" one.
-
 - Remove the "stage" from the boss name.
 - Remove the boss "rings" that are underneath them.
 - Boss health bar & name should show at the bottom of the screen (above the UI panels) whenever the boss is discovered and alive.
+- Some bosses are pretty hard to kill now due to the ungodly number of bullets produced. Can you please change the patterns to make them more playable and also more interesting? Here are some themes: a boss that tries to catch the player and kill them with melee but additionally shoots a sparse ring of bullets once in a while, it should also charge the player from time to time (stop briefly then charge with extra speed); a boss that is bullet-wave themed with each stage sending a wider wave; a boss that sends spirals of bullets, with each stage changing the spiral shape to be tighter and tighter; a boss that summons monsters and shoots from a distance; a boss that teleports and sends sparse rings of bullets, each stage it teleports more frequently.
 
 * Enemy rebalance
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.

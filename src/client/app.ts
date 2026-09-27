@@ -64,6 +64,7 @@ import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scor
 import { forSpatialCells, indexMonsterHitboxes, monsterCollisionCandidates, spatialCellKey } from "./domain/spatial";
 import {
   BARREL_EXPLOSION_DAMAGE,
+  BOSS_DEFINITIONS,
   CRYSTAL_INVULNERABILITY_BLINK_START_MS,
   CRYSTAL_INVULNERABILITY_DURATION_MS,
   DEFAULT_BULLET_SPEC,
@@ -144,6 +145,10 @@ const welcomeUrlInput = requireElement<HTMLInputElement>("#welcomeUrlInput");
 const luckyButton = requireElement<HTMLButtonElement>("#luckyButton");
 const welcomePromptBody = requireElement<HTMLElement>("#welcomePromptBody");
 const gameUi = requireElement<HTMLDivElement>("#gameUi");
+const bossHud = requireElement<HTMLElement>("#bossHud");
+const bossHudName = requireElement<HTMLElement>("#bossHudName");
+const bossHudHealth = requireElement<HTMLElement>("#bossHudHealth");
+const bossHudHealthFill = requireElement<HTMLElement>("#bossHudHealthFill");
 
 const loginLayout = requireElement<HTMLDivElement>("#loginLayout");
 const promptLayout = requireElement<HTMLDivElement>("#promptLayout");
@@ -1499,10 +1504,29 @@ function findSpawnerSpawnPosition(monster: Monster, spawner: Decoration): Point 
 
 function renderMonsters(): void {
   renderer.renderMonsters(currentMonsters);
+  updateBossHud();
 }
 
 function updateMonsterPositions(): void {
   renderer.updateMonsterPositions(currentMonsters);
+}
+
+function updateBossHud(): void {
+  const boss = currentMonsters.find(monster =>
+    monster.bossKind && !monster.dead && monster.active && visitedRooms.has(monster.spawnRoomId)
+  );
+  if (!boss?.bossKind) {
+    bossHud.hidden = true;
+    return;
+  }
+
+  bossHud.hidden = false;
+  bossHudName.textContent = BOSS_DEFINITIONS[boss.bossKind].label;
+  bossHud.dataset.stage = String(bossStage(boss.hp, boss.maxHp));
+  bossHudHealth.setAttribute("aria-label", `${bossHudName.textContent} health`);
+  bossHudHealth.setAttribute("aria-valuemax", String(boss.maxHp));
+  bossHudHealth.setAttribute("aria-valuenow", String(boss.hp));
+  bossHudHealthFill.style.width = `${Math.max(0, boss.hp) / Math.max(1, boss.maxHp) * 100}%`;
 }
 
 function applyPlayerDamage(amount: number, bullet?: Bullet): void {
@@ -1611,6 +1635,7 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
     renderer.playDamageSound();
     saveMonsterState(monster);
     updateMonsterPositions();
+    if (monster.bossKind) updateBossHud();
   }
 }
 
@@ -3390,6 +3415,7 @@ function renderGraph(
   cancelPortalActivationSound();
   currentStateId = stateId ?? stateIdForPage(pageUrl);
   renderer.clear();
+  bossHud.hidden = true;
   if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
   updateHealthUi();
   updateWeaponUi();
