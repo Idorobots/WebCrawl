@@ -98,7 +98,7 @@ const PLAYER_VISUAL: ActorVisualDefinition = {
 };
 
 export const PLAYER_SPEC = {
-  radius: world(36),
+  radius: world(28),
   spriteSize: world(190),
   visualCenterOffsetY: -world(38),
   visual: PLAYER_VISUAL,
