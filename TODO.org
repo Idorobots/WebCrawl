@@ -1096,6 +1096,7 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 * Performance optimization, again
 - Phaser 4 update?
 - WebWorkers for pathing/collision detection, etc?
+- The more rooms are revealed, the worse the performance
 
 * DONE UX improvements, again
 :LOGBOOK:
@@ -1114,11 +1115,13 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Rooms need random wall lights in yellow, blue and red variants.
 - Sprites that have a light on them need lighting.
 
-* Asset changes
+* DONE Asset changes
+:LOGBOOK:
+- State "DONE"       from              [2026-09-27 Sun 15:24]
+:END:
 - Change the RAM sticks to holographic, nonexistent RAM sticks
 - Use broken floor tiles sparingly
 - Use the pistol graphic as the default weapon
-
 
 * DONE Gameplay mechanics
 :LOGBOOK:

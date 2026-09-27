@@ -942,7 +942,7 @@ export const WEAPON_PICKUP_DEFINITIONS: Record<WeaponPlacement, { size: number; 
 };
 
 export const WEAPON_VISUAL_DEFINITIONS: Record<WeaponKind, { asset: string; origin: { x: number; y: number }; pedestalYOffset: number }> = {
-  "pulse-rifle": { asset: WEAPON_ASSETS["pulse-rifle"], origin: { x: 0.5, y: 0.77 }, pedestalYOffset: -world(39) },
+  "pulse-rifle": { asset: WEAPON_ASSETS["pulse-rifle"], origin: { x: 0.5, y: 0.656 }, pedestalYOffset: -world(49) },
   "byte-repeater": { asset: WEAPON_ASSETS["byte-repeater"], origin: { x: 0.5, y: 0.744 }, pedestalYOffset: -world(41) },
   "scatter-array": { asset: WEAPON_ASSETS["scatter-array"], origin: { x: 0.5, y: 0.801 }, pedestalYOffset: -world(36) },
   "fork-driver": { asset: WEAPON_ASSETS["fork-driver"], origin: { x: 0.5, y: 0.77 }, pedestalYOffset: -world(39) },
@@ -952,7 +952,7 @@ export const WEAPON_VISUAL_DEFINITIONS: Record<WeaponKind, { asset: string; orig
   "cross-compiler": { asset: WEAPON_ASSETS["cross-compiler"], origin: { x: 0.5, y: 0.771 }, pedestalYOffset: -world(38) },
   "nova-cache": { asset: WEAPON_ASSETS["nova-cache"], origin: { x: 0.5, y: 0.762 }, pedestalYOffset: -world(39) },
   "helix-emitter": { asset: WEAPON_ASSETS["helix-emitter"], origin: { x: 0.5, y: 0.744 }, pedestalYOffset: -world(41) },
-  "sideband-projector": { asset: WEAPON_ASSETS["sideband-projector"], origin: { x: 0.5, y: 0.656 }, pedestalYOffset: -world(49) },
+  "sideband-projector": { asset: WEAPON_ASSETS["sideband-projector"], origin: { x: 0.5, y: 0.77 }, pedestalYOffset: -world(39) },
 };
 
 export const PORTAL_DEFINITION = {

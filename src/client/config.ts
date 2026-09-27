@@ -287,7 +287,7 @@ export const PORTAL_FRAMES = {
 } as const;
 
 export const WEAPON_ASSETS: Record<WeaponKind, string> = {
-  "pulse-rifle": asset("pickups/weapons/assault_rifle.png"),
+  "pulse-rifle": asset("pickups/weapons/pistol.png"),
   "byte-repeater": asset("pickups/weapons/smg.png"),
   "scatter-array": asset("pickups/weapons/shotgun.png"),
   "fork-driver": asset("pickups/weapons/assault_rifle.png"),
@@ -297,7 +297,7 @@ export const WEAPON_ASSETS: Record<WeaponKind, string> = {
   "cross-compiler": asset("pickups/weapons/laser.png"),
   "nova-cache": asset("pickups/weapons/flamer.png"),
   "helix-emitter": asset("pickups/weapons/arc.png"),
-  "sideband-projector": asset("pickups/weapons/pistol.png"),
+  "sideband-projector": asset("pickups/weapons/assault_rifle.png"),
 };
 
 export const EXPLOSION_FRAMES = Array.from({ length: 6 }, (_, index) =>
