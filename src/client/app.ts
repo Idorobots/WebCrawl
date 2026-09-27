@@ -2953,6 +2953,8 @@ function teleportPlayerTo(x: number, y: number): void {
     playerFacing: () => Point;
     damagePlayer: (amount: number) => void;
     spawnHealingEffect: () => void;
+    primeMonsterAttackAnimation: () => number;
+    gameTickAt: () => number | null;
     stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y" | "url" | "enabled">>;
     defeatAllMonsters: () => void;
     destroyContentPoint: (id: string) => void;
@@ -3006,6 +3008,22 @@ function teleportPlayerTo(x: number, y: number): void {
   spawnHealingEffect(): void {
     renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize, { followPlayer: true });
   },
+  primeMonsterAttackAnimation(): number {
+    const now = performance.now();
+    let primed = 0;
+    for (const monster of currentMonsters) {
+      if (!monster.active || monster.dead || !monster.visual.directions.down?.ranged) continue;
+      monster.moveDir = "down";
+      monster.moving = false;
+      monster.attackKind = "ranged";
+      monster.lastAttackAt = now;
+      monster.attackWarmupUntil = now + 10_000;
+      primed += 1;
+    }
+    updateMonsterPositions();
+    return primed;
+  },
+  gameTickAt: () => lastGameTick,
     stairs: () => currentStairs.map(({ id, type, x, y, url, enabled }) => ({ id, type, x, y, url, enabled })),
     defeatAllMonsters(): void {
       for (const monster of currentMonsters) {

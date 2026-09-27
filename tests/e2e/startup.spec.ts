@@ -1212,20 +1212,60 @@ test("spawns multiple enemies once another room is revealed", async ({ page }) =
   await expect.poll(async () => Number(await game.getAttribute("data-enemy-auras"))).toBeGreaterThanOrEqual(2);
   await expect.poll(async () => Number(await game.getAttribute("data-monster-shadows"))).toBeGreaterThanOrEqual(2);
 
-  const seen = new Set<string>();
-  const samples: string[] = [];
-  const animationDeadline = Date.now() + 5_000;
-  while (seen.size < 2 && Date.now() < animationDeadline) {
-    await page.waitForTimeout(50);
-    const assets = await game.getAttribute("data-monster-assets") ?? "";
-    samples.push(`${await game.getAttribute("data-rendered-monsters")}:${assets}`);
-    for (const match of assets.matchAll(/frame_(\d{2})\.png/g)) seen.add(match[1]!);
-  }
-  expect(
-    seen.size,
-    `Page errors: ${pageErrors.join(" | ")}\nMonster asset samples: ${samples.join(" | ")}`,
-  ).toBeGreaterThanOrEqual(2);
-  expect([...seen].every(frame => ["01", "02", "03", "04"].includes(frame))).toBe(true);
+  const assets = (await game.getAttribute("data-monster-assets") ?? "").split(",").filter(Boolean);
+  expect(assets.length).toBeGreaterThanOrEqual(2);
+  expect(assets.every(asset => /^assets\/enemies\/.+\/frame_0[1-4]\.png$/.test(asset))).toBe(true);
+  expect(pageErrors).toEqual([]);
+});
+
+test("advances monster attack textures while the game loop runs", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  const direction = await game.getAttribute("data-first-exit");
+  const door = {
+    x: Number(await game.getAttribute("data-first-door-x")),
+    y: Number(await game.getAttribute("data-first-door-y")),
+  };
+  const inset = WORLD_GEOMETRY.segmentSize / 2 - world(5);
+  const target = direction === "N" ? { x: door.x, y: door.y + inset }
+    : direction === "S" ? { x: door.x, y: door.y - inset }
+    : direction === "E" ? { x: door.x - inset, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY }
+    : { x: door.x + inset, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY };
+  await teleportPlayer(page, target);
+  await expect.poll(async () => Number(await game.getAttribute("data-active-monsters"))).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () => Number(await game.getAttribute("data-rendered-monsters"))).toBeGreaterThanOrEqual(2);
+  await page.bringToFront();
+
+  // Sample within the browser: round trips to Playwright can miss an entire
+  // four-frame attack on a busy CI worker.
+  const observation = await page.evaluate(async () => {
+    const api = (window as Window & {
+      __webcrawlTest?: {
+        primeMonsterAttackAnimation: () => number;
+        gameTickAt: () => number | null;
+      };
+    }).__webcrawlTest;
+    if (!api) throw new Error("Game test API unavailable");
+    const host = document.querySelector<HTMLElement>("#gameCanvas")!;
+    const primed = api.primeMonsterAttackAnimation();
+    const initialTick = api.gameTickAt();
+    const initialAssets = host.dataset.monsterAssets ?? "";
+    const assets = new Set([initialAssets]);
+    const start = performance.now();
+    while (performance.now() - start < 5_000) {
+      await new Promise<void>(resolve => setTimeout(resolve, 20));
+      assets.add(host.dataset.monsterAssets ?? "");
+      if (assets.size > 1 && (api.gameTickAt() ?? -1) > (initialTick ?? -1)) break;
+    }
+    return {
+      primed, initialTick, finalTick: api.gameTickAt(), initialAssets,
+      assets: [...assets].slice(0, 8), focused: document.hasFocus(), hidden: document.hidden,
+    };
+  });
+  expect(observation.primed).toBeGreaterThanOrEqual(2);
+  expect(observation.initialAssets).toContain("attack/shoot/front/frame_01.png");
+  expect(observation.finalTick ?? -1, JSON.stringify(observation)).toBeGreaterThan(observation.initialTick ?? -1);
+  expect(observation.assets.length, JSON.stringify(observation)).toBeGreaterThan(1);
 });
 
 test("swaps temporary weapons, refills only from ammo cores, and falls back to pulse rifle", async ({ page }) => {
