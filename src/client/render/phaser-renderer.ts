@@ -26,6 +26,7 @@ import {
   world,
 } from "../config";
 import { backgroundAssetForUrl } from "../domain/background";
+import { bossStage } from "../domain/boss-attacks";
 import { signageFontForUrl, stationAmbientForUrl, STATION_AMBIENT_TRACKS } from "../domain/level-style";
 import { WEAPON_COLORS } from "../domain/weapons";
 import {
@@ -2036,6 +2037,7 @@ export class PhaserRenderer {
     const activeBoss = items.find(item => item.active && item.bossKind && !item.dead);
     if (activeBoss?.bossKind) {
       this.host.dataset.activeBossKind = activeBoss.bossKind;
+      this.host.dataset.activeBossStage = String(bossStage(activeBoss.hp, activeBoss.maxHp));
       this.host.dataset.activeBossX = String(Math.round(activeBoss.x));
       this.host.dataset.activeBossY = String(Math.round(activeBoss.y));
       this.host.dataset.activeBossRoom = String(activeBoss.roomId);
@@ -2048,6 +2050,7 @@ export class PhaserRenderer {
       }
     } else {
       delete this.host.dataset.activeBossKind;
+      delete this.host.dataset.activeBossStage;
       delete this.host.dataset.activeBossX;
       delete this.host.dataset.activeBossY;
       delete this.host.dataset.activeBossRoom;
@@ -2125,7 +2128,7 @@ export class PhaserRenderer {
           if (item.bossKind) {
             barChildren.push(scene.add.text(0, barY - world(9), BOSS_DEFINITIONS[item.bossKind].label, {
               color: "#f7ddff", fontSize: `${world(11)}px`, fontStyle: "bold",
-            }).setOrigin(0.5));
+            }).setOrigin(0.5).setName("bossStageLabel"));
           }
           const bar = scene.add.container(item.x, item.y, barChildren).setDepth(HEALTH_BAR_DEPTH);
           this.monsterHealthBars.set(item.id, bar);
@@ -2155,6 +2158,12 @@ export class PhaserRenderer {
       }
       const hp = (barContainer ?? container).getByName("hp") as Phaser.GameObjects.Rectangle | null;
       if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
+      if (item.bossKind && hp) {
+        const stage = bossStage(item.hp, item.maxHp);
+        hp.fillColor = [0xf09cff, 0xffc857, 0xff5e75][stage - 1]!;
+        const label = barContainer?.getByName("bossStageLabel") as Phaser.GameObjects.Text | null;
+        label?.setText(`${BOSS_DEFINITIONS[item.bossKind].label} · STAGE ${stage}`);
+      }
       if (item === activeBoss) {
         this.host.dataset.activeBossDisplayWidth = String(sprite.displayWidth);
         this.host.dataset.activeBossDisplayHeight = String(sprite.displayHeight);
@@ -2189,6 +2198,13 @@ export class PhaserRenderer {
       }
       const hp = this.monsterHealthBars.get(item.id)?.getByName("hp") as Phaser.GameObjects.Rectangle | null;
       if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
+      if (item.bossKind && item.active && !item.dead) {
+        const stage = bossStage(item.hp, item.maxHp);
+        this.setHostData("activeBossStage", String(stage));
+        if (hp) hp.fillColor = [0xf09cff, 0xffc857, 0xff5e75][stage - 1]!;
+        const label = this.monsterHealthBars.get(item.id)?.getByName("bossStageLabel") as Phaser.GameObjects.Text | null;
+        label?.setText(`${BOSS_DEFINITIONS[item.bossKind].label} · STAGE ${stage}`);
+      }
       if (item.bossKind && item.active && !item.dead) {
         this.setHostData("activeBossX", String(Math.round(item.x)));
         this.setHostData("activeBossY", String(Math.round(item.y)));

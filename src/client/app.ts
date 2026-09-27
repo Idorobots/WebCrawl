@@ -17,6 +17,7 @@ import {
   WEAPON_ASSETS,
   world,
 } from "./config";
+import { bossStage, bossStageCooldown, bossVolleyProjectiles } from "./domain/boss-attacks";
 import { signageFontForUrl } from "./domain/level-style";
 import {
   actorAimDirection,
@@ -1562,7 +1563,12 @@ function monsterDrop(monster: Monster): void {
 function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void {
   if (monster.dead) return;
 
+  const previousStage = monster.bossKind ? bossStage(monster.hp, monster.maxHp) : null;
   monster.hp = Math.max(0, monster.hp - amount);
+  if (previousStage && monster.bossKind !== "packet-storm" && monster.hp > 0 &&
+    bossStage(monster.hp, monster.maxHp) > previousStage) {
+    monster.nextSpecialAt = Math.min(monster.nextSpecialAt ?? Infinity, performance.now() + 500);
+  }
 
   if (monster.hp <= 0) {
     monster.dead = true;
@@ -1716,43 +1722,23 @@ function shootEnemyVolley(monster: Monster, direction: Point, timestamp: number)
   renderBullets();
 }
 
-function rotatedDirection(direction: Point, angle: number): Point {
-  const cosine = Math.cos(angle);
-  const sine = Math.sin(angle);
-  return {
-    x: direction.x * cosine - direction.y * sine,
-    y: direction.x * sine + direction.y * cosine,
-  };
-}
-
 function fireBossVolley(monster: Monster, target: Point, timestamp: number): void {
   const sequence = monster.attackSequence ?? 0;
-  const enraged = monster.hp <= monster.maxHp / 2;
   const aimed = actorAimDirection(
     monster,
     monsterVisualCenterOffsetY(monster.size, monster.visualKind),
     target,
   );
-
-  if (monster.bossKind === "packet-storm" && sequence % 2 === 0) {
-    const count = 10 + Math.min(6, floorNumber()) + (enraged ? 4 : 0);
-    const offset = sequence * 0.19;
-    for (let index = 0; index < count; index += 1) {
-      const angle = offset + index / count * Math.PI * 2;
-      queueEnemyBullet(monster, { x: Math.cos(angle), y: Math.sin(angle) }, {
-        radius: world(6),
-        style: "boss",
-      });
-    }
-  } else {
-    const count = monster.bossKind === "fork-bomb" ? (enraged ? 5 : 3) : (enraged ? 7 : 5);
-    const spread = monster.bossKind === "fork-bomb" ? 0.19 : 0.14;
-    for (let index = 0; index < count; index += 1) {
-      queueEnemyBullet(monster, rotatedDirection(aimed, (index - (count - 1) / 2) * spread), {
-        radius: world(6),
-        style: "boss",
-      });
-    }
+  for (const projectile of bossVolleyProjectiles(
+    monster.bossKind!, bossStage(monster.hp, monster.maxHp), sequence, aimed, floorNumber(), world(16),
+  )) {
+    queueEnemyBullet(monster, projectile.direction, {
+      lateralOffset: projectile.lateralOffset,
+      damage: monster.bossKind === "heap-titan" || monster.bossKind === "kimi-swarm" || monster.bossKind === "llama-herd"
+        ? Math.max(1, Math.floor(monster.attackDamage / 2)) : monster.attackDamage,
+      radius: monster.bossKind === "heap-titan" ? world(8) : world(6),
+      style: monster.bossKind === "heap-titan" ? "shockwave" : "boss",
+    });
   }
   monster.attackSequence = sequence + 1;
   monster.attackKind = "ranged";
@@ -1772,7 +1758,8 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
     boss.nextSpecialAt = timestamp + 1_500;
     return;
   }
-  const waveSize = boss.hp <= boss.maxHp / 2 ? 2 : 1;
+  const stage = bossStage(boss.hp, boss.maxHp);
+  const waveSize = stage;
   let added = 0;
   for (let offset = 0; offset < waveSize && alive + added < aliveLimit && summonedCount + added < totalLimit; offset += 1) {
     const index = summonedCount + added;
@@ -1790,7 +1777,7 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
     added += 1;
   }
   boss.summonedCount = summonedCount + added;
-  boss.nextSpecialAt = timestamp + Math.max(2_800, 6_500 - floorNumber() * 260);
+  boss.nextSpecialAt = timestamp + bossStageCooldown(Math.max(2_800, 6_500 - floorNumber() * 260), stage);
   saveMonsterState(boss);
   if (added) {
     renderMonsters();
@@ -1956,6 +1943,10 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
 
 function updateBoss(monster: Monster, dt: number, timestamp: number): void {
   if (currentRoomId === null) return;
+  const stage = bossStage(monster.hp, monster.maxHp);
+  const attackReady =
+    (monster.attackWarmupUntil === undefined || timestamp >= monster.attackWarmupUntil) &&
+    timestamp - monster.lastAttackAt >= bossStageCooldown(monster.attackCooldownMs, stage);
   const playerRoom = roomContainingPoint(player.x, player.y);
   const sharesPlayerRoom = playerRoom?.id === monster.roomId;
   let nextRoom: GraphNode | undefined;
@@ -1984,41 +1975,42 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): void {
       monsterVisualCenterOffsetY(monster.size, monster.visualKind))) : null;
 
   if (monster.bossKind === "packet-storm") {
-    if (aimPoint && monsterAttackIsReady(monster, timestamp)) fireBossVolley(monster, aimPoint, timestamp);
+    if (aimPoint && attackReady) fireBossVolley(monster, aimPoint, timestamp);
     return;
   }
 
   if (monster.bossKind === "fork-bomb") {
     if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 2_800;
     if (sharesPlayerRoom && timestamp >= monster.nextSpecialAt) summonBossMinions(monster, timestamp);
-    if (aimPoint && monsterAttackIsReady(monster, timestamp)) fireBossVolley(monster, aimPoint, timestamp);
+    if (aimPoint && attackReady) fireBossVolley(monster, aimPoint, timestamp);
     return;
   }
 
-  if (playerDistance <= monster.attackRange && monsterAttackIsReady(monster, timestamp)) {
+  if (playerDistance <= monster.attackRange && attackReady) {
     monster.attackKind = "melee";
     monster.lastAttackAt = timestamp;
     renderer.playMeleeSound();
     applyPlayerDamage(monster.attackDamage);
   }
   if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + HEAP_TITAN_WAVE.initialDelayMs;
-  if (timestamp >= monster.nextSpecialAt && playerDistance <= monster.projectileRange) {
-    const count = monster.hp <= monster.maxHp / 2
-      ? HEAP_TITAN_WAVE.enragedBulletCount
-      : HEAP_TITAN_WAVE.bulletCount;
-    for (let index = 0; index < count; index += 1) {
-      const angle = index / count * Math.PI * 2;
-      queueEnemyBullet(monster, { x: Math.cos(angle), y: Math.sin(angle) }, {
+  if (timestamp >= monster.nextSpecialAt && aimPoint) {
+    const aimed = actorAimDirection(monster,
+      monsterVisualCenterOffsetY(monster.size, monster.visualKind), aimPoint);
+    for (const projectile of bossVolleyProjectiles(
+      monster.bossKind!, stage, monster.attackSequence ?? 0, aimed, floorNumber(), world(16),
+    )) {
+      queueEnemyBullet(monster, projectile.direction, {
         damage: Math.max(1, Math.floor(monster.attackDamage / 2)),
-      radius: world(8),
+        radius: world(8),
         maxDistance: monster.projectileRange,
-        style: "shockwave",
+        style: monster.bossKind === "heap-titan" ? "shockwave" : "boss",
+        lateralOffset: projectile.lateralOffset,
       });
     }
-    monster.nextSpecialAt = timestamp + Math.max(
+    monster.nextSpecialAt = timestamp + bossStageCooldown(Math.max(
       HEAP_TITAN_WAVE.minIntervalMs,
       HEAP_TITAN_WAVE.baseIntervalMs - floorNumber() * HEAP_TITAN_WAVE.floorReductionMs,
-    );
+    ), stage);
     monster.attackSequence = (monster.attackSequence ?? 0) + 1;
     monster.attackKind = "ranged";
     monster.lastAttackAt = timestamp;

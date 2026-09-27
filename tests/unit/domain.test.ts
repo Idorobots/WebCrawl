@@ -16,6 +16,7 @@ import {
   world,
 } from "../../src/client/config";
 import { backgroundAssetForUrl } from "../../src/client/domain/background";
+import { bossStage } from "../../src/client/domain/boss-attacks";
 import { signageFontForUrl, SIGNAGE_FONTS, stationAmbientForUrl, STATION_AMBIENT_TRACKS } from "../../src/client/domain/level-style";
 import {
   applyObstacleDamage,
@@ -1855,7 +1856,7 @@ describe("deterministic room contents", () => {
           x: boss.x,
           y: boss.y,
           roomId: room.id,
-          hp: boss.maxHp - 5,
+          hp: Math.floor(boss.maxHp / 4),
           dead: false,
           active: true,
           droppedLoot: false,
@@ -1872,10 +1873,11 @@ describe("deterministic room contents", () => {
     );
     expect(monsters.filter(monster => monster.id.startsWith(`${boss.id}::summon-`))).toHaveLength(3);
     expect(monsters.find(monster => monster.id === boss.id)).toMatchObject({
-      hp: boss.maxHp - 5,
+      hp: Math.floor(boss.maxHp / 4),
       attackSequence: 3,
       summonedCount: 3,
     });
+    expect(bossStage(monsters.find(monster => monster.id === boss.id)!.hp, boss.maxHp)).toBe(3);
   });
 
   it("preserves boss positions after they pursue the player out of their arena", () => {

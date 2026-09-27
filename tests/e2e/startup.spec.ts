@@ -925,6 +925,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
 
   await expect(game).toHaveAttribute("data-active-bosses", "1");
   await expect(game).toHaveAttribute("data-active-boss-kind", /^(packet-storm|fork-bomb|heap-titan|kimi-swarm|llama-herd)$/);
+  await expect(game).toHaveAttribute("data-active-boss-stage", "1");
   await expect.poll(
     async () => Number(await game.getAttribute("data-active-boss-display-width")),
     { timeout: 15_000 },
