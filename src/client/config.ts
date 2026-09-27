@@ -56,6 +56,10 @@ const asset = (path: string): string => `assets/${path}`;
 
 export const ASSETS = {
   backgroundTechTile: asset("environment/backgrounds/background_tech_tile.png"),
+  backgroundAlien: asset("environment/backgrounds/alien.png"),
+  backgroundAsteroid: asset("environment/backgrounds/asteroid.png"),
+  backgroundMars: asset("environment/backgrounds/mars.png"),
+  backgroundSpace: asset("environment/backgrounds/space.png"),
   bullet: asset("bullet.png"),
   floorPlain: asset("environment/floor/floor_plain_steel.png"),
   floorComposite: asset("environment/floor/floor_plain_composite.png"),
@@ -86,6 +90,14 @@ export const ASSETS = {
   lootCore: asset("pickups/ammo_ballistic.png"),
   lootEnergy: asset("pickups/ammo_energy.png"),
 } as const;
+
+export const BACKGROUND_ASSETS = [
+  ASSETS.backgroundTechTile,
+  ASSETS.backgroundAlien,
+  ASSETS.backgroundAsteroid,
+  ASSETS.backgroundMars,
+  ASSETS.backgroundSpace,
+] as const;
 
 /** Floors that may tile whole rooms and corridors: undamaged materials only. */
 export const BASE_FLOOR_ASSETS = [

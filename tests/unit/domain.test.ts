@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ASSETS,
+  BACKGROUND_ASSETS,
   BASE_FLOOR_ASSETS,
   DAMAGED_FLOOR_ASSETS,
   DEBRIS_ASSETS,
@@ -14,6 +15,8 @@ import {
   WORLD_SCALE,
   world,
 } from "../../src/client/config";
+import { backgroundAssetForUrl } from "../../src/client/domain/background";
+import { signageFontForUrl, SIGNAGE_FONTS, stationAmbientForUrl, STATION_AMBIENT_TRACKS } from "../../src/client/domain/level-style";
 import {
   applyObstacleDamage,
   actorAimDirection,
@@ -320,6 +323,27 @@ describe("DOM graph generation", () => {
     const stairs = buildInteractiveObjects(layout, "https://example.com/page", null, new Set()).stairs;
     expect(stairs.filter(stair => stair.type === "up")).toHaveLength(1);
     expect(stairs.filter(stair => stair.type === "down")).toHaveLength(6);
+  });
+});
+
+describe("URL backgrounds", () => {
+  it("keeps a URL's background stable across visits and exposes every tile", () => {
+    const urls = Array.from({ length: 200 }, (_, index) => `https://example.com/page-${index}`);
+    const selected = urls.map(backgroundAssetForUrl);
+    expect(selected).toEqual(urls.map(backgroundAssetForUrl));
+    expect(new Set(selected)).toEqual(new Set(BACKGROUND_ASSETS));
+  });
+});
+
+describe("URL level atmosphere", () => {
+  it("chooses stable signage fonts and station ambience from every available asset", () => {
+    const urls = Array.from({ length: 200 }, (_, index) => `https://example.com/page-${index}`);
+    const fonts = urls.map(signageFontForUrl);
+    const tracks = urls.map(stationAmbientForUrl);
+    expect(fonts).toEqual(urls.map(signageFontForUrl));
+    expect(tracks).toEqual(urls.map(stationAmbientForUrl));
+    expect(new Set(fonts)).toEqual(new Set(SIGNAGE_FONTS));
+    expect(new Set(tracks)).toEqual(new Set(STATION_AMBIENT_TRACKS));
   });
 });
 

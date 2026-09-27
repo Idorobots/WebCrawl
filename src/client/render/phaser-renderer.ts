@@ -25,6 +25,8 @@ import {
   WORLD_SCALE,
   world,
 } from "../config";
+import { backgroundAssetForUrl } from "../domain/background";
+import { signageFontForUrl, stationAmbientForUrl, STATION_AMBIENT_TRACKS } from "../domain/level-style";
 import { WEAPON_COLORS } from "../domain/weapons";
 import {
   BOSS_DEFINITIONS,
@@ -163,8 +165,6 @@ const CORRIDOR_LIGHT_SPACING = world(240);
 const CORRIDOR_LIGHT_CULL_CELL = CORRIDOR_LIGHT_SPACING / 2;
 const SHOW_DEBUG_GEOMETRY = import.meta.env.VITE_DEBUG_HITBOXES === "true";
 
-const STATION_AMBIENT_KEY = "station-ambient";
-const STATION_AMBIENT_SRC = "sounds/ambient/station/space.mp3";
 const STATION_AMBIENT_VOLUME = 0.45;
 const STATION_AMBIENT_FADE_MS = 750;
 
@@ -364,6 +364,7 @@ export class PhaserRenderer {
   private layout: DungeonLayout | null = null;
   private visited = new Set<number>();
   private background: Phaser.GameObjects.TileSprite | null = null;
+  private backgroundAsset: string = ASSETS.backgroundTechTile;
   private staticObjects: Phaser.GameObjects.GameObject[] = [];
   private roomStatics = new Map<number, StaticObject[]>();
   private corridorStatics = new Map<string, StaticObject[]>();
@@ -438,6 +439,9 @@ export class PhaserRenderer {
   private lastShadowOffsetUpdate = -Infinity;
   private keyedEffects = new Map<string, KeyedEffect>();
   private stationAmbient: Phaser.Sound.BaseSound | null = null;
+  private stationAmbientKey: string = STATION_AMBIENT_TRACKS[0];
+  private stationAmbientEnabled = false;
+  private signageFont = "Prefix";
 
   constructor(private readonly host: HTMLElement) {}
 
@@ -469,7 +473,7 @@ export class PhaserRenderer {
           WEAPON_ASSETS,
         );
         for (const asset of assets) this.load.image(textureKey(asset), asset);
-        this.load.audio(STATION_AMBIENT_KEY, STATION_AMBIENT_SRC);
+        for (const src of STATION_AMBIENT_TRACKS) this.load.audio(src, src);
         for (const [key, src] of Object.entries(ONE_SHOT_SOUNDS)) this.load.audio(key, src);
         for (const src of POOLED_SOUND_SOURCES) this.load.audio(src, src);
       }
@@ -562,7 +566,6 @@ export class PhaserRenderer {
     this.hostResizeObserver?.disconnect();
     this.hostResizeObserver = new ResizeObserver(() => this.handleHostResize());
     this.hostResizeObserver.observe(this.host);
-    this.refreshFloorMarkingsAfterFontLoad();
     this.drawWorld();
     this.renderDecorations(this.currentDecorations, this.visited);
     this.renderObjects(this.currentStairs, this.currentLoot, this.visited, this.currentLootAssets);
@@ -572,15 +575,6 @@ export class PhaserRenderer {
     this.applyCameraMode(true);
     this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
     (window as unknown as { __webcrawlScene?: Phaser.Scene }).__webcrawlScene = scene;
-  }
-
-  private refreshFloorMarkingsAfterFontLoad(): void {
-    if (typeof document === "undefined" || !document.fonts) return;
-    void document.fonts.load(`900 ${world(34)}px Prefix`).then(() => {
-      // The first map can render while Prefix is still loading. Rebuild just
-      // the static world so its canvas-backed floor textures use the real face.
-      if (this.scene && this.layout) this.drawWorld();
-    }).catch(() => undefined);
   }
 
   clear(): void {
@@ -669,12 +663,15 @@ export class PhaserRenderer {
     delete this.host.dataset.followingEffectY;
     delete this.host.dataset.sceneryShadows;
     delete this.host.dataset.monsterShadows;
+    delete this.host.dataset.signageFont;
+    delete this.host.dataset.stationAmbient;
   }
 
   playStationAmbient(): void {
+    this.stationAmbientEnabled = true;
     const scene = this.scene;
-    if (!scene || !scene.cache.audio.exists(STATION_AMBIENT_KEY)) return;
-    const sound = this.stationAmbient ??= scene.sound.add(STATION_AMBIENT_KEY, {
+    if (!scene || !scene.cache.audio.exists(this.stationAmbientKey)) return;
+    const sound = this.stationAmbient ??= scene.sound.add(this.stationAmbientKey, {
       loop: true,
       volume: 0,
     });
@@ -689,6 +686,7 @@ export class PhaserRenderer {
   }
 
   stopStationAmbient(): void {
+    this.stationAmbientEnabled = false;
     const scene = this.scene;
     const sound = this.stationAmbient;
     if (!scene || !sound) return;
@@ -895,8 +893,22 @@ export class PhaserRenderer {
     sound.once(Phaser.Sound.Events.COMPLETE, () => sound.destroy());
   }
 
-  setWorld(layout: DungeonLayout, visited: ReadonlySet<number>): void {
+  setWorld(layout: DungeonLayout, visited: ReadonlySet<number>, pageUrl: string): void {
     this.layout = layout;
+    this.backgroundAsset = backgroundAssetForUrl(pageUrl);
+    this.signageFont = signageFontForUrl(pageUrl);
+    this.host.dataset.signageFont = this.signageFont;
+    const ambientKey = stationAmbientForUrl(pageUrl);
+    if (ambientKey !== this.stationAmbientKey) {
+      if (this.stationAmbient) {
+        this.scene?.tweens.killTweensOf(this.stationAmbient);
+        this.stationAmbient.destroy();
+        this.stationAmbient = null;
+      }
+      this.stationAmbientKey = ambientKey;
+      if (this.stationAmbientEnabled) this.playStationAmbient();
+    }
+    this.host.dataset.stationAmbient = ambientKey;
     this.visited = new Set(visited);
     this.host.dataset.rooms = String(layout.nodes.length);
     this.host.dataset.corridors = String(layout.links.length);
@@ -1006,7 +1018,7 @@ export class PhaserRenderer {
     if (!this.background || this.background.width < width || this.background.height < height) {
       this.background?.destroy();
       this.background = this.illuminate(scene.add.tileSprite(
-        0, 0, width, height, textureKey(ASSETS.backgroundTechTile),
+        0, 0, width, height, textureKey(this.backgroundAsset),
       ).setOrigin(0).setTileScale(WORLD_SCALE).setDepth(-10));
     }
     const left = Math.floor(view.x - pad);
@@ -1205,7 +1217,7 @@ export class PhaserRenderer {
     const measureCanvas = document.createElement("canvas");
     const measureContext = measureCanvas.getContext("2d");
     if (!measureContext) throw new Error("Unable to create floor-marking texture.");
-    const font = `900 ${fontSize}px Prefix, monospace`;
+    const font = `900 ${fontSize}px "${this.signageFont}", monospace`;
     measureContext.font = font;
     // Measure with the same alignment used for drawing, so the ink bounding
     // box is relative to the exact point the text will be drawn at.

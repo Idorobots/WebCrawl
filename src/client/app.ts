@@ -17,6 +17,7 @@ import {
   WEAPON_ASSETS,
   world,
 } from "./config";
+import { signageFontForUrl } from "./domain/level-style";
 import {
   actorAimDirection,
   actorCollisionCenter,
@@ -129,9 +130,6 @@ const captureButton = requireElement<HTMLButtonElement>("#captureButton");
 gameCanvasHost.dataset.debugMode = String(DEBUG_MODE);
 gameCanvasHost.dataset.monstersEnabled = String(MONSTERS_ENABLED);
 gameCanvasHost.dataset.playerMaxHp = String(PLAYER_MAX_HP);
-// Start this while the welcome screen is visible so the first floor textures
-// are drawn with Prefix instead of being regenerated after a fallback render.
-const prefixFontReady = document.fonts?.load(`900 ${world(34)}px Prefix`).catch(() => undefined) ?? Promise.resolve();
 let renderer!: PhaserRenderer;
 const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
 const contentBrowserEl = requireElement<HTMLElement>("#contentBrowser");
@@ -3467,7 +3465,7 @@ function renderGraph(
   portalContacts.clear();
   updateFloorPortals();
 
-  renderer.setWorld(layout, visitedRooms);
+  renderer.setWorld(layout, visitedRooms, pageUrl);
   updateFogOfWar();
   renderDecorations();
 
@@ -3570,6 +3568,9 @@ async function loadPage(
   try {
     if (rendererReady) await rendererReady();
     if (requestId !== currentRequest) return;
+    // Floor labels are canvas textures; wait for this page's face before drawing them.
+    await document.fonts?.load(`900 ${world(34)}px "${signageFontForUrl(resolvedUrl)}"`).catch(() => undefined);
+    if (requestId !== currentRequest) return;
     saveCurrentFloorState();
     if (currentPageUrl && currentStateId && currentGraph && currentLayout) {
       floorSnapshots.set(currentStateId, {
@@ -3601,6 +3602,7 @@ async function loadPage(
       spawnPortalUrl: popBack ? departingPageUrl : null,
     }, layout);
     gameStarted = true;
+    if (!LOADING_SCREEN_ENABLED) renderer.playStationAmbient();
     if (retainedPointerPosition && pointerInViewport) {
       pointerClientPosition = retainedPointerPosition;
       updatePlayerAimFromPointer();
@@ -3615,7 +3617,6 @@ async function loadPage(
 }
 
 async function loadRenderer(): Promise<void> {
-  await prefixFontReady;
   const { PhaserRenderer } = await import("./render/phaser-renderer");
   renderer = new PhaserRenderer(gameCanvasHost);
 }
@@ -3629,7 +3630,6 @@ function startRenderer(): Promise<void> {
         completeLoadingTask("boot");
         if (!LOADING_SCREEN_ENABLED) {
           gameUi.classList.add("game-ui-ready");
-          renderer.playStationAmbient();
         }
         resolve();
       },

@@ -14,6 +14,30 @@
   src: url("/fonts/Prefix-2Oa8.ttf") format("truetype");
 }
 
+@font-face {
+  font-family: "Desoto";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Desoto-Zyq.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Projects Fenotype";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/ProjectsFenotype-EXqz.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Searider Falcon";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/SeariderFalconCondensedItal-aYYwa.otf") format("opentype");
+}
+
 /* Terminal monospace with the box-drawing glyphs the loading logo needs.
    Noto Sans Mono ships with the game and covers them at a uniform 0.6em
    advance, keeping every column aligned on mobile and desktop alike. */
