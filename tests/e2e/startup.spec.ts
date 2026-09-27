@@ -29,20 +29,8 @@ async function signIn(page: Page): Promise<void> {
   await expect(page.locator("#welcomeUrlInput")).toBeVisible();
 }
 
-async function startGame(page: Page, debug = false): Promise<void> {
+async function startGame(page: Page): Promise<void> {
   const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
-  if (debug) {
-    const index = fs.readFileSync(path.resolve("dist/client/index.html"), "utf8");
-    const debugIndex = index.replace(
-      "</head>",
-      '<script>window.__WEBCRAWL_RUNTIME_CONFIG__={"debug":true};</script></head>',
-    );
-    await page.route("http://127.0.0.1:3000/", route => route.fulfill({
-      status: 200,
-      contentType: "text/html",
-      body: debugIndex,
-    }));
-  }
   await stubRemoteFetchFallbacks(page, fixture);
   await page.route("**/api/fetch?**", (route) => route.fulfill({
     status: 200,
@@ -463,13 +451,15 @@ test("loads the server-hosted three-room test level", async ({ page }) => {
   expect(links).toEqual([`${levelUrl}?path=left`, `${levelUrl}?path=right`]);
 });
 
-test("starts with 1000 HP when server debug mode is enabled", async ({ page }) => {
-  await startGame(page, true);
+test("uses the build-time VITE_DEBUG flag for starting HP", async ({ page }) => {
+  await startGame(page);
   const game = page.locator("#gameCanvas");
-  await expect(game).toHaveAttribute("data-debug-mode", "true");
-  await expect(game).toHaveAttribute("data-player-max-hp", "1000");
-  await expect(game).toHaveAttribute("data-player-hp", "1000");
-  expect(await playerHp(page)).toBe(1_000);
+  const debug = process.env.VITE_DEBUG === "true";
+  const maxHp = debug ? 1_000 : PLAYER_SPEC.maxHp;
+  await expect(game).toHaveAttribute("data-debug-mode", String(debug));
+  await expect(game).toHaveAttribute("data-player-max-hp", String(maxHp));
+  await expect(game).toHaveAttribute("data-player-hp", String(maxHp));
+  expect(await playerHp(page)).toBe(maxHp);
 });
 
 test("reports the configured collision-debug state", async ({ page }) => {

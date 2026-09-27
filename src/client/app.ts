@@ -115,10 +115,7 @@ import { requestMobileFullscreen } from "./ui/fullscreen";
 import { createThoughtPicker } from "./ui/loading-texts";
 import { setupWelcomePrompt, type WelcomePromptHandle } from "./ui/welcome-prompt";
 
-const runtimeConfig = (window as Window & {
-  __WEBCRAWL_RUNTIME_CONFIG__?: { debug?: boolean };
-}).__WEBCRAWL_RUNTIME_CONFIG__;
-const DEBUG_MODE = runtimeConfig?.debug === true;
+const DEBUG_MODE = import.meta.env.VITE_DEBUG === "true";
 const MONSTERS_ENABLED = import.meta.env.VITE_NO_MONSTERS !== "true";
 const PLAYER_MAX_HP = DEBUG_MODE ? 1_000 : PLAYER_SPEC.maxHp;
 

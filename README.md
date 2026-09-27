@@ -34,6 +34,14 @@ npm run dev
 
 Open `http://127.0.0.1:5173`. Vite proxies `/api` requests to the backend on port 3000.
 
+To start with 1,000 HP for debugging, set the Vite compile-time flag before starting the dev server:
+
+```bash
+VITE_DEBUG=true npm run dev
+```
+
+For a debug production build, run `VITE_DEBUG=true npm run build` before `npm start`. Restart Vite or rebuild after changing the flag. Collision overlays use the separate `VITE_DEBUG_HITBOXES=true` flag.
+
 For a small local crawl, enter `http://127.0.0.1:5173/test-level.html` in the game's URL field. The test page has three rooms and two links back to alternate routes through the same level. With the production server, use `http://127.0.0.1:3000/test-level.html` instead.
 
 Optional backend environment variables:

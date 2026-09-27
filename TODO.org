@@ -1252,6 +1252,7 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Sentries sometimes don't shoot even though there's a clear line of sight to the player. Scenery should be ignored by monster line-of-sight computation for shooting.
+- Monster's line-of-sight computation takes descructible scenery as blocking, which shouldn't be the case.
 
 * DONE UI improvements
 :LOGBOOK:
@@ -1272,8 +1273,12 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Portals should activate after all bosses & revealed monsters on the level are defeated.
 
 * Boss rebalance
-- All bosses are pretty easy to kill.
+- All bosses are pretty easy to kill. Make them faster.
 - Bosses should have multiple stages with different attack patterns depending on their HP. Let's go for three stages, with the final one being the most "intense" one.
+
+- Remove the "stage" from the boss name.
+- Remove the boss "rings" that are underneath them.
+- Boss health bar & name should show at the bottom of the screen (above the UI panels) whenever the boss is discovered and alive.
 
 * Enemy rebalance
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.
