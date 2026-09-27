@@ -1467,6 +1467,39 @@ describe("deterministic room contents", () => {
     expect(decorationSpecsForCorridor(shortLink, 1).length).toBeLessThan(decorationSpecsForCorridor(longLink, 1).length);
   });
 
+  it("spaces scenery along long and turning corridors without stacking props", () => {
+    const source = node(0, null, 0);
+    const target = node(1, 0, 1);
+    const length = ENVIRONMENT_SEGMENT_SIZE * 20;
+    const link: LayoutLink = {
+      id: "long-corridor", source, target, direction: "S", ownerRoomId: source.id,
+      width: WORLD_GEOMETRY.corridorHalfWidth * 2,
+      points: [{ x: 0, y: 0 }, { x: 0, y: length }, { x: length / 2, y: length }],
+    };
+    const decorations = decorationSpecsForCorridor(link, 4);
+    expect(decorations.length).toBeGreaterThan(3);
+    expect(decorations).toEqual(decorationSpecsForCorridor(link, 4));
+    for (const [index, item] of decorations.entries()) {
+      for (const previous of decorations.slice(0, index)) {
+        expect(Math.hypot(item.x - previous.x, item.y - previous.y))
+          .toBeGreaterThanOrEqual((item.size + previous.size) / 2);
+      }
+    }
+    expect(decorations.some(item => item.y < length / 2)).toBe(true);
+    expect(decorations.some(item => item.x > 0)).toBe(true);
+
+    // Forked corridors may share a trunk; they must not duplicate its props.
+    const shared = { ...link, id: "shared-trunk" };
+    const generated = buildDecorations({ nodes: [source, target], links: [link, shared], hiddenCount: 0 }, new Map(), 4)
+      .filter(item => item.kind === "corridor-prop");
+    for (const [index, item] of generated.entries()) {
+      for (const previous of generated.slice(0, index)) {
+        expect(Math.hypot(item.x - previous.x, item.y - previous.y))
+          .toBeGreaterThanOrEqual((item.size + previous.size) / 2);
+      }
+    }
+  });
+
   it("scales monster stats and includes sentries on deeper floors", () => {
     const rooms = Array.from({ length: 200 }, (_, index) => node(index + 1200, 0, 1, {
       tag: "article",

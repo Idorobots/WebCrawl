@@ -355,16 +355,18 @@ export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decorat
   const difficulty = floorDifficulty(floor);
   const expected = corridorSegmentLength(link) * sceneryDensityForFloor(floor);
   const count = Math.max(2, Math.floor(expected)) + (seed % 2);
-  return Array.from({ length: count }, (_, index) => {
+  const decorations: Decoration[] = [];
+  for (let index = 0; index < count; index += 1) {
     const itemSeed = stableHash(`${seed}|${index}`);
     const position = pointAlongCorridor(
       link,
-      index === 0 ? 0.5 : index === 1 ? 0.28 : 0.72,
+      (index + 1) / (count + 1),
       (index % 2 ? 1 : -1) * world(26),
     );
     const definition = SCENERY_DEFINITIONS[itemSeed % SCENERY_DEFINITIONS.length]!;
+    if (decorations.some(item => corridorDecorationsOverlap(item, { ...position, size: definition.size }))) continue;
     const hp = definition.destructible ? 3 + (itemSeed % 3) + Math.floor(difficulty / 3) : 0;
-    return {
+    decorations.push({
       ...definition,
       id: `${link.id}::decor-${index}`,
       roomId: link.ownerRoomId,
@@ -378,8 +380,13 @@ export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decorat
       hp,
       destroyed: false,
       dropKind: definition.destructible ? sceneryDropKindForSeed(itemSeed, definition.definitionId) : null,
-    };
-  });
+    });
+  }
+  return decorations;
+}
+
+function corridorDecorationsOverlap(left: Pick<Decoration, "x" | "y" | "size">, right: Pick<Decoration, "x" | "y" | "size">): boolean {
+  return Math.hypot(left.x - right.x, left.y - right.y) < (left.size + right.size) / 2;
 }
 
 function pointToSegmentDistance(point: Point, start: Point, end: Point): number {
@@ -463,13 +470,19 @@ export function buildDecorations(
     room,
     doorsByRoom.get(room.id) ?? [],
   ));
+  const corridorItems: Decoration[] = [];
+  for (const link of layout.links) {
+    for (const item of decorationSpecsForCorridor(link, floor)) {
+      if (!corridorItems.some(placed => corridorDecorationsOverlap(placed, item))) corridorItems.push(item);
+    }
+  }
   return [
     ...roomItems,
     ...layout.nodes.flatMap(room => {
       const browser = contentBrowserForRoom(room);
       return browser ? [browser] : [];
     }),
-    ...layout.links.flatMap(link => decorationSpecsForCorridor(link, floor)),
+    ...corridorItems,
   ].map((item) => {
     const state = savedStates.get(item.id);
     return {
