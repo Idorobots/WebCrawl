@@ -1067,7 +1067,6 @@ The goal is to be able to generate a room with all its enemies that already incl
 - Use the footprints for enemy/scenery collision detection and blocking.
 
 
-
 * DONE Additional scenery
 :LOGBOOK:
 - State "DONE"       from              [2026-09-27 Sun 16:49]
@@ -1272,7 +1271,10 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 
 - Portals should activate after all bosses & revealed monsters on the level are defeated.
 
-* Boss rebalance
+* DONE Boss rebalance
+:LOGBOOK:
+- State "DONE"       from              [2026-09-27 Sun 23:53]
+:END:
 - Bosses should have multiple stages with different attack patterns depending on their HP. Let's go for three stages, with the final one being the most "intense" one.
 - Remove the "stage" from the boss name.
 - Remove the boss "rings" that are underneath them.
@@ -1341,3 +1343,4 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Some scenery items have a very weird choice of debris
 - Asset sizes are arbitrary, need to be tuned
 - Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
+- When entering a boss arena, camera jumps up immediately, while exiting it animates nicely. It should animate nicely both ways.

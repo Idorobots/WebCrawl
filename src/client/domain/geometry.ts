@@ -28,6 +28,76 @@ export function pointInRoomFloor(x: number, y: number, room: GraphNode, radius =
   return left <= right && top <= bottom && x >= left && x <= right && y >= top && y <= bottom;
 }
 
+export interface FloorBounds {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** Boundaries at which corridor walkability can change (body, turns, and door openings). */
+export function corridorFloorBounds(link: LayoutLink, radius = PLAYER_SPEC.radius): FloorBounds[] {
+  if (link.direct) {
+    const door = link.points[0];
+    const across = WORLD_GEOMETRY.doorOpeningWidth / 2 - radius;
+    if (!door || across < 0) return [];
+    const along = radius + WORLD_GEOMETRY.wallThickness;
+    return [link.direction === "E" || link.direction === "W"
+      ? { left: door.x - along, right: door.x + along,
+        top: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY - across,
+        bottom: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY + across }
+      : { left: door.x - across, right: door.x + across, top: door.y - along, bottom: door.y + along }];
+  }
+  const bounds: FloorBounds[] = [];
+  const width = link.width || WORLD_GEOMETRY.corridorHalfWidth * 2;
+  for (let index = 1; index < link.points.length; index += 1) {
+    const start = link.points[index - 1]!;
+    const end = link.points[index]!;
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    if (!length) continue;
+    const unitX = (end.x - start.x) / length;
+    const unitY = (end.y - start.y) / length;
+    const bodyStart = index === 1
+      ? { x: start.x + unitX * WORLD_GEOMETRY.wallThickness, y: start.y + unitY * WORLD_GEOMETRY.wallThickness }
+      : start;
+    const bodyEnd = index === link.points.length - 1
+      ? { x: end.x - unitX * WORLD_GEOMETRY.wallThickness, y: end.y - unitY * WORLD_GEOMETRY.wallThickness }
+      : end;
+    const halfWidth = width / 2 - radius;
+    if (halfWidth >= 0) {
+      bounds.push(start.y === end.y
+        ? { left: Math.min(bodyStart.x, bodyEnd.x), right: Math.max(bodyStart.x, bodyEnd.x),
+          top: start.y - halfWidth, bottom: start.y + halfWidth }
+        : { left: start.x - halfWidth, right: start.x + halfWidth,
+          top: Math.min(bodyStart.y, bodyEnd.y), bottom: Math.max(bodyStart.y, bodyEnd.y) });
+      if (index < link.points.length - 1) {
+        bounds.push({ left: end.x - halfWidth, right: end.x + halfWidth,
+          top: end.y - halfWidth, bottom: end.y + halfWidth });
+      }
+    }
+    const doorwayHalf = Math.max(0, WORLD_GEOMETRY.doorOpeningWidth / 2 - radius);
+    const offsetY = start.y === end.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
+    const addDoor = (inside: Point, outside: Point): void => {
+      bounds.push(start.y === end.y
+        ? { left: Math.min(inside.x, outside.x), right: Math.max(inside.x, outside.x),
+          top: inside.y - doorwayHalf, bottom: inside.y + doorwayHalf }
+        : { left: inside.x - doorwayHalf, right: inside.x + doorwayHalf,
+          top: Math.min(inside.y, outside.y), bottom: Math.max(inside.y, outside.y) });
+    };
+    if (index === 1) addDoor(
+      { x: start.x - unitX * radius, y: start.y - unitY * radius + offsetY },
+      { x: start.x + unitX * WORLD_GEOMETRY.wallThickness,
+        y: start.y + unitY * WORLD_GEOMETRY.wallThickness + offsetY },
+    );
+    if (index === link.points.length - 1) addDoor(
+      { x: end.x + unitX * radius, y: end.y + unitY * radius + offsetY },
+      { x: end.x - unitX * WORLD_GEOMETRY.wallThickness,
+        y: end.y - unitY * WORLD_GEOMETRY.wallThickness + offsetY },
+    );
+  }
+  return bounds;
+}
+
 /** Room ownership must agree with the rectangular floor used for movement. */
 export function roomContainingFloorPoint(rooms: readonly GraphNode[], point: Point): GraphNode | null {
   return rooms.find(room => pointInRoomFloor(point.x, point.y, room, 0)) ?? null;

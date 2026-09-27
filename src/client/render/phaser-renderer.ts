@@ -71,6 +71,7 @@ import {
   ELLIPTICAL_LIGHT_PIPELINE,
   EllipticalLightPipeline,
 } from "./elliptical-light-pipeline";
+import { buildBlockedWallRegions } from "./wall-debug-plan";
 
 const textureKey = (asset: string): string => `asset:${asset}`;
 const SEGMENT_SIZE = WORLD_GEOMETRY.segmentSize;
@@ -370,6 +371,7 @@ export class PhaserRenderer {
   private corridorStatics = new Map<string, StaticObject[]>();
   private bulletSprites = new Map<string, Phaser.GameObjects.Image>();
   private debugGraphics: Phaser.GameObjects.Graphics | null = null;
+  private debugWallGraphics: Phaser.GameObjects.Graphics | null = null;
   private decorations: Phaser.GameObjects.Container[] = [];
   private decorationSprites = new Map<string, Phaser.GameObjects.Image>();
   private decorationShadows = new Map<string, Phaser.GameObjects.Image>();
@@ -591,6 +593,8 @@ export class PhaserRenderer {
     for (const object of this.bulletSprites.values()) object.destroy(true);
     this.bulletSprites.clear();
     this.debugGraphics?.clear();
+    this.debugWallGraphics?.clear();
+    delete this.host.dataset.debugWallRegions;
     this.destroyAll(this.decorations);
     this.decorationSprites.clear();
     this.decorationShadows.clear();
@@ -953,6 +957,7 @@ export class PhaserRenderer {
       this.addRoomLight(room, visible);
     }
     this.refreshLocalLightVisibility(true);
+    this.renderDebugWalls();
   }
 
   private updateWorldVisibility(): void {
@@ -2451,20 +2456,36 @@ export class PhaserRenderer {
     this.setHostData("flashlightMinorRadius", String(Math.round(pipeline.flashlight.minorRadius)));
   }
 
+  private renderDebugWalls(): void {
+    if (!SHOW_DEBUG_GEOMETRY || !this.scene || !this.layout) return;
+    const graphics = this.debugWallGraphics ??= this.scene.add.graphics().setDepth(DEBUG_DEPTH - 1);
+    graphics.clear().fillStyle(0xff4b70, 0.35);
+    const regions = buildBlockedWallRegions(this.layout);
+    for (const region of regions) graphics.fillRect(region.x, region.y, region.width, region.height);
+    this.host.dataset.debugWallRegions = String(regions.length);
+  }
+
   private renderDebugGeometry(): void {
     if (!SHOW_DEBUG_GEOMETRY || !this.scene) return;
     const graphics = this.debugGraphics ??= this.scene.add.graphics().setDepth(DEBUG_DEPTH);
     graphics.clear();
+    const drawMovementAnchor = (x: number, y: number, centerY: number, color: number): void => {
+      graphics.lineStyle(world(1), color, 0.95);
+      graphics.lineBetween(x, centerY, x, y);
+      graphics.strokeCircle(x, y, world(6));
+      graphics.fillStyle(color, 1);
+      graphics.fillCircle(x, y, world(3));
+    };
     graphics.lineStyle(world(1), 0x69f7de, 0.9);
     graphics.strokeCircle(this.currentPlayer.x, this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY, PLAYER_SPEC.radius);
+    drawMovementAnchor(this.currentPlayer.x, this.currentPlayer.y,
+      this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY, 0x69f7de);
     for (const monster of this.currentMonsters) {
       if (!monster.active || monster.dead) continue;
+      const centerY = monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind);
       graphics.lineStyle(world(1), 0xff5c77, 0.9);
-      graphics.strokeCircle(
-        monster.x,
-        monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind),
-        monster.radius,
-      );
+      graphics.strokeCircle(monster.x, centerY, monster.radius);
+      drawMovementAnchor(monster.x, monster.y, centerY, 0xff5c77);
     }
     for (const item of this.currentDecorations) {
       if (item.destroyed) continue;

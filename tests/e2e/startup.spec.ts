@@ -465,10 +465,15 @@ test("uses the build-time VITE_DEBUG flag for starting HP", async ({ page }) => 
 
 test("reports the configured collision-debug state", async ({ page }) => {
   await startGame(page);
-  await expect(page.locator("#gameCanvas")).toHaveAttribute(
+  const canvas = page.locator("#gameCanvas");
+  await expect(canvas).toHaveAttribute(
     "data-debug-hitboxes",
     process.env.VITE_DEBUG_HITBOXES === "true" ? "true" : "false",
   );
+  if (process.env.VITE_DEBUG_HITBOXES === "true") {
+    await expect.poll(async () => Number(await canvas.getAttribute("data-debug-wall-regions")))
+      .toBeGreaterThan(0);
+  }
 });
 
 test("renders ambient lighting and aims the elliptical flashlight at the cursor", async ({ page }) => {
