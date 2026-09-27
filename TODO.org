@@ -1329,3 +1329,7 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Zuckerborg Mark1 CEO of DefaceBooks
 - E-LON CEO of A-AI
 
+* Visual bugs
+- Generic robot debris look weird, should only use dedicated robot debris
+- Some scenery items have a very weird choice of suitable debris
+- Asset sizes are arbitrary

@@ -10,6 +10,7 @@ import {
   MONSTER_FRAMES,
   ROOM_HEIGHT,
   ROOM_WIDTH,
+  SCENERY_ASSETS,
   WORLD_SCALE,
   world,
 } from "../../src/client/config";
@@ -92,6 +93,7 @@ import {
   WEAPON_VISUAL_DEFINITIONS,
   WORLD_GEOMETRY,
   monsterDisplaySize,
+  type RoomSceneryTheme,
 } from "../../src/client/domain/specs";
 import {
   DEFAULT_WEAPON,
@@ -1257,6 +1259,34 @@ describe("deterministic room contents", () => {
     }
   });
 
+  it("uses every new room theme and makes its scenery available to generation", () => {
+    const newThemes: RoomSceneryTheme[] = ["medical", "engine", "escape", "storage", "living"];
+    const rooms = Array.from({ length: 800 }, (_, index) => node(index + 40_000, 0, 1, {
+      tag: "img",
+      lootSeed: stableHash(`new-theme-${index}`),
+    }));
+    const themedAssets = Object.values(SCENERY_ASSETS).filter(asset =>
+      /^assets\/scenery\/(medical|engine|escape|storage|living)\//.test(asset) ||
+      asset === SCENERY_ASSETS.planterDivider
+    );
+    const themeAssets = new Set(Object.values(ROOM_SCENERY_THEMES).flatMap(theme =>
+      [...theme.primary, ...theme.accents].map(entry => entry.definition.visual.normal.frames[0])
+    ));
+    expect(themedAssets).toHaveLength(48);
+    expect(themedAssets.filter(asset => !themeAssets.has(asset))).toEqual([]);
+    const spawnedAssets = new Set(rooms.flatMap(room => decorationSpecsForRoom(room).map(item => item.visual.normal.frames[0])));
+    expect(themedAssets.filter(asset => !spawnedAssets.has(asset))).toEqual([]);
+    for (const theme of newThemes) {
+      const matching = rooms.filter(room => roomSceneryThemeForRoom(room) === theme);
+      expect(matching.length, theme).toBeGreaterThan(0);
+      const primaryIds = new Set(ROOM_SCENERY_THEMES[theme].primary.map(entry => entry.definition.definitionId));
+      expect(matching.some(room => decorationSpecsForRoom(room).some(item => primaryIds.has(item.definitionId)))).toBe(true);
+      expect(roomSceneryThemeForRoom(matching[0]!)).toBe(theme);
+    }
+    expect(ROOM_SCENERY_THEMES.lab.primary.some(entry => entry.definition.definitionId === "evacuation-kiosk")).toBe(false);
+    expect(ROOM_SCENERY_THEMES.escape.primary.some(entry => entry.definition.definitionId === "evacuation-kiosk")).toBe(true);
+  });
+
   it("relocates generated monsters away from obstacle footprints", () => {
     const combatRoom = node(9, 0, 1, {
       x: 500,
@@ -2094,6 +2124,34 @@ describe("deterministic room contents", () => {
     expect(MONSTER_FRAMES.sentryBallistic.up.normal).toEqual([MONSTER_FRAMES.sentryBallistic.up.ranged![0]]);
     expect(MONSTER_FRAMES.sentryBallistic.down.ranged).toHaveLength(4);
     expect(Object.values(EFFECT_FRAMES).every(frames => frames.length === 4)).toBe(true);
+  });
+
+  it("leaves species-specific wrecks and parts when enemies die", () => {
+    for (const [kind, visual] of Object.entries(MONSTER_VISUAL_DEFINITIONS)) {
+      const prefix = `assets/debris/enemies__${kind.replaceAll("-", "_")}__`;
+      expect(visual.destroyed?.slice(0, 2).map(clip => clip.frames[0]), kind).toEqual([
+        `${prefix}wreck.png`,
+        `${prefix}parts.png`,
+      ]);
+      expect(visual.destroyed?.every(clip => clip.origin.y === 0.9375)).toBe(true);
+    }
+  });
+
+  it("uses matching debris for colored barrels, electronics, energy, and fuel props", () => {
+    const assetsFor = (definition: { visual: { destroyed?: readonly SpriteClip[] } }) =>
+      definition.visual.destroyed?.map(clip => clip.frames[0]) ?? [];
+    expect(assetsFor(DECORATION_DEFINITIONS.barrelRed)).toContain(DEBRIS_ASSETS.redBarrelWreck);
+    expect(assetsFor(DECORATION_DEFINITIONS.barrelCoolant)).toEqual(expect.arrayContaining([
+      DEBRIS_ASSETS.blueBarrelWreck, DEBRIS_ASSETS.turquoiseBarrelShards,
+    ]));
+    expect(assetsFor(DECORATION_DEFINITIONS.barrelHazard)).toContain(DEBRIS_ASSETS.yellowBarrelWreck);
+    expect(assetsFor(DECORATION_DEFINITIONS.terminal)).toContain(DEBRIS_ASSETS.cyanMonitor);
+    expect(assetsFor(DECORATION_DEFINITIONS.serverRack)).toContain(DEBRIS_ASSETS.electronicsCabinet);
+    expect(assetsFor(DECORATION_DEFINITIONS.energyCapacitor)).toContain(DEBRIS_ASSETS.purpleEnergyCoil);
+    expect(assetsFor(DECORATION_DEFINITIONS.fuelPumpSkid)).toEqual(expect.arrayContaining([
+      DEBRIS_ASSETS.greenChemicalBarrel, DEBRIS_ASSETS.orangeFuelBarrel,
+    ]));
+    expect(assetsFor(DECORATION_DEFINITIONS.canisterRack)).toContain(DEBRIS_ASSETS.purpleStorageBarrel);
   });
 
   it("keeps destruction, collision, debris, and spawner visuals as separate concerns", () => {
