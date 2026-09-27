@@ -57,7 +57,7 @@ import {
 import { contentPagesForRoom, domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { chooseReachablePath, monsterEscapeStep, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "./domain/pathfinding";
-import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
+import { closestPortalWithUrl, entryPortalFor, hasBlockingPortalMonsters, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
 import { forSpatialCells, indexMonsterHitboxes, monsterCollisionCandidates, spatialCellKey } from "./domain/spatial";
 import {
@@ -533,6 +533,7 @@ function markVisited(room: GraphNode | null): void {
   updateFogOfWar();
   activateMonstersInRoom(room.id);
   renderDecorations();
+  updateFloorPortals();
   renderInteractiveObjects();
 }
 
@@ -1354,7 +1355,7 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string): Monster[] {
 }
 
 function updateFloorPortals(): boolean {
-  const changed = updatePortalAvailability(currentStairs, currentMonsters);
+  const changed = updatePortalAvailability(currentStairs, currentMonsters, visitedRooms);
   if (changed && !currentStairs.some(stair => stair.enabled)) cancelPortalActivationSound();
   updatePortalContacts(
     currentStairs,
@@ -1382,7 +1383,7 @@ function schedulePortalIntroEnd(playSound: boolean): void {
   if (playSound) {
     portalIntroSoundTimer = window.setTimeout(() => {
       portalIntroSoundTimer = null;
-      if (currentMonsters.some(monster => !monster.dead) &&
+      if (hasBlockingPortalMonsters(currentMonsters, visitedRooms) &&
           currentStairs.some(stair => stair.url !== null && !stair.enabled)) {
         renderer.playPortalShutdownSound();
       }
@@ -3435,7 +3436,6 @@ function renderGraph(
 
   currentMonsters = MONSTERS_ENABLED ? buildMonsters(layout, pageUrl) : [];
   monsterCells = indexMonsterHitboxes(currentMonsters);
-  updateFloorPortals();
   renderer.setPortalStartupPreview(true);
 
   const root =
@@ -3465,13 +3465,7 @@ function renderGraph(
     discoveredRoomsByPage.set(currentStateId, new Set(visitedRooms));
   }
   portalContacts.clear();
-  updatePortalContacts(
-    currentStairs,
-    player,
-    PORTAL_DEFINITION.contactRadius,
-    portalContacts,
-    PORTAL_DEFINITION.contactOffset,
-  );
+  updateFloorPortals();
 
   renderer.setWorld(layout, visitedRooms);
   updateFogOfWar();

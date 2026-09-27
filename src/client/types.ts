@@ -109,6 +109,8 @@ export interface GraphNode extends Point {
   height: number;
   lootSeed: number;
   isRoot: boolean;
+  /** Selected combat arena on this floor, independent of the room's HTML tag. */
+  isBossArena?: boolean;
   isHidden: boolean;
   parentSide: Direction | null;
   directionFromParent: Direction | null;

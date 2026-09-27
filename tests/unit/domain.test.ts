@@ -1056,32 +1056,58 @@ describe("portal entry", () => {
     expect(closestPortalWithUrl(portals, { x: 300, y: 100 }, 80)).toBeNull();
   });
 
-  it("locks both directions until every monster on the floor dies, then relocks for a new spawn", () => {
+  it("requires the boss and every enemy from revealed rooms, but ignores unrevealed enemies", () => {
     const down = { ...portal };
     const up = { ...portal, id: "room-1::portal-up", type: "up" as const, url: "https://example.com/previous" };
     const firstFloorUp = { ...up, id: "room-0::portal-up", url: null };
     const stairs = [down, up, firstFloorUp];
-    const monsters = [{ dead: true }, { dead: false }];
+    const monsters = [
+      { dead: false, spawnRoomId: 0, roomId: 0, bossKind: undefined },
+      { dead: false, spawnRoomId: 1, roomId: 1, bossKind: "fork-bomb" as const },
+      { dead: false, spawnRoomId: 2, roomId: 2, bossKind: undefined },
+      { dead: false, spawnRoomId: 3, roomId: 3, bossKind: undefined },
+    ];
+    const revealed = new Set([0]);
 
-    expect(updatePortalAvailability(stairs, monsters)).toBe(true);
+    expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
     expect(stairs.map(stair => stair.enabled)).toEqual([false, false, false]);
-    expect(updatePortalAvailability(stairs, monsters)).toBe(false);
+    expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(false);
 
-    monsters[1]!.dead = true;
-    expect(updatePortalAvailability(stairs, monsters)).toBe(true);
+    monsters[1]!.dead = true; // The boss blocks even before its room is revealed.
+    expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(false);
+    monsters[0]!.dead = true;
+    expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
     expect(stairs.map(stair => stair.enabled)).toEqual([true, true, false]);
 
-    monsters.push({ dead: false });
-    expect(updatePortalAvailability(stairs, monsters)).toBe(true);
+    revealed.add(2);
+    expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
     expect(stairs.map(stair => stair.enabled)).toEqual([false, false, false]);
     monsters[2]!.dead = true;
-    expect(updatePortalAvailability(stairs, monsters)).toBe(true);
+    expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
     expect(stairs.map(stair => stair.enabled)).toEqual([true, true, false]);
+
+    // Reinforcements from a revealed room also relock portals.
+    monsters.push({ dead: false, spawnRoomId: 2, roomId: 3, bossKind: undefined });
+    expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
+    monsters[4]!.dead = true;
+    expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
+    expect(stairs.map(stair => stair.enabled)).toEqual([true, true, false]);
+  });
+
+  it("counts enemies that enter a revealed room even if they originated elsewhere", () => {
+    const stairs = [{ ...portal, enabled: false }];
+    const monster = { dead: false, spawnRoomId: 2, roomId: 2, miniboss: true };
+    const revealed = new Set([0]);
+    expect(updatePortalAvailability(stairs, [monster], revealed)).toBe(true);
+    expect(stairs[0]?.enabled).toBe(true);
+    monster.roomId = 0;
+    expect(updatePortalAvailability(stairs, [monster], revealed)).toBe(true);
+    expect(stairs[0]?.enabled).toBe(false);
   });
 
   it("opens destination portals immediately on floors without monsters", () => {
     const stairs = [{ ...portal, enabled: false }, { ...portal, type: "up" as const, url: null }];
-    expect(updatePortalAvailability(stairs, [])).toBe(true);
+    expect(updatePortalAvailability(stairs, [], new Set())).toBe(true);
     expect(stairs.map(stair => stair.enabled)).toEqual([true, false]);
   });
 
@@ -1402,6 +1428,7 @@ describe("deterministic room contents", () => {
     });
     const script = node(1, null, 0, {
       tag: "script",
+      isBossArena: true,
       lootSeed: stableHash("arena-density"),
       isRoot: false,
       width: ROOM_DEFINITIONS.boss.width,
@@ -1417,6 +1444,7 @@ describe("deterministic room contents", () => {
     const sceneryFor = (room: GraphNode) => decorationSpecsForRoom(room, 1)
       .map(item => ({ kind: item.kind, obstacle: item.obstacle, destructible: item.destructible, origin: item.origin }));
     expect(sceneryFor(script)).toEqual(sceneryFor(section));
+    expect(monsterSpecsForRoom({ ...script, isBossArena: false }).some(monster => monster.bossKind)).toBe(false);
   });
 
   it("never spawns enemies in corridors", () => {
@@ -1567,10 +1595,14 @@ describe("deterministic room contents", () => {
       .slice(0, 6);
     expect(rooms).toHaveLength(6);
 
-    const layout = { nodes: rooms, links: [], hiddenCount: 0 };
+    const arena = node(30_300, 0, 1, {
+      tag: "script", isBossArena: true, isRoot: false,
+      x: -ROOM_WIDTH * 3, lootSeed: stableHash("fallback-arena"),
+    });
+    const layout = { nodes: [...rooms, arena], links: [], hiddenCount: 0 };
     const generated = buildMonsters(layout, new Map(), new Set(), 3);
     const reordered = buildMonsters(
-      { ...layout, nodes: [...rooms].reverse() },
+      { ...layout, nodes: [...layout.nodes].reverse() },
       new Map(),
       new Set(),
       3,
@@ -1579,24 +1611,72 @@ describe("deterministic room contents", () => {
     const reorderedMinibosses = reordered.filter(monster => monster.miniboss);
 
     expect(minibosses).toHaveLength(1);
+    expect(minibosses[0]?.spawnRoomId).not.toBe(arena.id);
     expect(reorderedMinibosses).toHaveLength(1);
     expect(reorderedMinibosses[0]?.id).toBe(minibosses[0]?.id);
   });
 
-  it("turns every script room into a scaled boss arena without removing ambient threats", () => {
+  it("uses the entrance for the miniboss when it is the only alternative to the arena", () => {
+    const root = node(0, null, 0);
+    const candidate = Array.from({ length: 100 }, (_, index) => node(1, 0, 1, {
+      lootSeed: stableHash(`two-room-arena-${index}`), isBossArena: true,
+    })).find(room => monsterSpecsForRoom(room).every(monster => !monster.miniboss))!;
+    const layout = layoutOrthogonal({
+      nodes: [root, candidate], links: [{ source: 0, target: 1 }],
+      originalCount: 2, coalescedCount: 0, truncated: false,
+    });
+    const monsters = buildMonsters(layout, new Map(), new Set());
+    const miniboss = monsters.find(monster => monster.miniboss);
+    expect(monsters.filter(monster => monster.bossKind)).toHaveLength(1);
+    expect(miniboss?.spawnRoomId).toBe(root.id);
+    expect(buildMonsters(layout, new Map(), new Set()).find(monster => monster.miniboss)?.id).toBe(miniboss?.id);
+  });
+
+  it("skips bosses and minibosses when the floor has only one room", () => {
+    const root = node(0, null, 0, { tag: "script" });
+    const layout = layoutOrthogonal({
+      nodes: [root], links: [], originalCount: 1, coalescedCount: 0, truncated: false,
+    });
+    expect(layout.nodes[0]?.isBossArena).toBe(false);
+    expect(buildMonsters(layout, new Map(), new Set())).toEqual([]);
+  });
+
+  it("breaks equal room-to-room distances using the floor seed, independently of node order", () => {
+    const root = node(0, null, 0, { lootSeed: stableHash("tie-root") });
+    const first = node(1, 0, 1, { lootSeed: stableHash("tie-first") });
+    const second = node(2, 0, 1, { lootSeed: stableHash("tie-second") });
+    const graph = {
+      nodes: [root, first, second], links: [{ source: 0, target: 1 }, { source: 0, target: 2 }],
+      originalCount: 3, coalescedCount: 0, truncated: false,
+    };
+    const expected = [first, second].sort((left, right) =>
+      stableHash(`${root.lootSeed}|boss-arena|${right.lootSeed}|${right.id}`) -
+      stableHash(`${root.lootSeed}|boss-arena|${left.lootSeed}|${left.id}`) || left.id - right.id
+    )[0]!.id;
+    expect(layoutOrthogonal(graph).nodes.find(room => room.isBossArena)?.id).toBe(expected);
+    expect(layoutOrthogonal({ ...graph, nodes: [root, second, first] })
+      .nodes.find(room => room.isBossArena)?.id).toBe(expected);
+  });
+
+  it("turns the farthest room into a scaled boss arena regardless of its tag", () => {
     const root = node(0, null, 0);
     const scriptRoom = node(1, 0, 1, {
       tag: "script",
       lootSeed: stableHash("boss-script"),
     });
+    const farthest = node(2, 1, 2, { tag: "img", lootSeed: stableHash("boss-image") });
     const bossLayout = layoutOrthogonal({
-      nodes: [root, scriptRoom],
-      links: [{ source: 0, target: 1 }],
-      originalCount: 2,
+      nodes: [root, scriptRoom, farthest],
+      links: [{ source: 0, target: 1 }, { source: 1, target: 2 }],
+      originalCount: 3,
       coalescedCount: 0,
       truncated: false,
     });
-    const arena = bossLayout.nodes.find(room => room.tag === "script")!;
+    const arena = bossLayout.nodes.find(room => room.isBossArena)!;
+    expect(arena.id).toBe(farthest.id);
+    expect(bossLayout.nodes.find(room => room.id === scriptRoom.id)?.isBossArena).toBe(false);
+    expect(monsterSpecsForRoom(bossLayout.nodes.find(room => room.id === scriptRoom.id)!)
+      .some(monster => monster.bossKind)).toBe(false);
     expect(arena).toMatchObject({
       shape: "rectangle",
       width: ROOM_DEFINITIONS.boss.width,
@@ -1640,9 +1720,10 @@ describe("deterministic room contents", () => {
     );
     const rosterRoot = node(5_000, null, 0, { lootSeed: stableHash("boss-roster-root") });
     const rosterScripts = Array.from({ length: 20 }, (_, index) => node(5_001 + index, rosterRoot.id, 1, {
-      tag: "script",
+      tag: "section",
       lootSeed: stableHash(`roster-script-${index}`),
       isRoot: false,
+      isBossArena: true,
       x: index * 1_000,
     }));
     const roster = buildMonsters(
@@ -1675,6 +1756,7 @@ describe("deterministic room contents", () => {
       y: 400,
     }));
     const room = scriptRooms.find(candidate => bossKindForRoom(candidate) === "fork-bomb")!;
+    room.isBossArena = true;
     const boss = bossSpecForRoom(room, 6);
     const firstSummon = monsterSpecForBossSummon(boss, 6, 0);
     expect(firstSummon).toEqual(monsterSpecForBossSummon(boss, 6, 0));
@@ -1714,6 +1796,7 @@ describe("deterministic room contents", () => {
       parentId: 0,
       isRoot: false,
       tag: "script",
+      isBossArena: true,
       x: 250,
       y: -150,
       width: ROOM_DEFINITIONS.boss.width,

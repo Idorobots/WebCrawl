@@ -336,7 +336,7 @@ function seededUnit(seed: number): number {
 }
 
 function roomIsBright(room: GraphNode): boolean {
-  return room.isRoot || room.tag === "script" || Math.abs(room.id) % 2 === 0;
+  return room.isRoot || room.isBossArena === true || Math.abs(room.id) % 2 === 0;
 }
 
 function assetPaths(...sources: unknown[]): string[] {
@@ -1098,7 +1098,7 @@ export class PhaserRenderer {
 
   private roomFloorAsset(room: GraphNode): string {
     if (room.isRoot) return ASSETS.floorPlain;
-    if (room.tag === "script") return ASSETS.floorHex;
+    if (room.isBossArena) return ASSETS.floorHex;
     return BASE_FLOOR_ASSETS[room.lootSeed % BASE_FLOOR_ASSETS.length] ?? ASSETS.floorPlain;
   }
 
@@ -1348,7 +1348,7 @@ export class PhaserRenderer {
   private addRoomLight(room: GraphNode, visible: boolean): void {
     if (!this.lightingEnabled || !this.scene) return;
     const seed = room.lootSeed + room.id * 101;
-    const bossArena = room.tag === "script";
+    const bossArena = room.isBossArena === true;
     const dimRoom = !roomIsBright(room);
     const dimRoomColors = [0x7ec8ff, 0x8edaff, 0xa6c8ff] as const;
     const roomRadius = Math.hypot(room.width, room.height) / 2;
@@ -1395,7 +1395,7 @@ export class PhaserRenderer {
     if (!this.lightingEnabled || !this.scene) return;
     const profiles: WorldLight[] = [];
     const brightCorridor = roomIsBright(link.target);
-    const bossCorridor = link.target.tag === "script";
+    const bossCorridor = link.target.isBossArena === true;
     const baseIntensity = bossCorridor ? 0.78 : brightCorridor ? 0.76 : 0.24;
     const radius = Math.max(link.width * 1.15, CORRIDOR_LIGHT_SPACING * 0.8);
     const color = bossCorridor ? 0xd94b52 : brightCorridor ? 0xeaf8ff : 0x5f8ca8;
@@ -1438,7 +1438,7 @@ export class PhaserRenderer {
       this.corridorLights.get(link.id)?.some(profile => profile.enabled)
     );
     this.setHostData("roomLights", String(visibleRooms.length));
-    this.setHostData("bossRoomLights", String(visibleRooms.filter(room => room.tag === "script").length));
+    this.setHostData("bossRoomLights", String(visibleRooms.filter(room => room.isBossArena).length));
     this.setHostData("corridorLights", String(visibleCorridors.reduce(
       (count, link) => count + (this.corridorLights.get(link.id)?.length ?? 0),
       0,
@@ -1456,7 +1456,7 @@ export class PhaserRenderer {
     this.setHostData("fullRoomLights", String([...this.roomLights.values()]
       .filter(profile => profile.fullyLit).length));
     const root = layout.nodes.find(room => room.isRoot);
-    const boss = layout.nodes.find(room => room.tag === "script");
+    const boss = layout.nodes.find(room => room.isBossArena);
     if (root) this.setHostData("rootRoomLightIntensity", this.roomLights.get(root.id)!.baseIntensity.toFixed(2));
     if (boss) this.setHostData("bossRoomLightIntensity", this.roomLights.get(boss.id)!.baseIntensity.toFixed(2));
     this.setHostData("bossRoomLightColor", "ff3d42");
@@ -2685,7 +2685,7 @@ export class PhaserRenderer {
   }
 
   setCameraRoom(room: GraphNode | null, immediate = false): void {
-    const bossRoom = room?.tag === "script" ? room : null;
+    const bossRoom = room?.isBossArena ? room : null;
     const nextRoomId = bossRoom?.id ?? null;
     this.cameraRoom = bossRoom;
     if (!immediate && nextRoomId === this.cameraRoomId) return;

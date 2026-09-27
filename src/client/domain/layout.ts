@@ -44,7 +44,7 @@ function configureRoom(node: GraphNode, childCount: number): void {
   const exitCount = childCount + (node.isRoot ? 0 : 1);
   node.shape = "rectangle";
   node.childCount = childCount;
-  if (node.tag === "script" || exitCount > 8) {
+  if (node.isBossArena || exitCount > 8) {
     node.width = ROOM_DEFINITIONS.boss.width;
     node.height = ROOM_DEFINITIONS.boss.height;
     return;
@@ -160,8 +160,35 @@ function routeOverlapsOtherCorridor(
 }
 
 export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
+  const ordinary = placeRooms(graph);
+  if (ordinary.nodes.length < 2) return ordinary;
+  const root = ordinary.nodes.find(room => room.isRoot) ?? ordinary.nodes[0]!;
+  const distance = new Map<number, number>([[root.id, 0]]);
+  const visit = (id: number): void => {
+    for (const link of ordinary.links.filter(link => link.source.id === id)) {
+      distance.set(link.target.id, distance.get(id)! + 1);
+      visit(link.target.id);
+    }
+  };
+  visit(root.id);
+  const candidates = ordinary.nodes.filter(room => room.id !== root.id && distance.has(room.id))
+    .sort((left, right) =>
+      distance.get(right.id)! - distance.get(left.id)! ||
+      stableHash(`${root.lootSeed}|boss-arena|${right.lootSeed}|${right.id}`) -
+        stableHash(`${root.lootSeed}|boss-arena|${left.lootSeed}|${left.id}`) ||
+      left.id - right.id
+    );
+  for (const candidate of candidates) {
+    const layout = placeRooms(graph, candidate.id);
+    if (layout.nodes.some(room => room.id === candidate.id)) return layout;
+  }
+  return ordinary;
+}
+
+function placeRooms(graph: DungeonGraph, bossRoomId?: number): DungeonLayout {
   const nodes = graph.nodes.map(node => ({
-    ...node, hrefs: [...node.hrefs], contentChunks: node.contentChunks?.map(chunk => ({ ...chunk })),
+    ...node, isBossArena: bossRoomId === node.id,
+    hrefs: [...node.hrefs], contentChunks: node.contentChunks?.map(chunk => ({ ...chunk })),
   }));
   const childrenByParent = new Map<number, GraphNode[]>();
   for (const node of nodes) {

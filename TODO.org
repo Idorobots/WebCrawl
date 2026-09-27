@@ -850,7 +850,11 @@ Corridors can be made a bit longer in the generator, so that more variety is ava
 - Both south and north walls can use the same block zones. Use the one from the S walls.
 - Both west and east walls can use the same block zones. Use the one from W walls.
 
-* Wall refactor, again
+* CANCELLED Wall refactor, again
+:LOGBOOK:
+- State "CANCELLED"  from              [2026-09-27 Sun 13:34] \\
+  Nah.
+:END:
 Generate the layout, collect floor segments iterate over all segments and check each one against its surroundings.
 Below are the templates to check against (the tile of focus is the middle tile with its 8 neighbours).
 There are several cases (* is the tile under iteraction, F is floor segment, W is wall, C is corner, empty is empty space):
@@ -993,6 +997,8 @@ turns into:
 [W][W][W]
 [ ][ ][ ]
 
+* Wall refactor, again
+- Add wall T-junctions for directly-connected rooms.
 * Door refactor, continued
 Initially the doors should be closed, but then open when the player or a monster comes near to them, revealing the corridor. Similarly, the doors at the end of a corridor should remain closed, but open when the player or a monster comes near them.
 
@@ -1114,15 +1120,6 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Use the pistol graphic as the default weapon
 
 
-* Enemy rebalance
-- LLaMa boss is too easy to kill - it should always walk towards the player and attempt a heavy melee attack.
-- All bosses are pretty easy to kill.
-- Walking shooters should have a much lower fire rate, they are basically better sentries right now. Their bullet range should also be reduced.
-- Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
-- Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
-- Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
-- Use separate monster appearance propabilities depending on the floor - no sentries on floor 0, etc.
-
 * DONE Gameplay mechanics
 :LOGBOOK:
 - State "DONE"       from              [2026-09-25 Fri 00:07]
@@ -1138,11 +1135,16 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 :END:
 - Show the link URL when player comes close to a portal (similarly to how the content browser shows its content).
 - Play a sound when portals activate once all enemies are destroyed - alerts/access_granted
+* Player mechanics
+- Player's damage multiplier - initially set to 1.0, will be used in the future.
+- Player's shot rate multiplier - initially set to 1.0, will be used in the future.
+- Player's walk speed multiplier - initially set to 1.0, will be used in the future for permanent & temporary effects.
+- Player's critical damage chance - initially set to 0%, will be used in the future. When damage is applied to monsters/scenery check for critical damage chance and apply the regular bullet damage times 3.
+- Player's aim aid - initially set to 0 on desktop and 0.2 on mobile. It should be a parameter that "pulls" player's bullets towards the closest enemy (closest to the bullet). At zero it doesn't affect the bullet trajectory, at any non-zero value it should slightly curve the bullet towards the enemy.
+
 * Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
-- Each floor should have at least one boss monster - if none are generated initially, the most distant room should be promoted to a boss arena. Portals should activate after all bosses on the level are defeated (not all enemies at all, just all bosses).
-- When a floor has no links at all, add a random link (same as I'm feeling lucky button) to one of the rooms. If there is a boss arena, place the link in that arena.
 
 * CANCELLED Gameplay mechanics
 :LOGBOOK:
@@ -1164,23 +1166,40 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 * Easter egg
 Whenever AI is mentioned in the content, render a special Samario content browser.
 
-* Power-ups & enhancements
-- Higher max health
-- Higher damage
-- Health regen
-- Shield regen
-- Ammo regen
-- Critical damage chance
+* Power-ups
+Add a concept of power-ups to the game.
+Power-ups are pickup items that alter the player's state such as HP, damage multiplier, fire rate, etc.
+Power ups should not be available as monster loot, except for a very tiny chance for mini-bosses and guaranteed chance for bosses (bosses should drop either a power-up or a weapon).
+Power ups should have a chance to appear in level rooms on a pedestal (same as weapons). A power-up and a weapon should not appear in the same room.
+When a player picks up a powerup, it is added to the player's state and taken into account whever player's state is consulted - for instance for weapon cooldowns, damage computation etc. The power-ups icon icon should be shown on the player state panel indicating that it's in effect. Show the name of the power up on hover.
+
+Add the following power-ups to the game:
+
+- Higher Valuation - adds 2 hitpoints to the max HP
+- The End is nigh - adds 2 point to the max energy
+- Context utilization - adds 10% to the player's damage multiplier
+- Lower Latency - Faster walking speed by 10%
+- Tok/s - faster shot speed by 10%
+- Vesting - regenerates 0.1 HP every 10 seconds
+- Model training - regenerates 0.1 energy every 10 seconds
+- Quota Reset - regenerates 1% of the max ammo for the weapon every 10 seconds
+- DDR - wheneven the player picks up a RAM stick they get an additional RAM stick.
+- Campaign Contribution - Government bailout crystalss last 2 seconds longer
+- Trust me bro benchmark - adds 1% to critical shot damage chance
+
+When the same power-up is picked up multiple times, their effects should stack (i.e. two times critical damage increases the change from 1 to 2%, two times max health increases the HP by 4 points, etc).
+
+Add a line to the prompt following the loot breakdown, explaining that certain power-ups exist (but without revealing what they do). Show random power-up icons in the prompt - 5 on desktop and 3 on mobile.
+
+* Extra Power-ups & enhancements
 - Better loot chance
-- Faster walking speed
-- Faster shot speed
-- "Familiar" robot helping
+- AGI - "Familiar" robot helping the player
 - Map update - shows the whole level layout on the minimap
 - Minimap radar - show a rotating bar that marks monsters on the minimap for a brief moment
 - Better minimap radar - shows monsters on the minimap all the time
 - Minimap locator - shows the player's location & portals on the minimap
 - Temporary Invisibility triggered with a button
-- Slowing bullets
+- Slowing bullets - slow enemies that are hit
 - Stun chance or regular shots
 - Better aim - bullets curve towards the closes enemy slightly
 
@@ -1228,14 +1247,38 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Annimate the health/energy/ammo bars whenever they change.
 - Player's health bar should flash when almost depleted (< 20%).
 
-* Boss fights
+
+* DONE Boss fights
+:LOGBOOK:
+- State "DONE"       from              [2026-09-27 Sun 15:21]
+:END:
+- Script element should no longer be boss arenas. Instead, the most distant room should be promoted to a boss arena. Use the level hash to break ties.
+
+- Each floor should have at least one mini-boss monster - if none are generated initially, select a room distinct to the boss arena at random and promote one of monsters in there to a mini-boss status. Make this deterministic, based on the level hash.
+
+- Portals should activate after all bosses & revealed monsters on the level are defeated.
+
+* Boss rebalance
+- All bosses are pretty easy to kill.
+- Bosses should have multiple stages with different attack patterns depending on their HP. Let's go for three stages, with the final one being the most "intense" one.
+
+* Enemy rebalance
+- Shooting scouts should have a much lower fire rate, they are basically better sentries right now.
+- Walkig shooter bullet range should be reduced.
+- Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
+- Use separate monster appearance propabilities depending on the floor - no sentries on floor 0, etc.
+
+* Enemy rebalance continued
+- Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
+- Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
+
+* Boss fights continued
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
 - Doors should shut behind the player once the arena is entered.
 - All enemies in the boss arena are invulnerable until the boss fight actually begins (player enters the room).
 - Camera should zoom out to show the entire boss arena at once when the fight begins.
 - Should play one of the alert sounds while the boss fight is starting and then transition to the boss music.
 - Play boss music until the boss is killed (or player is killed).
-- Bosses should have multiple stages with different attack patterns depending on their HP.
 
 * DONE Room layout
 :LOGBOOK:
@@ -1247,7 +1290,8 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 
 * Room layout
 - We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
-
+- A level can consist of only the initial room. Should be handled gracefully by placing an "I'm feeling lucky" portal within it.
+- When a floor has no links at all, add a random link (same as I'm feeling lucky button) to one of the rooms. If there is a boss arena, place the link in that arena.
 * DONE Bugs
 :LOGBOOK:
 - State "DONE"       from              [2026-09-26 Sat 20:54]
@@ -1270,3 +1314,8 @@ There should be no doors generated leading to these hidden rooms, only walls wit
 Look empty, but monsters lurk in large scenery crates and burst out of it a few seconds after the player enters the room.
 * Vending machines
 - Use RAM sticks to purchase medkits, ammo and energy.
+* CEOs
+- Samario CEO of ClosedNS
+- Zuckerborg Mark1 CEO of DefaceBooks
+- E-LON CEO of A-AI
+

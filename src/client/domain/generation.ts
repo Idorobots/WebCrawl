@@ -233,7 +233,7 @@ function decorationFits(
     ...staircasePositions(
       room,
       portalCountForRoom(room) + (room.isRoot ? 1 : 0) + (hasContentBrowser(room) ? 1 : 0),
-      room.tag === "script" ? room.height * 0.24 : 0,
+      room.isBossArena ? room.height * 0.24 : 0,
       hasContentBrowser(room),
     ),
   ];
@@ -712,16 +712,16 @@ function promoteToMiniboss(monster: Monster): Monster {
 }
 
 export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossKind): Monster[] {
-  if (room.isRoot || room.tag === "img") return [];
+  if (room.isRoot || (room.tag === "img" && !room.isBossArena)) return [];
   const roomSeed = stableHash(`${room.lootSeed}|monsters`);
   const count = monsterCountForRoom(
     room,
     floor,
-    room.tag === "script" ? BOSS_ARENA_MONSTER_DENSITY_FACTOR : 1,
+    room.isBossArena ? BOSS_ARENA_MONSTER_DENSITY_FACTOR : 1,
   );
   const offsetScaleX = room.width / ROOM_WIDTH;
   const offsetScaleY = room.height / ROOM_HEIGHT;
-  const offsets: Array<[number, number]> = room.tag === "script"
+  const offsets: Array<[number, number]> = room.isBossArena
     ? [
       [-world(250), -world(20)], [world(250), -world(20)],
       [-world(220), world(150)], [world(220), world(150)], [0, world(190)],
@@ -749,7 +749,7 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossK
       ? promoteToMiniboss(monster)
       : monster);
   }
-  return room.tag === "script"
+  return room.isBossArena
     ? [bossSpecForRoom(room, floor, bossKind), ...regularMonsters]
     : regularMonsters;
 }
@@ -797,21 +797,7 @@ export function buildMonsters(
   floor = 1,
   decorations: readonly Decoration[] = [],
 ): Monster[] {
-  let roomSpecs = layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor));
-  if (!roomSpecs.some(monster => monster.miniboss)) {
-    const candidates = roomSpecs
-      .filter(monster => !monster.bossKind)
-      .sort((left, right) => left.id.localeCompare(right.id));
-    if (candidates.length) {
-      const floorSeed = stableHash([
-        floor,
-        "floor-miniboss",
-        ...layout.nodes.map(room => room.lootSeed).sort((left, right) => left - right),
-      ].join("|"));
-      const selectedId = candidates[floorSeed % candidates.length]!.id;
-      roomSpecs = roomSpecs.map(monster => monster.id === selectedId ? promoteToMiniboss(monster) : monster);
-    }
-  }
+  const roomSpecs = layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor));
   const bossSummons = roomSpecs
     .filter(monster => monster.bossKind === "fork-bomb")
     .flatMap(boss => Array.from(
@@ -852,6 +838,53 @@ export function buildMonsters(
       attackSequence: saved?.attackSequence ?? spec.attackSequence,
       summonedCount: saved?.summonedCount ?? spec.summonedCount,
     });
+  }
+  if (layout.nodes.length > 1 && !monsters.some(monster => monster.miniboss)) {
+    const arenaId = layout.nodes.find(room => room.isBossArena)?.id;
+    const rooms = layout.nodes
+      .filter(room => !room.isRoot && room.id !== arenaId && monsters.some(monster =>
+        monster.spawnRoomId === room.id && !monster.bossKind && !monster.spawnSourceId
+      ))
+      .sort((left, right) => left.id - right.id);
+    if (rooms.length) {
+      const floorSeed = stableHash([
+        floor,
+        "floor-miniboss",
+        ...layout.nodes.map(room => room.lootSeed).sort((left, right) => left - right),
+      ].join("|"));
+      const room = rooms[floorSeed % rooms.length]!;
+      const candidates = monsters.filter(monster => monster.spawnRoomId === room.id &&
+        !monster.bossKind && !monster.spawnSourceId).sort((left, right) => left.id.localeCompare(right.id));
+      const selected = candidates[stableHash(`${floorSeed}|${room.lootSeed}|miniboss-slot`) % candidates.length]!;
+      const promoted = promoteToMiniboss(selected);
+      Object.assign(selected, promoted, { hp: savedStates.get(selected.id)?.hp ?? promoted.maxHp });
+    } else if (arenaId !== undefined) {
+      // A two-room floor has no regular entrance monsters to promote.
+      const root = layout.nodes.find(room => room.isRoot && room.id !== arenaId);
+      if (root) {
+        const seed = stableHash(`${root.lootSeed}|floor-miniboss|${floor}`);
+        const spec = promoteToMiniboss(regularMonsterSpec(
+          `${root.id}::floor-miniboss`, seed, root.id,
+          { x: root.x + world(90), y: root.y + world(85) }, floor, "room",
+        ));
+        const saved = savedStates.get(spec.id);
+        const desired = { x: saved?.x ?? spec.x, y: saved?.y ?? spec.y };
+        const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters);
+        if (position) monsters.push({
+          ...spec,
+          ...position,
+          hp: saved?.hp ?? spec.maxHp,
+          dead: saved?.dead ?? false,
+          active: saved?.active ?? visitedRooms.has(root.id),
+          droppedLoot: saved?.droppedLoot ?? false,
+          dropId: saved?.dropId ?? null,
+          dropX: saved?.dropX ?? null,
+          dropY: saved?.dropY ?? null,
+          dropKind: saved?.dropKind ?? null,
+          roomId: saved?.roomId ?? root.id,
+        });
+      }
+    }
   }
   return monsters;
 }
@@ -1009,7 +1042,7 @@ export function buildInteractiveObjects(
     const positions = staircasePositions(
       room,
       hrefs.length + (room.isRoot ? 1 : 0) + (hasContentBrowser(room) ? 1 : 0),
-      room.tag === "script" ? room.height * 0.24 : 0,
+      room.isBossArena ? room.height * 0.24 : 0,
       hasContentBrowser(room),
     );
     let positionIndex = 0;

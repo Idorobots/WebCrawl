@@ -892,7 +892,7 @@ test("keeps generated world coordinates independent of viewport size", async ({ 
 
 test("keeps an active boss sized consistently while it follows the player out", async ({ page }) => {
   test.setTimeout(90_000);
-  const bossFixture = "<!doctype html><html><body><script>const boss = true;</script><main><h1>Boss deck</h1></main></body></html>";
+  const bossFixture = "<!doctype html><html><body><main>Boss deck</main></body></html>";
   await stubRemoteFetchFallbacks(page, bossFixture);
   await page.route("**/api/fetch?**", route => route.fulfill({
     status: 200,
@@ -914,7 +914,6 @@ test("keeps an active boss sized consistently while it follows the player out", 
     x: Number(await game.getAttribute("data-first-door-x")),
     y: Number(await game.getAttribute("data-first-door-y")),
   };
-  const position = await playerPosition(page);
   await alignPlayerToDoor(page, door, direction);
   const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
   await page.keyboard.down(exitKey);
@@ -937,7 +936,7 @@ test("keeps an active boss sized consistently while it follows the player out", 
   expect(initialBossSize.width).toBeGreaterThan(0);
   expect(initialBossSize.height).toBe(initialBossSize.width);
   await page.keyboard.down(exitKey);
-  await expect(game).toHaveAttribute("data-current-room-tag", "script", { timeout: 10_000 });
+  await expect(game).toHaveAttribute("data-current-room-tag", "main", { timeout: 10_000 });
   await expect(game).toHaveAttribute("data-boss-room-lights", "1");
   await expect(game).toHaveAttribute("data-boss-room-light-color", "ff3d42");
   expect(Number(await game.getAttribute("data-boss-room-light-intensity"))).toBeGreaterThanOrEqual(1.3);
@@ -960,7 +959,13 @@ test("keeps an active boss sized consistently while it follows the player out", 
     x: Number(await game.getAttribute("data-active-boss-x")),
     y: Number(await game.getAttribute("data-active-boss-y")),
   };
-  await teleportPlayer(page, position);
+  const entranceSide = {
+    N: { x: door.x, y: door.y + world(90) },
+    E: { x: door.x - world(90), y: door.y },
+    S: { x: door.x, y: door.y - world(90) },
+    W: { x: door.x + world(90), y: door.y },
+  }[direction ?? "N"] ?? { x: door.x, y: door.y + world(90) };
+  await teleportPlayer(page, entranceSide);
   await expect(game).toHaveAttribute("data-current-room-tag", "body");
   await expect.poll(async () => await cameraState(page)).toMatchObject({ zoom: MOBILE_CAMERA_SCALE, bossRoomId: null });
   await expect.poll(async () => {

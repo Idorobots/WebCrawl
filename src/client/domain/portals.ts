@@ -36,11 +36,21 @@ export function closestPortalWithUrl(portals: readonly Stair[], position: Point,
   return closest;
 }
 
+type PortalEnemy = Pick<Monster, "dead" | "bossKind" | "roomId" | "spawnRoomId">;
+
+export function hasBlockingPortalMonsters(monsters: readonly PortalEnemy[], revealedRooms: ReadonlySet<number>): boolean {
+  return monsters.some(monster => !monster.dead && (
+    monster.bossKind !== undefined ||
+    revealedRooms.has(monster.spawnRoomId) || revealedRooms.has(monster.roomId)
+  ));
+}
+
 export function updatePortalAvailability(
   portals: Stair[],
-  monsters: readonly Pick<Monster, "dead">[],
+  monsters: readonly PortalEnemy[],
+  revealedRooms: ReadonlySet<number>,
 ): boolean {
-  const floorCleared = monsters.every(monster => monster.dead);
+  const floorCleared = !hasBlockingPortalMonsters(monsters, revealedRooms);
   let changed = false;
   for (const portal of portals) {
     const enabled = floorCleared && portal.url !== null;
