@@ -1,6 +1,7 @@
-import { ASSETS } from "../config";
+import { ASSETS, BASE_FLOOR_ASSETS, DAMAGED_FLOOR_ASSETS, FLOOR_DAMAGE_CHANCE_PERCENT } from "../config";
 import type { Direction, DungeonLayout, GraphNode, LayoutLink, Point } from "../types";
 import { segmentIntersectionPoints } from "../domain/corridor-junctions";
+import { stableHash } from "../domain/hash";
 
 export type CorridorCornerKind = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type WallModuleKind = "wall" | CorridorCornerKind;
@@ -29,6 +30,12 @@ export interface CorridorJunctionFloorPlan extends Point {
   seed: number;
 }
 
+export interface CorridorFloorDetailPlan extends Point {
+  ownerLinkId: string;
+  asset: string;
+  damaged: boolean;
+}
+
 export interface CorridorMarkingPlan {
   ownerLinkId: string;
   start: Point;
@@ -42,6 +49,7 @@ export interface CorridorRenderPlan {
   segments: CorridorSegmentPlan[];
   walls: WallModulePlan[];
   junctionFloors: CorridorJunctionFloorPlan[];
+  floorDetails: CorridorFloorDetailPlan[];
   corners: WallModulePlan[];
   markings: CorridorMarkingPlan[];
 }
@@ -590,6 +598,48 @@ function buildMarkings(layout: DungeonLayout, segmentSize: number): CorridorMark
   return markings;
 }
 
+function buildFloorDetails(
+  segments: readonly CorridorSegmentPlan[],
+  junctionFloors: readonly CorridorJunctionFloorPlan[],
+  segmentSize: number,
+): CorridorFloorDetailPlan[] {
+  const tileSize = segmentSize / 2;
+  const details: CorridorFloorDetailPlan[] = [];
+  const occupied = new Set<string>();
+  const addTiles = (left: number, top: number, width: number, height: number, ownerLinkId: string, seed: number): void => {
+    for (let y = top + tileSize / 2; y + tileSize / 2 <= top + height; y += tileSize) {
+      for (let x = left + tileSize / 2; x + tileSize / 2 <= left + width; x += tileSize) {
+        const key = `${x}:${y}`;
+        if (occupied.has(key)) continue;
+        occupied.add(key);
+        const roll = stableHash(`${seed}|corridor-floor|${key}`);
+        // A standard 8x8-tile room gets 2-5 detail attempts: ~3.5 / 64 tiles.
+        if (roll % 1_000 >= 55) continue;
+        const damaged = stableHash(`${roll}|damage`) % 100 < FLOOR_DAMAGE_CHANCE_PERCENT;
+        const assets = damaged ? DAMAGED_FLOOR_ASSETS : BASE_FLOOR_ASSETS;
+        details.push({
+          ownerLinkId, x, y, damaged,
+          asset: assets[stableHash(`${roll}|asset`) % assets.length]!,
+        });
+      }
+    }
+  };
+  for (const segment of segments) {
+    if (segment.start.y === segment.end.y) {
+      addTiles(Math.min(segment.start.x, segment.end.x), segment.start.y - segment.width / 2,
+        Math.abs(segment.end.x - segment.start.x), segment.width, segment.ownerLinkId, segment.seed);
+    } else {
+      addTiles(segment.start.x - segment.width / 2, Math.min(segment.start.y, segment.end.y),
+        segment.width, Math.abs(segment.end.y - segment.start.y), segment.ownerLinkId, segment.seed);
+    }
+  }
+  for (const floor of junctionFloors) {
+    addTiles(floor.x - segmentSize / 2, floor.y - segmentSize / 2,
+      segmentSize, segmentSize, floor.ownerLinkId, floor.seed);
+  }
+  return details;
+}
+
 export function buildCorridorRenderPlan(
   layout: DungeonLayout,
   segmentSize: number,
@@ -602,6 +652,7 @@ export function buildCorridorRenderPlan(
     walls: buildWalls(segments, segmentSize)
       .filter(wall => wall.kind !== "wall" || !cornerCells.has(`${wall.x}:${wall.y}`)),
     junctionFloors: junctions.junctionFloors,
+    floorDetails: buildFloorDetails(segments, junctions.junctionFloors, segmentSize),
     corners: junctions.corners,
     markings: buildMarkings(layout, segmentSize),
   };

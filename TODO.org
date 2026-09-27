@@ -1239,7 +1239,10 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
 - Monsters get stuck on doors again during pathfinding.
 
-* Visual bugs
+* DONE Visual bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-27 Sun 15:37]
+:END:
 - In long corridors often scenery is placed on the same spot.
 - There seem to be no debris floor tiles in corridors, they should occur as ofter as in the rooms.
 

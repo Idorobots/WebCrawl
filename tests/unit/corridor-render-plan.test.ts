@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BASE_FLOOR_ASSETS, DAMAGED_FLOOR_ASSETS, FLOOR_DAMAGE_CHANCE_PERCENT } from "../../src/client/config";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
 import { WORLD_GEOMETRY } from "../../src/client/domain/specs";
 import { connectedRoomAdjacency, corridorJunctions, junctionRoomsAtPoint } from "../../src/client/domain/corridor-junctions";
@@ -98,6 +99,40 @@ const oppositeCorner = (kind: string): string => {
 };
 
 describe("corridor render planning", () => {
+  it("places sparse damaged tiles at the same per-tile rate as room floor details", () => {
+    const source = room(0);
+    const target = room(1, 0);
+    const length = SEGMENT_SIZE * 200;
+    const link: LayoutLink = {
+      id: "long-floor", source, target, direction: "E", ownerRoomId: source.id,
+      width: CORRIDOR_WIDTH, points: [{ x: 0, y: 0 }, { x: length, y: 0 }],
+    };
+    const layout = { nodes: [source, target], links: [link], hiddenCount: 0 };
+    const plan = buildCorridorRenderPlan(layout, SEGMENT_SIZE);
+    const details = plan.floorDetails;
+    const tileCount = (length / WORLD_GEOMETRY.floorTileSize) *
+      (CORRIDOR_WIDTH / WORLD_GEOMETRY.floorTileSize);
+    const expectedDetails = tileCount * 3.5 / 64;
+    const expectedDamage = expectedDetails * FLOOR_DAMAGE_CHANCE_PERCENT / 100;
+
+    expect(details).toEqual(buildCorridorRenderPlan(layout, SEGMENT_SIZE).floorDetails);
+    expect(details.length).toBeGreaterThan(expectedDetails / 2);
+    expect(details.length).toBeLessThan(expectedDetails * 2);
+    expect(details.every(detail => detail.x > 0 && detail.x < length &&
+      Math.abs(detail.y) < CORRIDOR_WIDTH / 2)).toBe(true);
+    const damaged = details.filter(detail => detail.damaged);
+    expect(damaged.length).toBeGreaterThan(expectedDamage / 3);
+    expect(damaged.length).toBeLessThan(expectedDamage * 3);
+    expect(damaged.every(detail => DAMAGED_FLOOR_ASSETS.includes(detail.asset as typeof DAMAGED_FLOOR_ASSETS[number]))).toBe(true);
+    expect(details.filter(detail => !detail.damaged).every(detail =>
+      BASE_FLOOR_ASSETS.includes(detail.asset as typeof BASE_FLOOR_ASSETS[number]))).toBe(true);
+  });
+
+  it("does not double-place details where corridor segments and junction floors overlap", () => {
+    const plan = buildCorridorRenderPlan(layoutForArms(["N", "E", "S", "W"]), SEGMENT_SIZE);
+    expect(new Set(plan.floorDetails.map(tile => `${tile.x}:${tile.y}`)).size).toBe(plan.floorDetails.length);
+  });
+
   it.each([
     [["N", "W"], "bottom-right", 4],
     [["N", "E"], "bottom-left", 5],
@@ -304,7 +339,7 @@ describe("corridor render planning", () => {
     const link = layout.links[0]!;
     expect(link.direct).toBe(true);
     const plan = buildCorridorRenderPlan(layout, SEGMENT_SIZE);
-    expect(plan).toEqual({ segments: [], walls: [], junctionFloors: [], corners: [], markings: [] });
+    expect(plan).toEqual({ segments: [], walls: [], junctionFloors: [], floorDetails: [], corners: [], markings: [] });
     expect(corridorJunctions(layout.links)).toEqual([]);
     const door = link.points[0]!;
     const sourceWalls = buildRoomWalls(link.source, [{ position: door, side: link.direction }], SEGMENT_SIZE);

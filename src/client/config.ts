@@ -98,6 +98,8 @@ export const BASE_FLOOR_ASSETS = [
 ] as const;
 
 /** Floors reserved as sparse decoration details rather than main tiles. */
+export const FLOOR_DAMAGE_CHANCE_PERCENT = 12;
+
 export const DAMAGED_FLOOR_ASSETS = [
   ASSETS.floorWorn,
   ASSETS.floorDented,

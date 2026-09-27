@@ -14,6 +14,7 @@ import {
   EFFECT_FRAMES,
   EXPLOSION_FRAMES,
   FLOOR_ASSETS,
+  FLOOR_DAMAGE_CHANCE_PERCENT,
   LOOT_RAM_FRAMES,
   MONSTER_FRAMES,
   PLAYER_DEFAULT_ASSETS,
@@ -74,7 +75,6 @@ const SEGMENT_SIZE = WORLD_GEOMETRY.segmentSize;
 const FLOOR_TILE_SIZE = WORLD_GEOMETRY.floorTileSize;
 const FLOOR_TILE_SCALE = FLOOR_TILE_SIZE / 128;
 const HIDDEN_WORLD_ALPHA = 0.24;
-const FLOOR_DAMAGE_CHANCE_PERCENT = 12;
 
 type StaticObject =
   | Phaser.GameObjects.Image
@@ -1054,8 +1054,9 @@ export class PhaserRenderer {
     if (!scene) return;
     const floorContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_FLOOR_DEPTH).setAlpha(alpha));
     const junctionContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_FLOOR_DEPTH + 0.1).setAlpha(alpha));
+    const detailContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_FLOOR_DEPTH + 0.2).setAlpha(alpha));
     const markingContainer = this.rememberStatic(scene.add.container(0, 0).setDepth(CORRIDOR_MARKING_DEPTH).setAlpha(alpha));
-    const statics: StaticObject[] = [floorContainer, junctionContainer, markingContainer];
+    const statics: StaticObject[] = [floorContainer, junctionContainer, detailContainer, markingContainer];
     this.corridorBounds.set(link.id, link.points.reduce<WorldBounds>((bounds, point) => ({
       left: Math.min(bounds.left, point.x - link.width / 2),
       right: Math.max(bounds.right, point.x + link.width / 2),
@@ -1076,6 +1077,10 @@ export class PhaserRenderer {
       const floor = this.createCorridorJunctionFloor(floorPlan.x, floorPlan.y, floorPlan.seed);
       this.illuminate(floor);
       junctionContainer.add(floor);
+    }
+    for (const detail of plan.floorDetails.filter(candidate => candidate.ownerLinkId === link.id)) {
+      detailContainer.add(this.illuminate(scene.add.image(detail.x, detail.y, textureKey(detail.asset))
+        .setDisplaySize(FLOOR_TILE_SIZE, FLOOR_TILE_SIZE)));
     }
     for (const wall of plan.walls.filter(candidate => candidate.ownerLinkId === link.id)) {
       statics.push(this.rememberStatic(this.createEnvironmentModule(wall).setAlpha(alpha)));
