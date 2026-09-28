@@ -99,13 +99,17 @@ const PLAYER_VISUAL: ActorVisualDefinition = {
 
 export const PLAYER_SPEC = {
   radius: world(28),
+  footprint: world(20),
   spriteSize: world(190),
   visualCenterOffsetY: -world(38),
   visual: PLAYER_VISUAL,
   muzzleDistance: world(21),
-  speed: world(457),
+  speed: world(550),
   maxHp: 10,
 } as const;
+
+/** Actor feet occupy less floor space than their elevated projectile hitboxes. */
+export const monsterFootprint = (hitboxRadius: number): number => Math.round(hitboxRadius * 0.72);
 
 export const DEFAULT_BULLET_SPEC = {
   radius: world(6),
@@ -339,6 +343,10 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
   },
 };
 
+export const MAX_REGULAR_MONSTER_FOOTPRINT = Math.max(
+  ...Object.values(REGULAR_MONSTER_DEFINITIONS).map(definition => monsterFootprint(definition.radius)),
+);
+
 export const MINIBOSS_CHANCE_PERCENT = 5;
 export const MINIBOSS_HP_MULTIPLIER = 3;
 export const MINIBOSS_DAMAGE_MULTIPLIER = 1.5;
@@ -491,6 +499,12 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     projectileRange: world(900),
   },
 };
+
+export const MAX_ACTOR_FOOTPRINT = Math.max(
+  PLAYER_SPEC.footprint,
+  MAX_REGULAR_MONSTER_FOOTPRINT,
+  ...Object.values(BOSS_DEFINITIONS).map(definition => monsterFootprint(definition.radius)),
+);
 
 export const GLM_HUNTER_ATTACKS = {
   initialRingDelayMs: 1_800,

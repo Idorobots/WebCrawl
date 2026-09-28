@@ -2474,23 +2474,21 @@ export class PhaserRenderer {
     if (!SHOW_DEBUG_GEOMETRY || !this.scene) return;
     const graphics = this.debugGraphics ??= this.scene.add.graphics().setDepth(DEBUG_DEPTH);
     graphics.clear();
-    const drawMovementAnchor = (x: number, y: number, centerY: number, color: number): void => {
-      graphics.lineStyle(world(1), color, 0.95);
+    const drawFootprint = (x: number, y: number, centerY: number, radius: number): void => {
+      graphics.lineStyle(world(1), 0xffbd5d, 0.95);
       graphics.lineBetween(x, centerY, x, y);
-      graphics.strokeCircle(x, y, world(6));
-      graphics.fillStyle(color, 1);
-      graphics.fillCircle(x, y, world(3));
+      graphics.strokeCircle(x, y, radius);
     };
     graphics.lineStyle(world(1), 0x69f7de, 0.9);
     graphics.strokeCircle(this.currentPlayer.x, this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY, PLAYER_SPEC.radius);
-    drawMovementAnchor(this.currentPlayer.x, this.currentPlayer.y,
-      this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY, 0x69f7de);
+    drawFootprint(this.currentPlayer.x, this.currentPlayer.y,
+      this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY, PLAYER_SPEC.footprint);
     for (const monster of this.currentMonsters) {
       if (!monster.active || monster.dead) continue;
       const centerY = monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind);
       graphics.lineStyle(world(1), 0xff5c77, 0.9);
       graphics.strokeCircle(monster.x, centerY, monster.radius);
-      drawMovementAnchor(monster.x, monster.y, centerY, 0xff5c77);
+      drawFootprint(monster.x, monster.y, centerY, monster.footprint);
     }
     for (const item of this.currentDecorations) {
       if (item.destroyed) continue;

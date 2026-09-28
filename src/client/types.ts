@@ -253,6 +253,7 @@ export interface Monster extends Point {
   speed: number;
   fast: boolean;
   radius: number;
+  footprint: number;
   size: number;
   bossKind?: BossKind;
   miniboss: boolean;

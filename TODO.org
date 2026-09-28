@@ -1058,13 +1058,17 @@ It's OK if the specs are not entirely static - it's perfectly fine to have a fun
 The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
 * Consistent collision detection
-- Define dedicated footprints and hitboxes for all wall & door pieces. Use those for calculations.
-- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
+- Replace movement anchors with footprints
+
 - Use hitboxes for player/bullet collision detection and damage calcualation.
 - Use hitboxes for enemy/bullet collision detection and damage calcualation.
 - Use hitboxes for player/pickup collision detection.
 - Use the footprints for player/scenery collision detection and blocking.
 - Use the footprints for enemy/scenery collision detection and blocking.
+
+- Define dedicated footprints for walls, use the same footprint as a hitbox, but shifted by 0.25 SEGMENT_SIZE up.
+
+- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
 
 
 * DONE Additional scenery

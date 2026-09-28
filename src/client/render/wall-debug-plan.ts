@@ -14,7 +14,7 @@ export interface DebugWallRegion {
 /** Shade floor edges, splitting boundary cells at exact movement-geometry edges. */
 export function buildBlockedWallRegions(
   layout: DungeonLayout,
-  radius = PLAYER_SPEC.radius,
+  radius = PLAYER_SPEC.footprint,
   step = world(8),
 ): DebugWallRegion[] {
   const rows = new Map<number, Set<number>>();

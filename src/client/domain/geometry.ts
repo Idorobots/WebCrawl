@@ -1,7 +1,7 @@
 import type { GraphNode, LayoutLink, Point } from "../types";
 import { PLAYER_SPEC, WORLD_GEOMETRY } from "./specs";
 
-export function pointInRoom(x: number, y: number, room: GraphNode, padding = PLAYER_SPEC.radius): boolean {
+export function pointInRoom(x: number, y: number, room: GraphNode, padding = PLAYER_SPEC.footprint): boolean {
   const dx = Math.abs(x - room.x);
   const dy = Math.abs(y - room.y);
   const halfWidth = room.width / 2 - padding;
@@ -20,7 +20,7 @@ export function pointInRoom(x: number, y: number, room: GraphNode, padding = PLA
   return true;
 }
 
-export function pointInRoomFloor(x: number, y: number, room: GraphNode, radius = PLAYER_SPEC.radius): boolean {
+export function pointInRoomFloor(x: number, y: number, room: GraphNode, radius = PLAYER_SPEC.footprint): boolean {
   const left = room.x - room.width / 2 + radius;
   const right = room.x + room.width / 2 - radius;
   const top = room.y - room.height / 2 + radius;
@@ -36,7 +36,7 @@ export interface FloorBounds {
 }
 
 /** Boundaries at which corridor walkability can change (body, turns, and door openings). */
-export function corridorFloorBounds(link: LayoutLink, radius = PLAYER_SPEC.radius): FloorBounds[] {
+export function corridorFloorBounds(link: LayoutLink, radius = PLAYER_SPEC.footprint): FloorBounds[] {
   if (link.direct) {
     const door = link.points[0];
     const across = WORLD_GEOMETRY.doorOpeningWidth / 2 - radius;
@@ -142,7 +142,7 @@ function pointInCorridorBody(point: Point, start: Point, end: Point, width: numb
   return point.y > minY && point.y < maxY && point.x >= left && point.x <= right;
 }
 
-export function pointInCorridor(x: number, y: number, link: LayoutLink, radius = PLAYER_SPEC.radius): boolean {
+export function pointInCorridor(x: number, y: number, link: LayoutLink, radius = PLAYER_SPEC.footprint): boolean {
   if (link.direct) {
     const door = link.points[0]!;
     const along = radius + WORLD_GEOMETRY.wallThickness;
@@ -226,6 +226,27 @@ export interface CircleObstacle extends Point {
   radius: number;
 }
 
+export function footprintsOverlap(a: Point, aRadius: number, b: Point, bRadius: number): boolean {
+  return Math.hypot(a.x - b.x, a.y - b.y) < aRadius + bRadius;
+}
+
+/** Allow an actor already overlapping a footprint to leave it, but never move deeper in. */
+export function footprintMoveIsClear(
+  from: Point,
+  to: Point,
+  radius: number,
+  blocker: Point,
+  blockerRadius: number,
+): boolean {
+  if (!footprintsOverlap(to, radius, blocker, blockerRadius)) return true;
+  if (!footprintsOverlap(from, radius, blocker, blockerRadius)) return false;
+  const awayX = from.x - blocker.x;
+  const awayY = from.y - blocker.y;
+  return (awayX * (to.x - from.x) + awayY * (to.y - from.y) > 0 ||
+    (awayX === 0 && awayY === 0 && (to.x !== from.x || to.y !== from.y))) &&
+    Math.hypot(to.x - blocker.x, to.y - blocker.y) >= Math.hypot(awayX, awayY);
+}
+
 export function slideAlongObstacles(
   position: Point,
   movement: Point,
@@ -235,7 +256,7 @@ export function slideAlongObstacles(
 ): Point | null {
   const intended = { x: position.x + movement.x, y: position.y + movement.y };
   const blocker = obstacles.find(obstacle =>
-    Math.hypot(intended.x - obstacle.x, intended.y - obstacle.y) < radius + obstacle.radius
+    footprintsOverlap(intended, radius, obstacle, obstacle.radius)
   );
   if (!blocker) return null;
 

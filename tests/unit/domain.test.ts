@@ -28,6 +28,7 @@ import {
   enemyVolleyProjectiles,
   monsterAttackIsReady,
   monsterEngagementRange,
+  monsterMeleeRange,
   projectileHitsCircle,
   projectileHitsDecoration,
   steerDashDirection,
@@ -35,6 +36,8 @@ import {
 } from "../../src/client/domain/combat";
 import {
   distanceSquared,
+  footprintMoveIsClear,
+  footprintsOverlap,
   pointInCorridor,
   pointNearDirectDoor,
   pointInRoom,
@@ -79,6 +82,7 @@ import {
   DECORATION_DEFINITIONS,
   DEFAULT_BULLET_SPEC,
   GLM_HUNTER_ATTACKS,
+  MAX_REGULAR_MONSTER_FOOTPRINT,
   MAX_REGULAR_MONSTER_RADIUS,
   MINIBOSS_CHANCE_PERCENT,
   MINIBOSS_DAMAGE_MULTIPLIER,
@@ -98,6 +102,7 @@ import {
   WEAPON_VISUAL_DEFINITIONS,
   WORLD_GEOMETRY,
   monsterDisplaySize,
+  monsterFootprint,
   type RoomSceneryTheme,
 } from "../../src/client/domain/specs";
 import {
@@ -361,10 +366,37 @@ describe("layout and geometry", () => {
 
   it("scales world definitions from authored dimensions", () => {
     expect(ROOM_DEFINITIONS.rectangle).toEqual({ width: ENVIRONMENT_SEGMENT_SIZE * 4, height: ENVIRONMENT_SEGMENT_SIZE * 4 });
-    expect(PLAYER_SPEC.radius).toBe(world(36));
+    expect(PLAYER_SPEC.radius).toBe(world(28));
+    expect(PLAYER_SPEC.footprint).toBe(world(20));
     expect(WORLD_GEOMETRY.segmentSize).toBe(world(64) * 2);
     expect(WORLD_GEOMETRY.floorTileSize).toBe(world(64));
     expect(WORLD_GEOMETRY.segmentSize).toBe(WORLD_GEOMETRY.floorTileSize * 2);
+  });
+
+  it("keeps actor damage hitboxes separate from occupied floor space", () => {
+    const monster = bossSpecForRoom(layout.nodes[1]!, 1, "glm-hunter");
+    expect(monster.radius).toBe(BOSS_DEFINITIONS["glm-hunter"].radius);
+    expect(monster.footprint).toBe(monsterFootprint(monster.radius));
+    const position = { x: monster.x + PLAYER_SPEC.footprint + monster.footprint, y: monster.y };
+    expect(footprintsOverlap(position, PLAYER_SPEC.footprint, monster, monster.footprint)).toBe(false);
+    expect(footprintsOverlap(position, PLAYER_SPEC.radius, monster, monster.radius)).toBe(true);
+  });
+
+  it("blocks entering occupied footprints but lets actors escape an existing overlap", () => {
+    const blocker = { x: 0, y: 0 };
+    expect(footprintMoveIsClear({ x: 12, y: 0 }, { x: 8, y: 0 }, 5, blocker, 5)).toBe(false);
+    expect(footprintMoveIsClear({ x: 12, y: 0 }, { x: 10, y: 0 }, 5, blocker, 5)).toBe(true);
+    expect(footprintMoveIsClear({ x: 5, y: 0 }, { x: 4, y: 0 }, 5, blocker, 5)).toBe(false);
+    expect(footprintMoveIsClear({ x: 5, y: 0 }, { x: 6, y: 0 }, 5, blocker, 5)).toBe(true);
+    expect(footprintMoveIsClear({ x: -2, y: 0 }, { x: 3, y: 0 }, 5, blocker, 5)).toBe(false);
+    expect(footprintMoveIsClear(blocker, { x: 1, y: 0 }, 5, blocker, 5)).toBe(true);
+  });
+
+  it("keeps melee attacks in reach without overlapping the player footprint", () => {
+    const heavy = REGULAR_MONSTER_DEFINITIONS["melee-heavy"];
+    const monster = { attackRange: heavy.attackRange, footprint: monsterFootprint(heavy.radius) };
+    expect(monsterMeleeRange(monster)).toBeGreaterThan(monster.footprint + PLAYER_SPEC.footprint);
+    expect(monsterMeleeRange(monster)).toBeGreaterThanOrEqual(monster.attackRange);
   });
 
   it("reserves damaged floor tiles for sparse flavour instead of base floors", () => {
@@ -435,7 +467,7 @@ describe("layout and geometry", () => {
     const walkable = (point: Point, radius: number) => adjacent.nodes.some(room =>
       pointInRoomFloor(point.x, point.y, room, radius)
     ) || pointInCorridor(point.x, point.y, link, radius);
-    for (const radius of [PLAYER_SPEC.radius, MAX_REGULAR_MONSTER_RADIUS]) {
+    for (const radius of [PLAYER_SPEC.footprint, MAX_REGULAR_MONSTER_FOOTPRINT]) {
       const start = { x: door.x - normal.x * (radius + world(30)), y: door.y - normal.y * (radius + world(30)) + shift };
       const goal = { x: door.x + normal.x * (radius + world(30)), y: door.y + normal.y * (radius + world(30)) + shift };
       expect(walkable({ x: door.x, y: door.y + shift }, radius)).toBe(true);
@@ -518,8 +550,8 @@ describe("layout and geometry", () => {
     const topWallEdge = room.y - room.height / 2;
     expect(pointInRoomFloor(room.x, topWallEdge, room, 0)).toBe(true);
     expect(pointInRoomFloor(room.x, topWallEdge - 1, room, 0)).toBe(false);
-    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.radius, room, PLAYER_SPEC.radius)).toBe(true);
-    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.radius - 1, room, PLAYER_SPEC.radius)).toBe(false);
+    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.footprint, room, PLAYER_SPEC.footprint)).toBe(true);
+    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.footprint - 1, room, PLAYER_SPEC.footprint)).toBe(false);
     expect(pointInRoomFloor(room.x + room.width / 2, room.y, room, 0)).toBe(true);
     expect(pointInRoomFloor(room.x, room.y + room.height / 2, room, 0)).toBe(true);
     expect(pointInRoomFloor(room.x + room.width / 2 + 1, room.y, room, 0)).toBe(false);
@@ -539,15 +571,15 @@ describe("layout and geometry", () => {
       0,
     )).toBe(false);
     const playerInsideDoor = {
-      x: start.x - unit.x * PLAYER_SPEC.radius / 2,
-      y: start.y - unit.y * PLAYER_SPEC.radius / 2,
+      x: start.x - unit.x * PLAYER_SPEC.footprint / 2,
+      y: start.y - unit.y * PLAYER_SPEC.footprint / 2,
     };
-    expect(pointInCorridor(playerInsideDoor.x, playerInsideDoor.y, link, PLAYER_SPEC.radius)).toBe(true);
+    expect(pointInCorridor(playerInsideDoor.x, playerInsideDoor.y, link, PLAYER_SPEC.footprint)).toBe(true);
     expect(pointInCorridor(
-      playerInsideDoor.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
-      playerInsideDoor.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
+      playerInsideDoor.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
+      playerInsideDoor.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
       link,
-      PLAYER_SPEC.radius,
+      PLAYER_SPEC.footprint,
     )).toBe(false);
 
     // The door's blocked band spans the wall thickness into the corridor:
@@ -557,15 +589,15 @@ describe("layout and geometry", () => {
       x: start.x + unit.x * bandHalf,
       y: start.y + unit.y * bandHalf + (start.y === end.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
     };
-    expect(pointInCorridor(bandOpening.x, bandOpening.y, link, PLAYER_SPEC.radius)).toBe(true);
+    expect(pointInCorridor(bandOpening.x, bandOpening.y, link, PLAYER_SPEC.footprint)).toBe(true);
     const bandEdge = {
-      x: bandOpening.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
-      y: bandOpening.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
+      x: bandOpening.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
+      y: bandOpening.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
     };
-    expect(pointInCorridor(bandEdge.x, bandEdge.y, link, PLAYER_SPEC.radius), "Expected blocked door band edge").toBe(false);
+    expect(pointInCorridor(bandEdge.x, bandEdge.y, link, PLAYER_SPEC.footprint), "Expected blocked door band edge").toBe(false);
 
     const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-    expect(pointInCorridor(midpoint.x, midpoint.y, link, PLAYER_SPEC.radius)).toBe(true);
+    expect(pointInCorridor(midpoint.x, midpoint.y, link, PLAYER_SPEC.footprint)).toBe(true);
     expect(pointInCorridor(
       midpoint.x,
       midpoint.y + link.width / 2 + 1,
@@ -591,12 +623,12 @@ describe("layout and geometry", () => {
         link.source,
         link.target,
         point => {
-          const inFloor = layout.nodes.some(room => pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_RADIUS)) ||
-            layout.links.some(candidate => pointInCorridor(point.x, point.y, candidate, MAX_REGULAR_MONSTER_RADIUS));
+          const inFloor = layout.nodes.some(room => pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_FOOTPRINT)) ||
+            layout.links.some(candidate => pointInCorridor(point.x, point.y, candidate, MAX_REGULAR_MONSTER_FOOTPRINT));
           const blocked = decorations.some(item =>
             item.obstacle &&
             !item.destroyed &&
-            Math.hypot(point.x - item.x, point.y - item.y) < (item.footprint ?? item.radius) + MAX_REGULAR_MONSTER_RADIUS
+            footprintsOverlap(point, MAX_REGULAR_MONSTER_FOOTPRINT, item, item.footprint ?? item.radius)
           );
           return inFloor && !blocked;
         },
@@ -612,8 +644,8 @@ describe("layout and geometry", () => {
       expect(path, `Expected route through ${JSON.stringify(link.points)}`).not.toBeNull();
       expect(path!.slice(1).every((point, index) => walkableSegment(
         path![index]!, point,
-        candidate => layout.nodes.some(room => pointInRoomFloor(candidate.x, candidate.y, room, MAX_REGULAR_MONSTER_RADIUS)) ||
-          layout.links.some(link => pointInCorridor(candidate.x, candidate.y, link, MAX_REGULAR_MONSTER_RADIUS)),
+        candidate => layout.nodes.some(room => pointInRoomFloor(candidate.x, candidate.y, room, MAX_REGULAR_MONSTER_FOOTPRINT)) ||
+          layout.links.some(link => pointInCorridor(candidate.x, candidate.y, link, MAX_REGULAR_MONSTER_FOOTPRINT)),
       ))).toBe(true);
     }
   });
@@ -625,7 +657,7 @@ describe("layout and geometry", () => {
       const length = Math.hypot(next.x - door.x, next.y - door.y);
       const unit = { x: (next.x - door.x) / length, y: (next.y - door.y) / length };
       const shiftY = door.y === next.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
-      const radius = MAX_REGULAR_MONSTER_RADIUS;
+      const radius = MAX_REGULAR_MONSTER_FOOTPRINT;
       const start = {
         x: door.x - unit.x * (radius + world(30)),
         y: door.y - unit.y * (radius + world(30)) + shiftY,
@@ -657,11 +689,11 @@ describe("layout and geometry", () => {
     };
     const scenarios = [
       {
-        player: { x: room.x, y: room.y - room.height / 2 + PLAYER_SPEC.radius },
+        player: { x: room.x, y: room.y - room.height / 2 + PLAYER_SPEC.footprint },
         inside: (point: Point, radius: number) => pointInRoomFloor(point.x, point.y, room, radius),
       },
       {
-        player: { x: corridor.points[1]!.x / 2, y: -corridor.width / 2 + PLAYER_SPEC.radius },
+        player: { x: corridor.points[1]!.x / 2, y: -corridor.width / 2 + PLAYER_SPEC.footprint },
         inside: (point: Point, radius: number) => pointInCorridor(point.x, point.y, corridor, radius),
       },
     ];
@@ -669,14 +701,18 @@ describe("layout and geometry", () => {
       for (const [kind, visualKind] of [["melee-light", "scout"], ["melee-heavy", "heavy"]] as const) {
         const spec = REGULAR_MONSTER_DEFINITIONS[kind];
         const monster = { x: player.x + world(100), y: player.y + world(110) };
-        const walkable = (point: Point) => inside(point, spec.radius);
+        const footprint = monsterFootprint(spec.radius);
+        const walkable = (point: Point) => inside(point, footprint) &&
+          !footprintsOverlap(point, footprint, player, PLAYER_SPEC.footprint);
         const bulletWalkable = (point: Point) => inside(point, DEFAULT_BULLET_SPEC.radius);
-        expect(inside(player, PLAYER_SPEC.radius)).toBe(true);
+        expect(inside(player, PLAYER_SPEC.footprint)).toBe(true);
         expect(walkable(player)).toBe(false);
         const approach = walkableApproachPoint(player, monster, walkable,
-          point => walkableSegment(point, player, bulletWalkable), spec.radius + PLAYER_SPEC.radius);
+          point => walkableSegment(point, player, bulletWalkable),
+          footprint + PLAYER_SPEC.footprint + WORLD_GEOMETRY.pathGridStep * 2);
         expect(approach).not.toBeNull();
-        expect(Math.hypot(approach!.x - player.x, approach!.y - player.y)).toBeLessThan(spec.radius + PLAYER_SPEC.radius);
+        expect(Math.hypot(approach!.x - player.x, approach!.y - player.y))
+          .toBeGreaterThanOrEqual(footprint + PLAYER_SPEC.footprint);
         const path = aStarPath(monster, approach!, walkable, WORLD_GEOMETRY.pathGridStep, 1800);
         expect(path).not.toBeNull();
         expect(path!.at(-1)).toEqual(approach);
@@ -701,8 +737,8 @@ describe("layout and geometry", () => {
     for (const shape of ["capsule", "octagon"] as const) {
       const room = { ...layout.nodes[0]!, shape };
       const point = {
-        x: room.x + room.width / 2 - PLAYER_SPEC.radius,
-        y: room.y + room.height / 2 - PLAYER_SPEC.radius,
+        x: room.x + room.width / 2 - PLAYER_SPEC.footprint,
+        y: room.y + room.height / 2 - PLAYER_SPEC.footprint,
       };
       expect(pointInRoomFloor(point.x, point.y, room)).toBe(true);
       expect(pointInRoom(point.x, point.y, room, 0)).toBe(false);
@@ -742,17 +778,17 @@ describe("layout and geometry", () => {
         { boundary: end, inward: unit, side: targetSide },
       ];
       for (const door of doors) {
-        const depth = PLAYER_SPEC.radius;
+        const depth = PLAYER_SPEC.footprint;
         const center = {
           x: door.boundary.x + door.inward.x * depth / 2,
           y: door.boundary.y + door.inward.y * depth / 2 + verticalShift,
         };
         const blockedEdge = {
-          x: center.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
-          y: center.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius + 1),
+          x: center.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
+          y: center.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
         };
-        expect(onFloor(center, PLAYER_SPEC.radius)).toBe(true);
-        expect(onFloor(blockedEdge, PLAYER_SPEC.radius), `Expected blocked ${door.side} door edge`).toBe(false);
+        expect(onFloor(center, PLAYER_SPEC.footprint)).toBe(true);
+        expect(onFloor(blockedEdge, PLAYER_SPEC.footprint), `Expected blocked ${door.side} door edge`).toBe(false);
       }
     }
   });
@@ -806,12 +842,12 @@ describe("layout and geometry", () => {
     }
     const forkLink = forkLayout.links[0]!;
     const forkPoint = forkLink.points[forkLink.forkPointIndex!]!;
-    expect(pointInCorridor(forkPoint.x, forkPoint.y, forkLink, PLAYER_SPEC.radius)).toBe(true);
+    expect(pointInCorridor(forkPoint.x, forkPoint.y, forkLink, PLAYER_SPEC.footprint)).toBe(true);
     const end = forkLink.points.at(-1)!;
     const playerInBranch = { x: forkPoint.x + (end.x - forkPoint.x) * 0.4, y: forkPoint.y + (end.y - forkPoint.y) * 0.4 };
     const walkable = (point: Point) => forkLayout.nodes.some(room =>
-      pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_RADIUS)
-    ) || forkLayout.links.some(link => pointInCorridor(point.x, point.y, link, MAX_REGULAR_MONSTER_RADIUS));
+      pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_FOOTPRINT)
+    ) || forkLayout.links.some(link => pointInCorridor(point.x, point.y, link, MAX_REGULAR_MONSTER_FOOTPRINT));
     const path = aStarPath(forkLink.source, playerInBranch, walkable, WORLD_GEOMETRY.pathGridStep, 6000);
     expect(path).not.toBeNull();
     expect(path!.at(-1)).toEqual(playerInBranch);
@@ -821,7 +857,11 @@ describe("layout and geometry", () => {
 
     const previousRoom = forkLink.target;
     const playerRoom = forkLayout.links[4]!.target;
-    expect(walkableSegment(previousRoom, playerRoom, walkable)).toBe(false);
+    expect(walkableSegment(previousRoom, playerRoom, walkable)).toBe(true);
+    expect(walkableSegment(previousRoom, playerRoom, point =>
+      forkLayout.nodes.some(room => pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_RADIUS)) ||
+      forkLayout.links.some(link => pointInCorridor(point.x, point.y, link, MAX_REGULAR_MONSTER_RADIUS))
+    )).toBe(false);
     const door = forkLink.points.at(-1)!;
     const beforeDoor = forkLink.points.at(-2)!;
     const doorLength = Math.hypot(beforeDoor.x - door.x, beforeDoor.y - door.y);
@@ -1338,7 +1378,29 @@ describe("deterministic room contents", () => {
     const relocated = monsters.find(monster => monster.id === original.id)!;
     expect(relocated).toBeDefined();
     expect(relocated).not.toMatchObject({ x: original.x, y: original.y });
-    expect(monsterPositionIsClear(relocated, relocated.radius, combatLayout, [blocker])).toBe(true);
+    expect(monsterPositionIsClear(relocated, relocated.footprint, combatLayout, [blocker])).toBe(true);
+    expect(monsterPositionIsClear(
+      { x: blocker.x + blocker.footprint + relocated.footprint - 1, y: blocker.y },
+      relocated.footprint, combatLayout, [blocker],
+    )).toBe(false);
+  });
+
+  it("keeps generated monsters off the player's arrival footprint", () => {
+    const combatRoom = node(9, 0, 1, {
+      x: 500,
+      y: 400,
+      tag: "section",
+      isRoot: false,
+      lootSeed: stableHash("arrival-monster-room"),
+    });
+    const layout = { nodes: [combatRoom], links: [], hiddenCount: 0 };
+    const first = monsterSpecsForRoom(combatRoom, 1)[0]!;
+    const arrival = { x: first.x, y: first.y };
+    const monsters = buildMonsters(layout, new Map(), new Set([combatRoom.id]), 1, [], arrival);
+    expect(monsters.some(monster => monster.id === first.id)).toBe(true);
+    expect(monsters.every(monster =>
+      !footprintsOverlap(monster, monster.footprint, arrival, PLAYER_SPEC.footprint)
+    )).toBe(true);
   });
 
   it("scatters generated monsters and loot so no two items share the same space", () => {
@@ -1356,16 +1418,15 @@ describe("deterministic room contents", () => {
     for (const [index, item] of group.entries()) {
       for (const other of group.slice(index + 1)) {
         if (item.roomId !== other.roomId) continue;
-        const itemIsDecoration = "footprint" in item;
-        const otherIsDecoration = "footprint" in other;
+        const itemIsDecoration = "obstacle" in item;
+        const otherIsDecoration = "obstacle" in other;
         // Monsters only keep their distance from obstacle scenery; non-obstacle
         // low scenery is intentionally walkable. Decoration pairs always separate.
         if (itemIsDecoration !== otherIsDecoration) {
           const decoration = itemIsDecoration ? item : other;
           if (!(decoration as Decoration).obstacle) continue;
         }
-        const minimum = ("footprint" in item ? item.footprint ?? item.radius : item.radius) +
-          ("footprint" in other ? other.footprint ?? other.radius : other.radius);
+        const minimum = (item.footprint ?? item.radius) + (other.footprint ?? other.radius);
         expect(Math.hypot(item.x - other.x, item.y - other.y), `${item.id} vs ${other.id}`)
           .toBeGreaterThanOrEqual(minimum);
       }
@@ -1793,7 +1854,7 @@ describe("deterministic room contents", () => {
 
     const glmHunter = bossSpecForRoom(arena, 1, "glm-hunter");
     expect(glmHunter.maxHp).toBeGreaterThan(150);
-    expect(glmHunter.attackRange).toBeGreaterThanOrEqual(glmHunter.radius + PLAYER_SPEC.radius);
+    expect(glmHunter.attackRange).toBeGreaterThanOrEqual(glmHunter.footprint + PLAYER_SPEC.footprint);
     expect(GLM_HUNTER_ATTACKS.chargeWindupMs).toBeGreaterThanOrEqual(500);
     expect(GLM_HUNTER_ATTACKS.initialChargeDelayMs).toBeGreaterThan(GLM_HUNTER_ATTACKS.chargeWindupMs);
 
@@ -2421,7 +2482,7 @@ describe("deterministic room contents", () => {
     // capacity depends on obstacle layout, but the restored state must be
     // honored wherever it fits.
     const placedBeforeSave = buildMonsters(combatLayout, new Map(), new Set([combatRoom.id]), 10, restoredDecorations)
-      .map(item => ({ x: item.x, y: item.y, radius: item.radius }));
+      .map(item => ({ x: item.x, y: item.y, footprint: item.footprint }));
     let savedPosition: Point | undefined;
     for (let ring = 0; ring <= 9 && !savedPosition; ring += 1) {
       for (let index = 0; index < 24; index += 1) {
@@ -2430,7 +2491,7 @@ describe("deterministic room contents", () => {
           x: reinforcement.x + Math.cos(angle) * world(45) * ring,
           y: reinforcement.y + Math.sin(angle) * world(45) * ring,
         };
-        if (monsterPositionIsClear(position, reinforcement.radius, combatLayout, restoredDecorations, reinforcement.spawnSourceId, placedBeforeSave)) {
+        if (monsterPositionIsClear(position, reinforcement.footprint, combatLayout, restoredDecorations, placedBeforeSave)) {
           savedPosition = position;
           break;
         }
@@ -2460,10 +2521,9 @@ describe("deterministic room contents", () => {
     });
     expect(monsterPositionIsClear(
       restoredReinforcement,
-      restoredReinforcement.radius,
+      restoredReinforcement.footprint,
       combatLayout,
       restoredDecorations,
-      restoredReinforcement.spawnSourceId,
     )).toBe(true);
   });
 

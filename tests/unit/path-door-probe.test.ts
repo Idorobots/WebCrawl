@@ -2,7 +2,7 @@ import { describe, it } from "vitest";
 import { domToGraph } from "../../src/client/domain/graph";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
 import { pointInCorridor, pointInRoomFloor } from "../../src/client/domain/geometry";
-import { PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS, BOSS_DEFINITIONS } from "../../src/client/domain/specs";
+import { PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS, BOSS_DEFINITIONS, monsterFootprint } from "../../src/client/domain/specs";
 import type { Point } from "../../src/client/types";
 
 describe("doorway walkability detail", () => {
@@ -14,9 +14,9 @@ describe("doorway walkability detail", () => {
     const door = link.points[link.points.length - 1]!;
 
     const radii = new Map<string, number>([
-      ["player", PLAYER_SPEC.radius],
-      ...Object.entries(REGULAR_MONSTER_DEFINITIONS).map(([kind, def]) => [kind, def.radius] as const),
-      ...Object.entries(BOSS_DEFINITIONS).map(([kind, def]) => [kind, def.radius] as const),
+      ["player", PLAYER_SPEC.footprint],
+      ...Object.entries(REGULAR_MONSTER_DEFINITIONS).map(([kind, def]) => [kind, monsterFootprint(def.radius)] as const),
+      ...Object.entries(BOSS_DEFINITIONS).map(([kind, def]) => [kind, monsterFootprint(def.radius)] as const),
     ]);
 
     for (const [kind, radius] of radii) {

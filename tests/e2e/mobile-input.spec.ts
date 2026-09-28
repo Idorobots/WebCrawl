@@ -176,7 +176,7 @@ test("fires with the aim stick", async ({ page }) => {
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 });
 
-test("moves with the movement stick", async ({ page }) => {
+test("responds to a small movement stick deflection", async ({ page }) => {
   await startMobileGame(page);
 
   const game = page.locator("#gameCanvas");
@@ -186,7 +186,7 @@ test("moves with the movement stick", async ({ page }) => {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Input.dispatchTouchEvent", {
     type: "touchStart",
-    touchPoints: [{ x: stick.x + stick.width / 2 + 40, y: stick.y + stick.height / 2, id: 1 }],
+    touchPoints: [{ x: stick.x + stick.width / 2 + 8, y: stick.y + stick.height / 2, id: 1 }],
   });
   try {
     await expect.poll(async () => Number(await game.getAttribute("data-player-x")))

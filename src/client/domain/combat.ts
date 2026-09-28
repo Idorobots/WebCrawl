@@ -5,6 +5,7 @@ import {
   ENERGY_DASH_DISTANCE_PER_ENERGY,
   monsterVisualCenterOffsetY,
   PLAYER_SPEC,
+  WORLD_GEOMETRY,
 } from "./specs";
 
 export interface EnemyVolleyProjectile {
@@ -16,6 +17,11 @@ export function monsterEngagementRange(
   monster: Pick<Monster, "speed" | "attackRange" | "projectileRange">,
 ): number {
   return monster.speed === 0 ? monster.projectileRange : monster.attackRange;
+}
+
+/** Melee must reach an actor standing just beyond the two occupied floor circles. */
+export function monsterMeleeRange(monster: Pick<Monster, "attackRange" | "footprint">): number {
+  return Math.max(monster.attackRange, monster.footprint + PLAYER_SPEC.footprint + WORLD_GEOMETRY.pathGridStep * 2);
 }
 
 export function enemyVolleyProjectiles(
@@ -180,7 +186,7 @@ export function visiblePlayerHitPoint(
   radius: number,
   hasLineOfSight: (point: Point) => boolean,
 ): Point | null {
-  for (const offsetY of [0, radius / 2, radius * 0.8]) {
+  for (const offsetY of [0, radius / 2, radius * 0.95]) {
     const point = { x: center.x, y: center.y + offsetY };
     if (hasLineOfSight(point)) return point;
   }

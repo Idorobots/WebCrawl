@@ -36,12 +36,12 @@ describe("wall collision debug overlay", () => {
       points: [{ x: startX, y: 0 }, { x: endX, y: 0 }],
     };
     const layout: DungeonLayout = { nodes: [source, target], links: [link], hiddenCount: 0 };
-    const regions = buildBlockedWallRegions(layout, PLAYER_SPEC.radius, step);
+    const regions = buildBlockedWallRegions(layout, PLAYER_SPEC.footprint, step);
     expect(regions.length).toBeGreaterThan(0);
-    expect(covered(regions, { x: 0, y: -source.height / 2 + PLAYER_SPEC.radius / 2 })).toBe(true);
-    expect(covered(regions, { x: startX - PLAYER_SPEC.radius / 2, y: world(140) })).toBe(true);
-    expect(covered(regions, { x: (startX + endX) / 2, y: link.width / 2 - PLAYER_SPEC.radius / 2 })).toBe(true);
-    expect(covered(regions, { x: startX - PLAYER_SPEC.radius / 2,
+    expect(covered(regions, { x: 0, y: -source.height / 2 + PLAYER_SPEC.footprint / 2 })).toBe(true);
+    expect(covered(regions, { x: startX - PLAYER_SPEC.footprint / 2, y: world(140) })).toBe(true);
+    expect(covered(regions, { x: (startX + endX) / 2, y: link.width / 2 - PLAYER_SPEC.footprint / 2 })).toBe(true);
+    expect(covered(regions, { x: startX - PLAYER_SPEC.footprint / 2,
       y: WORLD_GEOMETRY.verticalDoorPassableOffsetY })).toBe(false);
     expect(covered(regions, { x: 0, y: 0 })).toBe(false);
     expect(covered(regions, { x: (startX + endX) / 2, y: 0 })).toBe(false);
@@ -56,7 +56,7 @@ describe("wall collision debug overlay", () => {
       links: [{ id: "direct", source, target, direction: "E", ownerRoomId: 0,
         width: WORLD_GEOMETRY.doorOpeningWidth, points: [doorway], direct: true }],
     };
-    const regions = buildBlockedWallRegions(layout, PLAYER_SPEC.radius, step);
+    const regions = buildBlockedWallRegions(layout, PLAYER_SPEC.footprint, step);
     expect(covered(regions, { x: doorway.x, y: WORLD_GEOMETRY.verticalDoorPassableOffsetY })).toBe(false);
     expect(covered(regions, { x: doorway.x, y: world(150) })).toBe(true);
   });
@@ -71,7 +71,7 @@ describe("wall collision debug overlay", () => {
     };
     const regions = buildBlockedWallRegions({ nodes: [source, target], links: [link], hiddenCount: 0 });
     const edge = WORLD_GEOMETRY.verticalDoorPassableOffsetY +
-      WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.radius;
+      WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint;
     const inside = { x: doorway.x, y: edge - 0.1 };
     const outside = { x: doorway.x, y: edge + 0.1 };
     expect(pointInCorridor(inside.x, inside.y, link)).toBe(true);
@@ -91,7 +91,7 @@ describe("wall collision debug overlay", () => {
       points: [{ x: startX, y: 0 }, { x: endX, y: 0 }],
     };
     const regions = buildBlockedWallRegions({ nodes: [source, target], links: [link], hiddenCount: 0 });
-    const edge = link.width / 2 - PLAYER_SPEC.radius;
+    const edge = link.width / 2 - PLAYER_SPEC.footprint;
     const x = (startX + endX) / 2;
     expect(pointInCorridor(x, edge - 0.1, link)).toBe(true);
     expect(covered(regions, { x, y: edge - 0.1 })).toBe(false);
