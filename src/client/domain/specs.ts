@@ -29,7 +29,13 @@ import type {
   SpriteDirection,
   WeaponKind,
   WeaponPlacement,
+  ObjectGeometry,
 } from "../types";
+
+const circle = (radius: number) => ({ x: radius, y: radius });
+/** Preserve the old image alignment with a center-origin sprite and pixel offset. */
+const offsetForOrigin = (size: number, originY: number) =>
+  ({ x: 0, y: size * (0.5 - originY) });
 
 const clip = (
   frames: readonly string[],
@@ -98,18 +104,20 @@ const PLAYER_VISUAL: ActorVisualDefinition = {
 };
 
 export const PLAYER_SPEC = {
-  radius: world(28),
-  footprint: world(20),
+  obstacle: true,
+  visualOffset: { x: 0, y: -world(190) * 0.40625 },
+  hitboxOffset: { x: 0, y: -world(38) },
+  hitboxRadii: circle(world(28)),
+  footprintRadii: circle(world(20)),
   spriteSize: world(190),
-  visualCenterOffsetY: -world(38),
   visual: PLAYER_VISUAL,
   muzzleDistance: world(21),
   speed: world(550),
   maxHp: 10,
 } as const;
 
-/** Actor feet occupy less floor space than their elevated projectile hitboxes. */
-export const monsterFootprint = (hitboxRadius: number): number => Math.round(hitboxRadius * 0.72);
+/** Initial actor floor ellipses are narrower than their elevated damage hitboxes. */
+const defaultMonsterFootprintRadii = (radius: number) => circle(Math.round(radius * 0.72));
 
 export const DEFAULT_BULLET_SPEC = {
   radius: world(6),
@@ -130,11 +138,15 @@ export const ENERGY_DASH_DAMAGE_PER_ENERGY = 23.5 / 5;
 export const ENERGY_DASH_TURN_RATE = Math.PI * 2;
 
 interface MonsterDefinition {
+  obstacle: boolean;
+  visualOffset: ObjectGeometry["visualOffset"];
+  hitboxOffset: ObjectGeometry["hitboxOffset"];
+  hitboxRadii: ObjectGeometry["hitboxRadii"];
+  footprintRadii: ObjectGeometry["footprintRadii"];
   kind: RegularMonsterKind;
   visualKinds: readonly MonsterVisualKind[];
   attackPattern: MonsterAttackPattern;
   fast: boolean;
-  radius: number;
   size: number;
   baseHp: number;
   hpVariance: number;
@@ -163,7 +175,11 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visualKinds: ["heavy"],
     attackPattern: "melee",
     fast: false,
-    radius: world(63),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(228.75) * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(228.75) * 0.22 },
+    hitboxRadii: circle(world(63)),
+    footprintRadii: defaultMonsterFootprintRadii(world(63)),
     size: world(228.75),
     baseHp: 8,
     hpVariance: 5,
@@ -189,7 +205,11 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visualKinds: ["scout"],
     attackPattern: "melee",
     fast: true,
-    radius: world(46),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(171.25) * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(171.25) * 0.2 },
+    hitboxRadii: circle(world(46)),
+    footprintRadii: defaultMonsterFootprintRadii(world(46)),
     size: world(171.25),
     baseHp: 2,
     hpVariance: 3,
@@ -215,7 +235,11 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visualKinds: ["scout"],
     attackPattern: "single",
     fast: true,
-    radius: world(46),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(171.25) * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(171.25) * 0.2 },
+    hitboxRadii: circle(world(46)),
+    footprintRadii: defaultMonsterFootprintRadii(world(46)),
     size: world(171.25),
     baseHp: 2,
     hpVariance: 3,
@@ -241,7 +265,11 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visualKinds: ["heavy"],
     attackPattern: "single",
     fast: false,
-    radius: world(63),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(228.75) * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(228.75) * 0.22 },
+    hitboxRadii: circle(world(63)),
+    footprintRadii: defaultMonsterFootprintRadii(world(63)),
     size: world(228.75),
     baseHp: 8,
     hpVariance: 5,
@@ -267,7 +295,11 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visualKinds: ["sentry-ballistic"],
     attackPattern: "single",
     fast: false,
-    radius: world(52),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(185) * 1.42 * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(185) * 0.44 },
+    hitboxRadii: circle(world(52)),
+    footprintRadii: defaultMonsterFootprintRadii(world(52)),
     size: world(185),
     baseHp: 3,
     hpVariance: 3,
@@ -294,7 +326,11 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visualKinds: ["sentry-twin"],
     attackPattern: "double",
     fast: false,
-    radius: world(62),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(220) * 1.34 * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(220) * 0.35 },
+    hitboxRadii: circle(world(62)),
+    footprintRadii: defaultMonsterFootprintRadii(world(62)),
     size: world(220),
     baseHp: 10,
     hpVariance: 5,
@@ -320,7 +356,11 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visualKinds: ["sentry-energy"],
     attackPattern: "scatter",
     fast: false,
-    radius: world(57),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(205) * 1.2 * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(205) * 0.44 },
+    hitboxRadii: circle(world(57)),
+    footprintRadii: defaultMonsterFootprintRadii(world(57)),
     size: world(205),
     baseHp: 6,
     hpVariance: 4,
@@ -344,7 +384,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
 };
 
 export const MAX_REGULAR_MONSTER_FOOTPRINT = Math.max(
-  ...Object.values(REGULAR_MONSTER_DEFINITIONS).map(definition => monsterFootprint(definition.radius)),
+  ...Object.values(REGULAR_MONSTER_DEFINITIONS).map(definition => Math.max(definition.footprintRadii.x, definition.footprintRadii.y)),
 );
 
 export const MINIBOSS_CHANCE_PERCENT = 5;
@@ -359,11 +399,15 @@ export const MONSTER_SPAWN_PROFILES = {
 } as const;
 
 interface BossDefinition {
+  obstacle: boolean;
+  visualOffset: ObjectGeometry["visualOffset"];
+  hitboxOffset: ObjectGeometry["hitboxOffset"];
+  hitboxRadii: ObjectGeometry["hitboxRadii"];
+  footprintRadii: ObjectGeometry["footprintRadii"];
   kind: BossKind;
   visualKinds: readonly MonsterVisualKind[];
   label: string;
   color: number;
-  radius: number;
   size: number;
   baseHp: number;
   hpPerDifficulty: number;
@@ -388,7 +432,11 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visualKinds: ["boss-arc", "boss-laser"],
     label: "DEEPSEEK",
     color: 0xd975ff,
-    radius: world(64),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(310) * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(310) * 0.36 },
+    hitboxRadii: circle(world(64)),
+    footprintRadii: defaultMonsterFootprintRadii(world(64)),
     size: world(310),
     baseHp: 42,
     hpPerDifficulty: 8,
@@ -411,7 +459,11 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visualKinds: ["boss-missile", "boss-siege"],
     label: "QWEN",
     color: 0x55e3cf,
-    radius: world(70),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(337.5) * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(337.5) * 0.38 },
+    hitboxRadii: circle(world(70)),
+    footprintRadii: defaultMonsterFootprintRadii(world(70)),
     size: world(337.5),
     baseHp: 54,
     hpPerDifficulty: 9,
@@ -434,7 +486,11 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visualKinds: ["boss-fortress"],
     label: "GLM",
     color: 0xff8b4d,
-    radius: world(78),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(393.75) * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(393.75) * 0.38 },
+    hitboxRadii: circle(world(78)),
+    footprintRadii: defaultMonsterFootprintRadii(world(78)),
     size: world(393.75),
     baseHp: 160,
     hpPerDifficulty: 20,
@@ -457,7 +513,11 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visualKinds: ["boss-arc", "boss-missile"],
     label: "KIMI",
     color: 0x5fe0c0,
-    radius: world(66),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(322.5) * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(322.5) * 0.36 },
+    hitboxRadii: circle(world(66)),
+    footprintRadii: defaultMonsterFootprintRadii(world(66)),
     size: world(322.5),
     baseHp: 66,
     hpPerDifficulty: 10,
@@ -480,7 +540,11 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visualKinds: ["boss-laser", "boss-siege"],
     label: "Hy4",
     color: 0xffd166,
-    radius: world(74),
+    obstacle: true,
+    visualOffset: { x: 0, y: -world(365) * 0.40625 },
+    hitboxOffset: { x: 0, y: -world(365) * 0.36 },
+    hitboxRadii: circle(world(74)),
+    footprintRadii: defaultMonsterFootprintRadii(world(74)),
     size: world(365),
     baseHp: 110,
     hpPerDifficulty: 16,
@@ -501,9 +565,9 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
 };
 
 export const MAX_ACTOR_FOOTPRINT = Math.max(
-  PLAYER_SPEC.footprint,
+  PLAYER_SPEC.footprintRadii.x, PLAYER_SPEC.footprintRadii.y,
   MAX_REGULAR_MONSTER_FOOTPRINT,
-  ...Object.values(BOSS_DEFINITIONS).map(definition => monsterFootprint(definition.radius)),
+  ...Object.values(BOSS_DEFINITIONS).map(definition => Math.max(definition.footprintRadii.x, definition.footprintRadii.y)),
 );
 
 export const GLM_HUNTER_ATTACKS = {
@@ -515,7 +579,6 @@ export const GLM_HUNTER_ATTACKS = {
 } as const;
 
 export interface MonsterVisualDefinition extends ActorVisualDefinition {
-  contentHalfHeight: number;
   healthBarHeight: number;
 }
 
@@ -546,7 +609,6 @@ function monsterVisual(
     directions,
     effects: { damage: damageEffect(0.32), destroy: explosionEffect(0.78) },
     destroyed: monsterDebris(debris, debrisScale),
-    contentHalfHeight,
     healthBarHeight,
   };
 }
@@ -591,19 +653,16 @@ export function monsterHealthBarY(size: number, visualKind: MonsterVisualKind): 
   return -size * MONSTER_VISUAL_DEFINITIONS[visualKind].healthBarHeight - world(8);
 }
 
-export function monsterVisualCenterOffsetY(size: number, visualKind: MonsterVisualKind): number {
-  return -size * MONSTER_VISUAL_DEFINITIONS[visualKind].contentHalfHeight;
-}
-
 export interface DecorationDefinition {
+  visualOffset: ObjectGeometry["visualOffset"];
+  hitboxOffset: ObjectGeometry["hitboxOffset"];
+  hitboxRadii: ObjectGeometry["hitboxRadii"];
+  footprintRadii: ObjectGeometry["footprintRadii"];
   definitionId: string;
   kind: string;
   visual: ObjectVisualDefinition;
   destructible: boolean;
   obstacle: boolean;
-  radius: number;
-  hitOffsetY: number;
-  footprint: number;
   size: number;
   origin: { x: number; y: number };
   /** Fraction of the sprite height where opaque content starts; aligns health bars with the visible body. */
@@ -616,21 +675,23 @@ const decoration = (
   asset: string,
   size: number,
   {
-    radius = 0,
-    footprint = 0,
-    obstacle = footprint > 0,
+    hitboxRadii = circle(0),
+    footprintRadii = circle(0),
+    obstacle = footprintRadii.x > 0 && footprintRadii.y > 0,
     origin = { x: 0.5, y: 0.9375 },
     healthBarTop,
-    hitOffsetY = -size * 0.4,
+    visualOffset = offsetForOrigin(size, origin.y),
+    hitboxOffset = { x: 0, y: -size * 0.4 },
     debris = [],
     destroy,
   }: {
-    radius?: number;
-    footprint?: number;
     obstacle?: boolean;
     origin?: { x: number; y: number };
     healthBarTop?: number;
-    hitOffsetY?: number;
+    visualOffset?: ObjectGeometry["visualOffset"];
+    hitboxOffset?: ObjectGeometry["hitboxOffset"];
+    hitboxRadii?: ObjectGeometry["hitboxRadii"];
+    footprintRadii?: ObjectGeometry["footprintRadii"];
     debris?: readonly string[];
     destroy?: SpriteClip;
   } = {},
@@ -646,9 +707,10 @@ const decoration = (
     },
     destructible,
     obstacle,
-    radius,
-    hitOffsetY,
-    footprint,
+    visualOffset,
+    hitboxOffset,
+    hitboxRadii,
+    footprintRadii,
     size,
     origin,
     healthBarTop,
@@ -679,8 +741,8 @@ const blockingScenery = (
   debris: readonly string[] = circuitDebris,
 ): DecorationDefinition =>
   decoration(id, "machinery", asset, size, {
-    radius,
-    footprint: radius * 0.72,
+    hitboxRadii: circle(radius),
+    footprintRadii: circle(radius * 0.72),
     debris,
     destroy: objectExplosion,
     healthBarTop,
@@ -694,8 +756,9 @@ const lowScenery = (
   debris: readonly string[] = circuitDebris,
 ): DecorationDefinition =>
   decoration(id, "scenery", asset, size, {
-    radius,
-    hitOffsetY: -size * 0.25,
+    hitboxRadii: circle(radius),
+    footprintRadii: circle(radius * 0.72),
+    hitboxOffset: { x: 0, y: -size * 0.25 },
     obstacle: false,
     debris,
     destroy: objectExplosion,
@@ -703,20 +766,20 @@ const lowScenery = (
   });
 
 export const DECORATION_DEFINITIONS = {
-  plantViolet: decoration("plant-violet", "plant", SCENERY_ASSETS.plantViolet, world(93), { radius: world(19), footprint: world(10), origin: { x: 0.5, y: 0.975 }, debris: plantDebris, destroy: plantBreak }),
-  plantGreen: decoration("plant-green", "plant", SCENERY_ASSETS.plantGreen, world(93), { radius: world(19), footprint: world(10), origin: { x: 0.5, y: 0.975 }, debris: plantDebris, destroy: plantBreak }),
-  plantMagenta: decoration("plant-magenta", "plant", SCENERY_ASSETS.plantMagenta, world(88), { radius: world(18), footprint: world(9), debris: plantDebris, destroy: plantBreak }),
-  plantTeal: decoration("plant-teal", "plant", SCENERY_ASSETS.plantTeal, world(65), { radius: world(14), footprint: world(7), origin: { x: 0.5, y: 0.941 }, debris: plantDebris, destroy: plantBreak }),
-  plantAmber: decoration("plant-amber", "plant", SCENERY_ASSETS.plantAmber, world(65), { radius: world(14), footprint: world(7), origin: { x: 0.5, y: 0.941 }, debris: plantDebris, destroy: plantBreak }),
-  planterDivider: decoration("planter-divider", "plant", SCENERY_ASSETS.planterDivider, world(125), { radius: world(26), footprint: world(19), debris: plantDebris, destroy: plantBreak }),
-  barrelRed: decoration("barrel-red", "barrel", SCENERY_ASSETS.barrelRed, world(82), { radius: world(16), footprint: world(9), origin: { x: 0.5, y: 0.917 }, debris: [DEBRIS_ASSETS.barrelRedCrushed, DEBRIS_ASSETS.barrelRedShards, DEBRIS_ASSETS.redBarrelWreck], destroy: barrelExplosion }),
-  barrelCoolant: decoration("barrel-coolant", "barrel", SCENERY_ASSETS.barrelCoolant, world(82), { radius: world(16), footprint: world(9), origin: { x: 0.5, y: 0.917 }, debris: [DEBRIS_ASSETS.barrelCoolantRuptured, DEBRIS_ASSETS.blueBarrelWreck, DEBRIS_ASSETS.turquoiseBarrelShards], destroy: barrelExplosion }),
-  barrelHazard: decoration("barrel-hazard", "barrel", SCENERY_ASSETS.barrelHazard, world(82), { radius: world(16), footprint: world(9), origin: { x: 0.5, y: 0.917 }, debris: [DEBRIS_ASSETS.barrelHazardBands, DEBRIS_ASSETS.yellowBarrelWreck, DEBRIS_ASSETS.mixedBarrelParts], destroy: barrelExplosion }),
-  crateCargo: decoration("crate-cargo", "crate", SCENERY_ASSETS.crateCargo, world(70), { radius: world(14), footprint: world(10), debris: [DEBRIS_ASSETS.crateCargo], destroy: objectExplosion }),
-  crateArmored: decoration("crate-armored", "crate", SCENERY_ASSETS.crateArmored, world(70), { radius: world(14), footprint: world(10), debris: [DEBRIS_ASSETS.crateArmored], destroy: objectExplosion }),
-  crateAmmo: decoration("crate-ammo", "crate", SCENERY_ASSETS.crateAmmo, world(70), { radius: world(14), footprint: world(10), debris: [DEBRIS_ASSETS.crateAmmo], destroy: objectExplosion }),
-  crateMedical: decoration("crate-medical", "crate", SCENERY_ASSETS.crateMedical, world(70), { radius: world(14), footprint: world(10), debris: [DEBRIS_ASSETS.crateMedical, DEBRIS_ASSETS.whiteMedicalBarrel], destroy: objectExplosion }),
-  terminal: decoration("terminal", "terminal", SCENERY_ASSETS.terminal, world(93), { radius: world(16), footprint: world(9), origin: { x: 0.5, y: 0.967 }, debris: [DEBRIS_ASSETS.cyanMonitor, DEBRIS_ASSETS.burntCircuits], destroy: objectExplosion }),
+  plantViolet: decoration("plant-violet", "plant", SCENERY_ASSETS.plantViolet, world(93), { hitboxRadii: circle(world(19)), footprintRadii: circle(world(10)), origin: { x: 0.5, y: 0.975 }, debris: plantDebris, destroy: plantBreak }),
+  plantGreen: decoration("plant-green", "plant", SCENERY_ASSETS.plantGreen, world(93), { hitboxRadii: circle(world(19)), footprintRadii: circle(world(10)), origin: { x: 0.5, y: 0.975 }, debris: plantDebris, destroy: plantBreak }),
+  plantMagenta: decoration("plant-magenta", "plant", SCENERY_ASSETS.plantMagenta, world(88), { hitboxRadii: circle(world(18)), footprintRadii: circle(world(9)), debris: plantDebris, destroy: plantBreak }),
+  plantTeal: decoration("plant-teal", "plant", SCENERY_ASSETS.plantTeal, world(65), { hitboxRadii: circle(world(14)), footprintRadii: circle(world(7)), origin: { x: 0.5, y: 0.941 }, debris: plantDebris, destroy: plantBreak }),
+  plantAmber: decoration("plant-amber", "plant", SCENERY_ASSETS.plantAmber, world(65), { hitboxRadii: circle(world(14)), footprintRadii: circle(world(7)), origin: { x: 0.5, y: 0.941 }, debris: plantDebris, destroy: plantBreak }),
+  planterDivider: decoration("planter-divider", "plant", SCENERY_ASSETS.planterDivider, world(125), { hitboxRadii: circle(world(26)), footprintRadii: circle(world(19)), debris: plantDebris, destroy: plantBreak }),
+  barrelRed: decoration("barrel-red", "barrel", SCENERY_ASSETS.barrelRed, world(82), { hitboxRadii: circle(world(16)), footprintRadii: circle(world(9)), origin: { x: 0.5, y: 0.917 }, debris: [DEBRIS_ASSETS.barrelRedCrushed, DEBRIS_ASSETS.barrelRedShards, DEBRIS_ASSETS.redBarrelWreck], destroy: barrelExplosion }),
+  barrelCoolant: decoration("barrel-coolant", "barrel", SCENERY_ASSETS.barrelCoolant, world(82), { hitboxRadii: circle(world(16)), footprintRadii: circle(world(9)), origin: { x: 0.5, y: 0.917 }, debris: [DEBRIS_ASSETS.barrelCoolantRuptured, DEBRIS_ASSETS.blueBarrelWreck, DEBRIS_ASSETS.turquoiseBarrelShards], destroy: barrelExplosion }),
+  barrelHazard: decoration("barrel-hazard", "barrel", SCENERY_ASSETS.barrelHazard, world(82), { hitboxRadii: circle(world(16)), footprintRadii: circle(world(9)), origin: { x: 0.5, y: 0.917 }, debris: [DEBRIS_ASSETS.barrelHazardBands, DEBRIS_ASSETS.yellowBarrelWreck, DEBRIS_ASSETS.mixedBarrelParts], destroy: barrelExplosion }),
+  crateCargo: decoration("crate-cargo", "crate", SCENERY_ASSETS.crateCargo, world(70), { hitboxRadii: circle(world(14)), footprintRadii: circle(world(10)), debris: [DEBRIS_ASSETS.crateCargo], destroy: objectExplosion }),
+  crateArmored: decoration("crate-armored", "crate", SCENERY_ASSETS.crateArmored, world(70), { hitboxRadii: circle(world(14)), footprintRadii: circle(world(10)), debris: [DEBRIS_ASSETS.crateArmored], destroy: objectExplosion }),
+  crateAmmo: decoration("crate-ammo", "crate", SCENERY_ASSETS.crateAmmo, world(70), { hitboxRadii: circle(world(14)), footprintRadii: circle(world(10)), debris: [DEBRIS_ASSETS.crateAmmo], destroy: objectExplosion }),
+  crateMedical: decoration("crate-medical", "crate", SCENERY_ASSETS.crateMedical, world(70), { hitboxRadii: circle(world(14)), footprintRadii: circle(world(10)), debris: [DEBRIS_ASSETS.crateMedical, DEBRIS_ASSETS.whiteMedicalBarrel], destroy: objectExplosion }),
+  terminal: decoration("terminal", "terminal", SCENERY_ASSETS.terminal, world(93), { hitboxRadii: circle(world(16)), footprintRadii: circle(world(9)), origin: { x: 0.5, y: 0.967 }, debris: [DEBRIS_ASSETS.cyanMonitor, DEBRIS_ASSETS.burntCircuits], destroy: objectExplosion }),
   specimenTank: blockingScenery("specimen-tank", SCENERY_ASSETS.specimenTank, world(155), world(28)),
   researchBench: blockingScenery("research-bench", SCENERY_ASSETS.researchBench, world(135), world(35), 0.2305),
   reagentRack: lowScenery("reagent-rack", SCENERY_ASSETS.reagentRack, world(105), world(24), 0.4609),
@@ -790,7 +853,8 @@ export const DECORATION_DEFINITIONS = {
   spawner: {
     ...blockingScenery("monster-spawner", SCENERY_ASSETS.spawnerDormant, world(205), world(34)),
     kind: "monster-spawner",
-    hitOffsetY: -world(40),
+    hitboxOffset: { x: 0, y: -world(40) },
+    visualOffset: { x: 0, y: -world(205) * 0.40625 },
     healthBarTop: 0.5273,
     visual: {
       normal: clip([SCENERY_ASSETS.spawnerDormant], 1, { x: 0.5, y: 0.90625 }),
@@ -813,10 +877,11 @@ export const DECORATION_DEFINITIONS = {
   },
   contentBrowser: {
     ...decoration("content-browser", "content-browser", SCENERY_ASSETS.contentBrowserOff, world(135), {
-      radius: world(28),
+      hitboxRadii: circle(world(28)),
+      footprintRadii: circle(world(20)),
       obstacle: false,
       origin: { x: 0.5, y: 0.90625 },
-      hitOffsetY: -world(38),
+      hitboxOffset: { x: 0, y: -world(38) },
       debris: circuitDebris,
       destroy: explosionEffect(0.72),
     }),
@@ -1042,7 +1107,7 @@ export const ROOM_SCENERY_THEMES: Readonly<Record<RoomSceneryTheme, RoomSceneryT
 };
 
 export const MAX_REGULAR_MONSTER_RADIUS = Math.max(
-  ...Object.values(REGULAR_MONSTER_DEFINITIONS).map(definition => definition.radius),
+  ...Object.values(REGULAR_MONSTER_DEFINITIONS).flatMap(definition => [definition.hitboxRadii.x, definition.hitboxRadii.y]),
 );
 
 export interface LootDefinition {
@@ -1087,17 +1152,19 @@ export const WEAPON_VISUAL_DEFINITIONS: Record<WeaponKind, { asset: string; orig
 };
 
 export const PORTAL_DEFINITION = {
+  obstacle: false,
   frames: PORTAL_FRAMES,
   size: world(150),
-  contactRadius: { x: world(38), y: world(34) },
+  visualOffset: { x: 0, y: -world(150) * 0.375 },
+  hitboxOffset: { x: 0, y: 0 },
+  hitboxRadii: circle(0),
+  footprintRadii: { x: world(58), y: world(52) },
   origin: { x: 0.5, y: 0.875 },
   // Depth-ordering anchor sits slightly above the sprite anchor so actors
   // near the pedestal base render in front of the portal.
   orderingOffsetY: -world(30),
-  // The player materializes this far in front of (below) the portal sprite;
-  // the contact area shifts down by the same amount.
+  // Spawn outside the activation footprint to avoid re-entering immediately.
   spawnOffset: { x: 0, y: world(40) },
-  contactOffset: { x: 0, y: -world(56) + world(40) },
 } as const;
 
 export function weaponAsset(kind: WeaponKind): string {

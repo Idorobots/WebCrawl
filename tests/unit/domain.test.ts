@@ -92,7 +92,6 @@ import {
   MONSTER_WALK_REFERENCE_SPEED,
   monsterHealthBarY,
   monsterWalkElapsed,
-  monsterVisualCenterOffsetY,
   PLAYER_ENERGY_MAX,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
@@ -102,7 +101,6 @@ import {
   WEAPON_VISUAL_DEFINITIONS,
   WORLD_GEOMETRY,
   monsterDisplaySize,
-  monsterFootprint,
   type RoomSceneryTheme,
 } from "../../src/client/domain/specs";
 import {
@@ -116,7 +114,7 @@ import {
   weaponForRoom,
   weaponKinds,
 } from "../../src/client/domain/weapons";
-import type { Decoration, DungeonGraph, GraphNode, LayoutLink, MonsterVisualKind, Point, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
+import type { Decoration, DungeonGraph, EllipseRadii, GraphNode, LayoutLink, MonsterVisualKind, Point, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
   id,
@@ -366,8 +364,8 @@ describe("layout and geometry", () => {
 
   it("scales world definitions from authored dimensions", () => {
     expect(ROOM_DEFINITIONS.rectangle).toEqual({ width: ENVIRONMENT_SEGMENT_SIZE * 4, height: ENVIRONMENT_SEGMENT_SIZE * 4 });
-    expect(PLAYER_SPEC.radius).toBe(world(28));
-    expect(PLAYER_SPEC.footprint).toBe(world(20));
+    expect(PLAYER_SPEC.hitboxRadii).toEqual({ x: world(28), y: world(28) });
+    expect(PLAYER_SPEC.footprintRadii).toEqual({ x: world(20), y: world(20) });
     expect(WORLD_GEOMETRY.segmentSize).toBe(world(64) * 2);
     expect(WORLD_GEOMETRY.floorTileSize).toBe(world(64));
     expect(WORLD_GEOMETRY.segmentSize).toBe(WORLD_GEOMETRY.floorTileSize * 2);
@@ -375,11 +373,11 @@ describe("layout and geometry", () => {
 
   it("keeps actor damage hitboxes separate from occupied floor space", () => {
     const monster = bossSpecForRoom(layout.nodes[1]!, 1, "glm-hunter");
-    expect(monster.radius).toBe(BOSS_DEFINITIONS["glm-hunter"].radius);
-    expect(monster.footprint).toBe(monsterFootprint(monster.radius));
-    const position = { x: monster.x + PLAYER_SPEC.footprint + monster.footprint, y: monster.y };
-    expect(footprintsOverlap(position, PLAYER_SPEC.footprint, monster, monster.footprint)).toBe(false);
-    expect(footprintsOverlap(position, PLAYER_SPEC.radius, monster, monster.radius)).toBe(true);
+    expect(monster.hitboxRadii).toEqual(BOSS_DEFINITIONS["glm-hunter"].hitboxRadii);
+    expect(monster.footprintRadii).toEqual(BOSS_DEFINITIONS["glm-hunter"].footprintRadii);
+    const position = { x: monster.x + PLAYER_SPEC.footprintRadii.x + monster.footprintRadii.x, y: monster.y };
+    expect(footprintsOverlap(position, PLAYER_SPEC.footprintRadii, monster, monster.footprintRadii)).toBe(false);
+    expect(footprintsOverlap(position, PLAYER_SPEC.hitboxRadii, monster, monster.hitboxRadii)).toBe(true);
   });
 
   it("blocks entering occupied footprints but lets actors escape an existing overlap", () => {
@@ -392,10 +390,33 @@ describe("layout and geometry", () => {
     expect(footprintMoveIsClear(blocker, { x: 1, y: 0 }, 5, blocker, 5)).toBe(true);
   });
 
+  it("uses both ellipse axes for footprints and keeps non-blocking scenery footprints", () => {
+    const a = { x: 0, y: 0 };
+    const b = { x: 19, y: 0 };
+    expect(footprintsOverlap(a, { x: 12, y: 3 }, b, { x: 8, y: 3 })).toBe(true);
+    expect(footprintsOverlap(a, { x: 3, y: 12 }, b, { x: 3, y: 8 })).toBe(false);
+    expect(footprintsOverlap(a, { x: 12, y: 3 }, { x: 16, y: 4 }, { x: 8, y: 3 })).toBe(false);
+    expect(DECORATION_DEFINITIONS.contentBrowser.obstacle).toBe(false);
+    expect(DECORATION_DEFINITIONS.contentBrowser.footprintRadii.x).toBeGreaterThan(0);
+    expect(DECORATION_DEFINITIONS.reagentRack.obstacle).toBe(false);
+    expect(DECORATION_DEFINITIONS.reagentRack.footprintRadii.y).toBeGreaterThan(0);
+  });
+
+  it("uses X and Y hitbox offsets and radii independently of the footprint", () => {
+    const item = {
+      ...DECORATION_DEFINITIONS.crateCargo,
+      id: "ellipse-crate", roomId: 0, x: 100, y: 100, hp: 1, maxHp: 1, destroyed: false, dropKind: null,
+      hitboxOffset: { x: 20, y: -30 }, hitboxRadii: { x: 12, y: 4 },
+    };
+    expect(projectileHitsDecoration(item, { x: 132, y: 70 }, 1)).toBe(true);
+    expect(projectileHitsDecoration(item, { x: 120, y: 76 }, 1)).toBe(false);
+    expect(projectileHitsDecoration(item, { x: 100, y: 100 }, 1)).toBe(false);
+  });
+
   it("keeps melee attacks in reach without overlapping the player footprint", () => {
     const heavy = REGULAR_MONSTER_DEFINITIONS["melee-heavy"];
-    const monster = { attackRange: heavy.attackRange, footprint: monsterFootprint(heavy.radius) };
-    expect(monsterMeleeRange(monster)).toBeGreaterThan(monster.footprint + PLAYER_SPEC.footprint);
+    const monster = { attackRange: heavy.attackRange, footprintRadii: heavy.footprintRadii };
+    expect(monsterMeleeRange(monster)).toBeGreaterThan(monster.footprintRadii.x + PLAYER_SPEC.footprintRadii.x);
     expect(monsterMeleeRange(monster)).toBeGreaterThanOrEqual(monster.attackRange);
   });
 
@@ -419,8 +440,8 @@ describe("layout and geometry", () => {
     expect(monsterDisplaySize(200, "scout", "melee")).toBe(200);
     expect(monsterDisplaySize(200, "scout", "walk")).toBe(200);
     expect(MONSTER_VISUAL_DEFINITIONS.scout.directions.down?.melee?.origin.y).toBeCloseTo(0.90625);
-    expect(PLAYER_SPEC.visualCenterOffsetY).toBeLessThan(0);
-    expect(monsterVisualCenterOffsetY(200, "scout")).toBe(-40);
+    expect(PLAYER_SPEC.hitboxOffset.y).toBeLessThan(0);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].hitboxOffset.y).toBe(-world(171.25) * 0.2);
     expect(monsterHealthBarY(200, "scout")).toBeLessThan(-80);
     expect(DECORATION_DEFINITIONS.crateCargo.origin).toEqual({ x: 0.5, y: 0.9375 });
     expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
@@ -464,12 +485,13 @@ describe("layout and geometry", () => {
     const normal = direction === "E" ? { x: 1, y: 0 } : direction === "W" ? { x: -1, y: 0 }
       : direction === "S" ? { x: 0, y: 1 } : { x: 0, y: -1 };
     const shift = normal.x ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
-    const walkable = (point: Point, radius: number) => adjacent.nodes.some(room =>
+    const walkable = (point: Point, radius: number | EllipseRadii) => adjacent.nodes.some(room =>
       pointInRoomFloor(point.x, point.y, room, radius)
     ) || pointInCorridor(point.x, point.y, link, radius);
-    for (const radius of [PLAYER_SPEC.footprint, MAX_REGULAR_MONSTER_FOOTPRINT]) {
-      const start = { x: door.x - normal.x * (radius + world(30)), y: door.y - normal.y * (radius + world(30)) + shift };
-      const goal = { x: door.x + normal.x * (radius + world(30)), y: door.y + normal.y * (radius + world(30)) + shift };
+    for (const radius of [PLAYER_SPEC.footprintRadii, { x: MAX_REGULAR_MONSTER_FOOTPRINT, y: MAX_REGULAR_MONSTER_FOOTPRINT }]) {
+      const along = normal.x ? radius.x : radius.y;
+      const start = { x: door.x - normal.x * (along + world(30)), y: door.y - normal.y * (along + world(30)) + shift };
+      const goal = { x: door.x + normal.x * (along + world(30)), y: door.y + normal.y * (along + world(30)) + shift };
       expect(walkable({ x: door.x, y: door.y + shift }, radius)).toBe(true);
       for (const [from, to] of [[start, goal], [goal, start]] as const) {
         const path = aStarPath(from, to, point => walkable(point, radius), WORLD_GEOMETRY.pathGridStep, 1800);
@@ -478,7 +500,7 @@ describe("layout and geometry", () => {
           walkableSegment(path![index]!, point, candidate => walkable(candidate, radius))
         )).toBe(true);
       }
-      const across = WORLD_GEOMETRY.doorOpeningWidth / 2 - radius + 1;
+      const across = WORLD_GEOMETRY.doorOpeningWidth / 2 - (normal.x ? radius.y : radius.x) + 1;
       const outsideDoor = { x: door.x - normal.y * across, y: door.y + shift + normal.x * across };
       expect(pointInCorridor(outsideDoor.x, outsideDoor.y, link, radius)).toBe(false);
     }
@@ -550,8 +572,8 @@ describe("layout and geometry", () => {
     const topWallEdge = room.y - room.height / 2;
     expect(pointInRoomFloor(room.x, topWallEdge, room, 0)).toBe(true);
     expect(pointInRoomFloor(room.x, topWallEdge - 1, room, 0)).toBe(false);
-    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.footprint, room, PLAYER_SPEC.footprint)).toBe(true);
-    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.footprint - 1, room, PLAYER_SPEC.footprint)).toBe(false);
+    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.footprintRadii.y, room, PLAYER_SPEC.footprintRadii)).toBe(true);
+    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.footprintRadii.y - 1, room, PLAYER_SPEC.footprintRadii)).toBe(false);
     expect(pointInRoomFloor(room.x + room.width / 2, room.y, room, 0)).toBe(true);
     expect(pointInRoomFloor(room.x, room.y + room.height / 2, room, 0)).toBe(true);
     expect(pointInRoomFloor(room.x + room.width / 2 + 1, room.y, room, 0)).toBe(false);
@@ -571,15 +593,16 @@ describe("layout and geometry", () => {
       0,
     )).toBe(false);
     const playerInsideDoor = {
-      x: start.x - unit.x * PLAYER_SPEC.footprint / 2,
-      y: start.y - unit.y * PLAYER_SPEC.footprint / 2,
+      x: start.x - unit.x * PLAYER_SPEC.footprintRadii.x / 2,
+      y: start.y - unit.y * PLAYER_SPEC.footprintRadii.y / 2,
     };
-    expect(pointInCorridor(playerInsideDoor.x, playerInsideDoor.y, link, PLAYER_SPEC.footprint)).toBe(true);
+    expect(pointInCorridor(playerInsideDoor.x, playerInsideDoor.y, link, PLAYER_SPEC.footprintRadii)).toBe(true);
+    const across = start.y === end.y ? PLAYER_SPEC.footprintRadii.y : PLAYER_SPEC.footprintRadii.x;
     expect(pointInCorridor(
-      playerInsideDoor.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
-      playerInsideDoor.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
+      playerInsideDoor.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
+      playerInsideDoor.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
       link,
-      PLAYER_SPEC.footprint,
+      PLAYER_SPEC.footprintRadii,
     )).toBe(false);
 
     // The door's blocked band spans the wall thickness into the corridor:
@@ -589,15 +612,15 @@ describe("layout and geometry", () => {
       x: start.x + unit.x * bandHalf,
       y: start.y + unit.y * bandHalf + (start.y === end.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
     };
-    expect(pointInCorridor(bandOpening.x, bandOpening.y, link, PLAYER_SPEC.footprint)).toBe(true);
+    expect(pointInCorridor(bandOpening.x, bandOpening.y, link, PLAYER_SPEC.footprintRadii)).toBe(true);
     const bandEdge = {
-      x: bandOpening.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
-      y: bandOpening.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
+      x: bandOpening.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
+      y: bandOpening.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
     };
-    expect(pointInCorridor(bandEdge.x, bandEdge.y, link, PLAYER_SPEC.footprint), "Expected blocked door band edge").toBe(false);
+    expect(pointInCorridor(bandEdge.x, bandEdge.y, link, PLAYER_SPEC.footprintRadii), "Expected blocked door band edge").toBe(false);
 
     const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-    expect(pointInCorridor(midpoint.x, midpoint.y, link, PLAYER_SPEC.footprint)).toBe(true);
+    expect(pointInCorridor(midpoint.x, midpoint.y, link, PLAYER_SPEC.footprintRadii)).toBe(true);
     expect(pointInCorridor(
       midpoint.x,
       midpoint.y + link.width / 2 + 1,
@@ -628,7 +651,7 @@ describe("layout and geometry", () => {
           const blocked = decorations.some(item =>
             item.obstacle &&
             !item.destroyed &&
-            footprintsOverlap(point, MAX_REGULAR_MONSTER_FOOTPRINT, item, item.footprint ?? item.radius)
+            footprintsOverlap(point, MAX_REGULAR_MONSTER_FOOTPRINT, item, item.footprintRadii)
           );
           return inFloor && !blocked;
         },
@@ -689,45 +712,45 @@ describe("layout and geometry", () => {
     };
     const scenarios = [
       {
-        player: { x: room.x, y: room.y - room.height / 2 + PLAYER_SPEC.footprint },
-        inside: (point: Point, radius: number) => pointInRoomFloor(point.x, point.y, room, radius),
+        player: { x: room.x, y: room.y - room.height / 2 + PLAYER_SPEC.footprintRadii.y },
+        inside: (point: Point, radius: number | EllipseRadii) => pointInRoomFloor(point.x, point.y, room, radius),
       },
       {
-        player: { x: corridor.points[1]!.x / 2, y: -corridor.width / 2 + PLAYER_SPEC.footprint },
-        inside: (point: Point, radius: number) => pointInCorridor(point.x, point.y, corridor, radius),
+        player: { x: corridor.points[1]!.x / 2, y: -corridor.width / 2 + PLAYER_SPEC.footprintRadii.y },
+        inside: (point: Point, radius: number | EllipseRadii) => pointInCorridor(point.x, point.y, corridor, radius),
       },
     ];
     for (const { player, inside } of scenarios) {
-      for (const [kind, visualKind] of [["melee-light", "scout"], ["melee-heavy", "heavy"]] as const) {
+      for (const kind of ["melee-light", "melee-heavy"] as const) {
         const spec = REGULAR_MONSTER_DEFINITIONS[kind];
         const monster = { x: player.x + world(100), y: player.y + world(110) };
-        const footprint = monsterFootprint(spec.radius);
+        const footprint = spec.footprintRadii;
         const walkable = (point: Point) => inside(point, footprint) &&
-          !footprintsOverlap(point, footprint, player, PLAYER_SPEC.footprint);
+          !footprintsOverlap(point, footprint, player, PLAYER_SPEC.footprintRadii);
         const bulletWalkable = (point: Point) => inside(point, DEFAULT_BULLET_SPEC.radius);
-        expect(inside(player, PLAYER_SPEC.footprint)).toBe(true);
+        expect(inside(player, PLAYER_SPEC.footprintRadii)).toBe(true);
         expect(walkable(player)).toBe(false);
         const approach = walkableApproachPoint(player, monster, walkable,
           point => walkableSegment(point, player, bulletWalkable),
-          footprint + PLAYER_SPEC.footprint + WORLD_GEOMETRY.pathGridStep * 2);
+          footprint.x + PLAYER_SPEC.footprintRadii.x + WORLD_GEOMETRY.pathGridStep * 2);
         expect(approach).not.toBeNull();
         expect(Math.hypot(approach!.x - player.x, approach!.y - player.y))
-          .toBeGreaterThanOrEqual(footprint + PLAYER_SPEC.footprint);
+          .toBeGreaterThanOrEqual(footprint.x + PLAYER_SPEC.footprintRadii.x);
         const path = aStarPath(monster, approach!, walkable, WORLD_GEOMETRY.pathGridStep, 1800);
         expect(path).not.toBeNull();
         expect(path!.at(-1)).toEqual(approach);
         expect(path!.slice(1).every((point, index) => walkableSegment(path![index]!, point, walkable))).toBe(true);
 
-        const playerCenter = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
-        const monsterCenter = actorCollisionCenter(monster, monsterVisualCenterOffsetY(spec.size, visualKind));
+        const playerCenter = actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset);
+        const monsterCenter = actorCollisionCenter(monster, spec.hitboxOffset);
         expect(walkableSegment(monsterCenter, playerCenter, bulletWalkable)).toBe(false);
-        const aim = visiblePlayerHitPoint(playerCenter, PLAYER_SPEC.radius,
+        const aim = visiblePlayerHitPoint(playerCenter, PLAYER_SPEC.hitboxRadii.x,
           point => walkableSegment(monsterCenter, point, bulletWalkable));
         expect(aim).not.toBeNull();
-        expect(Math.hypot(aim!.x - playerCenter.x, aim!.y - playerCenter.y)).toBeLessThan(PLAYER_SPEC.radius);
+        expect(Math.hypot(aim!.x - playerCenter.x, aim!.y - playerCenter.y)).toBeLessThan(PLAYER_SPEC.hitboxRadii.x);
         const occluded = (point: Point) => bulletWalkable(point) &&
           Math.abs(point.x - (player.x + world(50))) > WORLD_GEOMETRY.wallThickness / 2;
-        expect(visiblePlayerHitPoint(playerCenter, PLAYER_SPEC.radius,
+        expect(visiblePlayerHitPoint(playerCenter, PLAYER_SPEC.hitboxRadii.x,
           point => walkableSegment(monsterCenter, point, occluded))).toBeNull();
       }
     }
@@ -737,8 +760,8 @@ describe("layout and geometry", () => {
     for (const shape of ["capsule", "octagon"] as const) {
       const room = { ...layout.nodes[0]!, shape };
       const point = {
-        x: room.x + room.width / 2 - PLAYER_SPEC.footprint,
-        y: room.y + room.height / 2 - PLAYER_SPEC.footprint,
+        x: room.x + room.width / 2 - PLAYER_SPEC.footprintRadii.x,
+        y: room.y + room.height / 2 - PLAYER_SPEC.footprintRadii.y,
       };
       expect(pointInRoomFloor(point.x, point.y, room)).toBe(true);
       expect(pointInRoom(point.x, point.y, room, 0)).toBe(false);
@@ -761,7 +784,7 @@ describe("layout and geometry", () => {
   });
 
   it("blocks every door edge across the combined room and corridor floor", () => {
-    const onFloor = (point: { x: number; y: number }, radius: number): boolean =>
+    const onFloor = (point: { x: number; y: number }, radius: number | EllipseRadii): boolean =>
       layout.nodes.some(room => pointInRoomFloor(point.x, point.y, room, radius)) ||
       layout.links.some(link => pointInCorridor(point.x, point.y, link, radius));
 
@@ -778,17 +801,18 @@ describe("layout and geometry", () => {
         { boundary: end, inward: unit, side: targetSide },
       ];
       for (const door of doors) {
-        const depth = PLAYER_SPEC.footprint;
+        const depth = unit.x ? PLAYER_SPEC.footprintRadii.x : PLAYER_SPEC.footprintRadii.y;
         const center = {
           x: door.boundary.x + door.inward.x * depth / 2,
           y: door.boundary.y + door.inward.y * depth / 2 + verticalShift,
         };
+        const across = unit.x ? PLAYER_SPEC.footprintRadii.y : PLAYER_SPEC.footprintRadii.x;
         const blockedEdge = {
-          x: center.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
-          y: center.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - PLAYER_SPEC.footprint + 1),
+          x: center.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
+          y: center.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
         };
-        expect(onFloor(center, PLAYER_SPEC.footprint)).toBe(true);
-        expect(onFloor(blockedEdge, PLAYER_SPEC.footprint), `Expected blocked ${door.side} door edge`).toBe(false);
+        expect(onFloor(center, PLAYER_SPEC.footprintRadii)).toBe(true);
+        expect(onFloor(blockedEdge, PLAYER_SPEC.footprintRadii), `Expected blocked ${door.side} door edge`).toBe(false);
       }
     }
   });
@@ -803,7 +827,7 @@ describe("layout and geometry", () => {
     const decorations = decorationSpecsForCorridor(link);
     const monsters = monsterSpecsForCorridor(link, 3);
     expect(decorations).toEqual(decorationSpecsForCorridor(link));
-    expect(decorations.every(item => !item.obstacle && item.footprint === 0)).toBe(true);
+    expect(decorations.every(item => !item.obstacle)).toBe(true);
     expect(monsters).toEqual(monsterSpecsForCorridor(link, 3));
     expect(monsters).toEqual([]);
     expect(decorations.every(item => item.roomId === link.source.id)).toBe(true);
@@ -842,7 +866,7 @@ describe("layout and geometry", () => {
     }
     const forkLink = forkLayout.links[0]!;
     const forkPoint = forkLink.points[forkLink.forkPointIndex!]!;
-    expect(pointInCorridor(forkPoint.x, forkPoint.y, forkLink, PLAYER_SPEC.footprint)).toBe(true);
+    expect(pointInCorridor(forkPoint.x, forkPoint.y, forkLink, PLAYER_SPEC.footprintRadii)).toBe(true);
     const end = forkLink.points.at(-1)!;
     const playerInBranch = { x: forkPoint.x + (end.x - forkPoint.x) * 0.4, y: forkPoint.y + (end.y - forkPoint.y) * 0.4 };
     const walkable = (point: Point) => forkLayout.nodes.some(room =>
@@ -1081,7 +1105,7 @@ describe("layout and geometry", () => {
   });
 
   it("projects diagonal movement along obstacle surfaces without entering them", () => {
-    const obstacle = { x: 0, y: 0, radius: 10 };
+    const obstacle = { x: 0, y: 0, radii: { x: 10, y: 10 } };
     const slid = slideAlongObstacles(
       { x: -20, y: 0 },
       { x: 10, y: 8 },
@@ -1181,36 +1205,48 @@ describe("portal entry", () => {
 
   it("requires leaving a portal occupied at spawn before it can activate", () => {
     const contacts = new Set<string>();
-    updatePortalContacts([portal], portal, 56, contacts);
-    expect(updatePortalContacts([portal], portal, 56, contacts)).toBeNull();
-    expect(updatePortalContacts([portal], { x: 200, y: 100 }, 56, contacts)).toBeNull();
-    expect(updatePortalContacts([portal], portal, 56, contacts)).toEqual(portal);
+    updatePortalContacts([portal], portal, PLAYER_SPEC.footprintRadii, contacts);
+    expect(updatePortalContacts([portal], portal, PLAYER_SPEC.footprintRadii, contacts)).toBeNull();
+    expect(updatePortalContacts([portal], { x: 200, y: 100 }, PLAYER_SPEC.footprintRadii, contacts)).toBeNull();
+    expect(updatePortalContacts([portal], portal, PLAYER_SPEC.footprintRadii, contacts)).toEqual(portal);
   });
 
   it("does not activate when walking through a disabled portal", () => {
     const contacts = new Set<string>();
-    expect(updatePortalContacts([{ ...portal, enabled: false }], portal, 56, contacts)).toBeNull();
+    expect(updatePortalContacts([{ ...portal, enabled: false }], portal, PLAYER_SPEC.footprintRadii, contacts)).toBeNull();
     expect(contacts.size).toBe(0);
   });
 
-  it("uses the portal energy ring rather than the low sprite anchor", () => {
+  it("activates only when the whole player footprint enters the portal footprint, not at spawn", () => {
     const contacts = new Set<string>();
-    const { contactOffset, contactRadius, spawnOffset } = PORTAL_DEFINITION;
+    const { footprintRadii, spawnOffset } = PORTAL_DEFINITION;
     expect(updatePortalContacts(
       [portal],
-      { x: portal.x + contactOffset.x, y: portal.y + contactOffset.y },
-      contactRadius,
+      { x: portal.x + footprintRadii.x - PLAYER_SPEC.footprintRadii.x + 1, y: portal.y },
+      PLAYER_SPEC.footprintRadii,
       contacts,
-      contactOffset,
-    )).toEqual(portal);
+    )).toBeNull();
+    expect(updatePortalContacts([portal], portal, PLAYER_SPEC.footprintRadii, contacts)).toEqual(portal);
     contacts.clear();
     expect(updatePortalContacts(
       [portal],
       { x: portal.x + spawnOffset.x, y: portal.y + spawnOffset.y },
-      contactRadius,
+      PLAYER_SPEC.footprintRadii,
       contacts,
-      contactOffset,
     )).toBeNull();
+  });
+
+  it("checks the player's entire elliptical footprint, including diagonal edges", () => {
+    const contacts = new Set<string>();
+    const playerFootprint = { x: 8, y: 28 };
+    const portalRadii = PORTAL_DEFINITION.footprintRadii;
+    expect(updatePortalContacts([portal], { x: portal.x, y: portal.y + portalRadii.y - playerFootprint.y + 1 },
+      playerFootprint, contacts)).toBeNull();
+    expect(updatePortalContacts([portal], {
+      x: portal.x + portalRadii.x * 0.7,
+      y: portal.y + portalRadii.y * 0.6,
+    }, playerFootprint, contacts)).toBeNull();
+    expect(updatePortalContacts([portal], portal, playerFootprint, contacts)).toEqual(portal);
   });
 
   it("selects the entry portal by explicit url, then the up portal, then the first room stair", () => {
@@ -1317,8 +1353,8 @@ describe("deterministic room contents", () => {
       const decorations = decorationSpecsForRoom(candidate, 10);
       for (const [index, item] of decorations.entries()) {
         for (const other of decorations.slice(index + 1)) {
-          const minimum = Math.max(world(10), item.footprint ?? 0) +
-            Math.max(world(10), other.footprint ?? 0) + world(8);
+          const minimum = Math.max(world(10), item.footprintRadii.x, item.footprintRadii.y) +
+            Math.max(world(10), other.footprintRadii.x, other.footprintRadii.y) + world(8);
           expect(Math.hypot(item.x - other.x, item.y - other.y)).toBeGreaterThanOrEqual(minimum);
         }
       }
@@ -1378,10 +1414,10 @@ describe("deterministic room contents", () => {
     const relocated = monsters.find(monster => monster.id === original.id)!;
     expect(relocated).toBeDefined();
     expect(relocated).not.toMatchObject({ x: original.x, y: original.y });
-    expect(monsterPositionIsClear(relocated, relocated.footprint, combatLayout, [blocker])).toBe(true);
+    expect(monsterPositionIsClear(relocated, relocated.footprintRadii, combatLayout, [blocker])).toBe(true);
     expect(monsterPositionIsClear(
-      { x: blocker.x + blocker.footprint + relocated.footprint - 1, y: blocker.y },
-      relocated.footprint, combatLayout, [blocker],
+      { x: blocker.x + blocker.footprintRadii.x + relocated.footprintRadii.x - 1, y: blocker.y },
+      relocated.footprintRadii, combatLayout, [blocker],
     )).toBe(false);
   });
 
@@ -1399,7 +1435,7 @@ describe("deterministic room contents", () => {
     const monsters = buildMonsters(layout, new Map(), new Set([combatRoom.id]), 1, [], arrival);
     expect(monsters.some(monster => monster.id === first.id)).toBe(true);
     expect(monsters.every(monster =>
-      !footprintsOverlap(monster, monster.footprint, arrival, PLAYER_SPEC.footprint)
+      !footprintsOverlap(monster, monster.footprintRadii, arrival, PLAYER_SPEC.footprintRadii)
     )).toBe(true);
   });
 
@@ -1418,15 +1454,16 @@ describe("deterministic room contents", () => {
     for (const [index, item] of group.entries()) {
       for (const other of group.slice(index + 1)) {
         if (item.roomId !== other.roomId) continue;
-        const itemIsDecoration = "obstacle" in item;
-        const otherIsDecoration = "obstacle" in other;
+        const itemIsDecoration = "definitionId" in item;
+        const otherIsDecoration = "definitionId" in other;
         // Monsters only keep their distance from obstacle scenery; non-obstacle
         // low scenery is intentionally walkable. Decoration pairs always separate.
         if (itemIsDecoration !== otherIsDecoration) {
           const decoration = itemIsDecoration ? item : other;
           if (!(decoration as Decoration).obstacle) continue;
         }
-        const minimum = (item.footprint ?? item.radius) + (other.footprint ?? other.radius);
+        const minimum = Math.max(item.footprintRadii.x, item.footprintRadii.y) +
+          Math.max(other.footprintRadii.x, other.footprintRadii.y);
         expect(Math.hypot(item.x - other.x, item.y - other.y), `${item.id} vs ${other.id}`)
           .toBeGreaterThanOrEqual(minimum);
       }
@@ -1644,7 +1681,7 @@ describe("deterministic room contents", () => {
     expect(scout).toBeDefined();
     expect(heavy).toBeDefined();
     expect(scout!.size).toBeLessThan(heavy!.size);
-    expect(scout!.radius).toBeLessThan(heavy!.radius);
+    expect(scout!.hitboxRadii.x).toBeLessThan(heavy!.hitboxRadii.x);
   });
 
   it("generates all seven deterministic archetypes with distinct combat roles", () => {
@@ -1725,7 +1762,7 @@ describe("deterministic room contents", () => {
     for (const miniboss of minibosses) {
       const definition = REGULAR_MONSTER_DEFINITIONS[miniboss.kind as RegularMonsterKind];
       expect(miniboss.size).toBeCloseTo(definition.size * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.radius).toBe(definition.radius);
+      expect(miniboss.hitboxRadii).toEqual(definition.hitboxRadii);
       expect(miniboss.maxHp).toBeGreaterThanOrEqual(definition.baseHp * MINIBOSS_HP_MULTIPLIER);
       expect(miniboss.attackDamage).toBeGreaterThanOrEqual(
         Math.ceil(definition.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER),
@@ -1854,7 +1891,7 @@ describe("deterministic room contents", () => {
 
     const glmHunter = bossSpecForRoom(arena, 1, "glm-hunter");
     expect(glmHunter.maxHp).toBeGreaterThan(150);
-    expect(glmHunter.attackRange).toBeGreaterThanOrEqual(glmHunter.footprint + PLAYER_SPEC.footprint);
+    expect(glmHunter.attackRange).toBeGreaterThanOrEqual(glmHunter.footprintRadii.x + PLAYER_SPEC.footprintRadii.x);
     expect(GLM_HUNTER_ATTACKS.chargeWindupMs).toBeGreaterThanOrEqual(500);
     expect(GLM_HUNTER_ATTACKS.initialChargeDelayMs).toBeGreaterThan(GLM_HUNTER_ATTACKS.chargeWindupMs);
 
@@ -1987,7 +2024,7 @@ describe("deterministic room contents", () => {
     expect(restored.roomId).toBe(999);
     expect(restored.x).toBe(destination.x);
     expect(restored.y).toBe(destination.y);
-    expect(pointInRoom(restored.x, restored.y, room, restored.radius)).toBe(false);
+    expect(pointInRoom(restored.x, restored.y, room, restored.hitboxRadii)).toBe(false);
   });
 
   it("subtracts the projectile's full damage from obstacle HP", () => {
@@ -2034,18 +2071,18 @@ describe("deterministic room contents", () => {
     };
     const destroyed = { ...crate, id: "destroyed-crate", destroyed: true };
     const indestructible = { ...crate, id: "pedestal", destructible: false };
-    const distant = { ...crate, id: "distant-crate", x: barrel.x + BARREL_EXPLOSION_RADIUS + crate.radius + 1 };
+    const distant = { ...crate, id: "distant-crate", x: barrel.x + BARREL_EXPLOSION_RADIUS + crate.hitboxRadii.x + 1 };
     const monsterSpec = monsterSpecForSpawner(barrel, 1, 0);
     const monster = {
       ...monsterSpec,
       active: true,
       hp: 10,
-      y: barrel.y + barrel.hitOffsetY - monsterVisualCenterOffsetY(monsterSpec.size, monsterSpec.visualKind),
+      y: barrel.y + barrel.hitboxOffset.y - monsterSpec.hitboxOffset.y,
     };
     const dead = { ...monster, id: "dead-monster", dead: true };
     const inactive = { ...monster, id: "inactive-monster", active: false };
-    const farMonster = { ...monster, id: "far-monster", x: barrel.x + BARREL_EXPLOSION_RADIUS + monster.radius + 1 };
-    const player = { x: barrel.x, y: barrel.y + barrel.hitOffsetY - PLAYER_SPEC.visualCenterOffsetY };
+    const farMonster = { ...monster, id: "far-monster", x: barrel.x + BARREL_EXPLOSION_RADIUS + monster.hitboxRadii.x + 1 };
+    const player = { x: barrel.x, y: barrel.y + barrel.hitboxOffset.y - PLAYER_SPEC.hitboxOffset.y };
 
     expect(barrelExplosionTargets(
       barrel,
@@ -2064,20 +2101,20 @@ describe("deterministic room contents", () => {
     const crate: Decoration = {
       ...DECORATION_DEFINITIONS.crateCargo,
       id: "edge-crate", roomId: room.id,
-      x: barrel.x + BARREL_EXPLOSION_RADIUS + DECORATION_DEFINITIONS.crateCargo.radius,
-      y: barrel.y + barrel.hitOffsetY - DECORATION_DEFINITIONS.crateCargo.hitOffsetY,
+      x: barrel.x + BARREL_EXPLOSION_RADIUS + DECORATION_DEFINITIONS.crateCargo.hitboxRadii.x,
+      y: barrel.y + barrel.hitboxOffset.y - DECORATION_DEFINITIONS.crateCargo.hitboxOffset.y,
       maxHp: 4, hp: 4, destroyed: false, dropKind: null,
     };
     const player = {
-      x: barrel.x + BARREL_EXPLOSION_RADIUS + PLAYER_SPEC.radius,
-      y: barrel.y + barrel.hitOffsetY - PLAYER_SPEC.visualCenterOffsetY,
+      x: barrel.x + BARREL_EXPLOSION_RADIUS + PLAYER_SPEC.hitboxRadii.x,
+      y: barrel.y + barrel.hitboxOffset.y - PLAYER_SPEC.hitboxOffset.y,
     };
     const monsterSpec = monsterSpecForSpawner(barrel, 1, 1);
     const monster = {
       ...monsterSpec,
       active: true,
-      x: barrel.x + BARREL_EXPLOSION_RADIUS + monsterSpec.radius,
-      y: barrel.y + barrel.hitOffsetY - monsterVisualCenterOffsetY(monsterSpec.size, monsterSpec.visualKind),
+      x: barrel.x + BARREL_EXPLOSION_RADIUS + monsterSpec.hitboxRadii.x,
+      y: barrel.y + barrel.hitboxOffset.y - monsterSpec.hitboxOffset.y,
     };
 
     expect(barrelExplosionTargets(barrel, [crate], [monster], player)).toMatchObject({
@@ -2094,16 +2131,16 @@ describe("deterministic room contents", () => {
   it("finds monster hitboxes across spatial cell boundaries and refreshes after movement", () => {
     const template = monsterSpecsForRoom(node(9_001, 0, 1, { isRoot: false }))[0]!;
     const cellSize = WORLD_GEOMETRY.spatialCellSize;
-    const centerOffsetY = monsterVisualCenterOffsetY(template.size, template.visualKind);
+    const centerOffsetY = template.hitboxOffset.y;
     const near = {
       ...template,
-      x: cellSize - template.radius / 2,
-      y: cellSize - template.radius / 2 - centerOffsetY,
+      x: cellSize - template.hitboxRadii.x / 2,
+      y: cellSize - template.hitboxRadii.y / 2 - centerOffsetY,
       active: false,
     };
     const far = { ...template, id: "far-monster", x: cellSize * 6 };
     const dead = { ...near, id: "dead-monster", dead: true };
-    const hit = { x: cellSize + template.radius / 2, y: cellSize + template.radius / 2 };
+    const hit = { x: cellSize + template.hitboxRadii.x / 2, y: cellSize + template.hitboxRadii.y / 2 };
 
     const cells = indexMonsterHitboxes([near, far, dead]);
     // Index inactive monsters so discovering a room during a tick can activate them immediately.
@@ -2118,6 +2155,21 @@ describe("deterministic room contents", () => {
       .toEqual(new Set([near]));
   });
 
+  it("indexes hitboxes at their X/Y-offset centers using separate extents", () => {
+    const template = monsterSpecsForRoom(node(9_002, 0, 1, { isRoot: false }))[0]!;
+    const cell = WORLD_GEOMETRY.spatialCellSize;
+    const monster = {
+      ...template,
+      x: cell - 60,
+      y: cell + 5,
+      hitboxOffset: { x: 70, y: -10 },
+      hitboxRadii: { x: 3, y: 7 },
+    };
+    const cells = indexMonsterHitboxes([monster]);
+    expect(monsterCollisionCandidates(cells, { x: cell + 10, y: cell - 5 }, 0)).toEqual(new Set([monster]));
+    expect(monsterCollisionCandidates(cells, { x: monster.x, y: monster.y }, 0)).toEqual(new Set());
+  });
+
   it("centers scenery projectile hitboxes on the visible object", () => {
     const item = {
       ...DECORATION_DEFINITIONS.crateCargo,
@@ -2130,31 +2182,31 @@ describe("deterministic room contents", () => {
       destroyed: false,
       dropKind: null,
     };
-    expect(item.hitOffsetY).toBeLessThan(-item.radius);
-    expect(projectileHitsDecoration(item, { x: item.x, y: item.y + item.hitOffsetY }, 1)).toBe(true);
+    expect(item.hitboxOffset.y).toBeLessThan(-item.hitboxRadii.y);
+    expect(projectileHitsDecoration(item, { x: item.x + item.hitboxOffset.x, y: item.y + item.hitboxOffset.y }, 1)).toBe(true);
     expect(projectileHitsDecoration(item, { x: item.x, y: item.y }, 1)).toBe(false);
   });
 
   it("releases actor projectiles from the visual center instead of the floor anchor", () => {
     expect(actorAimDirection(
       { x: 100, y: 200 },
-      -50,
+      { x: 0, y: -50 },
       { x: 200, y: 150 },
     )).toEqual({ x: 1, y: 0 });
     expect(actorProjectileOrigin(
       { x: 100, y: 200 },
       { x: 1, y: 0 },
-      -50,
+      { x: 0, y: -50 },
       40,
       10,
     )).toEqual({ x: 140, y: 160 });
     expect(actorProjectileOrigin(
       { x: 100, y: 200 },
       { x: 0, y: -1 },
-      -50,
+      { x: 0, y: -50 },
       40,
     )).toEqual({ x: 100, y: 110 });
-    expect(actorCollisionCenter({ x: 100, y: 200 }, -50)).toEqual({ x: 100, y: 150 });
+    expect(actorCollisionCenter({ x: 100, y: 200 }, { x: 0, y: -50 })).toEqual({ x: 100, y: 150 });
     expect(projectileHitsCircle({ x: 100, y: 150 }, 30, { x: 100, y: 150 }, 5)).toBe(true);
     expect(projectileHitsCircle({ x: 100, y: 150 }, 30, { x: 100, y: 200 }, 5)).toBe(false);
   });
@@ -2482,7 +2534,7 @@ describe("deterministic room contents", () => {
     // capacity depends on obstacle layout, but the restored state must be
     // honored wherever it fits.
     const placedBeforeSave = buildMonsters(combatLayout, new Map(), new Set([combatRoom.id]), 10, restoredDecorations)
-      .map(item => ({ x: item.x, y: item.y, footprint: item.footprint }));
+      .map(item => ({ x: item.x, y: item.y, footprintRadii: item.footprintRadii }));
     let savedPosition: Point | undefined;
     for (let ring = 0; ring <= 9 && !savedPosition; ring += 1) {
       for (let index = 0; index < 24; index += 1) {
@@ -2491,7 +2543,7 @@ describe("deterministic room contents", () => {
           x: reinforcement.x + Math.cos(angle) * world(45) * ring,
           y: reinforcement.y + Math.sin(angle) * world(45) * ring,
         };
-        if (monsterPositionIsClear(position, reinforcement.footprint, combatLayout, restoredDecorations, placedBeforeSave)) {
+        if (monsterPositionIsClear(position, reinforcement.footprintRadii, combatLayout, restoredDecorations, placedBeforeSave)) {
           savedPosition = position;
           break;
         }
@@ -2521,7 +2573,7 @@ describe("deterministic room contents", () => {
     });
     expect(monsterPositionIsClear(
       restoredReinforcement,
-      restoredReinforcement.footprint,
+      restoredReinforcement.footprintRadii,
       combatLayout,
       restoredDecorations,
     )).toBe(true);
@@ -2571,8 +2623,8 @@ describe("deterministic room contents", () => {
       for (const other of placed) {
         if (spawner.id === other.id) continue;
         expect(Math.hypot(spawner.x - other.x, spawner.y - other.y)).toBeGreaterThanOrEqual(
-          Math.max(world(10), spawner.footprint ?? 0) +
-          Math.max(world(10), other.footprint ?? 0) + world(8),
+          Math.max(world(10), spawner.footprintRadii.x, spawner.footprintRadii.y) +
+          Math.max(world(10), other.footprintRadii.x, other.footprintRadii.y) + world(8),
         );
       }
     }

@@ -58,6 +58,21 @@ export interface Point {
   y: number;
 }
 
+/** Axis-aligned ellipse half-width and half-height in world pixels. */
+export interface EllipseRadii extends Point {}
+
+export interface ObjectGeometry {
+  /** Whether the footprint blocks other actors' movement. */
+  obstacle: boolean;
+  /** Sprite center relative to the object's world position. Visuals only. */
+  visualOffset: Point;
+  /** Damage hitbox center relative to the object's world position. */
+  hitboxOffset: Point;
+  hitboxRadii: EllipseRadii;
+  /** Always centered on the object's world position, regardless of blocking. */
+  footprintRadii: EllipseRadii;
+}
+
 export interface SpriteClip {
   frames: readonly string[];
   frameDurationMs: number;
@@ -198,7 +213,7 @@ export interface WeaponProjectile {
   damage: number;
 }
 
-export interface Decoration extends Point {
+export interface Decoration extends Point, ObjectGeometry {
   id: string;
   definitionId: string;
   roomId: number;
@@ -206,14 +221,10 @@ export interface Decoration extends Point {
   visual: ObjectVisualDefinition;
   visualVariant?: number;
   destructible: boolean;
-  obstacle: boolean;
-  radius: number;
-  hitOffsetY: number;
   size: number;
   origin: { x: number; y: number };
   /** Fraction of the sprite height where opaque content starts; aligns health bars with the visible body. */
   healthBarTop?: number;
-  footprint?: number;
   maxHp: number;
   hp: number;
   destroyed: boolean;
@@ -240,7 +251,7 @@ export interface ObstacleState {
   spawnedCount?: number;
 }
 
-export interface Monster extends Point {
+export interface Monster extends Point, ObjectGeometry {
   id: string;
   seed: number;
   kind: MonsterKind;
@@ -252,8 +263,6 @@ export interface Monster extends Point {
   hp: number;
   speed: number;
   fast: boolean;
-  radius: number;
-  footprint: number;
   size: number;
   bossKind?: BossKind;
   miniboss: boolean;

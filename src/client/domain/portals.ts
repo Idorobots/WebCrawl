@@ -1,5 +1,7 @@
 import type { Monster, Point, Stair } from "../types";
 import { PORTAL_DEFINITION } from "./specs";
+import { ellipseContainsEllipse } from "./geometry";
+import type { EllipseRadii } from "../types";
 
 export function entryPortalFor(
   roomStairs: readonly Stair[],
@@ -64,16 +66,11 @@ export function updatePortalAvailability(
 export function updatePortalContacts(
   portals: readonly Stair[],
   position: Point,
-  radius: number | Point,
+  playerFootprint: EllipseRadii,
   contacts: Set<string>,
-  offset: Point = { x: 0, y: 0 },
 ): Stair | null {
-  const radii = typeof radius === "number" ? { x: radius, y: radius } : radius;
-  const overlapping = portals.filter((portal) => {
-    const dx = (position.x - (portal.x + offset.x)) / radii.x;
-    const dy = (position.y - (portal.y + offset.y)) / radii.y;
-    return portal.enabled && dx * dx + dy * dy <= 1;
-  });
+  const overlapping = portals.filter(portal => portal.enabled &&
+    ellipseContainsEllipse(portal, PORTAL_DEFINITION.footprintRadii, position, playerFootprint));
   const overlappingIds = new Set(overlapping.map(portal => portal.id));
   for (const id of contacts) {
     if (!overlappingIds.has(id)) contacts.delete(id);

@@ -31,6 +31,6 @@ describe("top wall edge probe", () => {
     };
 
     report("scenery", decorations, () => 0);
-    report("monsters", monsters.filter(m => !m.bossKind), m => m.radius);
+    report("monsters", monsters.filter(m => !m.bossKind), m => Math.max(m.hitboxRadii.x, m.hitboxRadii.y));
   });
 });

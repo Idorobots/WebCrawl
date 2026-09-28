@@ -1,6 +1,7 @@
 import { ENVIRONMENT_SEGMENT_SIZE, ROOM_HEIGHT, ROOM_WIDTH, world } from "../config";
 import type {
   Decoration,
+  EllipseRadii,
   BossKind,
   DungeonLayout,
   GraphNode,
@@ -27,7 +28,6 @@ import {
   MINIBOSS_SIZE_MULTIPLIER,
   MONSTER_SPAWN_PROFILES,
   MONSTER_VISUAL_DEFINITIONS,
-  monsterFootprint,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   REGULAR_MONSTER_DEFINITIONS,
@@ -98,7 +98,7 @@ export function weaponLootForRoom(room: GraphNode, pageUrl: string): LootItem | 
   if (stableHash(`${room.lootSeed}|weapon-drop`) % 100 >= chance) return null;
   const maxYOffset = Math.max(
     0,
-    room.height / 2 - WORLD_GEOMETRY.wallThickness - PLAYER_SPEC.footprint - world(10),
+    room.height / 2 - WORLD_GEOMETRY.wallThickness - PLAYER_SPEC.footprintRadii.y - world(10),
   );
   return {
     id: `${pageUrl}::${room.id}::weapon`,
@@ -198,9 +198,8 @@ function weightedDecoration(
 }
 
 function roomDecorationSlots(room: GraphNode, seed: number): Point[] {
-  const edgeClearance = WORLD_GEOMETRY.wallThickness + PLAYER_SPEC.footprint + world(20);
-  const edgeX = Math.max(world(70), room.width / 2 - edgeClearance);
-  const edgeY = Math.max(world(65), room.height / 2 - edgeClearance);
+  const edgeX = Math.max(world(70), room.width / 2 - WORLD_GEOMETRY.wallThickness - PLAYER_SPEC.footprintRadii.x - world(20));
+  const edgeY = Math.max(world(65), room.height / 2 - WORLD_GEOMETRY.wallThickness - PLAYER_SPEC.footprintRadii.y - world(20));
   const horizontal = [-1, -0.5, 0, 0.5, 1].map(scale => ({ x: scale * edgeX, y: -edgeY }));
   const vertical = [-0.5, 0, 0.5].map(scale => ({ x: edgeX, y: scale * edgeY }));
   const groups: Point[][] = [
@@ -223,10 +222,11 @@ function decorationFits(
   room: GraphNode,
   placed: readonly Decoration[],
 ): boolean {
-  const radius = Math.max(world(10), definition.footprint);
+  const radius = { x: Math.max(world(10), definition.footprintRadii.x),
+    y: Math.max(world(10), definition.footprintRadii.y) };
   const maxWeaponYOffset = Math.max(
     0,
-    room.height / 2 - WORLD_GEOMETRY.wallThickness - PLAYER_SPEC.footprint - world(10),
+    room.height / 2 - WORLD_GEOMETRY.wallThickness - PLAYER_SPEC.footprintRadii.y - world(10),
   );
   const interactionPoints = [
     { x: room.x, y: room.y - Math.min(world(135), maxWeaponYOffset) },
@@ -240,16 +240,16 @@ function decorationFits(
   ];
   const leavesInteractionsClear = !definition.obstacle || interactionPoints.every(point =>
     Math.hypot(position.x - point.x, position.y - point.y) >=
-      radius + PLAYER_SPEC.footprint + world(10)
+      Math.max(radius.x + PLAYER_SPEC.footprintRadii.x, radius.y + PLAYER_SPEC.footprintRadii.y) + world(10)
   );
   const leavesRoomCenterClear = !definition.obstacle || Math.hypot(
     position.x - room.x,
     position.y - room.y,
-  ) >= radius + MAX_REGULAR_MONSTER_FOOTPRINT + world(20);
+  ) >= Math.max(radius.x, radius.y) + MAX_REGULAR_MONSTER_FOOTPRINT + world(20);
   return leavesRoomCenterClear && leavesInteractionsClear &&
     pointInRoomFloor(position.x, position.y, room, radius) && placed.every(item =>
     Math.hypot(position.x - item.x, position.y - item.y) >=
-      radius + Math.max(world(10), item.footprint ?? 0) + world(8)
+      Math.max(radius.x, radius.y) + Math.max(world(10), item.footprintRadii.x, item.footprintRadii.y) + world(8)
   );
 }
 
@@ -375,8 +375,7 @@ export function decorationSpecsForCorridor(link: LayoutLink, floor = 1): Decorat
       visualVariant: itemSeed,
       kind: "corridor-prop",
       obstacle: false,
-      radius: definition.radius,
-      footprint: 0,
+      footprintRadii: definition.footprintRadii,
       maxHp: hp,
       hp,
       destroyed: false,
@@ -408,7 +407,7 @@ function blocksDoorApproach(item: Decoration, room: GraphNode, door: Point): boo
     x: door.x + dx / distance * Math.min(world(140), distance),
     y: door.y + dy / distance * Math.min(world(140), distance),
   };
-  return pointToSegmentDistance(item, door, approach) < (item.footprint ?? item.radius) + MAX_REGULAR_MONSTER_FOOTPRINT + world(20);
+  return pointToSegmentDistance(item, door, approach) < Math.max(item.footprintRadii.x, item.footprintRadii.y) + MAX_REGULAR_MONSTER_FOOTPRINT + world(20);
 }
 
 function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly Point[]): Decoration[] {
@@ -615,8 +614,11 @@ export function bossSpecForRoom(
     maxHp: definition.baseHp + difficulty * definition.hpPerDifficulty + (seed % definition.hpVariance),
     speed: definition.speed + Math.min(definition.maxSpeedBonus, difficulty * definition.speedPerDifficulty),
     fast: false,
-    radius: definition.radius,
-    footprint: monsterFootprint(definition.radius),
+    obstacle: definition.obstacle,
+    visualOffset: definition.visualOffset,
+    hitboxOffset: definition.hitboxOffset,
+    hitboxRadii: definition.hitboxRadii,
+    footprintRadii: definition.footprintRadii,
     size: definition.size,
     miniboss: false,
     attackPattern: "single",
@@ -687,8 +689,11 @@ function regularMonsterSpec(
     hp: 1,
     speed: scaledPercent(speed, profile.speedPercent),
     fast: definition.fast,
-    radius: definition.radius,
-    footprint: monsterFootprint(definition.radius),
+    obstacle: definition.obstacle,
+    visualOffset: definition.visualOffset,
+    hitboxOffset: definition.hitboxOffset,
+    hitboxRadii: definition.hitboxRadii,
+    footprintRadii: definition.footprintRadii,
     size: definition.size,
     miniboss: false,
     attackPattern: definition.attackPattern,
@@ -724,6 +729,8 @@ function promoteToMiniboss(monster: Monster): Monster {
     maxHp: Math.ceil(monster.maxHp * MINIBOSS_HP_MULTIPLIER),
     attackDamage: Math.ceil(monster.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER),
     size: monster.size * MINIBOSS_SIZE_MULTIPLIER,
+    visualOffset: { x: monster.visualOffset.x * MINIBOSS_SIZE_MULTIPLIER, y: monster.visualOffset.y * MINIBOSS_SIZE_MULTIPLIER },
+    hitboxOffset: { x: monster.hitboxOffset.x * MINIBOSS_SIZE_MULTIPLIER, y: monster.hitboxOffset.y * MINIBOSS_SIZE_MULTIPLIER },
   };
 }
 
@@ -795,7 +802,9 @@ export function monsterSpecForBossSummon(boss: Monster, floor: number, index: nu
   const seed = stableHash(`${boss.id}|summon|${floor}|${index}`);
   const angle = index * 2.399963;
   const kind = monsterKindForSeed(seed, floorDifficulty(floor));
-  const distance = boss.footprint + monsterFootprint(REGULAR_MONSTER_DEFINITIONS[kind].radius) + world(30);
+  const candidateFootprint = REGULAR_MONSTER_DEFINITIONS[kind].footprintRadii;
+  const distance = Math.max(boss.footprintRadii.x + candidateFootprint.x,
+    boss.footprintRadii.y + candidateFootprint.y) + world(30);
   return regularMonsterSpec(
     `${boss.id}::summon-${index}`,
     seed,
@@ -831,14 +840,14 @@ export function buildMonsters(
       )),
     ...bossSummons,
   ];
-  const placedMonsters: Array<Pick<Monster, "x" | "y" | "footprint">> = [];
+  const placedMonsters: Array<Pick<Monster, "x" | "y" | "footprintRadii">> = [];
   const monsters: Monster[] = [];
   for (const spec of specs) {
     const saved = savedStates.get(spec.id);
     const desired = { x: saved?.x ?? spec.x, y: saved?.y ?? spec.y };
     const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters, playerSpawn);
     if (!position) continue;
-    if (!(saved?.dead ?? false)) placedMonsters.push({ x: position.x, y: position.y, footprint: spec.footprint });
+    if (!(saved?.dead ?? false) && spec.obstacle) placedMonsters.push({ x: position.x, y: position.y, footprintRadii: spec.footprintRadii });
     const relocated = position.x !== desired.x || position.y !== desired.y;
     monsters.push({
       ...spec,
@@ -908,10 +917,10 @@ export function buildMonsters(
 
 export function monsterPositionIsClear(
   position: Point,
-  footprint: number,
+  footprint: number | EllipseRadii,
   layout: DungeonLayout,
   decorations: readonly Decoration[],
-  placedMonsters: ReadonlyArray<Pick<Monster, "x" | "y" | "footprint">> = [],
+  placedMonsters: ReadonlyArray<Pick<Monster, "x" | "y" | "footprintRadii">> = [],
 ): boolean {
   const onFloor = layout.nodes.some(room => pointInRoomFloor(position.x, position.y, room, footprint)) ||
     layout.links.some(link => pointInCorridor(position.x, position.y, link, footprint));
@@ -919,9 +928,9 @@ export function monsterPositionIsClear(
   return decorations.every(item =>
     !item.obstacle ||
     item.destroyed ||
-    !footprintsOverlap(position, footprint, item, item.footprint ?? item.radius)
+    !footprintsOverlap(position, footprint, item, item.footprintRadii)
   ) && placedMonsters.every(placed =>
-    !footprintsOverlap(position, footprint, placed, placed.footprint)
+    !footprintsOverlap(position, footprint, placed, placed.footprintRadii)
   );
 }
 
@@ -930,13 +939,13 @@ function safeMonsterPosition(
   desired: Point,
   layout: DungeonLayout,
   decorations: readonly Decoration[],
-  placedMonsters: ReadonlyArray<Pick<Monster, "x" | "y" | "footprint">> = [],
+  placedMonsters: ReadonlyArray<Pick<Monster, "x" | "y" | "footprintRadii">> = [],
   playerSpawn?: Point,
 ): Point | null {
   const room = layout.nodes.find(candidate => candidate.id === monster.spawnRoomId);
   const centers = [desired, ...(room ? [{ x: room.x, y: room.y }] : [])];
   const candidates: Point[] = [];
-  const spacing = monster.footprint + world(24);
+  const spacing = Math.max(monster.footprintRadii.x, monster.footprintRadii.y) + world(24);
   const angleOffset = (monster.seed % 12) / 12 * Math.PI * 2;
   for (const center of centers) {
     candidates.push(center);
@@ -955,11 +964,11 @@ function safeMonsterPosition(
     // deterministic scan of the room floor so crowded spots still relocate.
     // Perimeter obstacles leave narrow walkable strips along the walls, so
     // the step stays fine relative to the monster's footprint.
-    const step = Math.max(world(16), monster.footprint / 3);
-    const left = room.x - room.width / 2 + monster.footprint;
-    const right = room.x + room.width / 2 - monster.footprint;
-    const top = room.y - room.height / 2 + monster.footprint;
-    const bottom = room.y + room.height / 2 - monster.footprint;
+    const step = Math.max(world(16), Math.min(monster.footprintRadii.x, monster.footprintRadii.y) / 3);
+    const left = room.x - room.width / 2 + monster.footprintRadii.x;
+    const right = room.x + room.width / 2 - monster.footprintRadii.x;
+    const top = room.y - room.height / 2 + monster.footprintRadii.y;
+    const bottom = room.y + room.height / 2 - monster.footprintRadii.y;
     for (let y = top; y <= bottom; y += step) {
       for (let x = left; x <= right; x += step) {
         candidates.push({ x, y });
@@ -967,8 +976,8 @@ function safeMonsterPosition(
     }
   }
   return candidates.find(position =>
-    (!playerSpawn || !footprintsOverlap(position, monster.footprint, playerSpawn, PLAYER_SPEC.footprint)) &&
-    monsterPositionIsClear(position, monster.footprint, layout, decorations, placedMonsters)
+    (!playerSpawn || !footprintsOverlap(position, monster.footprintRadii, playerSpawn, PLAYER_SPEC.footprintRadii)) &&
+    monsterPositionIsClear(position, monster.footprintRadii, layout, decorations, placedMonsters)
   ) ?? null;
 }
 

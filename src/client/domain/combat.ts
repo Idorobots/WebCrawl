@@ -1,9 +1,9 @@
-import type { Decoration, Monster, MonsterAttackPattern, Point } from "../types";
+import type { Decoration, EllipseRadii, Monster, MonsterAttackPattern, Point } from "../types";
+import { ellipseRadii, ellipsesOverlap, sweptEllipsesOverlap } from "./geometry";
 import {
   BARREL_EXPLOSION_RADIUS,
   ENERGY_DASH_DAMAGE_PER_ENERGY,
   ENERGY_DASH_DISTANCE_PER_ENERGY,
-  monsterVisualCenterOffsetY,
   PLAYER_SPEC,
   WORLD_GEOMETRY,
 } from "./specs";
@@ -19,9 +19,11 @@ export function monsterEngagementRange(
   return monster.speed === 0 ? monster.projectileRange : monster.attackRange;
 }
 
-/** Melee must reach an actor standing just beyond the two occupied floor circles. */
-export function monsterMeleeRange(monster: Pick<Monster, "attackRange" | "footprint">): number {
-  return Math.max(monster.attackRange, monster.footprint + PLAYER_SPEC.footprint + WORLD_GEOMETRY.pathGridStep * 2);
+/** Melee must reach an actor standing just beyond the two occupied floor ellipses. */
+export function monsterMeleeRange(monster: Pick<Monster, "attackRange" | "footprintRadii">): number {
+  const footprint = monster.footprintRadii;
+  return Math.max(monster.attackRange, Math.max(footprint.x + PLAYER_SPEC.footprintRadii.x,
+    footprint.y + PLAYER_SPEC.footprintRadii.y) + WORLD_GEOMETRY.pathGridStep * 2);
 }
 
 export function enemyVolleyProjectiles(
@@ -60,22 +62,15 @@ export function applyObstacleDamage(item: Decoration, damage: number): boolean {
 }
 
 /** Sweep the boss's footprint across one movement step so fast charges cannot skip scenery. */
-export function bossCrushedScenery<T extends Pick<Decoration, "x" | "y" | "radius" | "footprint" | "destructible" | "destroyed">>(
+export function bossCrushedScenery<T extends Pick<Decoration, "x" | "y" | "footprintRadii" | "destructible" | "destroyed">>(
   from: Point,
   to: Point,
-  bossRadius: number,
+  bossRadius: number | EllipseRadii,
   decorations: readonly T[],
 ): T[] {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const lengthSquared = dx * dx + dy * dy;
   return decorations.filter(item => {
     if (!item.destructible || item.destroyed) return false;
-    const projection = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1,
-      ((item.x - from.x) * dx + (item.y - from.y) * dy) / lengthSquared,
-    ));
-    return Math.hypot(item.x - from.x - projection * dx, item.y - from.y - projection * dy) <=
-      bossRadius + (item.footprint || item.radius);
+    return sweptEllipsesOverlap(from, to, ellipseRadii(bossRadius), item, item.footprintRadii);
   });
 }
 
@@ -100,21 +95,21 @@ export function steerDashDirection(direction: Point, from: Point, target: Point,
 export function projectileHitsDecoration(
   item: Decoration,
   projectile: Point,
-  projectileRadius: number,
+  projectileRadius: number | EllipseRadii,
 ): boolean {
-  return Math.hypot(
-    projectile.x - item.x,
-    projectile.y - (item.y + item.hitOffsetY),
-  ) <= item.radius + projectileRadius;
+  return ellipsesOverlap(
+    { x: item.x + item.hitboxOffset.x, y: item.y + item.hitboxOffset.y }, item.hitboxRadii,
+    projectile, ellipseRadii(projectileRadius), true,
+  );
 }
 
 export function projectileHitsCircle(
   target: Point,
-  targetRadius: number,
+  targetRadius: number | EllipseRadii,
   projectile: Point,
-  projectileRadius: number,
+  projectileRadius: number | EllipseRadii,
 ): boolean {
-  return Math.hypot(projectile.x - target.x, projectile.y - target.y) <= targetRadius + projectileRadius;
+  return ellipsesOverlap(target, ellipseRadii(targetRadius), projectile, ellipseRadii(projectileRadius), true);
 }
 
 export function barrelExplosionTargets(
@@ -123,7 +118,7 @@ export function barrelExplosionTargets(
   monsters: readonly Monster[],
   player: Point,
 ): { decorations: Decoration[]; monsters: Monster[]; hitsPlayer: boolean } {
-  const center = { x: barrel.x, y: barrel.y + barrel.hitOffsetY };
+  const center = actorCollisionCenter(barrel, barrel.hitboxOffset);
   return {
     decorations: decorations.filter(item =>
       item !== barrel && item.destructible && !item.destroyed &&
@@ -131,15 +126,15 @@ export function barrelExplosionTargets(
     ),
     monsters: monsters.filter(monster =>
       monster.active && !monster.dead && projectileHitsCircle(
-        { x: monster.x, y: monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind) },
-        monster.radius,
+        actorCollisionCenter(monster, monster.hitboxOffset),
+        monster.hitboxRadii,
         center,
         BARREL_EXPLOSION_RADIUS,
       )
     ),
     hitsPlayer: projectileHitsCircle(
-      actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY),
-      PLAYER_SPEC.radius,
+      actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset),
+      PLAYER_SPEC.hitboxRadii,
       center,
       BARREL_EXPLOSION_RADIUS,
     ),
@@ -157,27 +152,27 @@ export function monsterAttackIsReady(monster: Monster, timestamp: number): boole
 export function actorProjectileOrigin(
   anchor: Point,
   direction: Point,
-  visualCenterOffsetY: number,
+  hitboxOffset: Point,
   muzzleDistance: number,
   lateralOffset = 0,
 ): Point {
-  const center = actorCollisionCenter(anchor, visualCenterOffsetY);
+  const center = actorCollisionCenter(anchor, hitboxOffset);
   return {
     x: center.x + direction.x * muzzleDistance - direction.y * lateralOffset,
     y: center.y + direction.y * muzzleDistance + direction.x * lateralOffset,
   };
 }
 
-export function actorAimDirection(anchor: Point, visualCenterOffsetY: number, target: Point): Point {
-  const center = actorCollisionCenter(anchor, visualCenterOffsetY);
+export function actorAimDirection(anchor: Point, hitboxOffset: Point, target: Point): Point {
+  const center = actorCollisionCenter(anchor, hitboxOffset);
   const dx = target.x - center.x;
   const dy = target.y - center.y;
   const distance = Math.max(1, Math.hypot(dx, dy));
   return { x: dx / distance, y: dy / distance };
 }
 
-export function actorCollisionCenter(anchor: Point, visualCenterOffsetY: number): Point {
-  return { x: anchor.x, y: anchor.y + visualCenterOffsetY };
+export function actorCollisionCenter(anchor: Point, offset: Point): Point {
+  return { x: anchor.x + offset.x, y: anchor.y + offset.y };
 }
 
 /** Aim within the player's hit area when its visual center is against a northern wall. */

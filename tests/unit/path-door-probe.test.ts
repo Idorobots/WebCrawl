@@ -2,8 +2,8 @@ import { describe, it } from "vitest";
 import { domToGraph } from "../../src/client/domain/graph";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
 import { pointInCorridor, pointInRoomFloor } from "../../src/client/domain/geometry";
-import { PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS, BOSS_DEFINITIONS, monsterFootprint } from "../../src/client/domain/specs";
-import type { Point } from "../../src/client/types";
+import { PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS, BOSS_DEFINITIONS } from "../../src/client/domain/specs";
+import type { EllipseRadii, Point } from "../../src/client/types";
 
 describe("doorway walkability detail", () => {
   it("dumps walkability along one door axis", () => {
@@ -13,10 +13,10 @@ describe("doorway walkability detail", () => {
     const link = layout.links.find(l => l.id === "1->2")!;
     const door = link.points[link.points.length - 1]!;
 
-    const radii = new Map<string, number>([
-      ["player", PLAYER_SPEC.footprint],
-      ...Object.entries(REGULAR_MONSTER_DEFINITIONS).map(([kind, def]) => [kind, monsterFootprint(def.radius)] as const),
-      ...Object.entries(BOSS_DEFINITIONS).map(([kind, def]) => [kind, monsterFootprint(def.radius)] as const),
+    const radii = new Map<string, EllipseRadii>([
+      ["player", PLAYER_SPEC.footprintRadii],
+      ...Object.entries(REGULAR_MONSTER_DEFINITIONS).map(([kind, def]) => [kind, def.footprintRadii] as const),
+      ...Object.entries(BOSS_DEFINITIONS).map(([kind, def]) => [kind, def.footprintRadii] as const),
     ]);
 
     for (const [kind, radius] of radii) {
@@ -30,7 +30,7 @@ describe("doorway walkability detail", () => {
         if (!ok) blockedSpan += `${depth} `;
       }
       rows.push(blockedSpan.trim() || "fully walkable");
-      console.log(`r=${String(radius).padStart(4)} (${kind}): ${rows[0]}`);
+      console.log(`r=(${radius.x}, ${radius.y}) (${kind}): ${rows[0]}`);
     }
   });
 });

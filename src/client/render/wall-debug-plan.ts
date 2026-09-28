@@ -1,8 +1,8 @@
 import { world } from "../config";
-import { corridorFloorBounds, pointInCorridor, pointInRoomFloor, type FloorBounds } from "../domain/geometry";
+import { corridorFloorBounds, ellipseRadii, pointInCorridor, pointInRoomFloor, type FloorBounds } from "../domain/geometry";
 import { forSpatialCells, spatialCellKey } from "../domain/spatial";
 import { PLAYER_SPEC, WORLD_GEOMETRY } from "../domain/specs";
-import type { DungeonLayout, GraphNode, LayoutLink } from "../types";
+import type { DungeonLayout, EllipseRadii, GraphNode, LayoutLink } from "../types";
 
 export interface DebugWallRegion {
   x: number;
@@ -14,21 +14,22 @@ export interface DebugWallRegion {
 /** Shade floor edges, splitting boundary cells at exact movement-geometry edges. */
 export function buildBlockedWallRegions(
   layout: DungeonLayout,
-  radius = PLAYER_SPEC.footprint,
+  radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii,
   step = world(8),
 ): DebugWallRegion[] {
   const rows = new Map<number, Set<number>>();
   const regions: DebugWallRegion[] = [];
   const visited = new Set<string>();
-  const padding = radius + WORLD_GEOMETRY.wallThickness;
+  const radii = ellipseRadii(radius);
+  const padding = Math.max(radii.x, radii.y) + WORLD_GEOMETRY.wallThickness;
   const roomCells = new Map<string, Set<GraphNode>>();
   const linkCells = new Map<string, Set<LayoutLink>>();
   const roomBounds = new Map<GraphNode, FloorBounds>();
   const linkBounds = new Map<LayoutLink, FloorBounds[]>();
   for (const room of layout.nodes) {
     roomBounds.set(room, {
-      left: room.x - room.width / 2 + radius, right: room.x + room.width / 2 - radius,
-      top: room.y - room.height / 2 + radius, bottom: room.y + room.height / 2 - radius,
+      left: room.x - room.width / 2 + radii.x, right: room.x + room.width / 2 - radii.x,
+      top: room.y - room.height / 2 + radii.y, bottom: room.y + room.height / 2 - radii.y,
     });
     forSpatialCells(room.x - room.width / 2, room.x + room.width / 2,
       room.y - room.height / 2, room.y + room.height / 2, key => {

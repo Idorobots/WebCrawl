@@ -63,7 +63,7 @@ import {
   pointInRoomFloor,
   roomContainingFloorPoint,
   slideAlongObstacles,
-  type CircleObstacle,
+  type EllipseObstacle,
 } from "./domain/geometry";
 import {
   buildDecorations as createDecorations,
@@ -93,11 +93,9 @@ import {
   GLM_HUNTER_ATTACKS,
   LOOT_DEFINITIONS,
   MAX_ACTOR_FOOTPRINT,
-  monsterVisualCenterOffsetY,
   PLAYER_DAMAGE_INVULNERABILITY_MS,
   PLAYER_ENERGY_MAX,
   PLAYER_SPEC,
-  PORTAL_DEFINITION,
   WEAPON_PICKUP_DEFINITIONS,
   WORLD_GEOMETRY,
 } from "./domain/specs";
@@ -114,6 +112,7 @@ import type {
   Bullet,
   BulletStyle,
   Decoration,
+  EllipseRadii,
   DungeonGraph,
   DungeonLayout,
   GraphNode,
@@ -1288,7 +1287,7 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
     renderer.spawnEffect(
       item.visual.animations?.damage,
       item.x,
-      item.y + item.hitOffsetY,
+      item.y + item.hitboxOffset.y,
       item.size,
       { key: `decoration:${item.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
     );
@@ -1298,13 +1297,13 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
   }
 }
 
-function crushSceneryAlongFootprint(from: Point, to: Point, radius: number): void {
+function crushSceneryAlongFootprint(from: Point, to: Point, radius: EllipseRadii): void {
   const nearby = new Set<Decoration>();
   forSpatialCells(
-    Math.min(from.x, to.x) - radius,
-    Math.max(from.x, to.x) + radius,
-    Math.min(from.y, to.y) - radius,
-    Math.max(from.y, to.y) + radius,
+    Math.min(from.x, to.x) - radius.x,
+    Math.max(from.x, to.x) + radius.x,
+    Math.min(from.y, to.y) - radius.y,
+    Math.max(from.y, to.y) + radius.y,
     key => {
       for (const item of damageableCells.get(key) ?? []) nearby.add(item);
     },
@@ -1315,7 +1314,7 @@ function crushSceneryAlongFootprint(from: Point, to: Point, radius: number): voi
 }
 
 function crushSceneryUnderBoss(monster: Monster, from: Point): void {
-  crushSceneryAlongFootprint(from, monster, monster.footprint);
+  crushSceneryAlongFootprint(from, monster, monster.footprintRadii);
 }
 
 function monsterStateMapForPage(pageUrl: string): Map<string, MonsterState> {
@@ -1406,9 +1405,8 @@ function updateFloorPortals(): boolean {
   updatePortalContacts(
     currentStairs,
     player,
-    PORTAL_DEFINITION.contactRadius,
+    PLAYER_SPEC.footprintRadii,
     portalContacts,
-    PORTAL_DEFINITION.contactOffset,
   );
   return changed;
 }
@@ -1533,7 +1531,7 @@ function updateMonsterSpawners(timestamp: number): void {
 }
 
 function findSpawnerSpawnPosition(monster: Monster, spawner: Decoration): Point | null {
-  const sideDistance = (spawner.footprint ?? spawner.radius) + monster.footprint + world(8);
+  const sideDistance = spawner.footprintRadii.x + monster.footprintRadii.x + world(8);
   // Spawn beside the spawner so actor and scenery footprints do not overlap.
   const spawnOffsets: Point[] = [
     { x: sideDistance, y: 0 }, { x: -sideDistance, y: 0 },
@@ -1581,7 +1579,7 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
   renderer.spawnEffect(
     PLAYER_SPEC.visual.effects?.damage,
     player.x,
-    player.y + PLAYER_SPEC.visualCenterOffsetY,
+    player.y + PLAYER_SPEC.hitboxOffset.y,
     PLAYER_SPEC.spriteSize,
     { key: "player", lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
   );
@@ -1682,7 +1680,7 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
     renderer.spawnEffect(
       monster.visual.effects?.damage,
       monster.x,
-      monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+      monster.y + monster.hitboxOffset.y,
       monster.size,
       { key: `monster:${monster.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
     );
@@ -1763,11 +1761,11 @@ function queueEnemyBullet(
     forwardOffset?: number;
   } = {},
 ): void {
-  const muzzleDistance = Math.max(monster.radius + radius + world(5), monster.size * 0.42);
+  const muzzleDistance = Math.max(Math.max(monster.hitboxRadii.x, monster.hitboxRadii.y) + radius + world(5), monster.size * 0.42);
   const origin = actorProjectileOrigin(
     monster,
     direction,
-    monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+    monster.hitboxOffset,
     muzzleDistance,
     lateralOffset,
   );
@@ -1779,7 +1777,7 @@ function queueEnemyBullet(
     y: origin.y + direction.y * forwardOffset,
     vx: direction.x * speed,
     vy: direction.y * speed,
-    depthOffsetY: -monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+    depthOffsetY: -monster.hitboxOffset.y,
     traveled: 0,
     radius,
     maxDistance,
@@ -1788,7 +1786,7 @@ function queueEnemyBullet(
 }
 
 function playerCollisionCenter(): Point {
-  return actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+  return actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset);
 }
 
 function shootEnemyVolley(monster: Monster, direction: Point, timestamp: number): void {
@@ -1805,7 +1803,7 @@ function fireBossVolley(monster: Monster, target: Point, timestamp: number, ring
   const sequence = monster.attackSequence ?? 0;
   const aimed = actorAimDirection(
     monster,
-    monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+    monster.hitboxOffset,
     target,
   );
   const stage = bossStage(monster.hp, monster.maxHp);
@@ -1847,10 +1845,10 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
       y: boss.y + Math.sin(angle + slot * Math.PI / 6) * distance * scale,
     }))).find(point =>
       roomContainingPoint(point.x, point.y)?.id === boss.roomId &&
-      isWalkable(point.x, point.y, minion.footprint) &&
-      !footprintsOverlap(point, minion.footprint, player, PLAYER_SPEC.footprint) &&
+      isWalkable(point.x, point.y, minion.footprintRadii) &&
+      !footprintsOverlap(point, minion.footprintRadii, player, PLAYER_SPEC.footprintRadii) &&
       currentMonsters.every(other => other.dead ||
-        !footprintsOverlap(point, minion.footprint, other, other.footprint))
+        !footprintsOverlap(point, minion.footprintRadii, other, other.footprintRadii))
     );
     if (!position) break;
     minion.x = position.x;
@@ -1862,7 +1860,7 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
     currentMonsters.push(minion);
     saveMonsterState(minion);
     renderer.spawnEffect(PLAYER_SPEC.visual.effects?.teleport, minion.x,
-      minion.y + monsterVisualCenterOffsetY(minion.size, minion.visualKind), minion.size);
+      minion.y + minion.hitboxOffset.y, minion.size);
     added += 1;
   }
   boss.summonedCount = summonedCount + added;
@@ -1886,14 +1884,14 @@ function hasWalkableLine(from: Point, to: Point, radius: number, step: number): 
 
 function hasLineOfSight(from: Point, to: Point): boolean {
   return walkableProjectileLine(
-    from, to, PLAYER_SPEC.visualCenterOffsetY,
+    from, to, PLAYER_SPEC.hitboxOffset.y,
     point => isWalkable(point.x, point.y, DEFAULT_BULLET_SPEC.radius),
   );
 }
 
 function visiblePlayerAimPoint(from: Point): Point | null {
   return visiblePlayerHitPoint(
-    playerCollisionCenter(), PLAYER_SPEC.radius,
+    playerCollisionCenter(), Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y),
     point => hasLineOfSight(from, point),
   );
 }
@@ -1908,7 +1906,8 @@ function monsterApproachPoint(monster: Monster): Point | null {
         position.x, position.y, DEFAULT_BULLET_SPEC.radius,
       ), WORLD_GEOMETRY.pathLineStep)
       : hasWalkableLine(point, player, DEFAULT_BULLET_SPEC.radius, WORLD_GEOMETRY.pathLineStep),
-    monster.footprint + PLAYER_SPEC.footprint + WORLD_GEOMETRY.pathGridStep * 2,
+    Math.max(monster.footprintRadii.x + PLAYER_SPEC.footprintRadii.x,
+      monster.footprintRadii.y + PLAYER_SPEC.footprintRadii.y) + WORLD_GEOMETRY.pathGridStep * 2,
   );
 }
 
@@ -2042,12 +2041,14 @@ function teleportBoss(monster: Monster, playerRoom: GraphNode, timestamp: number
     roomContainingPoint(point.x, point.y)?.id === playerRoom.id &&
     isMonsterWalkable(monster, point.x, point.y) &&
     Math.hypot(point.x - monster.x, point.y - monster.y) >= world(140) &&
-    Math.hypot(point.x - player.x, point.y - player.y) >= monster.footprint + PLAYER_SPEC.footprint + world(120) &&
+    Math.hypot(point.x - player.x, point.y - player.y) >= Math.max(monster.footprintRadii.x + PLAYER_SPEC.footprintRadii.x,
+      monster.footprintRadii.y + PLAYER_SPEC.footprintRadii.y) + world(120) &&
     currentMonsters.every(other => other === monster || other.dead ||
-      Math.hypot(point.x - other.x, point.y - other.y) >= monster.footprint + other.footprint + world(12));
+      Math.hypot(point.x - other.x, point.y - other.y) >= Math.max(monster.footprintRadii.x + other.footprintRadii.x,
+        monster.footprintRadii.y + other.footprintRadii.y) + world(12));
   const destination = bossTeleportDestination(player, monster.attackSequence ?? 0, world(320), clear,
     point => hasLineOfSight(
-      actorCollisionCenter(point, monsterVisualCenterOffsetY(monster.size, monster.visualKind)),
+      actorCollisionCenter(point, monster.hitboxOffset),
       playerCollisionCenter(),
     ));
   if (!destination) {
@@ -2056,8 +2057,8 @@ function teleportBoss(monster: Monster, playerRoom: GraphNode, timestamp: number
   }
 
   const effect = PLAYER_SPEC.visual.effects?.teleport;
-  const visualOffset = monsterVisualCenterOffsetY(monster.size, monster.visualKind);
-  renderer.spawnEffect(effect, monster.x, monster.y + visualOffset, monster.size);
+  const effectOffsetY = monster.hitboxOffset.y;
+  renderer.spawnEffect(effect, monster.x, monster.y + effectOffsetY, monster.size);
   monster.x = destination.x;
   monster.y = destination.y;
   monster.roomId = playerRoom.id;
@@ -2068,7 +2069,7 @@ function teleportBoss(monster: Monster, playerRoom: GraphNode, timestamp: number
   monster.attackWarmupUntil = timestamp + 650;
   monster.lastAttackAt = timestamp - bossStageCooldown(monster.attackCooldownMs, stage) + 650;
   monster.nextSpecialAt = timestamp + bossTeleportCooldown(stage);
-  renderer.spawnEffect(effect, monster.x, monster.y + visualOffset, monster.size);
+  renderer.spawnEffect(effect, monster.x, monster.y + effectOffsetY, monster.size);
   renderer.playTeleportSound();
   saveMonsterState(monster);
   return true;
@@ -2210,7 +2211,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): boolean | 
   monster.moveDir = cardinalDirection(player.x - monster.x, player.y - monster.y);
   const aimPoint = playerDistance <= monster.projectileRange
     ? visiblePlayerAimPoint(actorCollisionCenter(monster,
-      monsterVisualCenterOffsetY(monster.size, monster.visualKind))) : null;
+      monster.hitboxOffset)) : null;
 
   if (monster.bossKind === "deepseek-summoner") {
     if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 1_300;
@@ -2280,13 +2281,13 @@ function shootBullet(): boolean {
   const projectiles = projectilesForWeapon(currentWeapon, playerFacing, weaponShotSequence);
   for (const [index, projectile] of projectiles.entries()) {
     const muzzleDistance = Math.max(
-      PLAYER_SPEC.radius + projectile.radius + world(7),
+      Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + projectile.radius + world(7),
       PLAYER_SPEC.muzzleDistance,
     );
     const origin = actorProjectileOrigin(
       player,
       playerFacing,
-      PLAYER_SPEC.visualCenterOffsetY,
+      PLAYER_SPEC.hitboxOffset,
       muzzleDistance,
       projectile.lateralOffset,
     );
@@ -2297,7 +2298,7 @@ function shootBullet(): boolean {
       ...origin,
       vx: projectile.direction.x * projectile.speed,
       vy: projectile.direction.y * projectile.speed,
-      depthOffsetY: -PLAYER_SPEC.visualCenterOffsetY,
+      depthOffsetY: -PLAYER_SPEC.hitboxOffset.y,
       traveled: 0,
       radius: projectile.radius,
       maxDistance: projectile.range,
@@ -2347,7 +2348,7 @@ function updateBullets(dt: number): void {
         alive = false;
         break;
       }
-      const movementAlignedBulletY = bullet.y - PLAYER_SPEC.visualCenterOffsetY;
+      const movementAlignedBulletY = bullet.y - PLAYER_SPEC.hitboxOffset.y;
       if (!isGeometryWalkable(bullet.x, movementAlignedBulletY, bulletRadius)) {
         renderer.spawnEffect(
           PLAYER_SPEC.visual.effects?.damage,
@@ -2366,8 +2367,8 @@ function updateBullets(dt: number): void {
           if (!monster.active || monster.dead) continue;
 
           if (projectileHitsCircle(
-            { x: monster.x, y: monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind) },
-            monster.radius,
+            actorCollisionCenter(monster, monster.hitboxOffset),
+            monster.hitboxRadii,
             bullet,
             bulletRadius,
           )) {
@@ -2381,7 +2382,7 @@ function updateBullets(dt: number): void {
       if (!alive) break;
 
       if (bullet.owner === "enemy") {
-        if (projectileHitsCircle(playerCollisionCenter(), PLAYER_SPEC.radius, bullet, bulletRadius)) {
+        if (projectileHitsCircle(playerCollisionCenter(), PLAYER_SPEC.hitboxRadii, bullet, bulletRadius)) {
           applyPlayerDamage(bullet.damage, bullet);
           alive = false;
           break;
@@ -2497,7 +2498,7 @@ function gameTick(timestamp: number): void {
       const target = playerCollisionCenter();
       const monsterCenter = actorCollisionCenter(
         monster,
-        monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+        monster.hitboxOffset,
       );
       monster.moveDir = cardinalDirection(target.x - monsterCenter.x, target.y - monsterCenter.y);
       const playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
@@ -2508,7 +2509,7 @@ function gameTick(timestamp: number): void {
       ) {
         shootEnemyVolley(monster, actorAimDirection(
           monster,
-          monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+          monster.hitboxOffset,
           aimPoint,
         ), timestamp);
       }
@@ -2523,7 +2524,7 @@ function gameTick(timestamp: number): void {
     const target = playerCollisionCenter();
     let monsterCenter = actorCollisionCenter(
       monster,
-      monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+      monster.hitboxOffset,
     );
     let playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
     let aimPoint = monster.attackPattern !== "melee" && playerDistance <= monsterEngagementRange(monster)
@@ -2539,7 +2540,7 @@ function gameTick(timestamp: number): void {
       moveMonsterTowards(monster, targetPoint, dt, timestamp);
       monsterCenter = actorCollisionCenter(
         monster,
-        monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+        monster.hitboxOffset,
       );
       playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
       if (monster.attackPattern !== "melee" && playerDistance <= monsterEngagementRange(monster)) {
@@ -2564,7 +2565,7 @@ function gameTick(timestamp: number): void {
     ) {
       shootEnemyVolley(monster, actorAimDirection(
         monster,
-        monsterVisualCenterOffsetY(monster.size, monster.visualKind),
+        monster.hitboxOffset,
         aimPoint,
       ), timestamp);
     }
@@ -2660,16 +2661,20 @@ function rebuildSpatialIndexes(): void {
   }
   for (const item of currentDecorations) {
     if (item.obstacle) {
-      const extent = item.radius + margin;
-      forSpatialCells(item.x - extent, item.x + extent, item.y - extent, item.y + extent, key => {
+      const extentX = item.footprintRadii.x + margin;
+      const extentY = item.footprintRadii.y + margin;
+      forSpatialCells(item.x - extentX, item.x + extentX, item.y - extentY, item.y + extentY, key => {
         const cell = obstacleCells.get(key) ?? new Set();
         cell.add(item);
         obstacleCells.set(key, cell);
       });
     }
     if (item.destructible) {
-      const extent = item.radius + world(24);
-      forSpatialCells(item.x - extent, item.x + extent, item.y - extent, item.y + extent, key => {
+      const extentX = Math.max(item.hitboxRadii.x + Math.abs(item.hitboxOffset.x), item.footprintRadii.x) +
+        Math.max(world(24), PLAYER_SPEC.hitboxRadii.x);
+      const extentY = Math.max(item.hitboxRadii.y + Math.abs(item.hitboxOffset.y), item.footprintRadii.y) +
+        Math.max(world(24), PLAYER_SPEC.hitboxRadii.y);
+      forSpatialCells(item.x - extentX, item.x + extentX, item.y - extentY, item.y + extentY, key => {
         const cell = damageableCells.get(key) ?? new Set();
         cell.add(item);
         damageableCells.set(key, cell);
@@ -2678,31 +2683,29 @@ function rebuildSpatialIndexes(): void {
   }
 }
 
-function pointBlockedByDecoration(x: number, y: number, radius = PLAYER_SPEC.footprint): boolean {
+function pointBlockedByDecoration(x: number, y: number, radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii): boolean {
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
     if (!item.obstacle || item.destroyed) continue;
 
-    const footprint = item.footprint ?? item.radius;
-    const distance = Math.hypot(x - item.x, y - item.y);
-    if (distance < radius + footprint) return true;
+    if (footprintsOverlap({ x, y }, radius, item, item.footprintRadii)) return true;
   }
 
   return false;
 }
 
 /** Circle obstacles for the sliding movement solver. */
-function slideObstaclesNear(x: number, y: number): CircleObstacle[] {
+function slideObstaclesNear(x: number, y: number): EllipseObstacle[] {
   const scenery = [...(obstacleCells.get(spatialCellKey(x, y)) ?? [])]
     .filter(item => item.obstacle && !item.destroyed)
-    .map(item => ({ x: item.x, y: item.y, radius: item.footprint ?? item.radius }));
+    .map(item => ({ x: item.x, y: item.y, radii: item.footprintRadii }));
   const actors = currentMonsters
-    .filter(monster => monster.active && !monster.dead &&
-      footprintsOverlap({ x, y }, PLAYER_SPEC.footprint, monster, monster.footprint))
-    .map(monster => ({ x: monster.x, y: monster.y, radius: monster.footprint }));
+    .filter(monster => monster.obstacle && monster.active && !monster.dead &&
+      footprintsOverlap({ x, y }, PLAYER_SPEC.footprintRadii, monster, monster.footprintRadii))
+    .map(monster => ({ x: monster.x, y: monster.y, radii: monster.footprintRadii }));
   return [...scenery, ...actors];
 }
 
-function isGeometryWalkable(x: number, y: number, radius = PLAYER_SPEC.footprint): boolean {
+function isGeometryWalkable(x: number, y: number, radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii): boolean {
   if (!currentLayout) return false;
   const cell = geometryCells.get(spatialCellKey(x, y));
   if (!cell) return false;
@@ -2716,7 +2719,7 @@ function isGeometryWalkable(x: number, y: number, radius = PLAYER_SPEC.footprint
   return false;
 }
 
-function isWalkable(x: number, y: number, radius = PLAYER_SPEC.footprint): boolean {
+function isWalkable(x: number, y: number, radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii): boolean {
   return (
     isGeometryWalkable(x, y, radius) &&
     !pointBlockedByDecoration(x, y, radius)
@@ -2726,24 +2729,22 @@ function isWalkable(x: number, y: number, radius = PLAYER_SPEC.footprint): boole
 function isPlayerWalkable(x: number, y: number, allowEscape = true): boolean {
   if (!isWalkable(x, y)) return false;
   return currentMonsters.every(monster => !monster.active || monster.dead ||
+    !monster.obstacle ||
     (allowEscape
-      ? footprintMoveIsClear(player, { x, y }, PLAYER_SPEC.footprint, monster, monster.footprint)
-      : !footprintsOverlap({ x, y }, PLAYER_SPEC.footprint, monster, monster.footprint)));
+      ? footprintMoveIsClear(player, { x, y }, PLAYER_SPEC.footprintRadii, monster, monster.footprintRadii)
+      : !footprintsOverlap({ x, y }, PLAYER_SPEC.footprintRadii, monster, monster.footprintRadii)));
 }
 
 function isMonsterWalkable(monster: Monster, x: number, y: number, checkPlayer = true): boolean {
-  if (!isGeometryWalkable(x, y, monster.footprint)) return false;
-  if (checkPlayer && playerAlive &&
-    !footprintMoveIsClear(monster, { x, y }, monster.footprint, player, PLAYER_SPEC.footprint)) return false;
+  if (!isGeometryWalkable(x, y, monster.footprintRadii)) return false;
+  if (checkPlayer && playerAlive && PLAYER_SPEC.obstacle &&
+    !footprintMoveIsClear(monster, { x, y }, monster.footprintRadii, player, PLAYER_SPEC.footprintRadii)) return false;
   if (isBoss(monster)) return true;
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
     if (!item.obstacle || item.destroyed) continue;
-    const extent = monster.footprint + (item.footprint ?? item.radius);
-    const nextDistance = Math.hypot(x - item.x, y - item.y);
-    if (nextDistance >= extent) continue;
+    if (!footprintsOverlap({ x, y }, monster.footprintRadii, item, item.footprintRadii)) continue;
     if (item.id === monster.spawnSourceId) {
-      const currentDistance = Math.hypot(monster.x - item.x, monster.y - item.y);
-      if (currentDistance < extent && nextDistance >= currentDistance) continue;
+      if (footprintMoveIsClear(monster, { x, y }, monster.footprintRadii, item, item.footprintRadii)) continue;
     }
     return false;
   }
@@ -2751,14 +2752,14 @@ function isMonsterWalkable(monster: Monster, x: number, y: number, checkPlayer =
 }
 
 function monsterSpawnPositionIsClear(monster: Monster, position: Point): boolean {
-  if (!isGeometryWalkable(position.x, position.y, monster.footprint)) return false;
+  if (!isGeometryWalkable(position.x, position.y, monster.footprintRadii)) return false;
   for (const item of currentDecorations) {
     if (!item.obstacle || item.destroyed) continue;
-    if (footprintsOverlap(position, monster.footprint, item, item.footprint ?? item.radius)) return false;
+    if (footprintsOverlap(position, monster.footprintRadii, item, item.footprintRadii)) return false;
   }
-  if (footprintsOverlap(position, monster.footprint, player, PLAYER_SPEC.footprint)) return false;
-  return currentMonsters.every(item => item.dead ||
-    !footprintsOverlap(position, monster.footprint, item, item.footprint));
+  if (PLAYER_SPEC.obstacle && footprintsOverlap(position, monster.footprintRadii, player, PLAYER_SPEC.footprintRadii)) return false;
+  return currentMonsters.every(item => item.dead || !item.obstacle ||
+    !footprintsOverlap(position, monster.footprintRadii, item, item.footprintRadii));
 }
 
 function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
@@ -2887,9 +2888,8 @@ function checkStairs(): boolean {
   const stair = updatePortalContacts(
     currentStairs,
     player,
-    PORTAL_DEFINITION.contactRadius,
+    PLAYER_SPEC.footprintRadii,
     portalContacts,
-    PORTAL_DEFINITION.contactOffset,
   );
   if (!stair) return false;
   portalTransitioning = true;
@@ -2898,7 +2898,7 @@ function checkStairs(): boolean {
   renderer.spawnEffect(
     PLAYER_SPEC.visual.effects?.teleport,
     player.x,
-    player.y + PLAYER_SPEC.visualCenterOffsetY,
+    player.y + PLAYER_SPEC.hitboxOffset.y,
     PLAYER_SPEC.spriteSize,
   );
   renderer.playPortalSound(stair.type);
@@ -3049,7 +3049,7 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
     const slid = slideAlongObstacles(
       player,
       { x: dx, y: dy },
-      PLAYER_SPEC.footprint,
+      PLAYER_SPEC.footprintRadii,
       slideObstaclesNear(next.x, next.y),
       point => isPlayerWalkable(point.x, point.y),
     );
@@ -3089,7 +3089,7 @@ function startEnergyDash(clientX: number, clientY: number): void {
 
 function startEnergyDashTowards(target: Point): void {
   if (!playerAlive || !currentLayout || energyDash || lootInventory.energy <= 0) return;
-  const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+  const center = actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset);
   const dx = target.x - center.x;
   const dy = target.y - center.y;
   const magnitude = Math.hypot(dx, dy);
@@ -3126,13 +3126,13 @@ function applyEnergyDashDamage(): void {
   const dash = energyDash;
   if (!dash) return;
   const center = playerCollisionCenter();
-  for (const monster of monsterCollisionCandidates(monsterCells, center, PLAYER_SPEC.radius)) {
+  for (const monster of monsterCollisionCandidates(monsterCells, center, Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y))) {
     if (!monster.active || monster.dead || dash.hitTargets.has(monster.id)) continue;
     if (projectileHitsCircle(
-      { x: monster.x, y: monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind) },
-      monster.radius,
+      actorCollisionCenter(monster, monster.hitboxOffset),
+      monster.hitboxRadii,
       center,
-      PLAYER_SPEC.radius,
+      PLAYER_SPEC.hitboxRadii,
     )) {
       dash.hitTargets.add(monster.id);
       damageMonster(monster, dash.damage);
@@ -3140,7 +3140,7 @@ function applyEnergyDashDamage(): void {
   }
   for (const item of damageableCells.get(spatialCellKey(player.x, player.y)) ?? []) {
     if (!item.destructible || item.destroyed || dash.hitTargets.has(item.id)) continue;
-    if (projectileHitsDecoration(item, center, PLAYER_SPEC.radius)) {
+    if (projectileHitsDecoration(item, center, PLAYER_SPEC.hitboxRadii)) {
       dash.hitTargets.add(item.id);
       damageObstacle(item, dash.damage);
     }
@@ -3170,18 +3170,18 @@ function updateEnergyDash(dt: number): void {
   const distance = Math.min(ENERGY_DASH_SPEED * dt, remaining);
   if (distance > 0) {
     // Sweep short steps against walls; the dash passes through actors and crushes scenery.
-    const steps = Math.ceil(distance / (PLAYER_SPEC.footprint / 2));
+    const steps = Math.ceil(distance / (Math.min(PLAYER_SPEC.footprintRadii.x, PLAYER_SPEC.footprintRadii.y) / 2));
     const step = distance / steps;
     for (let index = 0; index < steps; index += 1) {
       const next = {
         x: player.x + dash.dirX * step,
         y: player.y + dash.dirY * step,
       };
-      if (!isGeometryWalkable(next.x, next.y, PLAYER_SPEC.footprint)) {
+      if (!isGeometryWalkable(next.x, next.y, PLAYER_SPEC.footprintRadii)) {
         dash.traveled = dash.maxDistance;
         break;
       }
-      crushSceneryAlongFootprint(player, next, PLAYER_SPEC.footprint);
+      crushSceneryAlongFootprint(player, next, PLAYER_SPEC.footprintRadii);
       player = next;
       dash.traveled += step;
       applyEnergyDashDamage();
@@ -3376,7 +3376,7 @@ window.addEventListener("keyup", event => {
 
 function applyAimTarget(target: Point): void {
   renderer.setFlashlightTarget(target);
-  const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+  const center = actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset);
   renderer.setCameraTarget({
     x: player.x + (target.x - player.x) / 3,
     y: player.y + (target.y - player.y) / 3,
@@ -3412,7 +3412,7 @@ function updatePlayerAimFromPointer(): void {
 function updateIdleFlashlight(): void {
   renderer.setFlashlightTarget({
     x: player.x,
-    y: player.y + PLAYER_SPEC.visualCenterOffsetY,
+    y: player.y + PLAYER_SPEC.hitboxOffset.y,
   });
 }
 
@@ -3426,7 +3426,7 @@ function playerAimNeedsUpdate(): boolean {
 
 function updateTouchAim(dt: number): void {
   const vector = touchAimVector ?? { x: 0, y: 0 };
-  const center = actorCollisionCenter(player, PLAYER_SPEC.visualCenterOffsetY);
+  const center = actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset);
   if (!touchAimCursor) {
     const magnitude = Math.hypot(vector.x, vector.y);
     const direction = magnitude > STICK_DEADZONE

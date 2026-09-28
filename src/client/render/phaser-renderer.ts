@@ -34,7 +34,6 @@ import {
   LOOT_DEFINITIONS,
   MONSTER_WALK_REFERENCE_SPEED,
   monsterHealthBarY,
-  monsterVisualCenterOffsetY,
   monsterWalkElapsed,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
@@ -1614,6 +1613,7 @@ export class PhaserRenderer {
     baseSize: number,
     elapsedMs = 0,
     assetOverride?: string,
+    visualOffset?: Point,
   ): void {
     const asset = assetOverride ?? this.clipAsset(clip, elapsedMs);
     const key = textureKey(asset);
@@ -1624,8 +1624,13 @@ export class PhaserRenderer {
     if (textureChanged || sprite.displayWidth !== width || sprite.displayHeight !== height) {
       sprite.setDisplaySize(width, height);
     }
-    if (sprite.originX !== clip.origin.x || sprite.originY !== clip.origin.y) {
-      sprite.setOrigin(clip.origin.x, clip.origin.y);
+    const origin = visualOffset ? { x: 0.5, y: 0.5 } : clip.origin;
+    if (sprite.originX !== origin.x || sprite.originY !== origin.y) {
+      sprite.setOrigin(origin.x, origin.y);
+    }
+    if (visualOffset) {
+      sprite.setPosition(visualOffset.x, visualOffset.y);
+      sprite.setData("visualOffset", visualOffset);
     }
   }
 
@@ -1637,15 +1642,16 @@ export class PhaserRenderer {
   }
 
   private applyShadowOffset(shadow: Phaser.GameObjects.Image, x: number, y: number, size: number): void {
+    const offset = shadow.getData("visualOffset") as Point | undefined;
     const dx = x - this.currentPlayer.x;
     const dy = y - this.currentPlayer.y;
     const length = Math.hypot(dx, dy);
     if (length < world(1)) {
-      shadow.setPosition(SHADOW_OFFSET_X, SHADOW_OFFSET_Y);
+      shadow.setPosition(SHADOW_OFFSET_X + (offset?.x ?? 0), SHADOW_OFFSET_Y + (offset?.y ?? 0));
       return;
     }
     const distance = Math.min(SHADOW_MAX_DISTANCE, Math.max(SHADOW_MIN_DISTANCE, size * SHADOW_DISTANCE_SCALE));
-    shadow.setPosition(dx / length * distance, dy / length * distance);
+    shadow.setPosition(dx / length * distance + (offset?.x ?? 0), dy / length * distance + (offset?.y ?? 0));
   }
 
   private createAuraLight(
@@ -1747,8 +1753,9 @@ export class PhaserRenderer {
       const asset = this.clipAsset(state.clip, state.elapsed);
       const sprite = this.illuminate(scene.add.image(0, 0, textureKey(asset)));
       const shadow = this.createShadow(asset);
-      this.applyClip(sprite, state.clip, item.size, state.elapsed);
-      this.applyClip(shadow, state.clip, item.size, state.elapsed);
+      const visualOffset = item.destroyed ? undefined : item.visualOffset;
+      this.applyClip(sprite, state.clip, item.size, state.elapsed, undefined, visualOffset);
+      this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, visualOffset);
       this.applyShadowOffset(shadow, item.x, item.y, item.size);
       const isDebris = item.destroyed ||
         item.kind === "debris" ||
@@ -1762,7 +1769,7 @@ export class PhaserRenderer {
       this.decorations.push(container);
       if (item.destructible && !item.destroyed && item.hp != item.maxHp) {
         const barWidth = world(44);
-        const barY = -item.size * state.clip.origin.y + (item.healthBarTop ?? 0) * item.size - world(8);
+        const barY = item.visualOffset.y - item.size / 2 + (item.healthBarTop ?? 0) * item.size - world(8);
         const bg = scene.add.rectangle(-barWidth / 2, barY, barWidth, world(5), 0x071018).setOrigin(0, 0.5);
         const hp = scene.add.rectangle(
           -barWidth / 2,
@@ -1788,9 +1795,12 @@ export class PhaserRenderer {
       const sprite = this.decorationSprites.get(item.id);
       if (!sprite) continue;
       const state = this.decorationClip(item, now);
-      this.applyClip(sprite, state.clip, item.size, state.elapsed);
+      this.applyClip(sprite, state.clip, item.size, state.elapsed, undefined, item.destroyed ? undefined : item.visualOffset);
       const shadow = this.decorationShadows.get(item.id);
-      if (shadow) this.applyClip(shadow, state.clip, item.size, state.elapsed);
+      if (shadow) {
+        this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, item.destroyed ? undefined : item.visualOffset);
+        this.applyShadowOffset(shadow, item.x, item.y, item.size);
+      }
       this.syncDecorationEffectLight(item, state);
     }
   }
@@ -1804,9 +1814,12 @@ export class PhaserRenderer {
     if (!sprite) return;
     const base = item.visual.animations?.spawn ?? item.visual.normal;
     const clip = { ...base, frames: [asset], holdLast: true };
-    this.applyClip(sprite, clip, item.size, 0, asset);
+    this.applyClip(sprite, clip, item.size, 0, asset, item.visualOffset);
     const shadow = this.decorationShadows.get(item.id);
-    if (shadow) this.applyClip(shadow, clip, item.size, 0, asset);
+    if (shadow) {
+      this.applyClip(shadow, clip, item.size, 0, asset, item.visualOffset);
+      this.applyShadowOffset(shadow, item.x, item.y, item.size);
+    }
   }
 
   updateShadowOffsets(items: readonly Decoration[], now: number): void {
@@ -1838,7 +1851,7 @@ export class PhaserRenderer {
     if (!light) {
       light = this.scene.lights.addLight(
         item.x,
-        item.y + item.hitOffsetY,
+        item.y + item.hitboxOffset.y,
         Math.max(world(52), item.size * profile.radiusScale),
         profile.color,
         profile.intensity,
@@ -1971,11 +1984,13 @@ export class PhaserRenderer {
         const frame = PORTAL_DEFINITION.frames[stair.type][0];
         const shadow = this.createShadow(frame)
           .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
-          .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y);
+          .setOrigin(0.5, 0.5)
+          .setData("visualOffset", PORTAL_DEFINITION.visualOffset);
         this.applyShadowOffset(shadow, stair.x, stair.y, PORTAL_DEFINITION.size);
         const sprite = this.illuminate(scene.add.image(0, 0, textureKey(frame))
           .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
-          .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y)
+          .setOrigin(0.5, 0.5)
+          .setPosition(PORTAL_DEFINITION.visualOffset.x, PORTAL_DEFINITION.visualOffset.y)
           .setName("sprite"));
         container = scene.add.container(stair.x, stair.y, [shadow, sprite]).setDepth(yDepth(stair.y + PORTAL_DEFINITION.orderingOffsetY));
         container.setData("enabled", false);
@@ -2020,10 +2035,11 @@ export class PhaserRenderer {
     const applyFrame = (asset: string): void => {
       sprite.setTexture(textureKey(asset))
         .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
-        .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y);
+        .setOrigin(0.5, 0.5)
+        .setPosition(PORTAL_DEFINITION.visualOffset.x, PORTAL_DEFINITION.visualOffset.y);
       shadow?.setTexture(textureKey(asset))
         .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
-        .setOrigin(PORTAL_DEFINITION.origin.x, PORTAL_DEFINITION.origin.y);
+        .setOrigin(0.5, 0.5);
     };
     if (initial && !enabled) {
       applyFrame(frames[0]);
@@ -2056,10 +2072,10 @@ export class PhaserRenderer {
       this.host.dataset.activeBossRoom = String(activeBoss.roomId);
       const arena = this.layout?.nodes.find(room => room.id === activeBoss.spawnRoomId);
       if (arena) {
-        this.host.dataset.activeBossArenaLeft = String(arena.x - arena.width / 2 + activeBoss.radius);
-        this.host.dataset.activeBossArenaRight = String(arena.x + arena.width / 2 - activeBoss.radius);
-        this.host.dataset.activeBossArenaTop = String(arena.y - arena.height / 2 + activeBoss.radius);
-        this.host.dataset.activeBossArenaBottom = String(arena.y + arena.height / 2 - activeBoss.radius);
+        this.host.dataset.activeBossArenaLeft = String(arena.x - arena.width / 2 + activeBoss.footprintRadii.x);
+        this.host.dataset.activeBossArenaRight = String(arena.x + arena.width / 2 - activeBoss.footprintRadii.x);
+        this.host.dataset.activeBossArenaTop = String(arena.y - arena.height / 2 + activeBoss.footprintRadii.y);
+        this.host.dataset.activeBossArenaBottom = String(arena.y + arena.height / 2 - activeBoss.footprintRadii.y);
       }
     } else {
       delete this.host.dataset.activeBossKind;
@@ -2108,8 +2124,8 @@ export class PhaserRenderer {
         const assetKey = textureKey(frame.asset);
         const sprite = this.illuminate(scene.add.image(0, 0, assetKey).setName("sprite"));
         const shadow = this.createShadow(frame.asset);
-        this.applyClip(sprite, frame.clip, item.size, frame.elapsed);
-        this.applyClip(shadow, frame.clip, item.size, frame.elapsed);
+        this.applyClip(sprite, frame.clip, item.size, frame.elapsed, undefined, item.dead ? undefined : item.visualOffset);
+        this.applyClip(shadow, frame.clip, item.size, frame.elapsed, undefined, item.dead ? undefined : item.visualOffset);
         this.applyShadowOffset(shadow, item.x, item.y, item.size);
         const barWidth = item.miniboss ? item.size * 0.72 : world(44);
         const barY = monsterHealthBarY(item.size, item.visualKind);
@@ -2131,8 +2147,8 @@ export class PhaserRenderer {
           this.monsterHealthBars.set(item.id, bar);
         }
         if (!item.dead && !item.bossKind) {
-          const auraRadius = item.radius + world(64);
-          const auraY = item.y + monsterVisualCenterOffsetY(item.size, item.visualKind);
+          const auraRadius = Math.max(item.hitboxRadii.x, item.hitboxRadii.y) + world(64);
+          const auraY = item.y + item.hitboxOffset.y;
           const aura = this.createAuraLight(
             item.x,
             auraY,
@@ -2151,7 +2167,7 @@ export class PhaserRenderer {
       const aura = this.monsterAuras.get(item.id);
       if (aura) {
         aura.x = item.x;
-        aura.y = item.y + monsterVisualCenterOffsetY(item.size, item.visualKind);
+        aura.y = item.y + item.hitboxOffset.y;
       }
       const hp = (barContainer ?? container).getByName("hp") as Phaser.GameObjects.Rectangle | null;
       if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
@@ -2179,13 +2195,11 @@ export class PhaserRenderer {
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
       const previousAsset = sprite.texture.key;
       this.applyMonsterFrame(container, item, now);
-      const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
-      if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
       assetChanged ||= previousAsset !== sprite.texture.key;
       const aura = this.monsterAuras.get(item.id);
       if (aura) {
         aura.x = item.x;
-        aura.y = item.y + monsterVisualCenterOffsetY(item.size, item.visualKind);
+        aura.y = item.y + item.hitboxOffset.y;
       }
       const hp = this.monsterHealthBars.get(item.id)?.getByName("hp") as Phaser.GameObjects.Rectangle | null;
       if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
@@ -2214,9 +2228,12 @@ export class PhaserRenderer {
   private applyMonsterFrame(container: Phaser.GameObjects.Container, item: Monster, now: number): void {
     const frame = this.monsterFrame(item, now);
     const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
-    this.applyClip(sprite, frame.clip, item.size, frame.elapsed);
+    this.applyClip(sprite, frame.clip, item.size, frame.elapsed, undefined, item.dead ? undefined : item.visualOffset);
     const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
-    if (shadow) this.applyClip(shadow, frame.clip, item.size, frame.elapsed);
+    if (shadow) {
+      this.applyClip(shadow, frame.clip, item.size, frame.elapsed, undefined, item.dead ? undefined : item.visualOffset);
+      this.applyShadowOffset(shadow, item.x, item.y, item.size);
+    }
   }
 
   private monsterDepth(item: Monster): number {
@@ -2356,8 +2373,8 @@ export class PhaserRenderer {
     this.player.setPosition(position.x, position.y).setDepth(yDepth(position.y));
     this.syncPlayerFollowingEffects();
     if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
-    this.applyClip(this.playerSprite!, clip, PLAYER_SPEC.spriteSize, 0, asset);
-    this.applyClip(this.playerShadow!, clip, PLAYER_SPEC.spriteSize, 0, asset);
+    this.applyClip(this.playerSprite!, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
+    this.applyClip(this.playerShadow!, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
     this.applyShadowOffset(this.playerShadow!, position.x, position.y, PLAYER_SPEC.spriteSize);
     this.applyPlayerProtectionTint();
     this.syncPlayerStateLight();
@@ -2398,7 +2415,7 @@ export class PhaserRenderer {
     const light = this.playerStateLight;
     if (!light) return;
     light.x = this.currentPlayer.x;
-    light.y = this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY;
+    light.y = this.currentPlayer.y + PLAYER_SPEC.hitboxOffset.y;
     light.setColor(this.playerDashTintActive ? 0x4db3ff : this.playerProtectionActive ? 0x78ff9b : 0xb7e2ff);
     light.setRadius(this.playerDashTintActive ? world(210) : this.playerProtectionActive ? world(150) : world(110));
     light.setIntensity(this.playerDashTintActive ? 1.3 : this.playerProtectionActive ? 0.8 : 0.48);
@@ -2414,7 +2431,7 @@ export class PhaserRenderer {
       return;
     }
     const originX = this.currentPlayer.x;
-    const originY = this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY;
+    const originY = this.currentPlayer.y + PLAYER_SPEC.hitboxOffset.y;
     const dx = target.x - originX;
     const dy = target.y - originY;
     const rawDistance = Math.hypot(dx, dy);
@@ -2474,32 +2491,38 @@ export class PhaserRenderer {
     if (!SHOW_DEBUG_GEOMETRY || !this.scene) return;
     const graphics = this.debugGraphics ??= this.scene.add.graphics().setDepth(DEBUG_DEPTH);
     graphics.clear();
-    const drawFootprint = (x: number, y: number, centerY: number, radius: number): void => {
+    const drawFootprint = (x: number, y: number, center: Point, radii: Point): void => {
       graphics.lineStyle(world(1), 0xffbd5d, 0.95);
-      graphics.lineBetween(x, centerY, x, y);
-      graphics.strokeCircle(x, y, radius);
+      graphics.lineBetween(center.x, center.y, x, y);
+      graphics.strokeEllipse(x, y, radii.x * 2, radii.y * 2);
     };
     graphics.lineStyle(world(1), 0x69f7de, 0.9);
-    graphics.strokeCircle(this.currentPlayer.x, this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY, PLAYER_SPEC.radius);
+    graphics.strokeEllipse(this.currentPlayer.x + PLAYER_SPEC.hitboxOffset.x, this.currentPlayer.y + PLAYER_SPEC.hitboxOffset.y,
+      PLAYER_SPEC.hitboxRadii.x * 2, PLAYER_SPEC.hitboxRadii.y * 2);
     drawFootprint(this.currentPlayer.x, this.currentPlayer.y,
-      this.currentPlayer.y + PLAYER_SPEC.visualCenterOffsetY, PLAYER_SPEC.footprint);
+      { x: this.currentPlayer.x + PLAYER_SPEC.hitboxOffset.x, y: this.currentPlayer.y + PLAYER_SPEC.hitboxOffset.y }, PLAYER_SPEC.footprintRadii);
     for (const monster of this.currentMonsters) {
       if (!monster.active || monster.dead) continue;
-      const centerY = monster.y + monsterVisualCenterOffsetY(monster.size, monster.visualKind);
+      const center = { x: monster.x + monster.hitboxOffset.x, y: monster.y + monster.hitboxOffset.y };
       graphics.lineStyle(world(1), 0xff5c77, 0.9);
-      graphics.strokeCircle(monster.x, centerY, monster.radius);
-      drawFootprint(monster.x, monster.y, centerY, monster.footprint);
+      graphics.strokeEllipse(center.x, center.y, monster.hitboxRadii.x * 2, monster.hitboxRadii.y * 2);
+      drawFootprint(monster.x, monster.y, center, monster.footprintRadii);
     }
     for (const item of this.currentDecorations) {
       if (item.destroyed) continue;
-      if (item.destructible && item.radius) {
+      if (item.destructible && item.hitboxRadii.x && item.hitboxRadii.y) {
         graphics.lineStyle(world(1), 0x8cf6ff, 0.85);
-        graphics.strokeCircle(item.x, item.y + item.hitOffsetY, item.radius);
+        graphics.strokeEllipse(item.x + item.hitboxOffset.x, item.y + item.hitboxOffset.y,
+          item.hitboxRadii.x * 2, item.hitboxRadii.y * 2);
       }
-      if (item.obstacle && item.footprint) {
+      if (item.footprintRadii.x && item.footprintRadii.y) {
         graphics.lineStyle(world(1), 0xffbd5d, 0.85);
-        graphics.strokeCircle(item.x, item.y, item.footprint);
+        graphics.strokeEllipse(item.x, item.y, item.footprintRadii.x * 2, item.footprintRadii.y * 2);
       }
+    }
+    for (const portal of this.layout ? this.currentStairs : []) {
+      graphics.lineStyle(world(1), 0xffbd5d, 0.85);
+      graphics.strokeEllipse(portal.x, portal.y, PORTAL_DEFINITION.footprintRadii.x * 2, PORTAL_DEFINITION.footprintRadii.y * 2);
     }
     graphics.lineStyle(world(1), 0xf8ef77, 0.9);
     for (const bullet of this.currentBullets) {
@@ -2544,8 +2567,11 @@ export class PhaserRenderer {
     if (this.playerSprite && this.scene?.textures.exists(textureKey(asset))) {
       const clip = this.playerClipForAsset(asset);
       this.playerSprite.setTexture(textureKey(asset));
-      this.applyClip(this.playerSprite, clip, PLAYER_SPEC.spriteSize, 0, asset);
-      if (this.playerShadow) this.applyClip(this.playerShadow, clip, PLAYER_SPEC.spriteSize, 0, asset);
+      this.applyClip(this.playerSprite, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
+      if (this.playerShadow) {
+        this.applyClip(this.playerShadow, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
+        this.applyShadowOffset(this.playerShadow, this.currentPlayer.x, this.currentPlayer.y, PLAYER_SPEC.spriteSize);
+      }
       this.applyPlayerProtectionTint();
     }
   }

@@ -1059,6 +1059,7 @@ The goal is to be able to generate a room with all its enemies that already incl
 
 * Consistent collision detection
 - Replace movement anchors with footprints
+- Refactor the object specs to include hitbox, footprint and visual offsets configs.
 
 - Use hitboxes for player/bullet collision detection and damage calcualation.
 - Use hitboxes for enemy/bullet collision detection and damage calcualation.

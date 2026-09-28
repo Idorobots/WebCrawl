@@ -70,7 +70,7 @@ async function alignPlayerToDoor(
 ): Promise<void> {
   // Start inside the doorway, beyond obstacles in the middle of the room,
   // then walk through the opening.
-  const inset = PLAYER_SPEC.radius + WORLD_GEOMETRY.wallThickness + world(20);
+  const inset = Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + WORLD_GEOMETRY.wallThickness + world(20);
   const target = direction === "N" ? { x: door.x, y: door.y + inset }
     : direction === "S" ? { x: door.x, y: door.y - inset }
     : direction === "E" ? { x: door.x - inset, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY }
@@ -1157,7 +1157,7 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
       x: camera.x + (aim.x - viewport.x - viewport.width / 2) / camera.zoom,
       y: camera.y + (aim.y - viewport.y - viewport.height / 2) / camera.zoom,
     };
-    const center = { x: position.x, y: position.y + PLAYER_SPEC.visualCenterOffsetY };
+    const center = { x: position.x + PLAYER_SPEC.hitboxOffset.x, y: position.y + PLAYER_SPEC.hitboxOffset.y };
     const expectedMagnitude = Math.hypot(cursorWorld.x - center.x, cursorWorld.y - center.y);
     const facing = await playerFacing(page);
     return facing.x * (cursorWorld.x - center.x) / expectedMagnitude +
@@ -1506,8 +1506,8 @@ test("pauses the game while teleporting through a portal", async ({ page }) => {
   if (!portal) throw new Error("Expected a down portal on floor one");
   expect(portal.enabled).toBe(false);
 
-  const contactX = portal.x + PORTAL_DEFINITION.contactOffset.x;
-  const contactY = portal.y + PORTAL_DEFINITION.contactOffset.y;
+  const contactX = portal.x;
+  const contactY = portal.y;
   await teleportPlayer(page, { x: contactX, y: contactY });
   await expect.poll(async () => {
     const position = await playerPosition(page);
@@ -1529,11 +1529,11 @@ test("pauses the game while teleporting through a portal", async ({ page }) => {
 
   await teleportPlayer(page, {
     x: contactX,
-    y: contactY + PORTAL_DEFINITION.contactRadius.y + 12,
+    y: contactY + PORTAL_DEFINITION.footprintRadii.y + 12,
   });
   expect(await playerPosition(page)).toEqual({
     x: Math.round(contactX),
-    y: Math.round(contactY + PORTAL_DEFINITION.contactRadius.y + 12),
+    y: Math.round(contactY + PORTAL_DEFINITION.footprintRadii.y + 12),
   });
   await page.keyboard.down("ArrowDown");
   await expect.poll(async () => page.evaluate(() =>
