@@ -1403,7 +1403,11 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   await expect.poll(async () => Number(await game.getAttribute("data-weapon-ammo"))).toBe(swappedAmmoBeforeShot - 1);
   await expect(game).toHaveAttribute("data-last-player-volley", String(volleyAfterShot));
 
-  await teleportPlayer(page, { x: droppedWeapon!.x + 80, y: droppedWeapon!.y + 80 });
+  await teleportPlayer(page, start);
+  await expect.poll(async () => {
+    const position = await playerPosition(page);
+    return Math.hypot(position.x - droppedWeapon!.x, position.y - droppedWeapon!.y);
+  }).toBeGreaterThan(world(40));
   await teleportPlayer(page, { x: droppedWeapon!.x, y: droppedWeapon!.y });
   await expect(game).toHaveAttribute("data-weapon-ammo", String(reducedAmmo));
 

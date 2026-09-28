@@ -1316,6 +1316,8 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
 - A level can consist of only the initial room. Should be handled gracefully by placing an "I'm feeling lucky" portal within it.
 - When a floor has no links at all, add a random link (same as I'm feeling lucky button) to one of the rooms. If there is a boss arena, place the link in that arena.
+- Some rooms should be generated empty (without any monsters).
+
 * DONE Bugs
 :LOGBOOK:
 - State "DONE"       from              [2026-09-26 Sat 20:54]

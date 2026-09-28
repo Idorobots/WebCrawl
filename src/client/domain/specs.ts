@@ -1113,7 +1113,7 @@ export const MAX_REGULAR_MONSTER_RADIUS = Math.max(
 export interface LootDefinition {
   asset: string;
   size: number;
-  pickupRadius: number;
+  footprintRadii: ObjectGeometry["footprintRadii"];
   frames?: readonly string[];
   frameDurationMs?: number;
 }
@@ -1124,17 +1124,17 @@ export const LOOT_DEFINITIONS: Record<Exclude<LootKind, "weapon">, LootDefinitio
     frames: LOOT_RAM_FRAMES,
     frameDurationMs: 200,
     size: world(50),
-    pickupRadius: world(33),
+    footprintRadii: circle(world(20)),
   },
-  crystal: { asset: ASSETS.lootCrystal, size: world(63), pickupRadius: world(33) },
-  core: { asset: ASSETS.lootCore, size: world(63), pickupRadius: world(33) },
-  energy: { asset: ASSETS.lootEnergy, size: world(63), pickupRadius: world(33) },
-  medkit: { asset: ASSETS.lootMedkit, size: world(63), pickupRadius: world(33) },
+  crystal: { asset: ASSETS.lootCrystal, size: world(63), footprintRadii: circle(world(20)) },
+  core: { asset: ASSETS.lootCore, size: world(63), footprintRadii: circle(world(20)) },
+  energy: { asset: ASSETS.lootEnergy, size: world(63), footprintRadii: circle(world(20)) },
+  medkit: { asset: ASSETS.lootMedkit, size: world(63), footprintRadii: circle(world(20)) },
 };
 
-export const WEAPON_PICKUP_DEFINITIONS: Record<WeaponPlacement, { size: number; yOffset: number; pickupRadius: number }> = {
-  pedestal: { size: world(92), yOffset: 0, pickupRadius: world(40) },
-  floor: { size: world(74), yOffset: 0, pickupRadius: world(36) },
+export const WEAPON_PICKUP_DEFINITIONS: Record<WeaponPlacement, { size: number; yOffset: number; footprintRadii: ObjectGeometry["footprintRadii"] }> = {
+  pedestal: { size: world(92), yOffset: 0, footprintRadii: circle(world(20)) },
+  floor: { size: world(74), yOffset: 0, footprintRadii: circle(world(20)) },
 };
 
 export const WEAPON_VISUAL_DEFINITIONS: Record<WeaponKind, { asset: string; origin: { x: number; y: number }; pedestalYOffset: number }> = {

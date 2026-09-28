@@ -1947,6 +1947,7 @@ export class PhaserRenderer {
       this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(yDepth(item.y, 0.5)));
     }
     this.refreshLocalLightVisibility(true);
+    this.renderDebugGeometry();
   }
 
   updateLootAnimations(items: readonly LootItem[], now: number): void {
@@ -2519,6 +2520,14 @@ export class PhaserRenderer {
         graphics.lineStyle(world(1), 0xffbd5d, 0.85);
         graphics.strokeEllipse(item.x, item.y, item.footprintRadii.x * 2, item.footprintRadii.y * 2);
       }
+    }
+    graphics.lineStyle(world(1), 0x6fe7ff, 0.9);
+    for (const item of this.currentLoot) {
+      if (!this.visited.has(item.roomId)) continue;
+      const radii = item.kind === "weapon"
+        ? WEAPON_PICKUP_DEFINITIONS[item.weaponPlacement ?? "floor"].footprintRadii
+        : LOOT_DEFINITIONS[item.kind].footprintRadii;
+      graphics.strokeEllipse(item.x, item.y, radii.x * 2, radii.y * 2);
     }
     for (const portal of this.layout ? this.currentStairs : []) {
       graphics.lineStyle(world(1), 0xffbd5d, 0.85);

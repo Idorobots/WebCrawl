@@ -2791,28 +2791,29 @@ function updatePlayerVisual(): void {
   updatePlayerProtectionVisual();
 }
 
+function playerOverlapsPickup(item: LootItem): boolean {
+  const footprintRadii = item.kind === "weapon"
+    ? WEAPON_PICKUP_DEFINITIONS[item.weaponPlacement ?? "floor"].footprintRadii
+    : LOOT_DEFINITIONS[item.kind].footprintRadii;
+  return footprintsOverlap(player, PLAYER_SPEC.footprintRadii, item, footprintRadii);
+}
+
 function checkLoot(): void {
   let changed = false;
   queuedLootDrops = [];
 
   for (const item of currentLoot) {
-    const pickupRadius = item.kind === "weapon"
-      ? WEAPON_PICKUP_DEFINITIONS[item.weaponPlacement ?? "floor"].pickupRadius
-      : LOOT_DEFINITIONS[item.kind].pickupRadius;
     if (
       temporarilyBlockedLoot.has(item.id) &&
-      distanceSquared(player, item) > pickupRadius * pickupRadius
+      !playerOverlapsPickup(item)
     ) {
       temporarilyBlockedLoot.delete(item.id);
     }
   }
 
   currentLoot = currentLoot.filter(item => {
-    const pickupRadius = item.kind === "weapon"
-      ? WEAPON_PICKUP_DEFINITIONS[item.weaponPlacement ?? "floor"].pickupRadius
-      : LOOT_DEFINITIONS[item.kind].pickupRadius;
     if (
-      distanceSquared(player, item) <= pickupRadius * pickupRadius &&
+      playerOverlapsPickup(item) &&
       !temporarilyBlockedLoot.has(item.id)
     ) {
       collectedLoot.add(item.id);
