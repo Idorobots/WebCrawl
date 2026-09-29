@@ -1255,6 +1255,7 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Sentries sometimes don't shoot even though there's a clear line of sight to the player. Scenery should be ignored by monster line-of-sight computation for shooting.
 - Monster's line-of-sight computation takes descructible scenery as blocking, which shouldn't be the case.
+- Mini-bosses hitbox & footprint should be scaled just like their size.
 
 * DONE UI improvements
 :LOGBOOK:
@@ -1349,3 +1350,4 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Asset sizes are arbitrary, need to be tuned
 - Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
 - When entering a boss arena, camera jumps up immediately, while exiting it animates nicely. It should animate nicely both ways.
+- Sentry ballistic directional annimations are scaled weird.
