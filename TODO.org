@@ -1060,13 +1060,11 @@ The goal is to be able to generate a room with all its enemies that already incl
 * Consistent collision detection
 - Replace movement anchors with footprints
 - Refactor the object specs to include hitbox, footprint and visual offsets configs.
-
 - Use hitboxes for player/bullet collision detection and damage calcualation.
 - Use hitboxes for enemy/bullet collision detection and damage calcualation.
 - Use hitboxes for player/pickup collision detection.
 - Use the footprints for player/scenery collision detection and blocking.
 - Use the footprints for enemy/scenery collision detection and blocking.
-
 - Define dedicated footprints for walls, use the same footprint as a hitbox, but shifted by 0.25 SEGMENT_SIZE up.
 
 - Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.

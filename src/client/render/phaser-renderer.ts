@@ -28,7 +28,6 @@ import {
 import { backgroundAssetForUrl } from "../domain/background";
 import { bossStage } from "../domain/boss-attacks";
 import { signageFontForUrl, stationAmbientForUrl, STATION_AMBIENT_TRACKS } from "../domain/level-style";
-import { WEAPON_COLORS } from "../domain/weapons";
 import {
   DEFAULT_BULLET_SPEC,
   LOOT_DEFINITIONS,
@@ -43,6 +42,8 @@ import {
   weaponAsset,
   type LootDefinition,
 } from "../domain/specs";
+import { buildWallFootprints, wallHitboxes, type WallRect } from "../domain/wall-collision";
+import { WEAPON_COLORS } from "../domain/weapons";
 import type {
   Bullet,
   Decoration,
@@ -60,6 +61,7 @@ import {
   buildCorridorRenderPlan,
   buildRoomWalls,
   doorModuleStyle,
+  roomDoorsForLayout,
   wallModuleStyle,
   type CorridorRenderPlan,
   type CorridorSegmentPlan,
@@ -70,7 +72,6 @@ import {
   ELLIPTICAL_LIGHT_PIPELINE,
   EllipticalLightPipeline,
 } from "./elliptical-light-pipeline";
-import { buildBlockedWallRegions } from "./wall-debug-plan";
 
 const textureKey = (asset: string): string => `asset:${asset}`;
 const SEGMENT_SIZE = WORLD_GEOMETRY.segmentSize;
@@ -371,6 +372,7 @@ export class PhaserRenderer {
   private bulletSprites = new Map<string, Phaser.GameObjects.Image>();
   private debugGraphics: Phaser.GameObjects.Graphics | null = null;
   private debugWallGraphics: Phaser.GameObjects.Graphics | null = null;
+  private wallFootprints: WallRect[] = [];
   private decorations: Phaser.GameObjects.Container[] = [];
   private decorationSprites = new Map<string, Phaser.GameObjects.Image>();
   private decorationShadows = new Map<string, Phaser.GameObjects.Image>();
@@ -598,6 +600,7 @@ export class PhaserRenderer {
     this.bulletSprites.clear();
     this.debugGraphics?.clear();
     this.debugWallGraphics?.clear();
+    this.wallFootprints = [];
     delete this.host.dataset.debugWallRegions;
     this.destroyAll(this.decorations);
     this.decorationSprites.clear();
@@ -961,6 +964,7 @@ export class PhaserRenderer {
       this.addRoomLight(room, visible);
     }
     this.refreshLocalLightVisibility(true);
+    this.wallFootprints = SHOW_DEBUG_GEOMETRY ? buildWallFootprints(this.layout) : [];
     this.renderDebugWalls();
   }
 
@@ -1323,19 +1327,7 @@ export class PhaserRenderer {
   }
 
   private roomDoors(room: GraphNode): (DoorModulePlan & { sharedTarget?: boolean })[] {
-    const doors: (DoorModulePlan & { sharedTarget?: boolean })[] = [];
-    for (const link of this.layout?.links ?? []) {
-      if (link.source.id === room.id) doors.push({
-        position: link.points[0]!,
-        side: link.direction,
-      });
-      if (link.target.id === room.id) doors.push({
-        position: link.points[link.points.length - 1]!,
-        side: link.targetDirection ?? this.opposite(link.direction),
-        sharedTarget: link.direct,
-      });
-    }
-    return doors;
+    return this.layout ? roomDoorsForLayout(this.layout, room) : [];
   }
 
   private createDoor(door: DoorModulePlan): Phaser.GameObjects.Image {
@@ -1346,10 +1338,6 @@ export class PhaserRenderer {
       door.position.y + style.offsetY,
       textureKey(style.asset),
     ).setDisplaySize(style.width, style.height));
-  }
-
-  private opposite(direction: "N" | "E" | "S" | "W"): "N" | "E" | "S" | "W" {
-    return ({ N: "S", E: "W", S: "N", W: "E" } as const)[direction];
   }
 
   private rememberStatic<T extends Phaser.GameObjects.GameObject>(object: T): T {
@@ -2483,9 +2471,10 @@ export class PhaserRenderer {
     if (!SHOW_DEBUG_GEOMETRY || !this.scene || !this.layout) return;
     const graphics = this.debugWallGraphics ??= this.scene.add.graphics().setDepth(DEBUG_DEPTH - 1);
     graphics.clear().fillStyle(0xff4b70, 0.35);
-    const regions = buildBlockedWallRegions(this.layout);
-    for (const region of regions) graphics.fillRect(region.x, region.y, region.width, region.height);
-    this.host.dataset.debugWallRegions = String(regions.length);
+    for (const rect of this.wallFootprints) graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
+    graphics.fillStyle(0x8cf6ff, 0.26);
+    for (const rect of wallHitboxes(this.wallFootprints)) graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
+    this.host.dataset.debugWallRegions = String(this.wallFootprints.length);
   }
 
   private renderDebugGeometry(): void {

@@ -25,6 +25,20 @@ export interface DoorModulePlan {
   side: "N" | "E" | "S" | "W";
 }
 
+/** Shared placements for rendering and floor-level collision. Direct doors appear once. */
+export function roomDoorsForLayout(layout: DungeonLayout, room: GraphNode): (DoorModulePlan & { sharedTarget?: boolean })[] {
+  const doors: (DoorModulePlan & { sharedTarget?: boolean })[] = [];
+  for (const link of layout.links) {
+    if (link.source.id === room.id) doors.push({ position: link.points[0]!, side: link.direction });
+    if (link.target.id === room.id) doors.push({
+      position: link.points[link.points.length - 1]!,
+      side: link.targetDirection ?? ({ N: "S", E: "W", S: "N", W: "E" } as const)[link.direction],
+      sharedTarget: link.direct,
+    });
+  }
+  return doors;
+}
+
 export interface CorridorJunctionFloorPlan extends Point {
   ownerLinkId: string;
   seed: number;

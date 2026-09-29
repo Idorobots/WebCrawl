@@ -78,10 +78,11 @@ import {
 } from "./domain/generation";
 import { contentPagesForRoom, domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
-import { chooseReachablePath, monsterEscapeStep, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "./domain/pathfinding";
+import { chooseReachablePath, monsterEscapeStep, walkableApproachPoint, walkableSegment } from "./domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, hasBlockingPortalMonsters, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
 import { forSpatialCells, indexMonsterHitboxes, monsterCollisionCandidates, spatialCellKey } from "./domain/spatial";
+import { buildWallFootprints, wallBlocksSegment, wallHitboxes, wallOverlapsEllipse, WallRectIndex } from "./domain/wall-collision";
 import {
   BARREL_EXPLOSION_DAMAGE,
   BOSS_DEFINITIONS,
@@ -235,6 +236,8 @@ interface GeometryCell {
   links: Set<LayoutLink>;
 }
 let geometryCells = new Map<string, GeometryCell>();
+let wallFootprints = new WallRectIndex([]);
+let wallProjectileHitboxes = new WallRectIndex([]);
 let obstacleCells = new Map<string, Set<Decoration>>();
 let damageableCells = new Map<string, Set<Decoration>>();
 let monsterCells = new Map<string, Set<Monster>>();
@@ -1245,9 +1248,9 @@ function saveObstacleState(item: Decoration): void {
 function buildDecorations(layout: DungeonLayout, pageUrl: string): Decoration[] {
   const pageIdentity = floorIdentity(pageUrl);
   return [
-    ...createDecorations(layout, obstacleStateMapForPage(pageUrl), floorNumber()),
+    ...createDecorations(layout, obstacleStateMapForPage(pageUrl), floorNumber(), wallFootprints),
     ...layout.nodes.flatMap((room) => {
-      const pedestal = weaponPedestalForRoom(room, pageIdentity);
+      const pedestal = weaponPedestalForRoom(room, pageIdentity, wallFootprints);
       return pedestal ? [pedestal] : [];
     }),
   ];
@@ -1390,6 +1393,7 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string, playerSpawn?: Poi
     floorNumber(),
     currentDecorations,
     playerSpawn,
+    wallFootprints,
   );
   for (const monster of monsters) {
     if (monster.dead && monster.droppedLoot) {
@@ -1873,20 +1877,24 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
   }
 }
 
-function hasWalkableLine(from: Point, to: Point, radius: number, step: number): boolean {
-  return walkableSegment(
-    from,
-    to,
-    point => isWalkable(point.x, point.y, radius),
-    Math.min(step, WORLD_GEOMETRY.wallThickness / 2),
-  );
+function monsterMoveIsClear(monster: Monster, to: Point, checkPlayer = true): boolean {
+  return !wallBlocksSegment(monster, to, monster.footprintRadii, wallFootprints) &&
+    walkableSegment(monster, to, point => isMonsterWalkable(monster, point.x, point.y, checkPlayer));
+}
+
+function wallLineOfSight(from: Point, to: Point): boolean {
+  const floorFrom = { x: from.x, y: from.y - PLAYER_SPEC.hitboxOffset.y };
+  const floorTo = { x: to.x, y: to.y - PLAYER_SPEC.hitboxOffset.y };
+  return !wallBlocksSegment(from, to, { x: DEFAULT_BULLET_SPEC.radius, y: DEFAULT_BULLET_SPEC.radius }, wallProjectileHitboxes) &&
+    walkableSegment(floorFrom, floorTo, point => isFloorPoint(point.x, point.y));
 }
 
 function hasLineOfSight(from: Point, to: Point): boolean {
-  return walkableProjectileLine(
-    from, to, PLAYER_SPEC.hitboxOffset.y,
-    point => isWalkable(point.x, point.y, DEFAULT_BULLET_SPEC.radius),
-  );
+  const floorFrom = { x: from.x, y: from.y - PLAYER_SPEC.hitboxOffset.y };
+  const floorTo = { x: to.x, y: to.y - PLAYER_SPEC.hitboxOffset.y };
+  return wallLineOfSight(from, to) &&
+    walkableSegment(from, to, point => !pointBlockedByDecoration(point.x, point.y, DEFAULT_BULLET_SPEC.radius)) &&
+    walkableSegment(floorFrom, floorTo, point => !pointBlockedByDecoration(point.x, point.y, DEFAULT_BULLET_SPEC.radius));
 }
 
 function visiblePlayerAimPoint(from: Point): Point | null {
@@ -1902,10 +1910,8 @@ function monsterApproachPoint(monster: Monster): Point | null {
     monster,
     point => isMonsterWalkable(monster, point.x, point.y),
     point => monster.bossKind
-      ? walkableSegment(point, player, position => isGeometryWalkable(
-        position.x, position.y, DEFAULT_BULLET_SPEC.radius,
-      ), WORLD_GEOMETRY.pathLineStep)
-      : hasWalkableLine(point, player, DEFAULT_BULLET_SPEC.radius, WORLD_GEOMETRY.pathLineStep),
+      ? wallLineOfSight(actorCollisionCenter(point, monster.hitboxOffset), playerCollisionCenter())
+      : hasLineOfSight(actorCollisionCenter(point, monster.hitboxOffset), playerCollisionCenter()),
     Math.max(monster.footprintRadii.x + PLAYER_SPEC.footprintRadii.x,
       monster.footprintRadii.y + PLAYER_SPEC.footprintRadii.y) + WORLD_GEOMETRY.pathGridStep * 2,
   );
@@ -1990,7 +1996,8 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
       : (dy < 0 ? "up" : "down");
 
   const walkable = (point: Point): boolean => isMonsterWalkable(monster, point.x, point.y);
-  if (walkableSegment(monster, { x: nextX, y: nextY }, walkable)) {
+  if (!wallBlocksSegment(monster, { x: nextX, y: nextY }, monster.footprintRadii, wallFootprints) &&
+      walkableSegment(monster, { x: nextX, y: nextY }, walkable)) {
     monster.x = nextX;
     monster.y = nextY;
     monster.moving = true;
@@ -2005,7 +2012,8 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     : [verticalStep, horizontalStep];
   for (const candidate of axisSteps) {
     if (Math.hypot(candidate.x - monster.x, candidate.y - monster.y) <= 0.001) continue;
-    if (!walkableSegment(monster, candidate, walkable)) continue;
+    if (wallBlocksSegment(monster, candidate, monster.footprintRadii, wallFootprints) ||
+        !walkableSegment(monster, candidate, walkable)) continue;
     monster.moveDir = cardinalDirection(candidate.x - monster.x, candidate.y - monster.y);
     monster.x = candidate.x;
     monster.y = candidate.y;
@@ -2022,7 +2030,8 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     monster,
     { x: dx, y: dy },
     Math.max(step, world(6)),
-    point => walkableSegment(monster, point, walkable),
+    point => !wallBlocksSegment(monster, point, monster.footprintRadii, wallFootprints) &&
+      walkableSegment(monster, point, walkable),
     monster.seed + monster.blockedMoveCount,
   );
   if (escaped) {
@@ -2089,7 +2098,7 @@ function retreatBoss(monster: Monster, playerRoom: GraphNode, dt: number): void 
       y: monster.y + (dx * sine + dy * cosine) / distance * step,
     };
     if (roomContainingPoint(point.x, point.y)?.id !== playerRoom.id ||
-      !walkableSegment(monster, point, position => isMonsterWalkable(monster, position.x, position.y))) continue;
+      !monsterMoveIsClear(monster, point)) continue;
     monster.x = point.x;
     monster.y = point.y;
     monster.moving = true;
@@ -2110,7 +2119,7 @@ function strafeBoss(
       y: monster.y + direction.y * monster.speed * dt,
     };
     if (roomContainingPoint(point.x, point.y)?.id !== playerRoom.id ||
-      !walkableSegment(monster, point, position => isMonsterWalkable(monster, position.x, position.y))) continue;
+      !monsterMoveIsClear(monster, point)) continue;
     monster.x = point.x;
     monster.y = point.y;
     monster.moving = true;
@@ -2132,7 +2141,7 @@ function updateGlmCharge(monster: Monster, dt: number, timestamp: number, stage:
         x: monster.x + monster.chargeDirection.x * monster.speed * bossChargeSpeedMultiplier(stage) * dt,
         y: monster.y + monster.chargeDirection.y * monster.speed * bossChargeSpeedMultiplier(stage) * dt,
       };
-      if (walkableSegment(monster, next, point => isMonsterWalkable(monster, point.x, point.y, false))) {
+      if (monsterMoveIsClear(monster, next, false)) {
         monster.x = next.x;
         monster.y = next.y;
         monster.moving = true;
@@ -2140,7 +2149,7 @@ function updateGlmCharge(monster: Monster, dt: number, timestamp: number, stage:
         monster.chargeUntil = timestamp;
       }
       if (!monster.chargeHit && Math.hypot(monster.x - player.x, monster.y - player.y) <= monster.attackRange &&
-        hasWalkableLine(monster, player, DEFAULT_BULLET_SPEC.radius, WORLD_GEOMETRY.pathLineStep)) {
+        hasLineOfSight(actorCollisionCenter(monster, monster.hitboxOffset), playerCollisionCenter())) {
         monster.chargeHit = true;
         monster.attackKind = "melee";
         monster.lastAttackAt = timestamp;
@@ -2249,7 +2258,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): boolean | 
   }
 
   if (playerDistance <= monsterMeleeRange(monster) && attackReady &&
-    hasWalkableLine(monster, player, DEFAULT_BULLET_SPEC.radius, WORLD_GEOMETRY.pathLineStep)) {
+    hasLineOfSight(actorCollisionCenter(monster, monster.hitboxOffset), playerCollisionCenter())) {
     monster.attackKind = "melee";
     monster.lastAttackAt = timestamp;
     renderer.playMeleeSound();
@@ -2348,8 +2357,10 @@ function updateBullets(dt: number): void {
         alive = false;
         break;
       }
-      const movementAlignedBulletY = bullet.y - PLAYER_SPEC.hitboxOffset.y;
-      if (!isGeometryWalkable(bullet.x, movementAlignedBulletY, bulletRadius)) {
+      const floorY = bullet.y - PLAYER_SPEC.hitboxOffset.y;
+      if (!isFloorPoint(bullet.x, floorY) ||
+          wallBlocksSegment({ x: bullet.x - dx, y: bullet.y - dy }, bullet,
+            { x: bulletRadius, y: bulletRadius }, wallProjectileHitboxes)) {
         renderer.spawnEffect(
           PLAYER_SPEC.visual.effects?.damage,
           bullet.x,
@@ -2705,18 +2716,23 @@ function slideObstaclesNear(x: number, y: number): EllipseObstacle[] {
   return [...scenery, ...actors];
 }
 
-function isGeometryWalkable(x: number, y: number, radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii): boolean {
+function isFloorPoint(x: number, y: number): boolean {
   if (!currentLayout) return false;
   const cell = geometryCells.get(spatialCellKey(x, y));
   if (!cell) return false;
   for (const room of cell.rooms) {
-    if (pointInRoomFloor(x, y, room, radius)) return true;
+    if (pointInRoomFloor(x, y, room, 0)) return true;
   }
   for (const link of cell.links) {
-    if (pointInCorridor(x, y, link, radius)) return true;
+    if (pointInCorridor(x, y, link, 0)) return true;
   }
 
   return false;
+}
+
+function isGeometryWalkable(x: number, y: number, radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii): boolean {
+  const radii = typeof radius === "number" ? { x: radius, y: radius } : radius;
+  return isFloorPoint(x, y) && !wallOverlapsEllipse({ x, y }, radii, wallFootprints);
 }
 
 function isWalkable(x: number, y: number, radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii): boolean {
@@ -2771,6 +2787,7 @@ function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
     floorIdentity(pageUrl),
     navigationHistory[navigationHistory.length - 1] ?? null,
     collectedLoot,
+    wallFootprints,
   );
   return {
     stairs: base.stairs,
@@ -3043,7 +3060,8 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
   };
 
   let moved = false;
-  if (isPlayerWalkable(next.x, next.y)) {
+  if (!wallBlocksSegment(player, next, PLAYER_SPEC.footprintRadii, wallFootprints) &&
+      walkableSegment(player, next, point => isPlayerWalkable(point.x, point.y))) {
     player = next;
     moved = true;
   } else {
@@ -3054,17 +3072,20 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
       slideObstaclesNear(next.x, next.y),
       point => isPlayerWalkable(point.x, point.y),
     );
-    if (slid) {
+    if (slid && !wallBlocksSegment(player, slid, PLAYER_SPEC.footprintRadii, wallFootprints) &&
+        walkableSegment(player, slid, point => isPlayerWalkable(point.x, point.y))) {
       player = slid;
       moved = true;
     }
   }
   if (!moved) {
-    if (dx !== 0 && isPlayerWalkable(player.x + dx, player.y)) {
+    if (dx !== 0 && !wallBlocksSegment(player, { x: player.x + dx, y: player.y }, PLAYER_SPEC.footprintRadii, wallFootprints) &&
+        walkableSegment(player, { x: player.x + dx, y: player.y }, point => isPlayerWalkable(point.x, point.y))) {
       player.x += dx;
       moved = true;
     }
-    if (dy !== 0 && isPlayerWalkable(player.x, player.y + dy)) {
+    if (dy !== 0 && !wallBlocksSegment(player, { x: player.x, y: player.y + dy }, PLAYER_SPEC.footprintRadii, wallFootprints) &&
+        walkableSegment(player, { x: player.x, y: player.y + dy }, point => isPlayerWalkable(point.x, point.y))) {
       player.y += dy;
       moved = true;
     }
@@ -3178,7 +3199,8 @@ function updateEnergyDash(dt: number): void {
         x: player.x + dash.dirX * step,
         y: player.y + dash.dirY * step,
       };
-      if (!isGeometryWalkable(next.x, next.y, PLAYER_SPEC.footprintRadii)) {
+      if (!isGeometryWalkable(next.x, next.y, PLAYER_SPEC.footprintRadii) ||
+          wallBlocksSegment(player, next, PLAYER_SPEC.footprintRadii, wallFootprints)) {
         dash.traveled = dash.maxDistance;
         break;
       }
@@ -3709,6 +3731,10 @@ function renderGraph(
     : new Set();
 
   currentRoomId = null;
+
+  const wallRects = buildWallFootprints(layout);
+  wallFootprints = new WallRectIndex(wallRects);
+  wallProjectileHitboxes = new WallRectIndex(wallHitboxes(wallRects));
 
   const objects = buildInteractiveObjects(layout, pageUrl);
   currentStairs = objects.stairs;
