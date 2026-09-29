@@ -99,7 +99,7 @@ function roomPositionOffWalls(position: Point, room: GraphNode, footprint: Ellip
       x: position.x + (room.x - position.x) * fraction,
       y: position.y + (room.y - position.y) * fraction,
     };
-    if (pointInRoomFloor(candidate.x, candidate.y, room, 0) &&
+    if (pointInRoomFloor(candidate.x, candidate.y, room) &&
         !wallOverlapsEllipse(candidate, footprint, walls)) return candidate;
   }
   return null;
@@ -276,7 +276,7 @@ function decorationFits(
     position.y - room.y,
   ) >= Math.max(radius.x, radius.y) + MAX_REGULAR_MONSTER_FOOTPRINT + world(20);
   return leavesRoomCenterClear && leavesInteractionsClear &&
-    pointInRoomFloor(position.x, position.y, room, 0) &&
+    pointInRoomFloor(position.x, position.y, room) &&
     !wallOverlapsEllipse(position, radius, walls) && placed.every(item =>
     Math.hypot(position.x - item.x, position.y - item.y) >=
       Math.max(radius.x, radius.y) + Math.max(world(10), item.footprintRadii.x, item.footprintRadii.y) + world(8)
@@ -963,8 +963,8 @@ export function monsterPositionIsClear(
   placedMonsters: ReadonlyArray<Pick<Monster, "x" | "y" | "footprintRadii">> = [],
   walls = new WallRectIndex(buildWallFootprints(layout)),
 ): boolean {
-  const onFloor = layout.nodes.some(room => pointInRoomFloor(position.x, position.y, room, 0)) ||
-    layout.links.some(link => pointInCorridor(position.x, position.y, link, 0));
+  const onFloor = layout.nodes.some(room => pointInRoomFloor(position.x, position.y, room)) ||
+    layout.links.some(link => pointInCorridor(position.x, position.y, link));
   if (!onFloor) return false;
   if (wallOverlapsEllipse(position, typeof footprint === "number" ? { x: footprint, y: footprint } : footprint, walls)) return false;
   return decorations.every(item =>

@@ -93,7 +93,7 @@ export function junctionRoomsAtPoint(
   for (const junction of nearby) {
     for (const id of junction.linkIds) {
       const link = byId.get(id);
-      if (!link || !pointInCorridor(point.x, point.y, link, 0)) continue;
+      if (!link || !pointInCorridor(point.x, point.y, link)) continue;
       rooms.set(link.source.id, link.source);
       rooms.set(link.target.id, link.target);
     }

@@ -282,7 +282,7 @@ describe("corridor render planning", () => {
     expect(connectedRoomAdjacency(layout, visited).get(0)).toContain(3);
     expect(connectedRoomAdjacency(layout, visited).get(0)).toContain(5);
     expect(revealedRoomPath(layout, visited, 0, 3)).toEqual([0, 3]);
-    const walkable = (point: Point): boolean => links.some(link => pointInCorridor(point.x, point.y, link, 0));
+    const walkable = (point: Point): boolean => links.some(link => pointInCorridor(point.x, point.y, link));
     const path = aStarPath({ x: -4 * s, y: 0 }, { x: -2 * s, y: 2 * s }, walkable, s / 5, 5000);
     expect(path).not.toBeNull();
     expect(path!.some(point => Math.abs(point.x + 2 * s) <= s && Math.abs(point.y) <= s)).toBe(true);

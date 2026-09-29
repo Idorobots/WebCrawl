@@ -32,7 +32,6 @@ import {
   projectileHitsCircle,
   projectileHitsDecoration,
   steerDashDirection,
-  visiblePlayerHitPoint,
 } from "../../src/client/domain/combat";
 import {
   distanceSquared,
@@ -73,9 +72,10 @@ import {
 import { coalesceLeaves, contentPagesForRoom, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, doorCapacity, doorPositionForSlot, layoutOrthogonal } from "../../src/client/domain/layout";
-import { aStarPath, chooseReachablePath, monsterEscapeStep, revealedRoomPath, walkableApproachPoint, walkableProjectileLine, walkableSegment } from "../../src/client/domain/pathfinding";
+import { aStarPath, chooseReachablePath, monsterEscapeStep, revealedRoomPath, walkableApproachPoint, walkableSegment } from "../../src/client/domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "../../src/client/domain/portals";
 import { indexMonsterHitboxes, monsterCollisionCandidates } from "../../src/client/domain/spatial";
+import { buildWallFootprints, wallBlocksSegment, wallHitboxes, wallOverlapsEllipse, WallRectIndex } from "../../src/client/domain/wall-collision";
 import {
   BARREL_EXPLOSION_RADIUS,
   BOSS_DEFINITIONS,
@@ -114,7 +114,17 @@ import {
   weaponForRoom,
   weaponKinds,
 } from "../../src/client/domain/weapons";
-import type { Decoration, DungeonGraph, EllipseRadii, GraphNode, LayoutLink, MonsterVisualKind, Point, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
+import type { Decoration, DungeonGraph, DungeonLayout, EllipseRadii, GraphNode, LayoutLink, MonsterVisualKind, Point, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
+
+function onLayoutFloor(layout: DungeonLayout, point: Point): boolean {
+  return layout.nodes.some(room => pointInRoomFloor(point.x, point.y, room)) ||
+    layout.links.some(link => pointInCorridor(point.x, point.y, link));
+}
+
+function actorClearOfWalls(layout: DungeonLayout, point: Point, radius: number | EllipseRadii, walls: WallRectIndex): boolean {
+  const radii = typeof radius === "number" ? { x: radius, y: radius } : radius;
+  return onLayoutFloor(layout, point) && !wallOverlapsEllipse(point, radii, walls);
+}
 
 const node = (id: number, parentId: number | null, depth: number, overrides: Partial<GraphNode> = {}): GraphNode => ({
   id,
@@ -485,9 +495,9 @@ describe("layout and geometry", () => {
     const normal = direction === "E" ? { x: 1, y: 0 } : direction === "W" ? { x: -1, y: 0 }
       : direction === "S" ? { x: 0, y: 1 } : { x: 0, y: -1 };
     const shift = normal.x ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
-    const walkable = (point: Point, radius: number | EllipseRadii) => adjacent.nodes.some(room =>
-      pointInRoomFloor(point.x, point.y, room, radius)
-    ) || pointInCorridor(point.x, point.y, link, radius);
+    const walls = new WallRectIndex(buildWallFootprints(adjacent));
+    const walkable = (point: Point, radius: number | EllipseRadii) =>
+      actorClearOfWalls(adjacent, point, radius, walls);
     for (const radius of [PLAYER_SPEC.footprintRadii, { x: MAX_REGULAR_MONSTER_FOOTPRINT, y: MAX_REGULAR_MONSTER_FOOTPRINT }]) {
       const along = normal.x ? radius.x : radius.y;
       const start = { x: door.x - normal.x * (along + world(30)), y: door.y - normal.y * (along + world(30)) + shift };
@@ -500,9 +510,9 @@ describe("layout and geometry", () => {
           walkableSegment(path![index]!, point, candidate => walkable(candidate, radius))
         )).toBe(true);
       }
-      const across = WORLD_GEOMETRY.doorOpeningWidth / 2 - (normal.x ? radius.y : radius.x) + 1;
-      const outsideDoor = { x: door.x - normal.y * across, y: door.y + shift + normal.x * across };
-      expect(pointInCorridor(outsideDoor.x, outsideDoor.y, link, radius)).toBe(false);
+      const blocked = { x: door.x - normal.y * WORLD_GEOMETRY.segmentSize * 0.75,
+        y: door.y + shift + normal.x * WORLD_GEOMETRY.segmentSize * 0.75 };
+      expect(walkable(blocked, radius)).toBe(false);
     }
   });
 
@@ -567,87 +577,54 @@ describe("layout and geometry", () => {
     expect(distanceSquared({ x: 1, y: 2 }, { x: 4, y: 6 })).toBe(25);
   });
 
-  it("blocks room walls halfway through their segment and admits only the middle of doors", () => {
+  it("treats room and corridor shapes as floor while piece footprints block walls and door jambs", () => {
     const room = layout.nodes[0]!;
     const topWallEdge = room.y - room.height / 2;
-    expect(pointInRoomFloor(room.x, topWallEdge, room, 0)).toBe(true);
-    expect(pointInRoomFloor(room.x, topWallEdge - 1, room, 0)).toBe(false);
-    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.footprintRadii.y, room, PLAYER_SPEC.footprintRadii)).toBe(true);
-    expect(pointInRoomFloor(room.x, topWallEdge + PLAYER_SPEC.footprintRadii.y - 1, room, PLAYER_SPEC.footprintRadii)).toBe(false);
-    expect(pointInRoomFloor(room.x + room.width / 2, room.y, room, 0)).toBe(true);
-    expect(pointInRoomFloor(room.x, room.y + room.height / 2, room, 0)).toBe(true);
-    expect(pointInRoomFloor(room.x + room.width / 2 + 1, room.y, room, 0)).toBe(false);
+    expect(pointInRoomFloor(room.x, topWallEdge, room)).toBe(true);
+    expect(pointInRoomFloor(room.x, topWallEdge - 1, room)).toBe(false);
+    expect(pointInRoomFloor(room.x + room.width / 2, room.y, room)).toBe(true);
+    expect(pointInRoomFloor(room.x, room.y + room.height / 2, room)).toBe(true);
+    expect(pointInRoomFloor(room.x + room.width / 2 + 1, room.y, room)).toBe(false);
 
     const link = layout.links[0]!;
     const start = link.points[0]!;
     const end = link.points[1]!;
-    const length = corridorLength(link.points);
-    const unit = { x: (end.x - start.x) / length, y: (end.y - start.y) / length };
-    const lateral = { x: -unit.y, y: unit.x };
-    const insideDoor = start;
-    expect(pointInCorridor(insideDoor.x, insideDoor.y, link, 0)).toBe(true);
-    expect(pointInCorridor(
-      insideDoor.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 + 1),
-      insideDoor.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 + 1),
-      link,
-      0,
-    )).toBe(false);
-    const playerInsideDoor = {
-      x: start.x - unit.x * PLAYER_SPEC.footprintRadii.x / 2,
-      y: start.y - unit.y * PLAYER_SPEC.footprintRadii.y / 2,
-    };
-    expect(pointInCorridor(playerInsideDoor.x, playerInsideDoor.y, link, PLAYER_SPEC.footprintRadii)).toBe(true);
-    const across = start.y === end.y ? PLAYER_SPEC.footprintRadii.y : PLAYER_SPEC.footprintRadii.x;
-    expect(pointInCorridor(
-      playerInsideDoor.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
-      playerInsideDoor.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
-      link,
-      PLAYER_SPEC.footprintRadii,
-    )).toBe(false);
-
-    // The door's blocked band spans the wall thickness into the corridor:
-    // walkable only through the opening, blocked everywhere else.
-    const bandHalf = WORLD_GEOMETRY.wallThickness / 2;
-    const bandOpening = {
-      x: start.x + unit.x * bandHalf,
-      y: start.y + unit.y * bandHalf + (start.y === end.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
-    };
-    expect(pointInCorridor(bandOpening.x, bandOpening.y, link, PLAYER_SPEC.footprintRadii)).toBe(true);
-    const bandEdge = {
-      x: bandOpening.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
-      y: bandOpening.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
-    };
-    expect(pointInCorridor(bandEdge.x, bandEdge.y, link, PLAYER_SPEC.footprintRadii), "Expected blocked door band edge").toBe(false);
-
+    const walls = new WallRectIndex(buildWallFootprints(layout));
     const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-    expect(pointInCorridor(midpoint.x, midpoint.y, link, PLAYER_SPEC.footprintRadii)).toBe(true);
+    expect(pointInCorridor(midpoint.x, midpoint.y, link)).toBe(true);
+    const northWall = walls.rects.find(rect => rect.y < topWallEdge && rect.y + rect.height === topWallEdge &&
+      rect.width > rect.height && rect.x >= room.x - room.width / 2 && rect.x + rect.width <= room.x + room.width / 2)!;
+    expect(actorClearOfWalls(layout, { x: northWall.x + northWall.width / 2,
+      y: topWallEdge + PLAYER_SPEC.footprintRadii.y / 4 },
+      PLAYER_SPEC.footprintRadii, walls)).toBe(false);
+    const doorCenter = { x: start.x, y: start.y + (start.y === end.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0) };
+    expect(actorClearOfWalls(layout, doorCenter, PLAYER_SPEC.footprintRadii, walls)).toBe(true);
     expect(pointInCorridor(
       midpoint.x,
       midpoint.y + link.width / 2 + 1,
       link,
-      0,
     )).toBe(false);
     if (start.y === end.y) {
       const topWallEdge = midpoint.y - link.width / 2;
-      expect(pointInCorridor(midpoint.x, topWallEdge, link, 0)).toBe(true);
-      expect(pointInCorridor(midpoint.x, topWallEdge - 1, link, 0)).toBe(false);
-      expect(pointInCorridor(midpoint.x, midpoint.y + link.width / 2, link, 0)).toBe(true);
+      expect(pointInCorridor(midpoint.x, topWallEdge, link)).toBe(true);
+      expect(pointInCorridor(midpoint.x, topWallEdge - 1, link)).toBe(false);
+      expect(pointInCorridor(midpoint.x, midpoint.y + link.width / 2, link)).toBe(true);
     } else {
-      expect(pointInCorridor(midpoint.x - link.width / 2, midpoint.y, link, 0)).toBe(true);
-      expect(pointInCorridor(midpoint.x - link.width / 2 - 1, midpoint.y, link, 0)).toBe(false);
-      expect(pointInCorridor(midpoint.x + link.width / 2, midpoint.y, link, 0)).toBe(true);
+      expect(pointInCorridor(midpoint.x - link.width / 2, midpoint.y, link)).toBe(true);
+      expect(pointInCorridor(midpoint.x - link.width / 2 - 1, midpoint.y, link)).toBe(false);
+      expect(pointInCorridor(midpoint.x + link.width / 2, midpoint.y, link)).toBe(true);
     }
   });
 
   it("keeps widened doorways and corridor obstacles traversable by monsters", () => {
     const decorations = buildDecorations(layout, new Map(), 1);
+    const walls = new WallRectIndex(buildWallFootprints(layout));
     for (const link of layout.links) {
       const path = aStarPath(
         link.source,
         link.target,
         point => {
-          const inFloor = layout.nodes.some(room => pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_FOOTPRINT)) ||
-            layout.links.some(candidate => pointInCorridor(point.x, point.y, candidate, MAX_REGULAR_MONSTER_FOOTPRINT));
+          const inFloor = actorClearOfWalls(layout, point, MAX_REGULAR_MONSTER_FOOTPRINT, walls);
           const blocked = decorations.some(item =>
             item.obstacle &&
             !item.destroyed &&
@@ -667,8 +644,7 @@ describe("layout and geometry", () => {
       expect(path, `Expected route through ${JSON.stringify(link.points)}`).not.toBeNull();
       expect(path!.slice(1).every((point, index) => walkableSegment(
         path![index]!, point,
-        candidate => layout.nodes.some(room => pointInRoomFloor(candidate.x, candidate.y, room, MAX_REGULAR_MONSTER_FOOTPRINT)) ||
-          layout.links.some(link => pointInCorridor(candidate.x, candidate.y, link, MAX_REGULAR_MONSTER_FOOTPRINT)),
+        candidate => actorClearOfWalls(layout, candidate, MAX_REGULAR_MONSTER_FOOTPRINT, walls),
       ))).toBe(true);
     }
   });
@@ -689,9 +665,8 @@ describe("layout and geometry", () => {
         x: door.x + unit.x * (WORLD_GEOMETRY.wallThickness + world(30)),
         y: door.y + unit.y * (WORLD_GEOMETRY.wallThickness + world(30)) + shiftY,
       };
-      const walkable = (point: Point) =>
-        pointInRoomFloor(point.x, point.y, link.source, radius) ||
-        pointInCorridor(point.x, point.y, link, radius);
+      const walls = new WallRectIndex(buildWallFootprints(layout));
+      const walkable = (point: Point) => actorClearOfWalls(layout, point, radius, walls);
       for (const [from, to] of [[start, goal], [goal, start]] as const) {
         const path = aStarPath(from, to, walkable, WORLD_GEOMETRY.pathGridStep, 1800);
         expect(path, `Expected ${link.direction} doorway to be passable from both sides`).not.toBeNull();
@@ -703,35 +678,35 @@ describe("layout and geometry", () => {
     }
   });
 
-  it("routes larger monsters to players against northern room and corridor walls", () => {
+  it("routes monsters near room and corridor walls using footprints and sights using hitboxes", () => {
     const room = layout.nodes[0]!;
-    const corridor = {
-      ...layout.links[0]!,
-      width: WORLD_GEOMETRY.corridorHalfWidth * 2,
-      points: [{ x: 0, y: 0 }, { x: WORLD_GEOMETRY.segmentSize * 5, y: 0 }],
-    };
-    const scenarios = [
-      {
-        player: { x: room.x, y: room.y - room.height / 2 + PLAYER_SPEC.footprintRadii.y },
-        inside: (point: Point, radius: number | EllipseRadii) => pointInRoomFloor(point.x, point.y, room, radius),
-      },
-      {
-        player: { x: corridor.points[1]!.x / 2, y: -corridor.width / 2 + PLAYER_SPEC.footprintRadii.y },
-        inside: (point: Point, radius: number | EllipseRadii) => pointInCorridor(point.x, point.y, corridor, radius),
-      },
-    ];
-    for (const { player, inside } of scenarios) {
+    const link = layout.links[0]!;
+    const [start, end] = link.points;
+    const horizontal = start!.y === end!.y;
+    const corridorPlayer = horizontal
+      ? { x: (start!.x + end!.x) / 2,
+        y: start!.y - link.width / 2 + PLAYER_SPEC.footprintRadii.y + world(5) }
+      : { x: start!.x - link.width / 2 + PLAYER_SPEC.footprintRadii.x + world(5),
+        y: (start!.y + end!.y) / 2 };
+    const walls = new WallRectIndex(buildWallFootprints(layout));
+    const hitboxes = new WallRectIndex(wallHitboxes(walls.rects));
+    for (const player of [
+      { x: room.x, y: room.y - room.height / 2 + PLAYER_SPEC.footprintRadii.y + world(5) },
+      corridorPlayer,
+    ]) {
       for (const kind of ["melee-light", "melee-heavy"] as const) {
         const spec = REGULAR_MONSTER_DEFINITIONS[kind];
         const monster = { x: player.x + world(100), y: player.y + world(110) };
         const footprint = spec.footprintRadii;
-        const walkable = (point: Point) => inside(point, footprint) &&
+        const walkable = (point: Point) => actorClearOfWalls(layout, point, footprint, walls) &&
           !footprintsOverlap(point, footprint, player, PLAYER_SPEC.footprintRadii);
-        const bulletWalkable = (point: Point) => inside(point, DEFAULT_BULLET_SPEC.radius);
-        expect(inside(player, PLAYER_SPEC.footprintRadii)).toBe(true);
+        const clearShot = (point: Point) => !wallBlocksSegment(
+          actorCollisionCenter(point, spec.hitboxOffset), actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset),
+          { x: DEFAULT_BULLET_SPEC.radius, y: DEFAULT_BULLET_SPEC.radius }, hitboxes,
+        );
+        expect(actorClearOfWalls(layout, player, PLAYER_SPEC.footprintRadii, walls)).toBe(true);
         expect(walkable(player)).toBe(false);
-        const approach = walkableApproachPoint(player, monster, walkable,
-          point => walkableSegment(point, player, bulletWalkable),
+        const approach = walkableApproachPoint(player, monster, walkable, clearShot,
           footprint.x + PLAYER_SPEC.footprintRadii.x + WORLD_GEOMETRY.pathGridStep * 2);
         expect(approach).not.toBeNull();
         expect(Math.hypot(approach!.x - player.x, approach!.y - player.y))
@@ -741,17 +716,7 @@ describe("layout and geometry", () => {
         expect(path!.at(-1)).toEqual(approach);
         expect(path!.slice(1).every((point, index) => walkableSegment(path![index]!, point, walkable))).toBe(true);
 
-        const playerCenter = actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset);
-        const monsterCenter = actorCollisionCenter(monster, spec.hitboxOffset);
-        expect(walkableSegment(monsterCenter, playerCenter, bulletWalkable)).toBe(false);
-        const aim = visiblePlayerHitPoint(playerCenter, PLAYER_SPEC.hitboxRadii.x,
-          point => walkableSegment(monsterCenter, point, bulletWalkable));
-        expect(aim).not.toBeNull();
-        expect(Math.hypot(aim!.x - playerCenter.x, aim!.y - playerCenter.y)).toBeLessThan(PLAYER_SPEC.hitboxRadii.x);
-        const occluded = (point: Point) => bulletWalkable(point) &&
-          Math.abs(point.x - (player.x + world(50))) > WORLD_GEOMETRY.wallThickness / 2;
-        expect(visiblePlayerHitPoint(playerCenter, PLAYER_SPEC.hitboxRadii.x,
-          point => walkableSegment(monsterCenter, point, occluded))).toBeNull();
+        expect(clearShot(approach!)).toBe(true);
       }
     }
   });
@@ -769,50 +734,33 @@ describe("layout and geometry", () => {
     }
   });
 
-  it("does not aim through a wall crossed by the projectile's floor collision path", () => {
-    const from = { x: 0, y: 0 };
+  it("uses shifted wall hitboxes rather than floor membership for projectile paths", () => {
+    const wall = new WallRectIndex([{ x: 20, y: 10, width: 10, height: 10 }]);
+    const hitboxes = new WallRectIndex(wallHitboxes(wall.rects));
+    const shot = { x: 0, y: 0 };
     const target = { x: 60, y: 0 };
-    const clearAtVisualHeight = ({ x, y }: Point) => !(x >= 20 && x <= 30 && y >= 10 && y <= 30);
-    expect(walkableSegment(from, target, clearAtVisualHeight)).toBe(true);
-    expect(walkableProjectileLine(from, target, -20, clearAtVisualHeight)).toBe(false);
-    expect(visiblePlayerHitPoint(target, 15,
-      point => walkableProjectileLine(from, point, -20, clearAtVisualHeight))).toBeNull();
-    const outsideWall = { x: 0, y: -0.1 };
-    const insideFloor = ({ y }: Point) => y >= 0;
-    expect(walkableSegment(outsideWall, { x: 60, y: 25 }, insideFloor)).toBe(true);
-    expect(walkableProjectileLine(outsideWall, { x: 60, y: 25 }, -20, insideFloor)).toBe(false);
+    expect(wallBlocksSegment(shot, target, { x: 1, y: 1 }, hitboxes)).toBe(false);
+    expect(wallBlocksSegment(shot, target, { x: 1, y: 1 }, wall)).toBe(false);
+    const atHitboxHeight = { x: 0, y: 15 + (hitboxes.rects[0]!.y - wall.rects[0]!.y) };
+    expect(wallBlocksSegment(atHitboxHeight, { x: 60, y: atHitboxHeight.y }, { x: 1, y: 1 }, hitboxes)).toBe(true);
   });
 
-  it("blocks every door edge across the combined room and corridor floor", () => {
-    const onFloor = (point: { x: number; y: number }, radius: number | EllipseRadii): boolean =>
-      layout.nodes.some(room => pointInRoomFloor(point.x, point.y, room, radius)) ||
-      layout.links.some(link => pointInCorridor(point.x, point.y, link, radius));
-
+  it("uses piece footprints, not the floor outline, to block each door jamb", () => {
+    const walls = new WallRectIndex(buildWallFootprints(layout));
     for (const link of layout.links) {
       const start = link.points[0]!;
       const end = link.points.at(-1)!;
       const length = corridorLength(link.points);
       const unit = { x: (end.x - start.x) / length, y: (end.y - start.y) / length };
       const lateral = { x: -unit.y, y: unit.x };
-      const targetSide = ({ N: "S", E: "W", S: "N", W: "E" } as const)[link.direction];
       const verticalShift = start.y === end.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
-      const doors = [
-        { boundary: start, inward: { x: -unit.x, y: -unit.y }, side: link.direction },
-        { boundary: end, inward: unit, side: targetSide },
-      ];
-      for (const door of doors) {
-        const depth = unit.x ? PLAYER_SPEC.footprintRadii.x : PLAYER_SPEC.footprintRadii.y;
-        const center = {
-          x: door.boundary.x + door.inward.x * depth / 2,
-          y: door.boundary.y + door.inward.y * depth / 2 + verticalShift,
-        };
-        const across = unit.x ? PLAYER_SPEC.footprintRadii.y : PLAYER_SPEC.footprintRadii.x;
-        const blockedEdge = {
-          x: center.x + lateral.x * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
-          y: center.y + lateral.y * (WORLD_GEOMETRY.doorOpeningWidth / 2 - across + 1),
-        };
-        expect(onFloor(center, PLAYER_SPEC.footprintRadii)).toBe(true);
-        expect(onFloor(blockedEdge, PLAYER_SPEC.footprintRadii), `Expected blocked ${door.side} door edge`).toBe(false);
+      for (const boundary of [start, end]) {
+        const center = { x: boundary.x, y: boundary.y + verticalShift };
+        expect(actorClearOfWalls(layout, center, PLAYER_SPEC.footprintRadii, walls)).toBe(true);
+        const edge = { x: center.x + lateral.x * WORLD_GEOMETRY.segmentSize * 0.8,
+          y: center.y + lateral.y * WORLD_GEOMETRY.segmentSize * 0.8 };
+        expect(onLayoutFloor(layout, edge)).toBe(true);
+        expect(actorClearOfWalls(layout, edge, PLAYER_SPEC.footprintRadii, walls)).toBe(false);
       }
     }
   });
@@ -866,12 +814,11 @@ describe("layout and geometry", () => {
     }
     const forkLink = forkLayout.links[0]!;
     const forkPoint = forkLink.points[forkLink.forkPointIndex!]!;
-    expect(pointInCorridor(forkPoint.x, forkPoint.y, forkLink, PLAYER_SPEC.footprintRadii)).toBe(true);
+    expect(pointInCorridor(forkPoint.x, forkPoint.y, forkLink)).toBe(true);
     const end = forkLink.points.at(-1)!;
     const playerInBranch = { x: forkPoint.x + (end.x - forkPoint.x) * 0.4, y: forkPoint.y + (end.y - forkPoint.y) * 0.4 };
-    const walkable = (point: Point) => forkLayout.nodes.some(room =>
-      pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_FOOTPRINT)
-    ) || forkLayout.links.some(link => pointInCorridor(point.x, point.y, link, MAX_REGULAR_MONSTER_FOOTPRINT));
+    const forkWalls = new WallRectIndex(buildWallFootprints(forkLayout));
+    const walkable = (point: Point) => actorClearOfWalls(forkLayout, point, MAX_REGULAR_MONSTER_FOOTPRINT, forkWalls);
     const path = aStarPath(forkLink.source, playerInBranch, walkable, WORLD_GEOMETRY.pathGridStep, 6000);
     expect(path).not.toBeNull();
     expect(path!.at(-1)).toEqual(playerInBranch);
@@ -883,9 +830,8 @@ describe("layout and geometry", () => {
     const playerRoom = forkLayout.links[4]!.target;
     expect(walkableSegment(previousRoom, playerRoom, walkable)).toBe(true);
     expect(walkableSegment(previousRoom, playerRoom, point =>
-      forkLayout.nodes.some(room => pointInRoomFloor(point.x, point.y, room, MAX_REGULAR_MONSTER_RADIUS)) ||
-      forkLayout.links.some(link => pointInCorridor(point.x, point.y, link, MAX_REGULAR_MONSTER_RADIUS))
-    )).toBe(false);
+      actorClearOfWalls(forkLayout, point, MAX_REGULAR_MONSTER_RADIUS, forkWalls)
+    )).toBe(true);
     const door = forkLink.points.at(-1)!;
     const beforeDoor = forkLink.points.at(-2)!;
     const doorLength = Math.hypot(beforeDoor.x - door.x, beforeDoor.y - door.y);

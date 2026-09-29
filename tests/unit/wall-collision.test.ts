@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildDecorations, weaponPedestalForRoom } from "../../src/client/domain/generation";
+import { pointInCorridor, pointInRoomFloor } from "../../src/client/domain/geometry";
 import { domToGraph } from "../../src/client/domain/graph";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
-import { PLAYER_SPEC, WORLD_GEOMETRY } from "../../src/client/domain/specs";
+import { DEFAULT_BULLET_SPEC, PLAYER_SPEC, WORLD_GEOMETRY } from "../../src/client/domain/specs";
 import {
   buildWallFootprints, wallBlocksSegment, wallHitboxes, wallOverlapsEllipse,
   wallPieceFootprints, WALL_FOOTPRINTS, WALL_HITBOX_SHIFT_Y, WallRectIndex,
@@ -68,9 +69,11 @@ describe("physical wall pieces", () => {
     const approach = { x: door.x - s / 2, y: passY };
     const beyond = { x: door.x + s / 2, y: passY };
     expect(wallBlocksSegment(approach, beyond, PLAYER_SPEC.footprintRadii, walls)).toBe(false);
+    const jamb = wallPieceFootprints("door-E", door)[1]!;
+    const jambY = jamb.y + jamb.height / 2;
     expect(wallBlocksSegment(
-      { x: approach.x, y: passY + WORLD_GEOMETRY.doorOpeningWidth / 2 },
-      { x: beyond.x, y: passY + WORLD_GEOMETRY.doorOpeningWidth / 2 },
+      { x: approach.x, y: jambY },
+      { x: beyond.x, y: jambY },
       PLAYER_SPEC.footprintRadii, walls,
     )).toBe(true);
   });
@@ -82,10 +85,27 @@ describe("physical wall pieces", () => {
     const from = vertical ? { x: -s / 2, y: opening } : { x: 0, y: -s / 2 };
     const to = vertical ? { x: s / 2, y: opening } : { x: 0, y: s / 2 };
     expect(wallBlocksSegment(from, to, PLAYER_SPEC.footprintRadii, walls)).toBe(false);
-    const acrossJamb = vertical
-      ? { x: 0, y: opening + WORLD_GEOMETRY.doorOpeningWidth / 2 }
-      : { x: WORLD_GEOMETRY.doorOpeningWidth / 2, y: 0 };
+    const jamb = wallPieceFootprints(`door-${side}`, { x: 0, y: 0 })[1]!;
+    const acrossJamb = { x: jamb.x + jamb.width / 2, y: jamb.y + jamb.height / 2 };
     expect(wallOverlapsEllipse(acrossJamb, PLAYER_SPEC.footprintRadii, walls)).toBe(true);
+  });
+
+  it("does not treat floor membership as an extra projectile wall outside the hitbox", () => {
+    const layout = eastLayout(false);
+    const link = layout.links[0]!;
+    const hitboxes = new WallRectIndex(wallHitboxes(buildWallFootprints(layout)));
+    const middleX = (link.points[0]!.x + link.points[1]!.x) / 2;
+    const clearY = link.width / 2 - WORLD_GEOMETRY.wallThickness;
+    const from = { x: middleX - s / 2, y: clearY };
+    const to = { x: middleX + s / 2, y: clearY };
+    const radius = { x: DEFAULT_BULLET_SPEC.radius, y: DEFAULT_BULLET_SPEC.radius };
+    // The former floor-aligned check rejects this shot even though it crosses no teal hitbox.
+    const floorY = clearY - PLAYER_SPEC.hitboxOffset.y;
+    expect(layout.nodes.some(room => pointInRoomFloor(middleX, floorY, room)) ||
+      pointInCorridor(middleX, floorY, link)).toBe(false);
+    expect(wallBlocksSegment(from, to, radius, hitboxes)).toBe(false);
+    const blockedY = clearY + WALL_HITBOX_SHIFT_Y + WORLD_GEOMETRY.wallThickness / 2;
+    expect(wallBlocksSegment({ ...from, y: blockedY }, { ...to, y: blockedY }, radius, hitboxes)).toBe(true);
   });
 
   it("blocks an entire swept ellipse at corners and across a thin wall between safe endpoints", () => {

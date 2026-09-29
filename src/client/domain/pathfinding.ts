@@ -102,19 +102,6 @@ export function walkableSegment(
   return true;
 }
 
-/** Projectiles are drawn at visual height, but collide with walls at floor height. */
-export function walkableProjectileLine(
-  from: Point,
-  to: Point,
-  visualOffsetY: number,
-  isWalkable: (point: Point) => boolean,
-): boolean {
-  const floorFrom = { x: from.x, y: from.y - visualOffsetY };
-  if (!isWalkable(from) || !isWalkable(floorFrom)) return false;
-  return walkableSegment(from, to, isWalkable) &&
-    walkableSegment(floorFrom, { x: to.x, y: to.y - visualOffsetY }, isWalkable);
-}
-
 /** Prefer a reachable player position over a graph-room waypoint. */
 export function chooseReachablePath(
   start: Point,

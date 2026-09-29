@@ -565,7 +565,7 @@ function markVisited(room: GraphNode | null): void {
 }
 
 function pointInCommittedForkBranch(x: number, y: number, link: LayoutLink): boolean {
-  if (link.forkPointIndex === undefined) return pointInCorridor(x, y, link, 0);
+  if (link.forkPointIndex === undefined) return pointInCorridor(x, y, link);
   const fork = link.points[link.forkPointIndex];
   const next = link.points[link.forkPointIndex + 1];
   if (!fork || !next) return false;
@@ -576,7 +576,7 @@ function pointInCommittedForkBranch(x: number, y: number, link: LayoutLink): boo
     (y - fork.y) * (next.y - fork.y)
   ) / length;
   if (branchProgress <= link.width / 2) return false;
-  return pointInCorridor(x, y, { ...link, points: link.points.slice(link.forkPointIndex) }, 0);
+  return pointInCorridor(x, y, { ...link, points: link.points.slice(link.forkPointIndex) });
 }
 
 function revealRoomsFromCorridor(x: number, y: number): void {
@@ -1883,10 +1883,7 @@ function monsterMoveIsClear(monster: Monster, to: Point, checkPlayer = true): bo
 }
 
 function wallLineOfSight(from: Point, to: Point): boolean {
-  const floorFrom = { x: from.x, y: from.y - PLAYER_SPEC.hitboxOffset.y };
-  const floorTo = { x: to.x, y: to.y - PLAYER_SPEC.hitboxOffset.y };
-  return !wallBlocksSegment(from, to, { x: DEFAULT_BULLET_SPEC.radius, y: DEFAULT_BULLET_SPEC.radius }, wallProjectileHitboxes) &&
-    walkableSegment(floorFrom, floorTo, point => isFloorPoint(point.x, point.y));
+  return !wallBlocksSegment(from, to, { x: DEFAULT_BULLET_SPEC.radius, y: DEFAULT_BULLET_SPEC.radius }, wallProjectileHitboxes);
 }
 
 function hasLineOfSight(from: Point, to: Point): boolean {
@@ -2357,10 +2354,8 @@ function updateBullets(dt: number): void {
         alive = false;
         break;
       }
-      const floorY = bullet.y - PLAYER_SPEC.hitboxOffset.y;
-      if (!isFloorPoint(bullet.x, floorY) ||
-          wallBlocksSegment({ x: bullet.x - dx, y: bullet.y - dy }, bullet,
-            { x: bulletRadius, y: bulletRadius }, wallProjectileHitboxes)) {
+      if (wallBlocksSegment({ x: bullet.x - dx, y: bullet.y - dy }, bullet,
+        { x: bulletRadius, y: bulletRadius }, wallProjectileHitboxes)) {
         renderer.spawnEffect(
           PLAYER_SPEC.visual.effects?.damage,
           bullet.x,
@@ -2721,10 +2716,10 @@ function isFloorPoint(x: number, y: number): boolean {
   const cell = geometryCells.get(spatialCellKey(x, y));
   if (!cell) return false;
   for (const room of cell.rooms) {
-    if (pointInRoomFloor(x, y, room, 0)) return true;
+    if (pointInRoomFloor(x, y, room)) return true;
   }
   for (const link of cell.links) {
-    if (pointInCorridor(x, y, link, 0)) return true;
+    if (pointInCorridor(x, y, link)) return true;
   }
 
   return false;
