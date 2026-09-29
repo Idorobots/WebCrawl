@@ -1351,3 +1351,4 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
 - When entering a boss arena, camera jumps up immediately, while exiting it animates nicely. It should animate nicely both ways.
 - Sentry ballistic directional annimations are scaled weird.
+- Site favicon

@@ -203,18 +203,32 @@ test("aims the first stick shot in the pressed direction", async ({ page }) => {
   const stick = await page.locator("#aimStick").boundingBox();
   if (!stick) throw new Error("Aim stick unavailable");
   const cdp = await page.context().newCDPSession(page);
+  await page.evaluate(() => {
+    const game = document.querySelector<HTMLElement>("#gameCanvas")!;
+    const observer = new MutationObserver(() => {
+      if (Number(game.dataset.shotsFired) < 1) return;
+      const scene = (window as Window & {
+        __webcrawlScene?: { children: { list: Array<{ texture?: { key: string }; rotation?: number }> } };
+      }).__webcrawlScene;
+      const angle = scene?.children.list.find(child => child.texture?.key === "asset:assets/bullet.png")?.rotation;
+      if (angle === undefined) return;
+      observer.disconnect();
+      (window as Window & { __firstStickShotAngle?: number }).__firstStickShotAngle = angle;
+    });
+    observer.observe(game, { attributes: true, attributeFilter: ["data-shots-fired", "data-bullets"] });
+  });
   await cdp.send("Input.dispatchTouchEvent", {
     type: "touchStart",
     touchPoints: [{ x: stick.x + stick.width / 2 + 40, y: stick.y + stick.height / 2, id: 1 }],
   });
   try {
-    await expect(game).toHaveAttribute("data-shots-fired", "1");
-    const shotAngle = await page.evaluate(() => {
-      const scene = (window as Window & {
-        __webcrawlScene?: { children: { list: Array<{ texture?: { key: string }; rotation?: number }> } };
-      }).__webcrawlScene;
-      return scene?.children.list.find(child => child.texture?.key === "asset:assets/bullet.png")?.rotation;
-    });
+    await expect.poll(() => page.evaluate(() =>
+      (window as Window & { __firstStickShotAngle?: number }).__firstStickShotAngle ?? null
+    )).not.toBeNull();
+    const shotAngle = await page.evaluate(() =>
+      (window as Window & { __firstStickShotAngle?: number }).__firstStickShotAngle
+    );
+    expect(Number(await game.getAttribute("data-shots-fired"))).toBeGreaterThanOrEqual(1);
     expect(shotAngle).toBeCloseTo(Math.PI / 2, 1);
   } finally {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });

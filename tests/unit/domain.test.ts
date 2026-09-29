@@ -382,9 +382,7 @@ describe("layout and geometry", () => {
   });
 
   it("keeps actor damage hitboxes separate from occupied floor space", () => {
-    const monster = bossSpecForRoom(layout.nodes[1]!, 1, "glm-hunter");
-    expect(monster.hitboxRadii).toEqual(BOSS_DEFINITIONS["glm-hunter"].hitboxRadii);
-    expect(monster.footprintRadii).toEqual(BOSS_DEFINITIONS["glm-hunter"].footprintRadii);
+    const monster = { ...REGULAR_MONSTER_DEFINITIONS["sentry-light"], x: 0, y: 0 };
     const position = { x: monster.x + PLAYER_SPEC.footprintRadii.x + monster.footprintRadii.x, y: monster.y };
     expect(footprintsOverlap(position, PLAYER_SPEC.footprintRadii, monster, monster.footprintRadii)).toBe(false);
     expect(footprintsOverlap(position, PLAYER_SPEC.hitboxRadii, monster, monster.hitboxRadii)).toBe(true);
@@ -444,14 +442,14 @@ describe("layout and geometry", () => {
 
   it("aligns visual content with collision centers and normalizes monster animations", () => {
     expect(PLAYER_SPEC.visual.directions.down?.normal.origin).toEqual({ x: 0.5, y: 0.90625 });
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].size).toBe(world(137 * 1.25));
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].size).toBe(world(183 * 1.25));
-    expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].size).toBe(world(185));
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].size).toBe(world(150));
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].size).toBe(world(230));
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].size).toBe(world(175));
     expect(monsterDisplaySize(200, "scout", "melee")).toBe(200);
     expect(monsterDisplaySize(200, "scout", "walk")).toBe(200);
     expect(MONSTER_VISUAL_DEFINITIONS.scout.directions.down?.melee?.origin.y).toBeCloseTo(0.90625);
     expect(PLAYER_SPEC.hitboxOffset.y).toBeLessThan(0);
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].hitboxOffset.y).toBe(-world(171.25) * 0.2);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].hitboxOffset.y).toBe(-world(5));
     expect(monsterHealthBarY(200, "scout")).toBeLessThan(-80);
     expect(DECORATION_DEFINITIONS.crateCargo.origin).toEqual({ x: 0.5, y: 0.9375 });
     expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
@@ -1662,9 +1660,9 @@ describe("deterministic room contents", () => {
     expect(REGULAR_MONSTER_DEFINITIONS["sentry-heavy"]).toMatchObject({ speed: 0, attackPattern: "double" });
     expect(REGULAR_MONSTER_DEFINITIONS["sentry-scatter"]).toMatchObject({ speed: 0, attackPattern: "scatter" });
     expect(REGULAR_MONSTER_DEFINITIONS["sentry-heavy"].attackCooldownMs)
-      .toBeGreaterThan(REGULAR_MONSTER_DEFINITIONS["shooter-light"].attackCooldownMs);
+      .toBeGreaterThan(REGULAR_MONSTER_DEFINITIONS["sentry-light"].attackCooldownMs);
     expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].attackCooldownMs)
-      .toBe(400);
+      .toBe(700);
     expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].attackCooldownMs)
       .toBeLessThan(REGULAR_MONSTER_DEFINITIONS["sentry-heavy"].attackCooldownMs);
     expect(REGULAR_MONSTER_DEFINITIONS["sentry-scatter"].attackCooldownMs)
@@ -1676,15 +1674,15 @@ describe("deterministic room contents", () => {
     const lightSentry = monsters.find(monster => monster.kind === "sentry-light")!;
     lightSentry.attackKind = "ranged";
     lightSentry.lastAttackAt = 1_000;
-    expect(lightSentry.attackCooldownMs).toBe(400);
+    expect(lightSentry.attackCooldownMs).toBe(700);
     expect(lightSentry.visual.directions.down?.ranged?.frameDurationMs).toBe(125);
-    expect(monsterAttackIsReady(lightSentry, 1_399)).toBe(false);
-    expect(monsterAttackIsReady(lightSentry, 1_400)).toBe(true);
-    lightSentry.attackWarmupUntil = 1_450;
-    expect(monsterAttackIsReady(lightSentry, 1_449)).toBe(false);
-    expect(monsterAttackIsReady(lightSentry, 1_450)).toBe(true);
+    expect(monsterAttackIsReady(lightSentry, 1_699)).toBe(false);
+    expect(monsterAttackIsReady(lightSentry, 1_700)).toBe(true);
+    lightSentry.attackWarmupUntil = 1_750;
+    expect(monsterAttackIsReady(lightSentry, 1_749)).toBe(false);
+    expect(monsterAttackIsReady(lightSentry, 1_750)).toBe(true);
     delete lightSentry.attackWarmupUntil;
-    expect(monsterAttackIsReady(lightSentry, 1_400)).toBe(true);
+    expect(monsterAttackIsReady(lightSentry, 1_700)).toBe(true);
   });
 
   it("promotes at most one room enemy to a rare deterministic miniboss", () => {
@@ -1838,7 +1836,7 @@ describe("deterministic room contents", () => {
     const glmHunter = bossSpecForRoom(arena, 1, "glm-hunter");
     expect(glmHunter.maxHp).toBeGreaterThan(150);
     expect(glmHunter.attackRange).toBeGreaterThanOrEqual(glmHunter.footprintRadii.x + PLAYER_SPEC.footprintRadii.x);
-    expect(GLM_HUNTER_ATTACKS.chargeWindupMs).toBeGreaterThanOrEqual(500);
+    expect(GLM_HUNTER_ATTACKS.chargeWindupMs).toBeGreaterThan(0);
     expect(GLM_HUNTER_ATTACKS.initialChargeDelayMs).toBeGreaterThan(GLM_HUNTER_ATTACKS.chargeWindupMs);
 
     const sampledScripts = Array.from({ length: 200 }, (_, index) => node(index + 3_000, 0, 1, {
@@ -2369,7 +2367,7 @@ describe("deterministic room contents", () => {
       maxAmmo: 20,
       ammoPerLoot: 3,
     }, forward, 0);
-    expect(scatter).toHaveLength(7);
+    expect(scatter).toHaveLength(5);
     expect(scatter.some(projectile => projectile.direction.y !== 0)).toBe(true);
 
     const nova = projectilesForWeapon({

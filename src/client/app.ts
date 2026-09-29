@@ -19,6 +19,7 @@ import {
 } from "./config";
 import {
   bossChargeCooldown,
+  bossChargeDuration,
   bossChargeSpeedMultiplier,
   bossRangedMovement,
   bossRingCooldown,
@@ -1822,7 +1823,7 @@ function fireBossVolley(monster: Monster, target: Point, timestamp: number, ring
   );
   const stage = bossStage(monster.hp, monster.maxHp);
   const projectiles = ring
-    ? bossRingProjectiles(monster.bossKind === "hy4-wave" ? "hy4-wave" : "glm-hunter", stage, sequence)
+    ? bossRingProjectiles(stage, sequence)
     : bossVolleyProjectiles(monster.bossKind!, stage, sequence, aimed);
   for (const projectile of projectiles) {
     queueEnemyBullet(monster, projectile.direction, {
@@ -2139,7 +2140,7 @@ function updateGlmCharge(monster: Monster, dt: number, timestamp: number, stage:
   if (monster.chargeWindupUntil !== undefined) {
     if (timestamp < monster.chargeWindupUntil) return true;
     monster.chargeWindupUntil = undefined;
-    monster.chargeUntil = timestamp + GLM_HUNTER_ATTACKS.chargeDurationMs;
+    monster.chargeUntil = timestamp + bossChargeDuration(stage);
   }
 
   if (monster.chargeUntil !== undefined) {

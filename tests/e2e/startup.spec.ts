@@ -886,7 +886,7 @@ test("keeps generated world coordinates independent of viewport size", async ({ 
   }).toEqual(desktop);
 });
 
-test("keeps an active boss sized consistently while it follows the player out", async ({ page }) => {
+test("keeps an active boss sized consistently when the player leaves its arena", async ({ page }) => {
   test.setTimeout(90_000);
   const bossFixture = "<!doctype html><html><body><main>Boss deck</main></body></html>";
   await stubRemoteFetchFallbacks(page, bossFixture);
@@ -967,10 +967,6 @@ test("keeps an active boss sized consistently while it follows the player out", 
       zoomedOut: Math.abs(camera.zoom - BOSS_CAMERA_SCALE * MOBILE_CAMERA_SCALE) < 0.01,
     };
   }).toEqual({ zoomedOut: true });
-  const initialBossPosition = {
-    x: Number(await game.getAttribute("data-active-boss-x")),
-    y: Number(await game.getAttribute("data-active-boss-y")),
-  };
   const entranceSide = {
     N: { x: door.x, y: door.y + world(90) },
     E: { x: door.x - world(90), y: door.y },
@@ -981,11 +977,6 @@ test("keeps an active boss sized consistently while it follows the player out", 
   await expect(bossHud).toBeVisible();
   await expect(game).toHaveAttribute("data-current-room-tag", "body");
   await expect.poll(async () => await cameraState(page)).toMatchObject({ zoom: MOBILE_CAMERA_SCALE, bossRoomId: null });
-  await expect.poll(async () => {
-    const x = Number(await game.getAttribute("data-active-boss-x"));
-    const y = Number(await game.getAttribute("data-active-boss-y"));
-    return Math.hypot(x - initialBossPosition.x, y - initialBossPosition.y);
-  }, { timeout: 10_000 }).toBeGreaterThan(12);
   const finalBoss = {
     x: Number(await game.getAttribute("data-active-boss-x")),
     y: Number(await game.getAttribute("data-active-boss-y")),
@@ -1738,7 +1729,18 @@ test("shows a source link when an image room cannot load its image", async ({ pa
       __webcrawlTest?: { contentPoints: () => Array<{ id: string; x: number; y: number }> };
     }).__webcrawlTest?.contentPoints().find(item => item.id === "1::content-browser")
   );
+  expect(point).toBeDefined();
+  // An image-only floor makes this room the boss arena; clear its guardian to
+  // unlock the recovered content before approaching the terminal.
+  await page.evaluate(() => {
+    (window as Window & { __webcrawlTest?: { defeatAllMonsters: () => void } })
+      .__webcrawlTest?.defeatAllMonsters();
+  });
   await teleportPlayer(page, point!);
+  await expect.poll(async () => page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: { contentPoints: () => Array<{ id: string; enabled: boolean }> } })
+      .__webcrawlTest?.contentPoints().find(item => item.id === "1::content-browser")?.enabled ?? false
+  )).toBe(true);
   await expect(page.locator("#contentBrowser")).toBeVisible();
   await expect(page.locator(".content-browser-body")).toContainText("Image unavailable");
   await expect(page.locator(".content-browser-body a")).toHaveAttribute("href", "https://example.com/vanished.png");

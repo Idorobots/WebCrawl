@@ -20,7 +20,7 @@ export function bossStageCooldown(baseMs: number, stage: BossStage): number {
 }
 
 export function bossTeleportCooldown(stage: BossStage): number {
-  return [5_000, 3_500, 2_400][stage - 1]!;
+  return [3_000, 2_400, 1_600][stage - 1]!;
 }
 
 export function bossRingCooldown(stage: BossStage): number {
@@ -32,15 +32,19 @@ export function hy4RingCooldown(stage: BossStage): number {
 }
 
 export function bossChargeCooldown(stage: BossStage): number {
-  return [4_200, 3_100, 2_300][stage - 1]!;
+  return [4_500, 3_000, 1_500][stage - 1]!;
+}
+
+export function bossChargeDuration(stage: BossStage): number {
+  return [450, 350, 250][stage - 1]!;
 }
 
 export function bossChargeSpeedMultiplier(stage: BossStage): number {
-  return [4.4, 5.2, 6][stage - 1]!;
+  return [3, 4, 5][stage - 1]!;
 }
 
 export function kimiSpiralCooldown(stage: BossStage): number {
-  return [170, 130, 105][stage - 1]!;
+  return [200, 160, 120][stage - 1]!;
 }
 
 export function bossSummonAliveLimit(stage: BossStage): number {
@@ -52,7 +56,7 @@ export function bossSummonCount(stage: BossStage, alive: number): number {
 }
 
 export function bossSummonCooldown(stage: BossStage): number {
-  return [2_000, 1_500, 1_100][stage - 1]!;
+  return [3_000, 2_000, 1_000][stage - 1]!;
 }
 
 /** Ordered, deterministic candidates around the player; callers reject obstructed or occupied points. */
@@ -98,8 +102,8 @@ function ring(count: number, rotation: number): BossProjectile[] {
   }));
 }
 
-export function bossRingProjectiles(kind: "glm-hunter" | "hy4-wave", stage: BossStage, sequence: number): BossProjectile[] {
-  return ring((kind === "glm-hunter" ? 6 : 8) + stage * 2, sequence * 0.23);
+export function bossRingProjectiles(stage: BossStage, sequence: number): BossProjectile[] {
+  return ring(8 + stage * 2, sequence * 0.23);
 }
 
 /** Prefer retreat/approach outside the firing band, and orbit within it. Kimi pauses between short walks. */
@@ -127,7 +131,7 @@ export function bossRangedMovement(
 
 /** Qwen's two parallel lanes have a longer tail at each stage. */
 function doubleLines(aimed: Point, stage: BossStage): BossProjectile[] {
-  return [-1, 1].flatMap(lane => Array.from({ length: stage + 1 }, (_, index) => ({
+  return [-1, 1].flatMap(lane => Array.from({ length: stage }, (_, index) => ({
     direction: aimed,
     lateralOffset: lane * world(28),
     forwardOffset: -index * world(38),
@@ -143,7 +147,7 @@ export function bossVolleyProjectiles(
 ): BossProjectile[] {
   if (kind === "deepseek-summoner") return fan(aimed, stage, 0.25);
   if (kind === "qwen-teleporter") return doubleLines(aimed, stage);
-  if (kind === "glm-hunter") return bossRingProjectiles(kind, stage, sequence);
+  if (kind === "glm-hunter") return bossRingProjectiles(stage, sequence);
   if (kind === "hy4-wave") return fan(aimed, stage * 2 + 1, [0.22, 0.20, 0.18][stage - 1]!);
 
   const rotation = sequence * [0.55, 0.40, 0.28][stage - 1]!;

@@ -95,10 +95,10 @@ describe("physical wall pieces", () => {
     const link = layout.links[0]!;
     const hitboxes = new WallRectIndex(wallHitboxes(buildWallFootprints(layout)));
     const middleX = (link.points[0]!.x + link.points[1]!.x) / 2;
-    const clearY = link.width / 2 - WORLD_GEOMETRY.wallThickness;
+    const radius = { x: DEFAULT_BULLET_SPEC.radius, y: DEFAULT_BULLET_SPEC.radius };
+    const clearY = link.width / 2 - WORLD_GEOMETRY.wallThickness + radius.y;
     const from = { x: middleX - s / 2, y: clearY };
     const to = { x: middleX + s / 2, y: clearY };
-    const radius = { x: DEFAULT_BULLET_SPEC.radius, y: DEFAULT_BULLET_SPEC.radius };
     // The former floor-aligned check rejects this shot even though it crosses no teal hitbox.
     const floorY = clearY - PLAYER_SPEC.hitboxOffset.y;
     expect(layout.nodes.some(room => pointInRoomFloor(middleX, floorY, room)) ||

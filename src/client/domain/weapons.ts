@@ -33,16 +33,16 @@ export function monsterDropsWeapon(seed: number, miniboss: boolean): boolean {
 }
 
 const EXTRA_WEAPONS: readonly WeaponBase[] = [
-  { kind: "byte-repeater", label: "AUTOCOMPLETE SPRAYER", fireCooldownMs: 92, projectileSpeed: 650, projectileRange: 760, projectileRadius: 3, damage: 0.25, maxAmmo: 500 },
-  { kind: "scatter-array", label: "SOFTMAX SCATTER", fireCooldownMs: 520, projectileSpeed: 440, projectileRange: 460, projectileRadius: 4, damage: 1, maxAmmo: 200 },
-  { kind: "fork-driver", label: "SUBAGENT DUO", fireCooldownMs: 260, projectileSpeed: 560, projectileRange: 820, projectileRadius: 5, damage: 1, maxAmmo: 100 },
-  { kind: "trident", label: "THOUGHT BRANCH", fireCooldownMs: 340, projectileSpeed: 540, projectileRange: 760, projectileRadius: 5, damage: 1, maxAmmo: 100 },
-  { kind: "needle-rail", label: "EMBEDDING RAIL", fireCooldownMs: 610, projectileSpeed: 960, projectileRange: 1_260, projectileRadius: 3, damage: 4, maxAmmo: 60 },
-  { kind: "packet-lobber", label: "CHECKPOINT LOBBER", fireCooldownMs: 940, projectileSpeed: 300, projectileRange: 690, projectileRadius: 15, damage: 10, maxAmmo: 30 },
-  { kind: "cross-compiler", label: "PROMPT INJECTOR", fireCooldownMs: 460, projectileSpeed: 500, projectileRange: 680, projectileRadius: 7, damage: 1, maxAmmo: 100 },
-  { kind: "nova-cache", label: "CONTEXT WINDOW BURST", fireCooldownMs: 820, projectileSpeed: 420, projectileRange: 590, projectileRadius: 7, damage: 2, maxAmmo: 60 },
-  { kind: "helix-emitter", label: "SAMPLING LOOP", fireCooldownMs: 230, projectileSpeed: 590, projectileRange: 820, projectileRadius: 5, damage: 3, maxAmmo: 60 },
-  { kind: "sideband-projector", label: "TOOL-USE FANOUT", fireCooldownMs: 390, projectileSpeed: 520, projectileRange: 720, projectileRadius: 5, damage: 2, maxAmmo: 200 },
+  { kind: "byte-repeater", label: "AUTOCOMPLETE SPRAYER", fireCooldownMs: 80, projectileSpeed: 650, projectileRange: 750, projectileRadius: 3, damage: 0.25, maxAmmo: 500 },
+  { kind: "scatter-array", label: "SOFTMAX SCATTER", fireCooldownMs: 500, projectileSpeed: 500, projectileRange: 400, projectileRadius: 4, damage: 1, maxAmmo: 100 },
+  { kind: "fork-driver", label: "SUBAGENT DUO", fireCooldownMs: 250, projectileSpeed: 500, projectileRange: 800, projectileRadius: 5, damage: 1, maxAmmo: 100 },
+  { kind: "trident", label: "THOUGHT BRANCH", fireCooldownMs: 350, projectileSpeed: 500, projectileRange: 750, projectileRadius: 5, damage: 1, maxAmmo: 100 },
+  { kind: "needle-rail", label: "EMBEDDING RAIL", fireCooldownMs: 600, projectileSpeed: 1000, projectileRange: 1_250, projectileRadius: 3, damage: 4, maxAmmo: 60 },
+  { kind: "packet-lobber", label: "CHECKPOINT LOBBER", fireCooldownMs: 1000, projectileSpeed: 300, projectileRange: 600, projectileRadius: 15, damage: 8, maxAmmo: 30 },
+  { kind: "cross-compiler", label: "PROMPT INJECTOR", fireCooldownMs: 450, projectileSpeed: 500, projectileRange: 700, projectileRadius: 7, damage: 1.5, maxAmmo: 100 },
+  { kind: "nova-cache", label: "CONTEXT WINDOW BURST", fireCooldownMs: 800, projectileSpeed: 400, projectileRange: 500, projectileRadius: 7, damage: 2, maxAmmo: 50 },
+  { kind: "helix-emitter", label: "SAMPLING LOOP", fireCooldownMs: 250, projectileSpeed: 500, projectileRange: 800, projectileRadius: 5, damage: 1.5, maxAmmo: 100 },
+  { kind: "sideband-projector", label: "TOOL-USE FANOUT", fireCooldownMs: 400, projectileSpeed: 500, projectileRange: 700, projectileRadius: 5, damage: 2, maxAmmo: 200 },
 ];
 
 const NAME_PREFIXES = [
@@ -55,8 +55,8 @@ export const DEFAULT_WEAPON: WeaponSpec = {
   kind: "pulse-rifle",
   name: "TOKEN SLINGER",
   fireCooldownMs: 220,
-  projectileSpeed: world(520),
-  projectileRange: world(900),
+  projectileSpeed: world(500),
+  projectileRange: world(600),
   projectileRadius: world(5),
   damage: 0.5,
   maxAmmo: null,
@@ -128,7 +128,7 @@ export function projectilesForWeapon(
   const patterns: Record<WeaponKind, Array<{ angle: number; lateral?: number }>> = {
     "pulse-rifle": [{ angle: 0 }],
     "byte-repeater": [{ angle: 0 }],
-    "scatter-array": [-0.33, -0.22, -0.11, 0, 0.11, 0.22, 0.33].map(angle => ({ angle })),
+    "scatter-array": [-0.22, -0.11, 0, 0.11, 0.22].map(angle => ({ angle })),
     "fork-driver": [{ angle: 0, lateral: -world(10) }, { angle: 0, lateral: world(10) }],
     trident: [{ angle: -0.16 }, { angle: 0 }, { angle: 0.16 }],
     "needle-rail": [{ angle: 0 }],

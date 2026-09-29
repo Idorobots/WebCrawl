@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bossChargeCooldown,
+  bossChargeDuration,
   bossChargeSpeedMultiplier,
   bossRangedMovement,
   bossRingCooldown,
@@ -37,11 +38,12 @@ describe("boss attacks", () => {
 
   it("makes GLM's rotating rings denser, its charges faster and both attacks more frequent", () => {
     expect(([1, 2, 3] as const).map(stage => volley("glm-hunter", stage).length))
-      .toEqual([8, 10, 12]);
+      .toEqual([10, 12, 14]);
     expect(angles("glm-hunter", 3, 1)).not.toEqual(angles("glm-hunter", 3, 0));
     expect(([1, 2, 3] as const).map(bossRingCooldown)).toEqual([3_600, 2_700, 2_000]);
-    expect(([1, 2, 3] as const).map(bossChargeCooldown)).toEqual([4_200, 3_100, 2_300]);
-    expect(([1, 2, 3] as const).map(bossChargeSpeedMultiplier)).toEqual([4.4, 5.2, 6]);
+    expect(([1, 2, 3] as const).map(bossChargeCooldown)).toEqual([4_500, 3_000, 1_500]);
+    expect(([1, 2, 3] as const).map(bossChargeDuration)).toEqual([450, 350, 250]);
+    expect(([1, 2, 3] as const).map(bossChargeSpeedMultiplier)).toEqual([3, 4, 5]);
   });
 
   it("widens Hy4's 3/5/7 aimed waves and interleaves occasional rings", () => {
@@ -53,10 +55,10 @@ describe("boss attacks", () => {
     });
     expect(spreads[0]).toBeLessThan(spreads[1]!);
     expect(spreads[1]).toBeLessThan(spreads[2]!);
-    expect(([1, 2, 3] as const).map(stage => bossRingProjectiles("hy4-wave", stage, 0).length))
+    expect(([1, 2, 3] as const).map(stage => bossRingProjectiles(stage, 0).length))
       .toEqual([10, 12, 14]);
     expect(([1, 2, 3] as const).map(hy4RingCooldown)).toEqual([7_200, 5_400, 4_000]);
-    expect(bossRingProjectiles("hy4-wave", 2, 0)).not.toEqual(bossRingProjectiles("hy4-wave", 2, 1));
+    expect(bossRingProjectiles(2, 0)).not.toEqual(bossRingProjectiles(2, 1));
   });
 
   it("keeps Hy4 circling at range, retreating nearby and approaching when far away", () => {
@@ -89,13 +91,13 @@ describe("boss attacks", () => {
     expect(bossSummonCount(1, 3)).toBe(0);
     expect(bossSummonCount(2, 5)).toBe(0);
     expect(bossSummonCount(3, 7)).toBe(0);
-    expect(([1, 2, 3] as const).map(bossSummonCooldown)).toEqual([2_000, 1_500, 1_100]);
+    expect(([1, 2, 3] as const).map(bossSummonCooldown)).toEqual([3_000, 2_000, 1_000]);
   });
 
   it("makes Kimi's continuous rotating spiral denser and faster each stage", () => {
     expect([1, 2, 3].map(stage => volley("kimi-spiral", stage as 1 | 2 | 3).length))
       .toEqual([2, 2, 3]);
-    expect(([1, 2, 3] as const).map(kimiSpiralCooldown)).toEqual([170, 130, 105]);
+    expect(([1, 2, 3] as const).map(kimiSpiralCooldown)).toEqual([200, 160, 120]);
     const angularSteps = ([1, 2, 3] as const).map(stage =>
       angles("kimi-spiral", stage, 1)[0]! - angles("kimi-spiral", stage, 0)[0]!);
     expect(angularSteps[0]).toBeGreaterThan(angularSteps[1]!);
@@ -104,7 +106,7 @@ describe("boss attacks", () => {
 
   it("teleports more often in later stages and offers separated, rotating positions", () => {
     expect([1, 2, 3].map(stage => bossTeleportCooldown(stage as 1 | 2 | 3)))
-      .toEqual([5_000, 3_500, 2_400]);
+      .toEqual([3_000, 2_400, 1_600]);
     const player = { x: 100, y: 200 };
     const candidates = bossTeleportCandidates(player, 0, 320);
     expect(candidates).toHaveLength(16);
@@ -117,11 +119,11 @@ describe("boss attacks", () => {
   it("fires Qwen's two parallel lines with longer bullet tails each stage", () => {
     for (const stage of [1, 2, 3] as const) {
       const shots = volley("qwen-teleporter", stage);
-      expect(shots).toHaveLength((stage + 1) * 2);
+      expect(shots).toHaveLength(stage * 2);
       expect(shots.every(shot => shot.direction.x === 1 && shot.direction.y === 0)).toBe(true);
       for (const side of [-world(28), world(28)]) {
         expect(shots.filter(shot => shot.lateralOffset === side).map(shot => shot.forwardOffset))
-          .toEqual(Array.from({ length: stage + 1 }, (_, index) => -index * world(38)));
+          .toEqual(Array.from({ length: stage }, (_, index) => -index * world(38)));
       }
     }
   });
