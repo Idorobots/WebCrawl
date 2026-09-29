@@ -40,6 +40,7 @@ import {
   type WeightedDecorationDefinition,
 } from "./specs";
 import { weaponForRoom, type WeaponSource } from "./weapons";
+import { authoredDecorations, authoredLoot, type AuthoredRooms } from "./authored-rooms";
 
 export function lootKindForSeed(seed: number): LootKind {
   return lootKindForRoll((seed >>> 3) % 100);
@@ -493,6 +494,7 @@ export function buildDecorations(
   savedStates: ReadonlyMap<string, ObstacleState>,
   floor = 1,
   walls = new WallRectIndex(buildWallFootprints(layout)),
+  authoredRooms: AuthoredRooms = new Map(),
 ): Decoration[] {
   const doorsByRoom = new Map<number, Point[]>();
   for (const link of layout.links) {
@@ -503,22 +505,29 @@ export function buildDecorations(
     targetDoors.push(link.points[link.points.length - 1]!);
     doorsByRoom.set(link.target.id, targetDoors);
   }
-  const roomItems = layout.nodes.flatMap(room => clearRoomDoorways(
-    decorationSpecsForRoom(room, floor, walls),
-    room,
-    doorsByRoom.get(room.id) ?? [],
-    walls,
-  ));
+  const roomItems = layout.nodes.flatMap(room => {
+    const template = authoredRooms.get(room.id);
+    return template
+      ? authoredDecorations(room, template).map((item, index) => ({
+        ...item,
+        dropKind: item.destructible
+          ? sceneryDropKindForSeed(stableHash(`${room.lootSeed}|authored-decor|${index}`), item.definitionId)
+          : null,
+      }))
+      : clearRoomDoorways(decorationSpecsForRoom(room, floor, walls), room, doorsByRoom.get(room.id) ?? [], walls);
+  });
   const corridorItems: Decoration[] = [];
-  for (const link of layout.links) {
-    for (const item of decorationSpecsForCorridor(link, floor, walls)) {
-      if (!corridorItems.some(placed => corridorDecorationsOverlap(placed, item))) corridorItems.push(item);
+  if (!layout.nodes.every(room => authoredRooms.has(room.id))) {
+    for (const link of layout.links) {
+      for (const item of decorationSpecsForCorridor(link, floor, walls)) {
+        if (!corridorItems.some(placed => corridorDecorationsOverlap(placed, item))) corridorItems.push(item);
+      }
     }
   }
   return [
     ...roomItems,
     ...layout.nodes.flatMap(room => {
-      const browser = contentBrowserForRoom(room, walls);
+      const browser = authoredRooms.has(room.id) ? null : contentBrowserForRoom(room, walls);
       return browser ? [browser] : [];
     }),
     ...corridorItems,
@@ -693,9 +702,10 @@ function regularMonsterSpec(
   position: Point,
   floor: number,
   profileName: keyof typeof MONSTER_SPAWN_PROFILES,
+  fixedKind?: RegularMonsterKind,
 ): Monster {
   const difficulty = floorDifficulty(floor);
-  const kind = monsterKindForSeed(seed, difficulty);
+  const kind = fixedKind ?? monsterKindForSeed(seed, difficulty);
   const definition = REGULAR_MONSTER_DEFINITIONS[kind];
   const profile = MONSTER_SPAWN_PROFILES[profileName];
   const visualKind = definition.visualKinds[seed % definition.visualKinds.length]!;
@@ -862,8 +872,20 @@ export function buildMonsters(
   decorations: readonly Decoration[] = [],
   playerSpawn?: Point,
   walls = new WallRectIndex(buildWallFootprints(layout)),
+  authoredRooms: AuthoredRooms = new Map(),
 ): Monster[] {
-  const roomSpecs = layout.nodes.flatMap(room => monsterSpecsForRoom(room, floor));
+  const roomSpecs = layout.nodes.flatMap(room => {
+    const template = authoredRooms.get(room.id);
+    if (!template) return monsterSpecsForRoom(room, floor);
+    return (template.monsters ?? []).map(({ kind, x, y }, index) => {
+      const position = { x: room.x + x, y: room.y + y };
+      const monster = kind in BOSS_DEFINITIONS
+        ? bossSpecForRoom(room, floor, kind as BossKind)
+        : regularMonsterSpec(`${room.id}::authored-monster-${index}`, room.id * 100 + index,
+          room.id, position, floor, "room", kind as RegularMonsterKind);
+      return { ...monster, id: `${room.id}::authored-monster-${index}`, ...position };
+    });
+  });
   const bossSummons = roomSpecs
     .filter(monster => monster.bossKind === "deepseek-summoner")
     .flatMap(boss => Array.from(
@@ -905,7 +927,8 @@ export function buildMonsters(
       summonedCount: saved?.summonedCount ?? spec.summonedCount,
     });
   }
-  if (layout.nodes.length > 1 && !monsters.some(monster => monster.miniboss)) {
+  if (layout.nodes.length > 1 && !layout.nodes.every(room => authoredRooms.has(room.id)) &&
+      !monsters.some(monster => monster.miniboss)) {
     const arenaId = layout.nodes.find(room => room.isBossArena)?.id;
     const rooms = layout.nodes
       .filter(room => !room.isRoot && room.id !== arenaId && monsters.some(monster =>
@@ -1103,6 +1126,7 @@ export function buildInteractiveObjects(
   previousUrl: string | null,
   collectedLoot: ReadonlySet<string>,
   walls = new WallRectIndex(buildWallFootprints(layout)),
+  authoredRooms: AuthoredRooms = new Map(),
 ): { stairs: Stair[]; loot: LootItem[] } {
   const stairs: Stair[] = [];
   const loot: LootItem[] = [];
@@ -1139,6 +1163,11 @@ export function buildInteractiveObjects(
       });
     }
 
+    const template = authoredRooms.get(room.id);
+    if (template) {
+      loot.push(...authoredLoot(room, template, pageUrl).filter(item => !collectedLoot.has(item.id)));
+      continue;
+    }
     const count = lootCountForRoom(room);
     const spots = lootPositions(room, count);
     for (let index = 0; index < count; index += 1) {

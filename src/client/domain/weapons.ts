@@ -156,3 +156,21 @@ export function replenishWeaponAmmo(weapon: WeaponSpec, ammo: number | null): nu
 export function weaponKinds(): WeaponKind[] {
   return [DEFAULT_WEAPON.kind, ...EXTRA_WEAPONS.map(weapon => weapon.kind)];
 }
+
+/** A fixed, unrolled pickup for authored rooms (no room seed or loot roll). */
+export function weaponForKind(kind: WeaponKind): WeaponSpec {
+  if (kind === DEFAULT_WEAPON.kind) return { ...DEFAULT_WEAPON };
+  const base = EXTRA_WEAPONS.find(weapon => weapon.kind === kind);
+  if (!base) throw new Error(`Unknown weapon kind: ${kind}`);
+  return {
+    kind: base.kind,
+    name: base.label,
+    fireCooldownMs: base.fireCooldownMs,
+    projectileSpeed: world(base.projectileSpeed),
+    projectileRange: world(base.projectileRange),
+    projectileRadius: world(base.projectileRadius),
+    damage: base.damage,
+    maxAmmo: base.maxAmmo,
+    ammoPerLoot: Math.ceil(base.maxAmmo * 0.25),
+  };
+}

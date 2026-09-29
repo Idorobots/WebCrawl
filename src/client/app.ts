@@ -34,6 +34,7 @@ import {
   kimiSpiralCooldown,
   type BossStage,
 } from "./domain/boss-attacks";
+import { artDebugLevel, type AuthoredRooms } from "./domain/authored-rooms";
 import { signageFontForUrl } from "./domain/level-style";
 import {
   actorAimDirection,
@@ -138,6 +139,7 @@ import { createThoughtPicker } from "./ui/loading-texts";
 import { setupWelcomePrompt, type WelcomePromptHandle } from "./ui/welcome-prompt";
 
 const DEBUG_MODE = import.meta.env.VITE_DEBUG === "true";
+const ART_DEBUG = import.meta.env.VITE_ART_DEBUG === "true";
 const MONSTERS_ENABLED = import.meta.env.VITE_NO_MONSTERS !== "true";
 const PLAYER_MAX_HP = DEBUG_MODE ? 1_000 : PLAYER_SPEC.maxHp;
 
@@ -215,6 +217,7 @@ const navigationReturnRooms: Array<number | null> = [];
 let currentLayout: DungeonLayout | null = null;
 let currentCorridorJunctions: CorridorJunction[] = [];
 let currentGraph: DungeonGraph | null = null;
+let currentAuthoredRooms: AuthoredRooms | null = null;
 interface FloorSnapshot {
   graph: DungeonGraph;
   layout: DungeonLayout;
@@ -606,6 +609,7 @@ function updateCurrentRoom(): void {
     gameCanvasHost.dataset.currentRoomTag = room.tag;
     if (roomChanged) roomRoutingDirty = true;
     markVisited(room);
+    if (roomChanged) updateBossHud();
     if (roomChanged && alreadyVisited && !gameUi.hidden) updateHudPanels();
   }
 }
@@ -1248,8 +1252,10 @@ function saveObstacleState(item: Decoration): void {
 function buildDecorations(layout: DungeonLayout, pageUrl: string): Decoration[] {
   const pageIdentity = floorIdentity(pageUrl);
   return [
-    ...createDecorations(layout, obstacleStateMapForPage(pageUrl), floorNumber(), wallFootprints),
+    ...createDecorations(layout, obstacleStateMapForPage(pageUrl), floorNumber(), wallFootprints,
+      currentAuthoredRooms ?? undefined),
     ...layout.nodes.flatMap((room) => {
+      if (currentAuthoredRooms?.has(room.id)) return [];
       const pedestal = weaponPedestalForRoom(room, pageIdentity, wallFootprints);
       return pedestal ? [pedestal] : [];
     }),
@@ -1394,6 +1400,7 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string, playerSpawn?: Poi
     currentDecorations,
     playerSpawn,
     wallFootprints,
+    currentAuthoredRooms ?? undefined,
   );
   for (const monster of monsters) {
     if (monster.dead && monster.droppedLoot) {
@@ -1557,9 +1564,12 @@ function updateMonsterPositions(): void {
 }
 
 function updateBossHud(): void {
-  const boss = currentMonsters.find(monster =>
+  const activeBosses = currentMonsters.filter(monster =>
     monster.bossKind && !monster.dead && monster.active && visitedRooms.has(monster.spawnRoomId)
   );
+  const boss = activeBosses.length === 1
+    ? activeBosses[0]
+    : activeBosses.find(monster => monster.roomId === currentRoomId);
   if (!boss?.bossKind) {
     bossHud.hidden = true;
     return;
@@ -2783,6 +2793,7 @@ function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
     navigationHistory[navigationHistory.length - 1] ?? null,
     collectedLoot,
     wallFootprints,
+    currentAuthoredRooms ?? undefined,
   );
   return {
     stairs: base.stairs,
@@ -3698,6 +3709,7 @@ function renderGraph(
     spawnPortalUrl = null,
   }: Pick<LoadPageOptions, "spawnRoomId" | "stateId"> & { spawnPortalUrl?: string | null } = {},
   preparedLayout: DungeonLayout | null = null,
+  authoredRooms: AuthoredRooms | null = null,
 ): void {
   cancelPortalIntro();
   cancelPortalActivationSound();
@@ -3712,7 +3724,8 @@ function renderGraph(
   hideContentBrowser();
   hidePortalPreview();
 
-  const layout = preparedLayout ?? layoutOrthogonal(graph);
+  const layout = preparedLayout ?? layoutOrthogonal(graph, authoredRooms ?? undefined);
+  currentAuthoredRooms = authoredRooms;
   currentGraph = graph;
   currentLayout = layout;
   currentCorridorJunctions = corridorJunctions(layout.links);
@@ -3930,6 +3943,29 @@ async function loadRenderer(): Promise<void> {
   renderer = new PhaserRenderer(gameCanvasHost);
 }
 
+async function startArtDebug(): Promise<void> {
+  const pageUrl = "https://art-debug.webcrawl.invalid/";
+  welcomeScreen.hidden = true;
+  loadingScreen.hidden = true;
+  gameUi.hidden = false;
+  resetRunState();
+  equipDefaultWeapon();
+  updateHudPanels();
+  try {
+    await loadRenderer();
+    await startRenderer();
+    gameUi.classList.add("game-ui-ready");
+    const level = artDebugLevel();
+    currentPageUrl = pageUrl;
+    updateUrlBar();
+    renderGraph(level.graph, pageUrl, {}, level.layout, level.rooms);
+    gameStarted = true;
+    renderer.playStationAmbient();
+  } catch (error) {
+    setStatus(`Could not start art debug: ${error instanceof Error ? error.message : String(error)}`, true);
+  }
+}
+
 function startRenderer(): Promise<void> {
   return new Promise((resolve) => {
     renderer.start({
@@ -4135,3 +4171,5 @@ luckyButton.addEventListener("click", () => {
       setStatus(`Could not pick a random page: ${message}`, true);
     });
 });
+
+if (ART_DEBUG) void startArtDebug();

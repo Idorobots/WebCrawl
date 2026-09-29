@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import { stableHash } from "./hash";
 import { ROOM_DEFINITIONS, WORLD_GEOMETRY } from "./specs";
+import type { AuthoredRooms } from "./authored-rooms";
 
 interface Bounds {
   left: number;
@@ -40,10 +41,16 @@ function boundsOverlap(left: Bounds, right: Bounds): boolean {
   return !(left.right <= right.left || left.left >= right.right || left.bottom <= right.top || left.top >= right.bottom);
 }
 
-function configureRoom(node: GraphNode, childCount: number): void {
+function configureRoom(node: GraphNode, childCount: number, authoredRooms: AuthoredRooms): void {
   const exitCount = childCount + (node.isRoot ? 0 : 1);
   node.shape = "rectangle";
   node.childCount = childCount;
+  const template = authoredRooms.get(node.id);
+  if (template) {
+    node.width = template.width;
+    node.height = template.height;
+    return;
+  }
   if (node.isBossArena || exitCount > 8) {
     node.width = ROOM_DEFINITIONS.boss.width;
     node.height = ROOM_DEFINITIONS.boss.height;
@@ -159,8 +166,8 @@ function routeOverlapsOtherCorridor(
   });
 }
 
-export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
-  const ordinary = placeRooms(graph);
+export function layoutOrthogonal(graph: DungeonGraph, authoredRooms: AuthoredRooms = new Map()): DungeonLayout {
+  const ordinary = placeRooms(graph, undefined, authoredRooms);
   if (ordinary.nodes.length < 2) return ordinary;
   const root = ordinary.nodes.find(room => room.isRoot) ?? ordinary.nodes[0]!;
   const distance = new Map<number, number>([[root.id, 0]]);
@@ -179,13 +186,13 @@ export function layoutOrthogonal(graph: DungeonGraph): DungeonLayout {
       left.id - right.id
     );
   for (const candidate of candidates) {
-    const layout = placeRooms(graph, candidate.id);
+    const layout = placeRooms(graph, candidate.id, authoredRooms);
     if (layout.nodes.some(room => room.id === candidate.id)) return layout;
   }
   return ordinary;
 }
 
-function placeRooms(graph: DungeonGraph, bossRoomId?: number): DungeonLayout {
+function placeRooms(graph: DungeonGraph, bossRoomId?: number, authoredRooms: AuthoredRooms = new Map()): DungeonLayout {
   const nodes = graph.nodes.map(node => ({
     ...node, isBossArena: bossRoomId === node.id,
     hrefs: [...node.hrefs], contentChunks: node.contentChunks?.map(chunk => ({ ...chunk })),
@@ -197,7 +204,7 @@ function placeRooms(graph: DungeonGraph, bossRoomId?: number): DungeonLayout {
     children.push(node);
     childrenByParent.set(node.parentId, children);
   }
-  for (const node of nodes) configureRoom(node, childrenByParent.get(node.id)?.length ?? 0);
+  for (const node of nodes) configureRoom(node, childrenByParent.get(node.id)?.length ?? 0, authoredRooms);
 
   const root = nodes.find(node => node.isRoot) ?? nodes.find(node => node.parentId === null);
   if (!root) return { nodes: [], links: [], hiddenCount: nodes.length };

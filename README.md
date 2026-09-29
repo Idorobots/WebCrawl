@@ -42,6 +42,8 @@ VITE_DEBUG=true npm run dev
 
 For a debug production build, run `VITE_DEBUG=true npm run build` before `npm start`. Restart Vite or rebuild after changing the flag. Collision overlays use the separate `VITE_DEBUG_HITBOXES=true` flag.
 
+To enter the playable art gallery directly, run `VITE_ART_DEBUG=true npm run dev` (or set the flag when building). This skips the welcome screens and remote page fetch. The fixed floor starts with every scenery object, decoration, pickup, and weapon variant in the gallery, followed by one room per enemy kind and one per boss. They use the usual combat and pickup rules. Room templates in `src/client/domain/authored-rooms.ts` use room-local coordinates and can also be supplied to the regular layout/content builders for future handcrafted rooms.
+
 For a small local crawl, enter `http://127.0.0.1:5173/test-level.html` in the game's URL field. The test page has three rooms and two links back to alternate routes through the same level. With the production server, use `http://127.0.0.1:3000/test-level.html` instead.
 
 Optional backend environment variables:
@@ -92,6 +94,8 @@ The browser smoke test uses Playwright to drive the system Chromium installation
 ```bash
 npm run test:e2e
 ```
+
+Run the dedicated art-floor browser test with `VITE_ART_DEBUG=true npx playwright test tests/e2e/art-debug.spec.ts`.
 
 The devcontainer installs Chromium at `/usr/bin/chromium`. Set `CHROMIUM_PATH` when Chromium is installed elsewhere:
 
