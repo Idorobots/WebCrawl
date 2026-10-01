@@ -499,7 +499,9 @@ describe("corridor render planning", () => {
       entrySigns[0]!.position.y - entrySigns[0]!.start.y,
     )).toBe(SEGMENT_SIZE / 2);
     expect(forwardBranchSigns).toHaveLength(layout.links.length);
-    expect(forwardBranchSigns.every(marking => marking.lateralOffset === -SEGMENT_SIZE * 5 / 6)).toBe(true);
+    for (const marking of forwardBranchSigns) {
+      expect(marking.lateralOffset).toBeCloseTo(-SEGMENT_SIZE * 5 / 6);
+    }
     expect(forwardBranchSigns.every(marking => Math.hypot(
       marking.position.x - marking.start.x,
       marking.position.y - marking.start.y,
@@ -508,7 +510,9 @@ describe("corridor render planning", () => {
       new Set(layout.links.map(link => link.target.floorLabel)),
     );
     expect(returnBranchSigns).toHaveLength(layout.links.length);
-    expect(returnBranchSigns.every(marking => marking.lateralOffset === SEGMENT_SIZE / 3)).toBe(true);
+    for (const marking of returnBranchSigns) {
+      expect(marking.lateralOffset).toBeCloseTo(SEGMENT_SIZE / 3);
+    }
     expect(returnBranchSigns.every(marking => Math.hypot(
       marking.position.x - marking.start.x,
       marking.position.y - marking.start.y,
@@ -583,16 +587,16 @@ describe("corridor render planning", () => {
         end,
         position: { x: SEGMENT_SIZE / 2, y: 0 },
         label: target.floorLabel,
-        lateralOffset: -SEGMENT_SIZE * 5 / 6,
       },
       {
         start: end,
         end: { x: 0, y: 0 },
         position: { x: end.x - SEGMENT_SIZE / 2, y: 0 },
         label: source.floorLabel,
-        lateralOffset: SEGMENT_SIZE / 3,
       },
     ]);
+    expect(markings[0]!.lateralOffset).toBeCloseTo(-SEGMENT_SIZE * 5 / 6);
+    expect(markings[1]!.lateralOffset).toBeCloseTo(SEGMENT_SIZE / 3);
   });
 });
 

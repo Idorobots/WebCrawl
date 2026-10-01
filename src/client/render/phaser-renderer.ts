@@ -22,8 +22,6 @@ import {
   PORTAL_FRAMES,
   SCENERY_ASSETS,
   WEAPON_ASSETS,
-  WORLD_SCALE,
-  world,
 } from "../config";
 import { backgroundAssetForUrl } from "../domain/background";
 import { bossStage } from "../domain/boss-attacks";
@@ -32,7 +30,6 @@ import {
   DEFAULT_BULLET_SPEC,
   LOOT_DEFINITIONS,
   MONSTER_WALK_REFERENCE_SPEED,
-  monsterHealthBarY,
   monsterWalkElapsed,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
@@ -152,17 +149,17 @@ const ENEMY_AURA_COLOR = 0xff344f;
 const PICKUP_AURA_COLOR = 0x6fe7ff;
 const PORTAL_DOWN_AURA_COLOR = 0xff4dff;
 const PORTAL_UP_AURA_COLOR = 0x4da6ff;
-const SHADOW_OFFSET_X = world(8);
-const SHADOW_OFFSET_Y = world(10);
+const SHADOW_OFFSET_X = 8;
+const SHADOW_OFFSET_Y = 10;
 const SHADOW_DISTANCE_SCALE = 0.09;
-const SHADOW_MIN_DISTANCE = world(6);
-const SHADOW_MAX_DISTANCE = world(26);
+const SHADOW_MIN_DISTANCE = 6;
+const SHADOW_MAX_DISTANCE = 26;
 const EFFECT_LIGHT_FALLBACK = { color: 0x8bdfff, radiusScale: 0.8, intensity: 0.9 };
-const FLASHLIGHT_MAX_RANGE = world(720);
+const FLASHLIGHT_MAX_RANGE = 720;
 const FLASHLIGHT_RADIUS_SCALE = 0.8;
 const FLICKER_BURST_INTERVAL_MS = 1_400;
 const FLICKER_STEP_MS = 35;
-const CORRIDOR_LIGHT_SPACING = world(240);
+const CORRIDOR_LIGHT_SPACING = 240;
 const CORRIDOR_LIGHT_CULL_CELL = CORRIDOR_LIGHT_SPACING / 2;
 const SHOW_DEBUG_GEOMETRY = import.meta.env.VITE_DEBUG_HITBOXES === "true";
 
@@ -256,7 +253,7 @@ const PLAYER_FOOTSTEP_SOUNDS: readonly string[] = [
   "sounds/footsteps/player/footstep1.mp3",
 ];
 const MONSTER_LOOP_SOUND_SRC = "sounds/footsteps/robot/robot_heavy1.mp3";
-const MONSTER_FOOTSTEP_MAX_DISTANCE = world(900);
+const MONSTER_FOOTSTEP_MAX_DISTANCE = 900;
 const MONSTER_FOOTSTEP_RATE_BOOST = 1.2;
 const FOOTSTEP_SFX_VOLUME = 0.3;
 const FOOTSTEP_INTERVAL_MS = 125;
@@ -557,7 +554,7 @@ export class PhaserRenderer {
         new EllipticalLightPipeline(scene.game),
       ) as EllipticalLightPipeline;
       scene.lights.enable().setAmbientColor(AMBIENT_LIGHT_COLOR);
-      this.playerStateLight = scene.lights.addLight(0, 0, world(110), 0xb7e2ff, 0.48).setVisible(false);
+      this.playerStateLight = scene.lights.addLight(0, 0, 110, 0xb7e2ff, 0.48).setVisible(false);
       this.host.dataset.ambientLight = AMBIENT_LIGHT_COLOR.toString(16).padStart(6, "0");
       this.host.dataset.auraMode = "light2d";
       this.host.dataset.auraFlicker = "false";
@@ -990,7 +987,7 @@ export class PhaserRenderer {
 
     this.updateBackground();
     const view = camera.worldView;
-    const padding = world(128);
+    const padding = 128;
     const bounds: WorldBounds = {
       left: view.x - padding,
       right: view.x + view.width + padding,
@@ -1027,7 +1024,7 @@ export class PhaserRenderer {
     const scene = this.scene;
     if (!scene) return;
     const view = scene.cameras.main.worldView;
-    const pad = world(192);
+    const pad = 192;
     // TileSprite allocates a canvas of its full display size. Bound that canvas
     // to the camera rather than the whole level, which can span tens of thousands of pixels.
     const width = Math.ceil(view.width + pad * 2);
@@ -1036,11 +1033,11 @@ export class PhaserRenderer {
       this.background?.destroy();
       this.background = this.illuminate(scene.add.tileSprite(
         0, 0, width, height, textureKey(this.backgroundAsset),
-      ).setOrigin(0).setTileScale(WORLD_SCALE).setDepth(-10));
+      ).setOrigin(0).setDepth(-10));
     }
     const left = Math.floor(view.x - pad);
     const top = Math.floor(view.y - pad);
-    this.background.setPosition(left, top).setTilePosition(left / WORLD_SCALE, top / WORLD_SCALE);
+    this.background.setPosition(left, top).setTilePosition(left, top);
   }
 
   private setStaticVisible(object: StaticObject | undefined, visible: boolean): void {
@@ -1177,14 +1174,14 @@ export class PhaserRenderer {
       0,
       0,
       room.floorLabel,
-      world(34),
+      34,
       rotated ? Math.PI / 2 : 0,
     );
-    const maxWidth = (rotated ? room.height : room.width) - world(128);
+    const maxWidth = (rotated ? room.height : room.width) - 128;
     if (label.displayWidth > maxWidth) label.setScale(maxWidth / label.displayWidth);
     const boundsWidth = rotated ? label.displayHeight : label.displayWidth;
     const boundsHeight = rotated ? label.displayWidth : label.displayHeight;
-    const inset = world(24);
+    const inset = 24;
     const topLeft = (room.lootSeed & 1) === 0;
     const direction = topLeft ? -1 : 1;
     const targetX = room.x + direction * room.width * 0.2;
@@ -1217,7 +1214,7 @@ export class PhaserRenderer {
       position.x + (vertical ? lateralOffset : 0),
       position.y + (vertical ? 0 : lateralOffset),
       text,
-      world(25),
+      25,
       vertical ? -Math.PI / 2 : 0,
     );
     if (marking.displayWidth > SEGMENT_SIZE) marking.setScale(SEGMENT_SIZE / marking.displayWidth);
@@ -1241,7 +1238,7 @@ export class PhaserRenderer {
     measureContext.textAlign = "center";
     measureContext.textBaseline = "middle";
     const metrics = measureContext.measureText(text);
-    const padding = world(24);
+    const padding = 24;
     const inkWidth = Math.max(metrics.width, metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight);
     const inkHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
     const width = Math.ceil(inkWidth + padding * 2);
@@ -1550,7 +1547,7 @@ export class PhaserRenderer {
     const view = this.scene?.cameras.main.worldView;
     if (!view) return true;
     const light = profile.light;
-    const pad = light.radius + world(96);
+    const pad = light.radius + 96;
     return (
       light.x + pad >= view.x &&
       light.x - pad <= view.right &&
@@ -1634,7 +1631,7 @@ export class PhaserRenderer {
     const dx = x - this.currentPlayer.x;
     const dy = y - this.currentPlayer.y;
     const length = Math.hypot(dx, dy);
-    if (length < world(1)) {
+    if (length < 1) {
       shadow.setPosition(SHADOW_OFFSET_X + (offset?.x ?? 0), SHADOW_OFFSET_Y + (offset?.y ?? 0));
       return;
     }
@@ -1703,6 +1700,15 @@ export class PhaserRenderer {
     return { clip: item.visual.normal, elapsed: 0 };
   }
 
+  private decorationVisualOffset(item: Decoration, clip: SpriteClip): Point {
+    if (!item.destroyed) return item.visualOffset;
+    // Keep differently sized debris resting at the same base as the intact prop.
+    return {
+      x: item.visualOffset.x,
+      y: item.visualOffset.y + item.size * (1 - clip.sizeScale) / 2,
+    };
+  }
+
   private lootClip(item: LootItem, definition?: LootDefinition): SpriteClip | null {
     if (item.kind === "weapon" || !definition?.frames?.length) return null;
     return {
@@ -1741,7 +1747,7 @@ export class PhaserRenderer {
       const asset = this.clipAsset(state.clip, state.elapsed);
       const sprite = this.illuminate(scene.add.image(0, 0, textureKey(asset)));
       const shadow = this.createShadow(asset);
-      const visualOffset = item.destroyed ? undefined : item.visualOffset;
+      const visualOffset = this.decorationVisualOffset(item, state.clip);
       this.applyClip(sprite, state.clip, item.size, state.elapsed, undefined, visualOffset);
       this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, visualOffset);
       this.applyShadowOffset(shadow, item.x, item.y, item.size);
@@ -1756,14 +1762,14 @@ export class PhaserRenderer {
       this.syncDecorationEffectLight(item, state);
       this.decorations.push(container);
       if (item.destructible && !item.destroyed && item.hp != item.maxHp) {
-        const barWidth = world(44);
-        const barY = item.visualOffset.y - item.size / 2 + (item.healthBarTop ?? 0) * item.size - world(8);
-        const bg = scene.add.rectangle(-barWidth / 2, barY, barWidth, world(5), 0x071018).setOrigin(0, 0.5);
+        const barWidth = 44;
+        const barY = item.visualOffset.y - item.size / 2 + (item.healthBarTop ?? 0) * item.size - 8;
+        const bg = scene.add.rectangle(-barWidth / 2, barY, barWidth, 5, 0x071018).setOrigin(0, 0.5);
         const hp = scene.add.rectangle(
           -barWidth / 2,
           barY,
           barWidth * Math.max(0, item.hp) / Math.max(1, item.maxHp),
-          world(5),
+          5,
           0x62e6c8,
         ).setOrigin(0, 0.5).setName("hp");
         const bar = scene.add.container(item.x, item.y, [bg, hp]).setDepth(HEALTH_BAR_DEPTH);
@@ -1783,10 +1789,11 @@ export class PhaserRenderer {
       const sprite = this.decorationSprites.get(item.id);
       if (!sprite) continue;
       const state = this.decorationClip(item, now);
-      this.applyClip(sprite, state.clip, item.size, state.elapsed, undefined, item.destroyed ? undefined : item.visualOffset);
+      const visualOffset = this.decorationVisualOffset(item, state.clip);
+      this.applyClip(sprite, state.clip, item.size, state.elapsed, undefined, visualOffset);
       const shadow = this.decorationShadows.get(item.id);
       if (shadow) {
-        this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, item.destroyed ? undefined : item.visualOffset);
+        this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, visualOffset);
         this.applyShadowOffset(shadow, item.x, item.y, item.size);
       }
       this.syncDecorationEffectLight(item, state);
@@ -1840,7 +1847,7 @@ export class PhaserRenderer {
       light = this.scene.lights.addLight(
         item.x,
         item.y + item.hitboxOffset.y,
-        Math.max(world(52), item.size * profile.radiusScale),
+        Math.max(52, item.size * profile.radiusScale),
         profile.color,
         profile.intensity,
       );
@@ -1898,7 +1905,7 @@ export class PhaserRenderer {
     if (!scene) return;
     for (const item of loot) {
       if (!visited.has(item.roomId)) continue;
-      const auraRadius = item.kind === "weapon" ? world(112) : world(86);
+      const auraRadius = item.kind === "weapon" ? 112 : 86;
       const lootAura = this.createAuraLight(
         item.x,
         item.y,
@@ -2113,11 +2120,13 @@ export class PhaserRenderer {
         const assetKey = textureKey(frame.asset);
         const sprite = this.illuminate(scene.add.image(0, 0, assetKey).setName("sprite"));
         const shadow = this.createShadow(frame.asset);
-        this.applyClip(sprite, frame.clip, item.size, frame.elapsed, undefined, item.dead ? undefined : item.visualOffset);
-        this.applyClip(shadow, frame.clip, item.size, frame.elapsed, undefined, item.dead ? undefined : item.visualOffset);
+        this.applyClip(sprite, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
+          item.dead ? item.destroyedVisualOffset : item.visualOffset);
+        this.applyClip(shadow, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
+          item.dead ? item.destroyedVisualOffset : item.visualOffset);
         this.applyShadowOffset(shadow, item.x, item.y, item.size);
-        const barWidth = item.miniboss ? item.size * 0.72 : world(44);
-        const barY = monsterHealthBarY(item.size, item.visualKind);
+        const barWidth = item.miniboss ? item.size * 0.72 : 44;
+        const barY = item.healthBarOffsetY;
         const children: Phaser.GameObjects.GameObject[] = [shadow, sprite];
         container = scene.add.container(item.x, item.y, children)
           .setDepth(this.monsterDepth(item));
@@ -2125,8 +2134,8 @@ export class PhaserRenderer {
         container.setData("dead", item.dead);
         this.monsters.set(item.id, container);
         if (!item.dead && !item.bossKind) {
-          const barHeight = item.miniboss ? world(7) : world(5);
-          const fillHeight = item.miniboss ? world(6) : world(5);
+          const barHeight = item.miniboss ? 7 : 5;
+          const fillHeight = item.miniboss ? 6 : 5;
           const fillColor = item.miniboss ? 0xffc857 : item.speed === 0 ? 0xc07cff : 0xff6b6b;
           const barChildren: Phaser.GameObjects.GameObject[] = [
             scene.add.rectangle(-barWidth / 2, barY, barWidth, barHeight, 0x071018).setOrigin(0, 0.5),
@@ -2136,7 +2145,7 @@ export class PhaserRenderer {
           this.monsterHealthBars.set(item.id, bar);
         }
         if (!item.dead && !item.bossKind) {
-          const auraRadius = Math.max(item.hitboxRadii.x, item.hitboxRadii.y) + world(64);
+          const auraRadius = Math.max(item.hitboxRadii.x, item.hitboxRadii.y) + 64;
           const auraY = item.y + item.hitboxOffset.y;
           const aura = this.createAuraLight(
             item.x,
@@ -2159,7 +2168,7 @@ export class PhaserRenderer {
         aura.y = item.y + item.hitboxOffset.y;
       }
       const hp = (barContainer ?? container).getByName("hp") as Phaser.GameObjects.Rectangle | null;
-      if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
+      if (hp) hp.width = Number(container.getData("hpWidth") ?? 40) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
       if (item === activeBoss) {
         this.host.dataset.activeBossDisplayWidth = String(sprite.displayWidth);
         this.host.dataset.activeBossDisplayHeight = String(sprite.displayHeight);
@@ -2191,7 +2200,7 @@ export class PhaserRenderer {
         aura.y = item.y + item.hitboxOffset.y;
       }
       const hp = this.monsterHealthBars.get(item.id)?.getByName("hp") as Phaser.GameObjects.Rectangle | null;
-      if (hp) hp.width = Number(container.getData("hpWidth") ?? world(40)) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
+      if (hp) hp.width = Number(container.getData("hpWidth") ?? 40) * Math.max(0, item.hp) / Math.max(1, item.maxHp);
       if (item.bossKind && item.active && !item.dead) {
         this.setHostData("activeBossStage", String(bossStage(item.hp, item.maxHp)));
       }
@@ -2217,10 +2226,12 @@ export class PhaserRenderer {
   private applyMonsterFrame(container: Phaser.GameObjects.Container, item: Monster, now: number): void {
     const frame = this.monsterFrame(item, now);
     const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
-    this.applyClip(sprite, frame.clip, item.size, frame.elapsed, undefined, item.dead ? undefined : item.visualOffset);
+    this.applyClip(sprite, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
+      item.dead ? item.destroyedVisualOffset : item.visualOffset);
     const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
     if (shadow) {
-      this.applyClip(shadow, frame.clip, item.size, frame.elapsed, undefined, item.dead ? undefined : item.visualOffset);
+      this.applyClip(shadow, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
+        item.dead ? item.destroyedVisualOffset : item.visualOffset);
       this.applyShadowOffset(shadow, item.x, item.y, item.size);
     }
   }
@@ -2285,9 +2296,9 @@ export class PhaserRenderer {
     const radius = bullet.radius ?? DEFAULT_BULLET_SPEC.radius;
     const speed = Math.hypot(bullet.vx, bullet.vy);
     const angle = speed > 0 ? Math.atan2(bullet.vy, bullet.vx) : 0;
-    const trailLength = Math.min(world(78), Math.max(world(18), speed * 0.045));
+    const trailLength = Math.min(78, Math.max(18, speed * 0.045));
     sprite.setTint(this.bulletColor(bullet));
-    sprite.setDisplaySize(Math.max(world(12), radius * 9.2), (trailLength + radius * 2) * 1.25);
+    sprite.setDisplaySize(Math.max(12, radius * 9.2), (trailLength + radius * 2) * 1.25);
     sprite.setRotation(angle + Math.PI / 2);
   }
 
@@ -2302,7 +2313,7 @@ export class PhaserRenderer {
     if (!BULLET_LIGHTS_ENABLED || !this.lightingEnabled || !this.scene) return;
     const lightCount = Math.min(items.length, MAX_BULLET_LIGHTS);
     while (this.bulletLights.length < lightCount) {
-      this.bulletLights.push(this.scene.lights.addLight(0, 0, world(72), 0xffffff, 0.7).setVisible(false));
+      this.bulletLights.push(this.scene.lights.addLight(0, 0, 72, 0xffffff, 0.7).setVisible(false));
     }
 
     const selected: Array<{ bullet: Bullet; distanceSquared: number }> = [];
@@ -2333,7 +2344,7 @@ export class PhaserRenderer {
       light.x = bullet.x;
       light.y = bullet.y;
       light.setColor(this.bulletColor(bullet));
-      light.setRadius(Math.max(world(72), radius * 8));
+      light.setRadius(Math.max(72, radius * 8));
       light.setIntensity(bullet.style === "shockwave" ? 1.05 : 0.72);
       light.setVisible(true);
     }
@@ -2406,7 +2417,7 @@ export class PhaserRenderer {
     light.x = this.currentPlayer.x;
     light.y = this.currentPlayer.y + PLAYER_SPEC.hitboxOffset.y;
     light.setColor(this.playerDashTintActive ? 0x4db3ff : this.playerProtectionActive ? 0x78ff9b : 0xb7e2ff);
-    light.setRadius(this.playerDashTintActive ? world(210) : this.playerProtectionActive ? world(150) : world(110));
+    light.setRadius(this.playerDashTintActive ? 210 : this.playerProtectionActive ? 150 : 110);
     light.setIntensity(this.playerDashTintActive ? 1.3 : this.playerProtectionActive ? 0.8 : 0.48);
     light.setVisible(true);
     this.setHostData("playerLight", "true");
@@ -2433,8 +2444,8 @@ export class PhaserRenderer {
         targetY: originY,
         axisX: 1,
         axisY: 0,
-        majorRadius: world(244) * FLASHLIGHT_RADIUS_SCALE,
-        minorRadius: world(224) * FLASHLIGHT_RADIUS_SCALE,
+        majorRadius: 244 * FLASHLIGHT_RADIUS_SCALE,
+        minorRadius: 224 * FLASHLIGHT_RADIUS_SCALE,
         intensity: 1.48,
       };
       this.setHostData("flashlightActive", "true");
@@ -2456,8 +2467,8 @@ export class PhaserRenderer {
       targetY,
       axisX: dx / rawDistance,
       axisY: dy / rawDistance,
-      majorRadius: (world(244) + world(156) * distanceRatio) * FLASHLIGHT_RADIUS_SCALE,
-      minorRadius: (world(224) + world(4) * distanceRatio) * FLASHLIGHT_RADIUS_SCALE,
+      majorRadius: (244 + 156 * distanceRatio) * FLASHLIGHT_RADIUS_SCALE,
+      minorRadius: (224 + 4 * distanceRatio) * FLASHLIGHT_RADIUS_SCALE,
       intensity: 1.48 - 0.28 * distanceRatio,
     };
     this.setHostData("flashlightActive", "true");
@@ -2482,11 +2493,11 @@ export class PhaserRenderer {
     const graphics = this.debugGraphics ??= this.scene.add.graphics().setDepth(DEBUG_DEPTH);
     graphics.clear();
     const drawFootprint = (x: number, y: number, center: Point, radii: Point): void => {
-      graphics.lineStyle(world(1), 0xffbd5d, 0.95);
+      graphics.lineStyle(1, 0xffbd5d, 0.95);
       graphics.lineBetween(center.x, center.y, x, y);
       graphics.strokeEllipse(x, y, radii.x * 2, radii.y * 2);
     };
-    graphics.lineStyle(world(1), 0x69f7de, 0.9);
+    graphics.lineStyle(1, 0x69f7de, 0.9);
     graphics.strokeEllipse(this.currentPlayer.x + PLAYER_SPEC.hitboxOffset.x, this.currentPlayer.y + PLAYER_SPEC.hitboxOffset.y,
       PLAYER_SPEC.hitboxRadii.x * 2, PLAYER_SPEC.hitboxRadii.y * 2);
     drawFootprint(this.currentPlayer.x, this.currentPlayer.y,
@@ -2494,23 +2505,23 @@ export class PhaserRenderer {
     for (const monster of this.currentMonsters) {
       if (!monster.active || monster.dead) continue;
       const center = { x: monster.x + monster.hitboxOffset.x, y: monster.y + monster.hitboxOffset.y };
-      graphics.lineStyle(world(1), 0xff5c77, 0.9);
+      graphics.lineStyle(1, 0xff5c77, 0.9);
       graphics.strokeEllipse(center.x, center.y, monster.hitboxRadii.x * 2, monster.hitboxRadii.y * 2);
       drawFootprint(monster.x, monster.y, center, monster.footprintRadii);
     }
     for (const item of this.currentDecorations) {
       if (item.destroyed) continue;
       if (item.destructible && item.hitboxRadii.x && item.hitboxRadii.y) {
-        graphics.lineStyle(world(1), 0x8cf6ff, 0.85);
+        graphics.lineStyle(1, 0x8cf6ff, 0.85);
         graphics.strokeEllipse(item.x + item.hitboxOffset.x, item.y + item.hitboxOffset.y,
           item.hitboxRadii.x * 2, item.hitboxRadii.y * 2);
       }
       if (item.footprintRadii.x && item.footprintRadii.y) {
-        graphics.lineStyle(world(1), 0xffbd5d, 0.85);
+        graphics.lineStyle(1, 0xffbd5d, 0.85);
         graphics.strokeEllipse(item.x, item.y, item.footprintRadii.x * 2, item.footprintRadii.y * 2);
       }
     }
-    graphics.lineStyle(world(1), 0x6fe7ff, 0.9);
+    graphics.lineStyle(1, 0x6fe7ff, 0.9);
     for (const item of this.currentLoot) {
       if (!this.visited.has(item.roomId)) continue;
       const radii = item.kind === "weapon"
@@ -2519,14 +2530,14 @@ export class PhaserRenderer {
       graphics.strokeEllipse(item.x, item.y, radii.x * 2, radii.y * 2);
     }
     for (const portal of this.layout ? this.currentStairs : []) {
-      graphics.lineStyle(world(1), 0xffbd5d, 0.85);
+      graphics.lineStyle(1, 0xffbd5d, 0.85);
       graphics.strokeEllipse(portal.x, portal.y, PORTAL_DEFINITION.footprintRadii.x * 2, PORTAL_DEFINITION.footprintRadii.y * 2);
     }
-    graphics.lineStyle(world(1), 0xf8ef77, 0.9);
+    graphics.lineStyle(1, 0xf8ef77, 0.9);
     for (const bullet of this.currentBullets) {
       graphics.strokeCircle(bullet.x, bullet.y, bullet.radius ?? DEFAULT_BULLET_SPEC.radius);
     }
-    graphics.lineStyle(world(1), 0xff8bd2, 0.9);
+    graphics.lineStyle(1, 0xff8bd2, 0.9);
     for (const room of this.layout?.nodes ?? []) {
       graphics.strokeRect(
         room.x - room.width / 2,
@@ -2620,7 +2631,7 @@ export class PhaserRenderer {
     this.setHostData("effectSpriteMode", "emissive");
     this.applyClip(effect, clip, baseSize);
     const light = this.lightingEnabled
-      ? scene.lights.addLight(x, y, Math.max(world(52), baseSize * profile.radiusScale), lightColor, profile.intensity)
+      ? scene.lights.addLight(x, y, Math.max(52, baseSize * profile.radiusScale), lightColor, profile.intensity)
       : null;
     if (light) {
       this.activeEffectLights.add(light);
@@ -2654,7 +2665,7 @@ export class PhaserRenderer {
       record.light.x = x;
       record.light.y = y;
       record.light.setColor(lightColor);
-      record.light.setRadius(Math.max(world(52), baseSize * profile.radiusScale));
+      record.light.setRadius(Math.max(52, baseSize * profile.radiusScale));
       record.light.setIntensity(profile.intensity);
     }
     if (followPlayer) {

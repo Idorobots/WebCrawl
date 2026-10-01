@@ -19,7 +19,6 @@ import {
   kimiSpiralCooldown,
 } from "../../src/client/domain/boss-attacks";
 import { bossCrushedScenery } from "../../src/client/domain/combat";
-import { world } from "../../src/client/config";
 import type { BossKind } from "../../src/client/types";
 
 const aim = { x: 1, y: 0 };
@@ -63,20 +62,20 @@ describe("boss attacks", () => {
 
   it("keeps Hy4 circling at range, retreating nearby and approaching when far away", () => {
     const boss = { x: 0, y: 0 };
-    expect(bossRangedMovement("hy4-wave", boss, { x: world(150), y: 0 }, 0, 0)[0]!.x).toBe(-1);
-    expect(bossRangedMovement("hy4-wave", boss, { x: world(650), y: 0 }, 0, 0)[0]!.x).toBe(1);
-    const orbit = bossRangedMovement("hy4-wave", boss, { x: world(410), y: 0 }, 0, 0)[0]!;
+    expect(bossRangedMovement("hy4-wave", boss, { x: 150, y: 0 }, 0, 0)[0]!.x).toBe(-1);
+    expect(bossRangedMovement("hy4-wave", boss, { x: 650, y: 0 }, 0, 0)[0]!.x).toBe(1);
+    const orbit = bossRangedMovement("hy4-wave", boss, { x: 410, y: 0 }, 0, 0)[0]!;
     expect(Math.abs(orbit.x)).toBe(0);
     expect(Math.abs(orbit.y)).toBe(1);
-    expect(bossRangedMovement("hy4-wave", boss, { x: world(410), y: 0 }, 4_000, 0)[0]!.y)
+    expect(bossRangedMovement("hy4-wave", boss, { x: 410, y: 0 }, 4_000, 0)[0]!.y)
       .toBe(-orbit.y);
   });
 
   it("lets Kimi roam periodically without stopping its evasive retreat when crowded", () => {
     const boss = { x: 0, y: 0 };
-    expect(bossRangedMovement("kimi-spiral", boss, { x: world(350), y: 0 }, 0, 0)).toHaveLength(2);
-    expect(bossRangedMovement("kimi-spiral", boss, { x: world(350), y: 0 }, 2_500, 0)).toEqual([]);
-    expect(bossRangedMovement("kimi-spiral", boss, { x: world(180), y: 0 }, 2_500, 0)[0]!.x)
+    expect(bossRangedMovement("kimi-spiral", boss, { x: 350, y: 0 }, 0, 0)).toHaveLength(2);
+    expect(bossRangedMovement("kimi-spiral", boss, { x: 350, y: 0 }, 2_500, 0)).toEqual([]);
+    expect(bossRangedMovement("kimi-spiral", boss, { x: 180, y: 0 }, 2_500, 0)[0]!.x)
       .toBe(-1);
   });
 
@@ -121,9 +120,9 @@ describe("boss attacks", () => {
       const shots = volley("qwen-teleporter", stage);
       expect(shots).toHaveLength(stage * 2);
       expect(shots.every(shot => shot.direction.x === 1 && shot.direction.y === 0)).toBe(true);
-      for (const side of [-world(28), world(28)]) {
+      for (const side of [-28, 28]) {
         expect(shots.filter(shot => shot.lateralOffset === side).map(shot => shot.forwardOffset))
-          .toEqual(Array.from({ length: stage }, (_, index) => -index * world(38)));
+          .toEqual(Array.from({ length: stage }, (_, index) => -index * 38));
       }
     }
   });

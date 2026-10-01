@@ -1,4 +1,3 @@
-import { world } from "../config";
 import type { BossKind, Point } from "../types";
 
 export type BossStage = 1 | 2 | 3;
@@ -121,8 +120,8 @@ export function bossRangedMovement(
   const side = Math.floor((timestamp + seed % 3_000) / 4_000) % 2 === 0 ? 1 : -1;
   const tangent = { x: -toward.y * side, y: toward.x * side };
   const otherTangent = { x: -tangent.x, y: -tangent.y };
-  const near = kind === "hy4-wave" ? world(340) : world(260);
-  const far = kind === "hy4-wave" ? world(510) : world(450);
+  const near = kind === "hy4-wave" ? 340 : 260;
+  const far = kind === "hy4-wave" ? 510 : 450;
   if (distance < near) return [{ x: -toward.x, y: -toward.y }, tangent, otherTangent];
   if (kind === "kimi-spiral" && (timestamp + seed % 3_000) % 3_000 >= 2_000) return [];
   if (distance > far) return [toward, tangent, otherTangent];
@@ -133,8 +132,8 @@ export function bossRangedMovement(
 function doubleLines(aimed: Point, stage: BossStage): BossProjectile[] {
   return [-1, 1].flatMap(lane => Array.from({ length: stage }, (_, index) => ({
     direction: aimed,
-    lateralOffset: lane * world(28),
-    forwardOffset: -index * world(38),
+    lateralOffset: lane * 28,
+    forwardOffset: -index * 38,
   })));
 }
 

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { world } from "../../src/client/config";
 import { artDebugLevel } from "../../src/client/domain/authored-rooms";
 import { footprintsOverlap, pointInRoomFloor } from "../../src/client/domain/geometry";
 import { buildDecorations, buildInteractiveObjects, buildMonsters } from "../../src/client/domain/generation";
@@ -60,7 +59,7 @@ describe("authored art floor", () => {
     }
     expect(decorations.some(item => item.obstacle &&
       footprintsOverlap(gallery, PLAYER_SPEC.footprintRadii, item, item.footprintRadii))).toBe(false);
-    for (let x = gallery.x; x < gallery.x + gallery.width / 2; x += world(40)) {
+    for (let x = gallery.x; x < gallery.x + gallery.width / 2; x += 40) {
       expect(decorations.some(item => item.obstacle &&
         footprintsOverlap({ x, y: gallery.y }, PLAYER_SPEC.footprintRadii,
           item, item.footprintRadii))).toBe(false);

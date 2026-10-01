@@ -12,8 +12,6 @@ import {
   ROOM_HEIGHT,
   ROOM_WIDTH,
   SCENERY_ASSETS,
-  WORLD_SCALE,
-  world,
 } from "../../src/client/config";
 import { backgroundAssetForUrl } from "../../src/client/domain/background";
 import { bossStage } from "../../src/client/domain/boss-attacks";
@@ -88,9 +86,7 @@ import {
   MINIBOSS_DAMAGE_MULTIPLIER,
   MINIBOSS_HP_MULTIPLIER,
   MINIBOSS_SIZE_MULTIPLIER,
-  MONSTER_VISUAL_DEFINITIONS,
   MONSTER_WALK_REFERENCE_SPEED,
-  monsterHealthBarY,
   monsterWalkElapsed,
   PLAYER_ENERGY_MAX,
   PLAYER_SPEC,
@@ -100,7 +96,6 @@ import {
   ROOM_DEFINITIONS,
   WEAPON_VISUAL_DEFINITIONS,
   WORLD_GEOMETRY,
-  monsterDisplaySize,
   type RoomSceneryTheme,
 } from "../../src/client/domain/specs";
 import {
@@ -114,7 +109,7 @@ import {
   weaponForRoom,
   weaponKinds,
 } from "../../src/client/domain/weapons";
-import type { Decoration, DungeonGraph, DungeonLayout, EllipseRadii, GraphNode, LayoutLink, MonsterVisualKind, Point, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
+import type { Decoration, DungeonGraph, DungeonLayout, EllipseRadii, GraphNode, LayoutLink, Point, RegularMonsterKind, SpriteClip, Stair } from "../../src/client/types";
 
 function onLayoutFloor(layout: DungeonLayout, point: Point): boolean {
   return layout.nodes.some(room => pointInRoomFloor(point.x, point.y, room)) ||
@@ -372,12 +367,12 @@ describe("layout and geometry", () => {
   };
   const layout = layoutOrthogonal(graph);
 
-  it("scales world definitions from authored dimensions", () => {
+  it("uses authored world dimensions directly", () => {
     expect(ROOM_DEFINITIONS.rectangle).toEqual({ width: ENVIRONMENT_SEGMENT_SIZE * 4, height: ENVIRONMENT_SEGMENT_SIZE * 4 });
-    expect(PLAYER_SPEC.hitboxRadii).toEqual({ x: world(28), y: world(28) });
-    expect(PLAYER_SPEC.footprintRadii).toEqual({ x: world(20), y: world(20) });
-    expect(WORLD_GEOMETRY.segmentSize).toBe(world(64) * 2);
-    expect(WORLD_GEOMETRY.floorTileSize).toBe(world(64));
+    expect(PLAYER_SPEC.hitboxRadii).toEqual({ x: 28, y: 28 });
+    expect(PLAYER_SPEC.footprintRadii).toEqual({ x: 20, y: 20 });
+    expect(WORLD_GEOMETRY.segmentSize).toBe(64 * 2);
+    expect(WORLD_GEOMETRY.floorTileSize).toBe(64);
     expect(WORLD_GEOMETRY.segmentSize).toBe(WORLD_GEOMETRY.floorTileSize * 2);
   });
 
@@ -442,17 +437,34 @@ describe("layout and geometry", () => {
 
   it("aligns visual content with collision centers and normalizes monster animations", () => {
     expect(PLAYER_SPEC.visual.directions.down?.normal.origin).toEqual({ x: 0.5, y: 0.90625 });
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].size).toBe(world(150));
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].size).toBe(world(230));
-    expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].size).toBe(world(175));
-    expect(monsterDisplaySize(200, "scout", "melee")).toBe(200);
-    expect(monsterDisplaySize(200, "scout", "walk")).toBe(200);
-    expect(MONSTER_VISUAL_DEFINITIONS.scout.directions.down?.melee?.origin.y).toBeCloseTo(0.90625);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].size).toBe(150);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].size).toBe(230);
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].size).toBe(175);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].spriteSize).toBe(150);
+    expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].spriteSize).toBe(248.5);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].visual.directions.down?.melee?.origin).toEqual({ x: 0.5, y: 0.5 });
     expect(PLAYER_SPEC.hitboxOffset.y).toBeLessThan(0);
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].hitboxOffset.y).toBe(-world(5));
-    expect(monsterHealthBarY(200, "scout")).toBeLessThan(-80);
-    expect(DECORATION_DEFINITIONS.crateCargo.origin).toEqual({ x: 0.5, y: 0.9375 });
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].hitboxOffset.y).toBe(-5);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].healthBarOffsetY).toBe(-71);
+    expect(DECORATION_DEFINITIONS.crateCargo.visualOffset).toEqual({ x: 0, y: -1 });
     expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
+  });
+
+  it("positions every scenery clip with a visual offset instead of a sprite origin", () => {
+    for (const definition of Object.values(DECORATION_DEFINITIONS)) {
+      expect(definition).not.toHaveProperty("origin");
+      expect(definition.visual.normal.origin).toEqual({ x: 0.5, y: 0.5 });
+      for (const debris of definition.visual.destroyed ?? []) {
+        expect(debris.origin).toEqual({ x: 0.5, y: 0.5 });
+      }
+    }
+    expect(DECORATION_DEFINITIONS.plantViolet.visualOffset.y).toBe(-14);
+    expect(DECORATION_DEFINITIONS.reactorPylon.visualOffset.y).toBe(-42);
+    expect(DECORATION_DEFINITIONS.spawner.visualOffset.y).toBe(-53.5);
+    expect(DECORATION_DEFINITIONS.contentBrowser.visualOffset.y).toBe(-25);
+    expect(DECORATION_DEFINITIONS.crateCargo.hitboxOffset.y).toBe(-39.2);
+    expect(DECORATION_DEFINITIONS.reagentRack.hitboxOffset.y).toBe(-36.75);
+    expect(DECORATION_DEFINITIONS.spawner.hitboxOffset.y).toBe(-56);
   });
 
   it("places every room deterministically with owned, routed corridors", () => {
@@ -498,8 +510,8 @@ describe("layout and geometry", () => {
       actorClearOfWalls(adjacent, point, radius, walls);
     for (const radius of [PLAYER_SPEC.footprintRadii, { x: MAX_REGULAR_MONSTER_FOOTPRINT, y: MAX_REGULAR_MONSTER_FOOTPRINT }]) {
       const along = normal.x ? radius.x : radius.y;
-      const start = { x: door.x - normal.x * (along + world(30)), y: door.y - normal.y * (along + world(30)) + shift };
-      const goal = { x: door.x + normal.x * (along + world(30)), y: door.y + normal.y * (along + world(30)) + shift };
+      const start = { x: door.x - normal.x * (along + 30), y: door.y - normal.y * (along + 30) + shift };
+      const goal = { x: door.x + normal.x * (along + 30), y: door.y + normal.y * (along + 30) + shift };
       expect(walkable({ x: door.x, y: door.y + shift }, radius)).toBe(true);
       for (const [from, to] of [[start, goal], [goal, start]] as const) {
         const path = aStarPath(from, to, point => walkable(point, radius), WORLD_GEOMETRY.pathGridStep, 1800);
@@ -633,10 +645,10 @@ describe("layout and geometry", () => {
         18,
         6_000,
         {
-          minX: Math.min(link.source.x, link.target.x) - world(220),
-          maxX: Math.max(link.source.x, link.target.x) + world(220),
-          minY: Math.min(link.source.y, link.target.y) - world(220),
-          maxY: Math.max(link.source.y, link.target.y) + world(220),
+          minX: Math.min(link.source.x, link.target.x) - 220,
+          maxX: Math.max(link.source.x, link.target.x) + 220,
+          minY: Math.min(link.source.y, link.target.y) - 220,
+          maxY: Math.max(link.source.y, link.target.y) + 220,
         },
       );
       expect(path, `Expected route through ${JSON.stringify(link.points)}`).not.toBeNull();
@@ -656,12 +668,12 @@ describe("layout and geometry", () => {
       const shiftY = door.y === next.y ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0;
       const radius = MAX_REGULAR_MONSTER_FOOTPRINT;
       const start = {
-        x: door.x - unit.x * (radius + world(30)),
-        y: door.y - unit.y * (radius + world(30)) + shiftY,
+        x: door.x - unit.x * (radius + 30),
+        y: door.y - unit.y * (radius + 30) + shiftY,
       };
       const goal = {
-        x: door.x + unit.x * (WORLD_GEOMETRY.wallThickness + world(30)),
-        y: door.y + unit.y * (WORLD_GEOMETRY.wallThickness + world(30)) + shiftY,
+        x: door.x + unit.x * (WORLD_GEOMETRY.wallThickness + 30),
+        y: door.y + unit.y * (WORLD_GEOMETRY.wallThickness + 30) + shiftY,
       };
       const walls = new WallRectIndex(buildWallFootprints(layout));
       const walkable = (point: Point) => actorClearOfWalls(layout, point, radius, walls);
@@ -683,18 +695,18 @@ describe("layout and geometry", () => {
     const horizontal = start!.y === end!.y;
     const corridorPlayer = horizontal
       ? { x: (start!.x + end!.x) / 2,
-        y: start!.y - link.width / 2 + PLAYER_SPEC.footprintRadii.y + world(5) }
-      : { x: start!.x - link.width / 2 + PLAYER_SPEC.footprintRadii.x + world(5),
+        y: start!.y - link.width / 2 + PLAYER_SPEC.footprintRadii.y + 5 }
+      : { x: start!.x - link.width / 2 + PLAYER_SPEC.footprintRadii.x + 5,
         y: (start!.y + end!.y) / 2 };
     const walls = new WallRectIndex(buildWallFootprints(layout));
     const hitboxes = new WallRectIndex(wallHitboxes(walls.rects));
     for (const player of [
-      { x: room.x, y: room.y - room.height / 2 + PLAYER_SPEC.footprintRadii.y + world(5) },
+      { x: room.x, y: room.y - room.height / 2 + PLAYER_SPEC.footprintRadii.y + 5 },
       corridorPlayer,
     ]) {
       for (const kind of ["melee-light", "melee-heavy"] as const) {
         const spec = REGULAR_MONSTER_DEFINITIONS[kind];
-        const monster = { x: player.x + world(100), y: player.y + world(110) };
+        const monster = { x: player.x + 100, y: player.y + 110 };
         const footprint = spec.footprintRadii;
         const walkable = (point: Point) => actorClearOfWalls(layout, point, footprint, walls) &&
           !footprintsOverlap(point, footprint, player, PLAYER_SPEC.footprintRadii);
@@ -834,8 +846,8 @@ describe("layout and geometry", () => {
     const beforeDoor = forkLink.points.at(-2)!;
     const doorLength = Math.hypot(beforeDoor.x - door.x, beforeDoor.y - door.y);
     const insideCorridor = {
-      x: door.x + (beforeDoor.x - door.x) / doorLength * world(80),
-      y: door.y + (beforeDoor.y - door.y) / doorLength * world(80),
+      x: door.x + (beforeDoor.x - door.x) / doorLength * 80,
+      y: door.y + (beforeDoor.y - door.y) / doorLength * 80,
     };
     for (const start of [previousRoom, insideCorridor]) {
       expect(walkable(start)).toBe(true);
@@ -1223,36 +1235,36 @@ describe("monster animation pacing", () => {
   };
 
   it("offsets walk cycles per monster seed so equally fast enemies desynchronize", () => {
-    const first = monsterWalkElapsed(walk, 1_000, 1, world(120));
-    const second = monsterWalkElapsed(walk, 1_000, 2, world(120));
+    const first = monsterWalkElapsed(walk, 1_000, 1, 120);
+    const second = monsterWalkElapsed(walk, 1_000, 2, 120);
     expect(first).not.toBe(second);
-    expect(monsterWalkElapsed(walk, 1_000, 1, world(120))).toBe(first);
+    expect(monsterWalkElapsed(walk, 1_000, 1, 120)).toBe(first);
   });
 
   it("scales walk playback rate with monster speed and clamps extremes", () => {
-    expect(MONSTER_WALK_REFERENCE_SPEED).toBe(world(120));
+    expect(MONSTER_WALK_REFERENCE_SPEED).toBe(120);
     expect(monsterWalkElapsed(walk, 1_000, 0, 0)).toBe(500);
-    expect(monsterWalkElapsed(walk, 1_000, 0, world(600))).toBe(2_000);
-    expect(monsterWalkElapsed(walk, 1_000, 0, world(120))).toBe(1_000);
-    expect(monsterWalkElapsed(walk, 1_000, 0, world(60))).toBe(500);
+    expect(monsterWalkElapsed(walk, 1_000, 0, 600)).toBe(2_000);
+    expect(monsterWalkElapsed(walk, 1_000, 0, 120)).toBe(1_000);
+    expect(monsterWalkElapsed(walk, 1_000, 0, 60)).toBe(500);
   });
 });
 
 describe("health bar geometry", () => {
   it("raises boss bars above the sprite body and keeps tuned regular bar positions", () => {
-    for (const kind of ["boss-arc", "boss-missile", "boss-fortress", "boss-laser", "boss-siege"] as MonsterVisualKind[]) {
-      expect(MONSTER_VISUAL_DEFINITIONS[kind].healthBarHeight, kind).toBeCloseTo(0.84375, 5);
-    }
-    expect(MONSTER_VISUAL_DEFINITIONS.scout.healthBarHeight).toBe(0.42);
-    expect(MONSTER_VISUAL_DEFINITIONS.heavy.healthBarHeight).toBe(0.42);
-    expect(monsterHealthBarY(400, "boss-arc")).toBeCloseTo(-400 * 0.84375 - world(8), 5);
-    expect(monsterHealthBarY(200, "scout")).toBeLessThan(-80);
+    expect(BOSS_DEFINITIONS["deepseek-summoner"].healthBarOffsetY).toBe(-269.5625);
+    expect(BOSS_DEFINITIONS["qwen-teleporter"].healthBarOffsetY).toBe(-294.875);
+    expect(BOSS_DEFINITIONS["glm-hunter"].healthBarOffsetY).toBe(-345.5);
+    expect(BOSS_DEFINITIONS["kimi-spiral"].healthBarOffsetY).toBe(-278);
+    expect(BOSS_DEFINITIONS["hy4-wave"].healthBarOffsetY).toBe(-315.96875);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].healthBarOffsetY).toBe(-71);
+    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].healthBarOffsetY).toBe(-104.6);
   });
 
   it("aligns decoration bars with measured sprite content", () => {
     expect(DECORATION_DEFINITIONS.spawner.healthBarTop).toBeCloseTo(0.5273, 2);
     expect(DECORATION_DEFINITIONS.barricade.healthBarTop).toBeCloseTo(0.5508, 2);
-    expect(DECORATION_DEFINITIONS.terminal.healthBarTop).toBeUndefined();
+    expect("healthBarTop" in DECORATION_DEFINITIONS.terminal).toBe(false);
   });
 });
 
@@ -1297,8 +1309,8 @@ describe("deterministic room contents", () => {
       const decorations = decorationSpecsForRoom(candidate, 10);
       for (const [index, item] of decorations.entries()) {
         for (const other of decorations.slice(index + 1)) {
-          const minimum = Math.max(world(10), item.footprintRadii.x, item.footprintRadii.y) +
-            Math.max(world(10), other.footprintRadii.x, other.footprintRadii.y) + world(8);
+          const minimum = Math.max(10, item.footprintRadii.x, item.footprintRadii.y) +
+            Math.max(10, other.footprintRadii.x, other.footprintRadii.y) + 8;
           expect(Math.hypot(item.x - other.x, item.y - other.y)).toBeGreaterThanOrEqual(minimum);
         }
       }
@@ -1417,7 +1429,7 @@ describe("deterministic room contents", () => {
       for (const [index, position] of positions.entries()) {
         for (const other of positions.slice(index + 1)) {
           expect(Math.hypot(position.x - other.x, position.y - other.y))
-            .toBeGreaterThanOrEqual(world(66));
+            .toBeGreaterThanOrEqual(66);
         }
       }
     }
@@ -1434,8 +1446,8 @@ describe("deterministic room contents", () => {
 
   it("caps dense portal grids at eight and fits them to each room width", () => {
     const tallRoom = node(8, 0, 1, {
-      width: Math.round(460 * WORLD_SCALE),
-      height: Math.round(560 * WORLD_SCALE),
+      width: 460,
+      height: 560,
       shape: "tall",
     });
     const positions = staircasePositions(tallRoom, 10);
@@ -1443,7 +1455,7 @@ describe("deterministic room contents", () => {
       positions.slice(index + 1).map(other => Math.hypot(position.x - other.x, position.y - other.y))
     );
     expect(positions).toHaveLength(8);
-    expect(Math.min(...distances)).toBeGreaterThanOrEqual(Math.round(100 * WORLD_SCALE));
+    expect(Math.min(...distances)).toBeGreaterThanOrEqual(100);
   });
 
   it("limits every room to eight total portals", () => {
@@ -1540,7 +1552,7 @@ describe("deterministic room contents", () => {
     expect(arenaRegular / sectionRegular).toBeGreaterThanOrEqual(0.25);
     expect(arenaRegular / sectionRegular).toBeLessThanOrEqual(0.4);
     const sceneryFor = (room: GraphNode) => decorationSpecsForRoom(room, 1)
-      .map(item => ({ kind: item.kind, obstacle: item.obstacle, destructible: item.destructible, origin: item.origin }));
+      .map(item => ({ kind: item.kind, obstacle: item.obstacle, destructible: item.destructible, visualOffset: item.visualOffset }));
     expect(sceneryFor(script)).toEqual(sceneryFor(section));
     expect(monsterSpecsForRoom({ ...script, isBossArena: false }).some(monster => monster.bossKind)).toBe(false);
   });
@@ -1706,6 +1718,10 @@ describe("deterministic room contents", () => {
     for (const miniboss of minibosses) {
       const definition = REGULAR_MONSTER_DEFINITIONS[miniboss.kind as RegularMonsterKind];
       expect(miniboss.size).toBeCloseTo(definition.size * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.spriteSize).toBeCloseTo(definition.spriteSize * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.healthBarOffsetY).toBeCloseTo((definition.healthBarOffsetY + 8) * MINIBOSS_SIZE_MULTIPLIER - 8);
+      expect(miniboss.destroyedVisualOffset.y).toBeCloseTo(definition.destroyedVisualOffset.y * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.visual).toBe(definition.visual);
       expect(miniboss.hitboxRadii).toEqual(definition.hitboxRadii);
       expect(miniboss.maxHp).toBeGreaterThanOrEqual(definition.baseHp * MINIBOSS_HP_MULTIPLIER);
       expect(miniboss.attackDamage).toBeGreaterThanOrEqual(
@@ -1835,6 +1851,9 @@ describe("deterministic room contents", () => {
 
     const glmHunter = bossSpecForRoom(arena, 1, "glm-hunter");
     expect(glmHunter.maxHp).toBeGreaterThan(150);
+    expect(glmHunter.visual).toBe(BOSS_DEFINITIONS["glm-hunter"].visual);
+    expect(glmHunter.spriteSize).toBe(BOSS_DEFINITIONS["glm-hunter"].spriteSize);
+    expect(glmHunter.destroyedVisualOffset).toEqual(BOSS_DEFINITIONS["glm-hunter"].destroyedVisualOffset);
     expect(glmHunter.attackRange).toBeGreaterThanOrEqual(glmHunter.footprintRadii.x + PLAYER_SPEC.footprintRadii.x);
     expect(GLM_HUNTER_ATTACKS.chargeWindupMs).toBeGreaterThan(0);
     expect(GLM_HUNTER_ATTACKS.initialChargeDelayMs).toBeGreaterThan(GLM_HUNTER_ATTACKS.chargeWindupMs);
@@ -1937,7 +1956,7 @@ describe("deterministic room contents", () => {
     });
     const boss = bossSpecForRoom(room, 4);
     const destination = node(999, room.id, 1, {
-      x: room.x + room.width + world(300),
+      x: room.x + room.width + 300,
       y: room.y,
       width: ROOM_DEFINITIONS.rectangle.width,
       height: ROOM_DEFINITIONS.rectangle.height,
@@ -2007,10 +2026,10 @@ describe("deterministic room contents", () => {
       id: "blast-barrel", roomId: room.id, x: 1000, y: 1000,
       maxHp: 6, hp: 0, destroyed: true, dropKind: null,
     };
-    const neighbor = { ...barrel, id: "neighbor", x: barrel.x + world(40), hp: 6, destroyed: false };
+    const neighbor = { ...barrel, id: "neighbor", x: barrel.x + 40, hp: 6, destroyed: false };
     const crate: Decoration = {
       ...DECORATION_DEFINITIONS.crateCargo,
-      id: "near-crate", roomId: room.id, x: barrel.x - world(50), y: barrel.y,
+      id: "near-crate", roomId: room.id, x: barrel.x - 50, y: barrel.y,
       maxHp: 4, hp: 4, destroyed: false, dropKind: null,
     };
     const destroyed = { ...crate, id: "destroyed-crate", destroyed: true };
@@ -2211,13 +2230,28 @@ describe("deterministic room contents", () => {
   });
 
   it("leaves species-specific wrecks and parts when enemies die", () => {
-    for (const [kind, visual] of Object.entries(MONSTER_VISUAL_DEFINITIONS)) {
+    const definitions = [
+      ["scout", REGULAR_MONSTER_DEFINITIONS["melee-light"]],
+      ["heavy", REGULAR_MONSTER_DEFINITIONS["melee-heavy"]],
+      ["sentry-ballistic", REGULAR_MONSTER_DEFINITIONS["sentry-light"]],
+      ["sentry-twin", REGULAR_MONSTER_DEFINITIONS["sentry-heavy"]],
+      ["sentry-energy", REGULAR_MONSTER_DEFINITIONS["sentry-scatter"]],
+      ["boss-arc", BOSS_DEFINITIONS["deepseek-summoner"]],
+      ["boss-missile", BOSS_DEFINITIONS["kimi-spiral"]],
+      ["boss-fortress", BOSS_DEFINITIONS["glm-hunter"]],
+      ["boss-laser", BOSS_DEFINITIONS["qwen-teleporter"]],
+      ["boss-siege", BOSS_DEFINITIONS["hy4-wave"]],
+    ] as const;
+    for (const [kind, definition] of definitions) {
       const prefix = `assets/debris/enemies__${kind.replaceAll("-", "_")}__`;
-      expect(visual.destroyed?.slice(0, 2).map(clip => clip.frames[0]), kind).toEqual([
+      expect(definition.visual.destroyed?.slice(0, 2).map(clip => clip.frames[0]), kind).toEqual([
         `${prefix}wreck.png`,
         `${prefix}parts.png`,
       ]);
-      expect(visual.destroyed?.every(clip => clip.origin.y === 0.9375)).toBe(true);
+      expect(definition.visual.destroyed?.every(clip => clip.origin.y === 0.5)).toBe(true);
+      expect(definition.destroyedVisualOffset.y).toBeCloseTo(
+        -definition.size * definition.visual.destroyed![0]!.sizeScale * 0.4375,
+      );
     }
   });
 
@@ -2484,8 +2518,8 @@ describe("deterministic room contents", () => {
       for (let index = 0; index < 24; index += 1) {
         const angle = index / 24 * Math.PI * 2;
         const position = {
-          x: reinforcement.x + Math.cos(angle) * world(45) * ring,
-          y: reinforcement.y + Math.sin(angle) * world(45) * ring,
+          x: reinforcement.x + Math.cos(angle) * 45 * ring,
+          y: reinforcement.y + Math.sin(angle) * 45 * ring,
         };
         if (monsterPositionIsClear(position, reinforcement.footprintRadii, combatLayout, restoredDecorations, placedBeforeSave)) {
           savedPosition = position;
@@ -2567,8 +2601,8 @@ describe("deterministic room contents", () => {
       for (const other of placed) {
         if (spawner.id === other.id) continue;
         expect(Math.hypot(spawner.x - other.x, spawner.y - other.y)).toBeGreaterThanOrEqual(
-          Math.max(world(10), spawner.footprintRadii.x, spawner.footprintRadii.y) +
-          Math.max(world(10), other.footprintRadii.x, other.footprintRadii.y) + world(8),
+          Math.max(10, spawner.footprintRadii.x, spawner.footprintRadii.y) +
+          Math.max(10, other.footprintRadii.x, other.footprintRadii.y) + 8,
         );
       }
     }

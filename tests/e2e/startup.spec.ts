@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { BOSS_CAMERA_SCALE, CAMERA_SCALE, MOBILE_CAMERA_SCALE, world } from "../../src/client/config";
+import { BOSS_CAMERA_SCALE, CAMERA_SCALE, MOBILE_CAMERA_SCALE } from "../../src/client/config";
 import {
   BOSS_DEFINITIONS,
   PLAYER_DAMAGE_INVULNERABILITY_MS,
@@ -70,7 +70,7 @@ async function alignPlayerToDoor(
 ): Promise<void> {
   // Start inside the doorway, beyond obstacles in the middle of the room,
   // then walk through the opening.
-  const inset = Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + WORLD_GEOMETRY.wallThickness + world(20);
+  const inset = Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + WORLD_GEOMETRY.wallThickness + 20;
   const target = direction === "N" ? { x: door.x, y: door.y + inset }
     : direction === "S" ? { x: door.x, y: door.y - inset }
     : direction === "E" ? { x: door.x - inset, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY }
@@ -516,7 +516,7 @@ test("renders ambient lighting and aims the elliptical flashlight at the cursor"
   const position = await playerPosition(page);
   const viewport = await page.locator("#gameViewport").boundingBox();
   if (!viewport) throw new Error("Game viewport unavailable");
-  const nearAim = await screenPositionFor(page, { x: position.x + world(36), y: position.y });
+  const nearAim = await screenPositionFor(page, { x: position.x + 36, y: position.y });
   await page.mouse.move(nearAim.x, nearAim.y);
   await expect(game).toHaveAttribute("data-flashlight-active", "true");
   const nearMajorRadius = Number(await game.getAttribute("data-flashlight-major-radius"));
@@ -525,7 +525,7 @@ test("renders ambient lighting and aims the elliptical flashlight at the cursor"
   await page.mouse.move(viewport.x + viewport.width * 0.75, viewport.y + viewport.height * 0.4);
   await expect(game).toHaveAttribute("data-flashlight-active", "true");
   await expect.poll(async () => Number(await game.getAttribute("data-flashlight-target-x"))).toBeGreaterThan(position.x);
-  expect(Number(await game.getAttribute("data-flashlight-major-radius"))).toBeGreaterThan(world(190));
+  expect(Number(await game.getAttribute("data-flashlight-major-radius"))).toBeGreaterThan(190);
 
   const movedEffect = await page.evaluate(() => {
     const host = document.querySelector<HTMLElement>("#gameCanvas")!;
@@ -647,7 +647,7 @@ test("charges energy and launches an invulnerable energy dash with right click",
   await expect(page.locator("#energyLootCount")).toHaveText("5");
 
   const before = await playerPosition(page);
-  const aim = await screenPositionFor(page, { x: before.x + world(120), y: before.y });
+  const aim = await screenPositionFor(page, { x: before.x + 120, y: before.y });
   await page.mouse.move(aim.x, aim.y);
   await page.mouse.down({ button: "right" });
   await expect.poll(async () => await game.getAttribute("data-player-dashing"), {
@@ -683,7 +683,7 @@ test("a full energy meter shines and a single charge can launch a dash", async (
   await expect(page.locator(".energy-track.is-full")).toHaveCount(0);
   await expect(page.locator("#hudEnergyFill")).toHaveAttribute("style", /width: 10%/);
   const before = await playerPosition(page);
-  const aim = await screenPositionFor(page, { x: before.x + world(120), y: before.y });
+  const aim = await screenPositionFor(page, { x: before.x + 120, y: before.y });
   await page.mouse.move(aim.x, aim.y);
   await page.mouse.click(aim.x, aim.y, { button: "right" });
   await expect(game).toHaveAttribute("data-energy", "0");
@@ -731,7 +731,7 @@ test("spawns beside the up portal and enables it after clearing the floor", asyn
   await startGame(page);
   const game = page.locator("#gameCanvas");
   const position = await playerPosition(page);
-  const aim = await screenPositionFor(page, { x: position.x + world(120), y: position.y });
+  const aim = await screenPositionFor(page, { x: position.x + 120, y: position.y });
   await page.mouse.move(aim.x, aim.y);
   await expect(game).toHaveAttribute("data-flashlight-active", "true");
   await page.evaluate(() => {
@@ -795,7 +795,7 @@ test("previews portal URLs by proximity even before portals are active", async (
   expect(firstDown.enabled).toBe(false);
   await expect(preview).toBeHidden();
 
-  await teleportPlayer(page, { x: firstDown.x, y: firstDown.y + world(40) });
+  await teleportPlayer(page, { x: firstDown.x, y: firstDown.y + 40 });
   await expect(previewUrl).toHaveText(firstDown.url!);
   await expect(preview).toBeVisible();
   await expect(game).toHaveAttribute("data-floor", "1");
@@ -968,15 +968,15 @@ test("keeps an active boss sized consistently when the player leaves its arena",
     };
   }).toEqual({ zoomedOut: true });
   const entranceSide = {
-    N: { x: door.x, y: door.y + world(90) },
-    E: { x: door.x - world(90), y: door.y },
-    S: { x: door.x, y: door.y - world(90) },
-    W: { x: door.x + world(90), y: door.y },
-  }[direction ?? "N"] ?? { x: door.x, y: door.y + world(90) };
+    N: { x: door.x, y: door.y + 90 },
+    E: { x: door.x - 90, y: door.y },
+    S: { x: door.x, y: door.y - 90 },
+    W: { x: door.x + 90, y: door.y },
+  }[direction ?? "N"] ?? { x: door.x, y: door.y + 90 };
   await teleportPlayer(page, entranceSide);
   await expect(bossHud).toBeVisible();
   await expect(game).toHaveAttribute("data-current-room-tag", "body");
-  await expect.poll(async () => await cameraState(page)).toMatchObject({ zoom: MOBILE_CAMERA_SCALE, bossRoomId: null });
+  await expect.poll(async () => await cameraState(page)).toMatchObject({ zoom: CAMERA_SCALE * MOBILE_CAMERA_SCALE, bossRoomId: null });
   const finalBoss = {
     x: Number(await game.getAttribute("data-active-boss-x")),
     y: Number(await game.getAttribute("data-active-boss-y")),
@@ -1106,7 +1106,7 @@ test("updates the player shadow when aiming after walking", async ({ page }) => 
   await page.keyboard.up("ArrowRight");
 
   const position = await playerPosition(page);
-  const leftAim = await screenPositionFor(page, { x: position.x - world(160), y: position.y });
+  const leftAim = await screenPositionFor(page, { x: position.x - 160, y: position.y });
   await page.mouse.move(leftAim.x, leftAim.y);
   await expect(game).toHaveAttribute("data-player-asset", /player_left\.png$/);
   const asset = await game.getAttribute("data-player-asset");
@@ -1119,7 +1119,7 @@ test("aims with the cursor and repeatedly fires while moving backward", async ({
   const game = page.locator("#gameCanvas");
   await expect(game).toHaveAttribute("data-lighting-mode", "webgl", { timeout: 15_000 });
   const aimFrom = await playerPosition(page);
-  const aim = await screenPositionFor(page, { x: aimFrom.x + world(120), y: aimFrom.y });
+  const aim = await screenPositionFor(page, { x: aimFrom.x + 120, y: aimFrom.y });
   await page.mouse.move(aim.x, aim.y);
   const rightFacingAsset = /assets\/player\/(?:idle\/player_right\.png|walk\/E\/walk_E_\d{2}\.png)/;
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-player-asset", rightFacingAsset);
@@ -1262,7 +1262,7 @@ test("advances monster attack textures while the game loop runs", async ({ page 
     x: Number(await game.getAttribute("data-first-door-x")),
     y: Number(await game.getAttribute("data-first-door-y")),
   };
-  const inset = WORLD_GEOMETRY.segmentSize / 2 - world(5);
+  const inset = WORLD_GEOMETRY.segmentSize / 2 - 5;
   const target = direction === "N" ? { x: door.x, y: door.y + inset }
     : direction === "S" ? { x: door.x, y: door.y - inset }
     : direction === "E" ? { x: door.x - inset, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY }
@@ -1382,8 +1382,8 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   await expect(game).toHaveAttribute("data-weapon-ammo", String(swappedAmmoBeforeShot));
 
   const firingOffset = {
-    x: secondWeapon.x + world(120),
-    y: secondWeapon.y + world(0),
+    x: secondWeapon.x + 120,
+    y: secondWeapon.y,
   };
   const gunTarget = await screenPositionFor(page, firingOffset);
   await page.mouse.move(gunTarget.x, gunTarget.y);
@@ -1398,7 +1398,7 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   await expect.poll(async () => {
     const position = await playerPosition(page);
     return Math.hypot(position.x - droppedWeapon!.x, position.y - droppedWeapon!.y);
-  }).toBeGreaterThan(world(40));
+  }).toBeGreaterThan(40);
   await teleportPlayer(page, { x: droppedWeapon!.x, y: droppedWeapon!.y });
   await expect(game).toHaveAttribute("data-weapon-ammo", String(reducedAmmo));
 
@@ -1419,7 +1419,7 @@ test("swaps temporary weapons, refills only from ammo cores, and falls back to p
   await setWeaponAmmo(page, 1);
   await expect(game).toHaveAttribute("data-weapon-ammo", "1");
   const fallbackAimFrom = await playerPosition(page);
-  const fallbackAim = await screenPositionFor(page, { x: fallbackAimFrom.x + world(120), y: fallbackAimFrom.y });
+  const fallbackAim = await screenPositionFor(page, { x: fallbackAimFrom.x + 120, y: fallbackAimFrom.y });
   await page.mouse.click(fallbackAim.x, fallbackAim.y);
   await expect.poll(async () => await game.getAttribute("data-weapon-kind")).toBe("pulse-rifle");
   await expect.poll(async () => await game.getAttribute("data-weapon-ammo")).toBe("infinite");

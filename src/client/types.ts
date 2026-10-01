@@ -20,17 +20,6 @@ export type RegularMonsterKind =
   | "sentry-heavy"
   | "sentry-scatter";
 export type MonsterKind = RegularMonsterKind | BossKind;
-export type MonsterVisualKind =
-  | "scout"
-  | "heavy"
-  | "sentry-ballistic"
-  | "sentry-twin"
-  | "sentry-energy"
-  | "boss-arc"
-  | "boss-missile"
-  | "boss-fortress"
-  | "boss-laser"
-  | "boss-siege";
 export type BulletOwner = "player" | "enemy";
 export type BulletStyle = "player" | "enemy" | "boss" | "shockwave";
 export type WeaponKind =
@@ -222,7 +211,6 @@ export interface Decoration extends Point, ObjectGeometry {
   visualVariant?: number;
   destructible: boolean;
   size: number;
-  origin: { x: number; y: number };
   /** Fraction of the sprite height where opaque content starts; aligns health bars with the visible body. */
   healthBarTop?: number;
   maxHp: number;
@@ -255,8 +243,11 @@ export interface Monster extends Point, ObjectGeometry {
   id: string;
   seed: number;
   kind: MonsterKind;
-  visualKind: MonsterVisualKind;
   visual: ActorVisualDefinition;
+  /** Center of the wreck relative to the monster's world position. */
+  destroyedVisualOffset: Point;
+  spriteSize: number;
+  healthBarOffsetY: number;
   spawnRoomId: number;
   roomId: number;
   maxHp: number;

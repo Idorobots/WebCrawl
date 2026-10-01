@@ -127,7 +127,7 @@ function corridorIntersectsBounds(points: readonly Point[], bounds: Bounds): boo
   return false;
 }
 
-export function corridorIntersectsRoom(link: LayoutLink, room: GraphNode, margin = WORLD_GEOMETRY.wallThickness): boolean {
+export function corridorIntersectsRoom(link: LayoutLink, room: GraphNode, margin: number = WORLD_GEOMETRY.wallThickness): boolean {
   return corridorIntersectsBounds(link.points, roomBounds(room, room.x, room.y, margin));
 }
 

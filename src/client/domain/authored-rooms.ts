@@ -1,4 +1,4 @@
-import { ENVIRONMENT_SEGMENT_SIZE, world } from "../config";
+import { ENVIRONMENT_SEGMENT_SIZE } from "../config";
 import type {
   BossKind, Decoration, DungeonGraph, DungeonLayout, GraphNode, LayoutLink,
   LootItem, LootKind, MonsterKind, Point, WeaponKind,
@@ -62,15 +62,15 @@ const gallery: AuthoredRoomTemplate = {
   height: GALLERY_HEIGHT,
   decorations: decorationKeys.map((definition, index) => ({
     definition,
-    x: (index % GALLERY_COLUMNS - (GALLERY_COLUMNS - 1) / 2) * world(205),
-    y: -world(1370) + Math.floor(index / GALLERY_COLUMNS) * world(205),
+    x: (index % GALLERY_COLUMNS - (GALLERY_COLUMNS - 1) / 2) * 205,
+    y: -1370 + Math.floor(index / GALLERY_COLUMNS) * 205,
   })),
   loot: [...pickupKinds.map(kind => ({ kind })), ...weaponKinds().map(weaponKind => ({
     kind: "weapon" as const, weaponKind,
   }))].map((pickup, index) => ({
     ...pickup,
-    x: (index % 9 - 4) * world(205),
-    y: world(420) + Math.floor(index / 9) * world(205),
+    x: (index % 9 - 4) * 205,
+    y: 420 + Math.floor(index / 9) * 205,
   })),
 };
 
@@ -84,12 +84,12 @@ export function artDebugLevel(): { graph: DungeonGraph; layout: DungeonLayout; r
     ...enemyKinds.map(kind => ({
       width: ENVIRONMENT_SEGMENT_SIZE * 4,
       height: ENVIRONMENT_SEGMENT_SIZE * 4,
-      monsters: [{ kind, x: 0, y: -world(75) }],
+      monsters: [{ kind, x: 0, y: -75 }],
     })),
     ...bossKinds.map(kind => ({
       width: ENVIRONMENT_SEGMENT_SIZE * 8,
       height: ENVIRONMENT_SEGMENT_SIZE * 8,
-      monsters: [{ kind, x: 0, y: -world(140) }],
+      monsters: [{ kind, x: 0, y: -140 }],
     })),
   ];
   const nodes: GraphNode[] = templates.map((template, id) => ({

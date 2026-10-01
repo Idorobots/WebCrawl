@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 import { artDebugLevel } from "../../src/client/domain/authored-rooms";
-import { world } from "../../src/client/config";
 
 test.skip(process.env.VITE_ART_DEBUG !== "true", "Requires a build with VITE_ART_DEBUG=true");
 test.describe.configure({ timeout: 90_000 });
@@ -26,14 +25,14 @@ test("boots directly into the playable, authored art floor without fetching a pa
   await page.evaluate(({ x, y }) => {
     (window as Window & { __webcrawlTest?: { teleportPlayerTo: (x: number, y: number) => void } })
       .__webcrawlTest?.teleportPlayerTo(x, y);
-  }, { x: enemyRoom.x, y: enemyRoom.y + world(150) });
+  }, { x: enemyRoom.x, y: enemyRoom.y + 150 });
   await expect(host).toHaveAttribute("data-active-monsters", "1");
 
   const bossRoom = layout.nodes[8]!;
   await page.evaluate(({ x, y }) => {
     (window as Window & { __webcrawlTest?: { teleportPlayerTo: (x: number, y: number) => void } })
       .__webcrawlTest?.teleportPlayerTo(x, y);
-  }, { x: bossRoom.x, y: bossRoom.y + world(180) });
+  }, { x: bossRoom.x, y: bossRoom.y + 180 });
   await expect(host).toHaveAttribute("data-active-bosses", "1");
   await expect(page.locator("#bossHud")).toBeVisible();
 });

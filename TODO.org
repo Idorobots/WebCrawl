@@ -1102,6 +1102,7 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Phaser 4 update?
 - WebWorkers for pathing/collision detection, etc?
 - The more rooms are revealed, the worse the performance
+- When the player is outside of the active boss arena, the performance tanks dramatically.
 
 * DONE UX improvements, again
 :LOGBOOK:

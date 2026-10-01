@@ -23,21 +23,19 @@ export const PUBLIC_FETCH_PROXIES: readonly PublicFetchProxy[] = Object.freeze([
   { name: "cors.io", url: "https://cors.io/?url={url}", parse: "json" },
 ]);
 
-export const WORLD_SCALE = 1.4;
-export const world = (value: number): number => Math.round(value * WORLD_SCALE);
-// Keep each environment segment exactly two floor tiles wide after integer scaling.
-export const ENVIRONMENT_SEGMENT_SIZE = world(64) * 2;
+// Keep each environment segment exactly two floor tiles wide.
+export const ENVIRONMENT_SEGMENT_SIZE = 64 * 2;
 export const ROOM_WIDTH = ENVIRONMENT_SEGMENT_SIZE * 4;
 export const ROOM_HEIGHT = ENVIRONMENT_SEGMENT_SIZE * 4;
-export const CAMERA_SCALE = 1.0;
+export const CAMERA_SCALE = 1.4;
 export const MOBILE_CAMERA_SCALE = 0.6;
-export const BOSS_CAMERA_SCALE = 0.8;
+export const BOSS_CAMERA_SCALE = 1.12;
 export const MOBILE_LAYOUT_QUERY = "(max-width: 1230px)";
 export const CAMERA_FOLLOW_LERP = 0.5;
 export const CAMERA_DEADZONE_WIDTH = 180;
 export const CAMERA_DEADZONE_HEIGHT = 120;
 export const CAMERA_TRANSITION_MS = 450;
-export const CAMERA_BOSS_PADDING = world(40);
+export const CAMERA_BOSS_PADDING = 40;
 export const HIGH_SCORE_KEY = "alien-web-crawler-high-scores-v1";
 
 export const DIRECTIONS: Record<Direction, {

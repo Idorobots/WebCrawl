@@ -15,7 +15,6 @@ import {
   PLAYER_DEFAULT_ASSETS,
   PLAYER_FRAMES,
   WEAPON_ASSETS,
-  world,
 } from "./config";
 import {
   bossChargeCooldown,
@@ -158,8 +157,8 @@ const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
 const contentBrowserEl = requireElement<HTMLElement>("#contentBrowser");
 const portalPreviewEl = requireElement<HTMLElement>("#portalPreview");
 const portalPreviewUrlEl = requireElement<HTMLElement>("#portalPreviewUrl");
-const CONTENT_BROWSER_RADIUS = world(112);
-const PORTAL_PREVIEW_RADIUS = world(112);
+const CONTENT_BROWSER_RADIUS = 112;
+const PORTAL_PREVIEW_RADIUS = 112;
 let visibleContentPointId: string | null = null;
 let visiblePortalId: string | null = null;
 
@@ -1543,7 +1542,7 @@ function updateMonsterSpawners(timestamp: number): void {
 }
 
 function findSpawnerSpawnPosition(monster: Monster, spawner: Decoration): Point | null {
-  const sideDistance = spawner.footprintRadii.x + monster.footprintRadii.x + world(8);
+  const sideDistance = spawner.footprintRadii.x + monster.footprintRadii.x + 8;
   // Spawn beside the spawner so actor and scenery footprints do not overlap.
   const spawnOffsets: Point[] = [
     { x: sideDistance, y: 0 }, { x: -sideDistance, y: 0 },
@@ -1776,7 +1775,7 @@ function queueEnemyBullet(
     forwardOffset?: number;
   } = {},
 ): void {
-  const muzzleDistance = Math.max(Math.max(monster.hitboxRadii.x, monster.hitboxRadii.y) + radius + world(5), monster.size * 0.42);
+  const muzzleDistance = Math.max(Math.max(monster.hitboxRadii.x, monster.hitboxRadii.y) + radius + 5, monster.size * 0.42);
   const origin = actorProjectileOrigin(
     monster,
     direction,
@@ -1805,7 +1804,7 @@ function playerCollisionCenter(): Point {
 }
 
 function shootEnemyVolley(monster: Monster, direction: Point, timestamp: number): void {
-  for (const projectile of enemyVolleyProjectiles(direction, monster.attackPattern, world(15))) {
+  for (const projectile of enemyVolleyProjectiles(direction, monster.attackPattern, 15)) {
     queueEnemyBullet(monster, projectile.direction, { lateralOffset: projectile.lateralOffset });
   }
   monster.attackKind = "ranged";
@@ -1831,7 +1830,7 @@ function fireBossVolley(monster: Monster, target: Point, timestamp: number, ring
       forwardOffset: projectile.forwardOffset,
       damage: monster.bossKind === "glm-hunter" || monster.bossKind === "kimi-spiral" || monster.bossKind === "hy4-wave"
         ? Math.max(1, Math.floor(monster.attackDamage / 2)) : monster.attackDamage,
-      radius: monster.bossKind === "glm-hunter" ? world(8) : world(6),
+      radius: monster.bossKind === "glm-hunter" ? 8 : 6,
       style: monster.bossKind === "glm-hunter" ? "shockwave" : "boss",
     });
   }
@@ -2037,7 +2036,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
   const escaped = monsterEscapeStep(
     monster,
     { x: dx, y: dy },
-    Math.max(step, world(6)),
+    Math.max(step, 6),
     point => !wallBlocksSegment(monster, point, monster.footprintRadii, wallFootprints) &&
       walkableSegment(monster, point, walkable),
     monster.seed + monster.blockedMoveCount,
@@ -2057,13 +2056,13 @@ function teleportBoss(monster: Monster, playerRoom: GraphNode, timestamp: number
   const clear = (point: Point): boolean =>
     roomContainingPoint(point.x, point.y)?.id === playerRoom.id &&
     isMonsterWalkable(monster, point.x, point.y) &&
-    Math.hypot(point.x - monster.x, point.y - monster.y) >= world(140) &&
+    Math.hypot(point.x - monster.x, point.y - monster.y) >= 140 &&
     Math.hypot(point.x - player.x, point.y - player.y) >= Math.max(monster.footprintRadii.x + PLAYER_SPEC.footprintRadii.x,
-      monster.footprintRadii.y + PLAYER_SPEC.footprintRadii.y) + world(120) &&
+      monster.footprintRadii.y + PLAYER_SPEC.footprintRadii.y) + 120 &&
     currentMonsters.every(other => other === monster || other.dead ||
       Math.hypot(point.x - other.x, point.y - other.y) >= Math.max(monster.footprintRadii.x + other.footprintRadii.x,
-        monster.footprintRadii.y + other.footprintRadii.y) + world(12));
-  const destination = bossTeleportDestination(player, monster.attackSequence ?? 0, world(320), clear,
+        monster.footprintRadii.y + other.footprintRadii.y) + 12);
+  const destination = bossTeleportDestination(player, monster.attackSequence ?? 0, 320, clear,
     point => hasLineOfSight(
       actorCollisionCenter(point, monster.hitboxOffset),
       playerCollisionCenter(),
@@ -2096,7 +2095,7 @@ function retreatBoss(monster: Monster, playerRoom: GraphNode, dt: number): void 
   const dx = monster.x - player.x;
   const dy = monster.y - player.y;
   const distance = Math.hypot(dx, dy);
-  if (distance < 0.001 || distance >= world(360)) return;
+  if (distance < 0.001 || distance >= 360) return;
   const step = monster.speed * dt;
   for (const angle of [0, 0.7, -0.7]) {
     const cosine = Math.cos(angle);
@@ -2179,7 +2178,7 @@ function updateGlmCharge(monster: Monster, dt: number, timestamp: number, stage:
   if (!sharesPlayerRoom) return false;
   if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + GLM_HUNTER_ATTACKS.initialChargeDelayMs;
   const distance = Math.hypot(player.x - monster.x, player.y - monster.y);
-  if (timestamp < monster.nextSpecialAt || distance < monster.attackRange * 1.5 || distance > world(800)) return false;
+  if (timestamp < monster.nextSpecialAt || distance < monster.attackRange * 1.5 || distance > 800) return false;
 
   monster.chargeDirection = { x: (player.x - monster.x) / distance, y: (player.y - monster.y) / distance };
   monster.chargeHit = false;
@@ -2298,7 +2297,7 @@ function shootBullet(): boolean {
   const projectiles = projectilesForWeapon(currentWeapon, playerFacing, weaponShotSequence);
   for (const [index, projectile] of projectiles.entries()) {
     const muzzleDistance = Math.max(
-      Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + projectile.radius + world(7),
+      Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + projectile.radius + 7,
       PLAYER_SPEC.muzzleDistance,
     );
     const origin = actorProjectileOrigin(
@@ -2350,7 +2349,7 @@ function updateBullets(dt: number): void {
     const stepDistance = Math.hypot(stepX, stepY);
 
     // Sub-step fast bullets so they do not tunnel through monsters/walls.
-    const segments = Math.max(1, Math.ceil(stepDistance / world(8)));
+    const segments = Math.max(1, Math.ceil(stepDistance / 8));
     const dx = stepX / segments;
     const dy = stepY / segments;
     let alive = true;
@@ -2643,7 +2642,7 @@ function rebuildSpatialIndexes(): void {
   obstacleCells = new Map();
   damageableCells = new Map();
   if (!currentLayout) return;
-  const margin = Math.max(world(48), MAX_ACTOR_FOOTPRINT);
+  const margin = Math.max(48, MAX_ACTOR_FOOTPRINT);
 
   for (const room of currentLayout.nodes) {
     forSpatialCells(
@@ -2688,9 +2687,9 @@ function rebuildSpatialIndexes(): void {
     }
     if (item.destructible) {
       const extentX = Math.max(item.hitboxRadii.x + Math.abs(item.hitboxOffset.x), item.footprintRadii.x) +
-        Math.max(world(24), PLAYER_SPEC.hitboxRadii.x);
+        Math.max(24, PLAYER_SPEC.hitboxRadii.x);
       const extentY = Math.max(item.hitboxRadii.y + Math.abs(item.hitboxOffset.y), item.footprintRadii.y) +
-        Math.max(world(24), PLAYER_SPEC.hitboxRadii.y);
+        Math.max(24, PLAYER_SPEC.hitboxRadii.y);
       forSpatialCells(item.x - extentX, item.x + extentX, item.y - extentY, item.y + extentY, key => {
         const cell = damageableCells.get(key) ?? new Set();
         cell.add(item);
@@ -3573,9 +3572,9 @@ window.addEventListener("pointercancel", () => {
 const MOVE_STICK_DEADZONE = 0.08;
 const MOVE_STICK_MIN_SPEED = 0.65;
 const STICK_DEADZONE = 0.18;
-const TOUCH_AIM_SPEED = world(520);
-const TOUCH_AIM_MAX_RANGE = world(210);
-const TOUCH_AIM_SEED_RANGE = world(80);
+const TOUCH_AIM_SPEED = 520;
+const TOUCH_AIM_MAX_RANGE = 210;
+const TOUCH_AIM_SEED_RANGE = 80;
 let touchMoveVector: Point | null = null;
 let touchAimVector: Point | null = null;
 let touchAimActive = false;
@@ -3676,8 +3675,8 @@ bailoutButton.addEventListener("click", () => {
 captureButton.addEventListener("click", () => {
   if (gameUi.hidden || teleportPauseActive || !currentLayout || !playerAlive) return;
   const target = touchAimCursor ?? {
-    x: player.x + playerFacing.x * world(120),
-    y: player.y + playerFacing.y * world(120),
+    x: player.x + playerFacing.x * 120,
+    y: player.y + playerFacing.y * 120,
   };
   startEnergyDashTowards(target);
 });
@@ -3892,7 +3891,7 @@ async function loadPage(
     if (rendererReady) await rendererReady();
     if (requestId !== currentRequest) return;
     // Floor labels are canvas textures; wait for this page's face before drawing them.
-    await document.fonts?.load(`900 ${world(34)}px "${signageFontForUrl(resolvedUrl)}"`).catch(() => undefined);
+    await document.fonts?.load(`900 ${34}px "${signageFontForUrl(resolvedUrl)}"`).catch(() => undefined);
     if (requestId !== currentRequest) return;
     saveCurrentFloorState();
     if (currentPageUrl && currentStateId && currentGraph && currentLayout) {
