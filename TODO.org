@@ -1057,7 +1057,10 @@ It's OK if the specs are not entirely static - it's perfectly fine to have a fun
 
 The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
-* Consistent collision detection
+* DONE Consistent collision detection
+:LOGBOOK:
+- State "DONE"       from              [2026-10-01 Thu 19:45]
+:END:
 - Replace movement anchors with footprints
 - Refactor the object specs to include hitbox, footprint and visual offsets configs.
 - Use hitboxes for player/bullet collision detection and damage calcualation.
@@ -1066,7 +1069,6 @@ The goal is to be able to generate a room with all its enemies that already incl
 - Use the footprints for player/scenery collision detection and blocking.
 - Use the footprints for enemy/scenery collision detection and blocking.
 - Define dedicated footprints for walls, use the same footprint as a hitbox, but shifted by 0.25 SEGMENT_SIZE up.
-
 - Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
 
 
@@ -1353,3 +1355,5 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - When entering a boss arena, camera jumps up immediately, while exiting it animates nicely. It should animate nicely both ways.
 - Sentry ballistic directional annimations are scaled weird.
 - Site favicon
+- Hitboxes on various scenery items are misaligned
+- Some scenery objects should be placed only on walls as decorations

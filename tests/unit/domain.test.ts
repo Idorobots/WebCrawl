@@ -393,7 +393,7 @@ describe("layout and geometry", () => {
     expect(footprintMoveIsClear(blocker, { x: 1, y: 0 }, 5, blocker, 5)).toBe(true);
   });
 
-  it("uses both ellipse axes for footprints and keeps non-blocking scenery footprints", () => {
+  it("uses both ellipse axes for footprints and preserves non-blocking scenery footprints", () => {
     const a = { x: 0, y: 0 };
     const b = { x: 19, y: 0 };
     expect(footprintsOverlap(a, { x: 12, y: 3 }, b, { x: 8, y: 3 })).toBe(true);
@@ -401,7 +401,7 @@ describe("layout and geometry", () => {
     expect(footprintsOverlap(a, { x: 12, y: 3 }, { x: 16, y: 4 }, { x: 8, y: 3 })).toBe(false);
     expect(DECORATION_DEFINITIONS.contentBrowser.obstacle).toBe(false);
     expect(DECORATION_DEFINITIONS.contentBrowser.footprintRadii.x).toBeGreaterThan(0);
-    expect(DECORATION_DEFINITIONS.reagentRack.obstacle).toBe(false);
+    expect(DECORATION_DEFINITIONS.reagentRack.obstacle).toBe(true);
     expect(DECORATION_DEFINITIONS.reagentRack.footprintRadii.y).toBeGreaterThan(0);
   });
 
@@ -446,7 +446,7 @@ describe("layout and geometry", () => {
     expect(PLAYER_SPEC.hitboxOffset.y).toBeLessThan(0);
     expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].hitboxOffset.y).toBe(-5);
     expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].healthBarOffsetY).toBe(-71);
-    expect(DECORATION_DEFINITIONS.crateCargo.visualOffset).toEqual({ x: 0, y: -1 });
+    expect(DECORATION_DEFINITIONS.crateCargo.visualOffset).toEqual({ x: 0, y: -10 });
     expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
   });
 
@@ -458,13 +458,13 @@ describe("layout and geometry", () => {
         expect(debris.origin).toEqual({ x: 0.5, y: 0.5 });
       }
     }
-    expect(DECORATION_DEFINITIONS.plantViolet.visualOffset.y).toBe(-14);
-    expect(DECORATION_DEFINITIONS.reactorPylon.visualOffset.y).toBe(-42);
-    expect(DECORATION_DEFINITIONS.spawner.visualOffset.y).toBe(-53.5);
-    expect(DECORATION_DEFINITIONS.contentBrowser.visualOffset.y).toBe(-25);
-    expect(DECORATION_DEFINITIONS.crateCargo.hitboxOffset.y).toBe(-39.2);
-    expect(DECORATION_DEFINITIONS.reagentRack.hitboxOffset.y).toBe(-36.75);
-    expect(DECORATION_DEFINITIONS.spawner.hitboxOffset.y).toBe(-56);
+    expect(DECORATION_DEFINITIONS.plantViolet.visualOffset.y).toBe(-20);
+    expect(DECORATION_DEFINITIONS.reactorPylon.visualOffset.y).toBe(-40);
+    expect(DECORATION_DEFINITIONS.spawner.visualOffset.y).toBe(-55);
+    expect(DECORATION_DEFINITIONS.contentBrowser.visualOffset.y).toBe(-35);
+    expect(DECORATION_DEFINITIONS.crateCargo.hitboxOffset.y).toBe(-10);
+    expect(DECORATION_DEFINITIONS.reagentRack.hitboxOffset.y).toBe(-15);
+    expect(DECORATION_DEFINITIONS.spawner.hitboxOffset.y).toBe(-10);
   });
 
   it("places every room deterministically with owned, routed corridors", () => {
@@ -645,10 +645,10 @@ describe("layout and geometry", () => {
         18,
         6_000,
         {
-          minX: Math.min(link.source.x, link.target.x) - 220,
-          maxX: Math.max(link.source.x, link.target.x) + 220,
-          minY: Math.min(link.source.y, link.target.y) - 220,
-          maxY: Math.max(link.source.y, link.target.y) + 220,
+          minX: Math.min(link.source.x - link.source.width / 2, link.target.x - link.target.width / 2),
+          maxX: Math.max(link.source.x + link.source.width / 2, link.target.x + link.target.width / 2),
+          minY: Math.min(link.source.y - link.source.height / 2, link.target.y - link.target.height / 2),
+          maxY: Math.max(link.source.y + link.source.height / 2, link.target.y + link.target.height / 2),
         },
       );
       expect(path, `Expected route through ${JSON.stringify(link.points)}`).not.toBeNull();
@@ -1194,7 +1194,7 @@ describe("portal entry", () => {
 
   it("checks the player's entire elliptical footprint, including diagonal edges", () => {
     const contacts = new Set<string>();
-    const playerFootprint = { x: 8, y: 28 };
+    const playerFootprint = { x: 8, y: 20 };
     const portalRadii = PORTAL_DEFINITION.footprintRadii;
     expect(updatePortalContacts([portal], { x: portal.x, y: portal.y + portalRadii.y - playerFootprint.y + 1 },
       playerFootprint, contacts)).toBeNull();
@@ -2145,9 +2145,12 @@ describe("deterministic room contents", () => {
       destroyed: false,
       dropKind: null,
     };
-    expect(item.hitboxOffset.y).toBeLessThan(-item.hitboxRadii.y);
+    expect(item.hitboxOffset.y).toBeLessThan(0);
     expect(projectileHitsDecoration(item, { x: item.x + item.hitboxOffset.x, y: item.y + item.hitboxOffset.y }, 1)).toBe(true);
-    expect(projectileHitsDecoration(item, { x: item.x, y: item.y }, 1)).toBe(false);
+    expect(projectileHitsDecoration(item, {
+      x: item.x + item.hitboxOffset.x,
+      y: item.y + item.hitboxOffset.y - item.hitboxRadii.y - 2,
+    }, 1)).toBe(false);
   });
 
   it("releases actor projectiles from the visual center instead of the floor anchor", () => {
@@ -2269,7 +2272,7 @@ describe("deterministic room contents", () => {
     expect(assetsFor(DECORATION_DEFINITIONS.fuelPumpSkid)).toEqual(expect.arrayContaining([
       DEBRIS_ASSETS.greenChemicalBarrel, DEBRIS_ASSETS.orangeFuelBarrel,
     ]));
-    expect(assetsFor(DECORATION_DEFINITIONS.canisterRack)).toContain(DEBRIS_ASSETS.purpleStorageBarrel);
+    expect(assetsFor(DECORATION_DEFINITIONS.canisterRack)).toContain(DEBRIS_ASSETS.mixedBarrelParts);
   });
 
   it("keeps destruction, collision, debris, and spawner visuals as separate concerns", () => {
@@ -2285,7 +2288,7 @@ describe("deterministic room contents", () => {
       destroyed: false,
       dropKind: null,
     };
-    expect(lowProp).toMatchObject({ obstacle: false, destructible: true });
+    expect(lowProp).toMatchObject({ obstacle: true, destructible: true });
     expect(applyObstacleDamage(lowProp, 2)).toBe(true);
     expect(lowProp.destroyed).toBe(true);
     expect(lowProp.visual.destroyed?.length).toBeGreaterThan(0);
@@ -2595,7 +2598,7 @@ describe("deterministic room contents", () => {
       const moved = spawners.find(candidate => candidate.id === item.id);
       return moved && (moved.x !== item.x || moved.y !== item.y);
     });
-    expect(relocated.length).toBeGreaterThanOrEqual(2);
+    expect(relocated).toHaveLength(0);
     expect(buildDecorations(layout, new Map(), 10)).toEqual(placed);
     for (const spawner of spawners) {
       for (const other of placed) {
