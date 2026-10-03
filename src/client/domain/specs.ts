@@ -124,7 +124,6 @@ export const PLAYER_SPEC = {
   footprintRadii: circle(20),
   spriteSize: 190,
   visual: PLAYER_VISUAL,
-  muzzleDistance: 21,
   speed: 400,
   maxHp: 10,
 } as const;

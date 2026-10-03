@@ -2317,10 +2317,7 @@ function shootBullet(): boolean {
 
   const projectiles = projectilesForWeapon(currentWeapon, playerFacing, weaponShotSequence);
   for (const [index, projectile] of projectiles.entries()) {
-    const muzzleDistance = Math.max(
-      Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + projectile.radius + 7,
-      PLAYER_SPEC.muzzleDistance,
-    );
+    const muzzleDistance = Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + projectile.radius + 7;
     const origin = actorProjectileOrigin(
       player,
       playerFacing,

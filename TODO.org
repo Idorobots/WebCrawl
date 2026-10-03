@@ -1228,7 +1228,10 @@ The goal is to be able to generate a room with all its enemies that already incl
 - Phaser 4 update?
 - WebWorkers for pathing/collision detection, etc?
 
-* UX improvements, again
+* DONE UX improvements, again
+:LOGBOOK:
+- State "DONE"       from              [2026-10-03 Sat 17:43]
+:END:
 - Configuration settings on the UI - let the player disable dynamic bullet lights & damage lights. It should be stored in the local storage. The UI form should be accessible via a "cog" button on the "login screen".
 * UX improvements, again
 - Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
@@ -1310,10 +1313,16 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
 
 * Bugs
+- Player muzzle offset is wrong, needs to be configurable.
+
+* Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Sentries sometimes don't shoot even though there's a clear line of sight to the player. Scenery should be ignored by monster line-of-sight computation for shooting.
 - Monster's line-of-sight computation takes descructible scenery as blocking, which shouldn't be the case.
 - Mini-bosses hitbox & footprint should be scaled just like their size.
+- Regulatory capture moves the player but doesn't move the camera on mobile
+- Regulatory capture should use the shooting direction as the direction, so that it's usable on mobile
+- Object offsets should be relative to its `size` property.
 
 * Enemy rebalance
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.
