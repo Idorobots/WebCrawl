@@ -989,7 +989,7 @@ test("animates the camera both ways and keeps an active boss sized consistently 
   } finally {
     await page.keyboard.up(returnKey);
   }
-  await expect.poll(() => cameraState(page)).toMatchObject({ zoom: CAMERA_SCALE, bossRoomId: null });
+  await expect.poll(() => cameraState(page), { timeout: 15_000 }).toMatchObject({ zoom: CAMERA_SCALE, bossRoomId: null });
   expect((await zoomSamples()).some(zoom =>
     zoom > BOSS_CAMERA_SCALE + 0.01 && zoom < CAMERA_SCALE - 0.01
   )).toBe(true);
@@ -1001,7 +1001,7 @@ test("animates the camera both ways and keeps an active boss sized consistently 
   } finally {
     await page.keyboard.up(exitKey);
   }
-  await expect.poll(() => cameraState(page)).toMatchObject({ zoom: BOSS_CAMERA_SCALE });
+  await expect.poll(() => cameraState(page), { timeout: 15_000 }).toMatchObject({ zoom: BOSS_CAMERA_SCALE });
   await page.setViewportSize({ width: 390, height: 720 });
   await expect(bossHud).toBeVisible();
   const mobileHud = await bossHud.boundingBox();

@@ -667,7 +667,6 @@ export function bossSpecForRoom(
     footprintRadii: definition.footprintRadii,
     size: definition.size,
     spriteSize: definition.spriteSize,
-    healthBarOffsetY: definition.healthBarOffsetY,
     miniboss: false,
     attackPattern: "single",
     attackRange: definition.attackRange,
@@ -744,7 +743,6 @@ function regularMonsterSpec(
     footprintRadii: definition.footprintRadii,
     size: definition.size,
     spriteSize: definition.spriteSize,
-    healthBarOffsetY: definition.healthBarOffsetY,
     miniboss: false,
     attackPattern: definition.attackPattern,
     attackRange: scaledPercent(attackRange, profile.rangePercent),
@@ -780,7 +778,6 @@ function promoteToMiniboss(monster: Monster): Monster {
     attackDamage: Math.ceil(monster.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER),
     size: monster.size * MINIBOSS_SIZE_MULTIPLIER,
     spriteSize: monster.spriteSize * MINIBOSS_SIZE_MULTIPLIER,
-    healthBarOffsetY: (monster.healthBarOffsetY + 8) * MINIBOSS_SIZE_MULTIPLIER - 8,
     visualOffset: { x: monster.visualOffset.x * MINIBOSS_SIZE_MULTIPLIER, y: monster.visualOffset.y * MINIBOSS_SIZE_MULTIPLIER },
     destroyedVisualOffset: {
       x: monster.destroyedVisualOffset.x * MINIBOSS_SIZE_MULTIPLIER,

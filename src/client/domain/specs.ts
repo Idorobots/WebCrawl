@@ -159,7 +159,6 @@ interface MonsterDefinition {
   fast: boolean;
   size: number;
   spriteSize: number;
-  healthBarOffsetY: number;
   baseHp: number;
   hpVariance: number;
   speed: number;
@@ -199,7 +198,6 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     footprintRadii: { x: 50, y: 50 },
     size: 230,
     spriteSize: 230,
-    healthBarOffsetY: -104.6,
     baseHp: 8,
     hpVariance: 5,
     speed: 120,
@@ -236,7 +234,6 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     footprintRadii: { x: 25, y: 25 },
     size: 150,
     spriteSize: 150,
-    healthBarOffsetY: -71,
     baseHp: 2,
     hpVariance: 3,
     speed: 250,
@@ -273,7 +270,6 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     footprintRadii: { x: 25, y: 25 },
     size: 150,
     spriteSize: 150,
-    healthBarOffsetY: -71,
     baseHp: 2,
     hpVariance: 3,
     speed: 250,
@@ -310,7 +306,6 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     footprintRadii: { x: 50, y: 50 },
     size: 230,
     spriteSize: 230,
-    healthBarOffsetY: -104.6,
     baseHp: 8,
     hpVariance: 5,
     speed: 120,
@@ -347,7 +342,6 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     footprintRadii: { x: 35, y: 35 },
     size: 175,
     spriteSize: 248.5,
-    healthBarOffsetY: -85,
     baseHp: 3,
     hpVariance: 3,
     speed: 0,
@@ -385,7 +379,6 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     footprintRadii: { x: 35, y: 35 },
     size: 200,
     spriteSize: 268,
-    healthBarOffsetY: -78,
     baseHp: 10,
     hpVariance: 5,
     speed: 0,
@@ -422,7 +415,6 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     footprintRadii: { x: 30, y: 30 },
     size: 150,
     spriteSize: 180,
-    healthBarOffsetY: -74,
     baseHp: 6,
     hpVariance: 4,
     speed: 0,
@@ -472,7 +464,6 @@ interface BossDefinition {
   color: number;
   size: number;
   spriteSize: number;
-  healthBarOffsetY: number;
   baseHp: number;
   hpPerDifficulty: number;
   hpVariance: number;
@@ -508,7 +499,6 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     footprintRadii: { x: 90, y: 90 },
     size: 310,
     spriteSize: 310,
-    healthBarOffsetY: -269.5625,
     baseHp: 60,
     hpPerDifficulty: 8,
     hpVariance: 12,
@@ -542,7 +532,6 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     footprintRadii: { x: 90, y: 90 },
     size: 340,
     spriteSize: 340,
-    healthBarOffsetY: -294.875,
     baseHp: 70,
     hpPerDifficulty: 9,
     hpVariance: 15,
@@ -576,7 +565,6 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     footprintRadii: { x: 90, y: 90 },
     size: 400,
     spriteSize: 400,
-    healthBarOffsetY: -345.5,
     baseHp: 200,
     hpPerDifficulty: 20,
     hpVariance: 30,
@@ -610,7 +598,6 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     footprintRadii: { x: 90, y: 90 },
     size: 320,
     spriteSize: 320,
-    healthBarOffsetY: -278,
     baseHp: 80,
     hpPerDifficulty: 10,
     hpVariance: 14,
@@ -644,7 +631,6 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     footprintRadii: { x: 90, y: 90 },
     size: 365,
     spriteSize: 365,
-    healthBarOffsetY: -315.96875,
     baseHp: 80,
     hpPerDifficulty: 16,
     hpVariance: 24,
@@ -701,8 +687,6 @@ export interface DecorationDefinition {
   destructible: boolean;
   obstacle: boolean;
   size: number;
-  /** Fraction of the sprite height where opaque content starts; aligns health bars with the visible body. */
-  healthBarTop?: number;
 }
 
 const plantDebris = [
@@ -814,7 +798,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -10 },
     hitboxRadii: { x: 65, y: 25 },
     footprintRadii: { x: 50, y: 20 },
-    healthBarTop: 0.0523,
     visual: {
       normal: clip([SCENERY_ASSETS.planterDivider]),
       destroyed: plantDebrisClips,
@@ -975,7 +958,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -15 },
     hitboxRadii: { x: 60, y: 30 },
     footprintRadii: { x: 60, y: 25 },
-    healthBarTop: 0.2305,
     visual: {
       normal: clip([SCENERY_ASSETS.researchBench]),
       destroyed: circuitDebrisClips,
@@ -992,7 +974,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -15 },
     hitboxRadii: { x: 60, y: 30 },
     footprintRadii: { x: 60, y: 25 },
-    healthBarTop: 0.4609,
     visual: {
       normal: clip([SCENERY_ASSETS.reagentRack]),
       destroyed: circuitDebrisClips,
@@ -1185,7 +1166,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: 0 },
     hitboxRadii: { x: 30, y: 15 },
     footprintRadii: { x: 30, y: 15 },
-    healthBarTop: 0.5742,
     visual: {
       normal: clip([SCENERY_ASSETS.pipeValve]),
       destroyed: circuitDebrisClips,
@@ -1202,7 +1182,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: 0 },
     hitboxRadii: circle(30),
     footprintRadii: circle(30),
-    healthBarTop: 0.1367,
     visual: {
       normal: clip([SCENERY_ASSETS.pipeElbow]),
       destroyed: circuitDebrisClips,
@@ -1219,7 +1198,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: 0 },
     hitboxRadii: { x: 30, y: 25 },
     footprintRadii: { x: 30, y: 25 },
-    healthBarTop: 0.3867,
     visual: {
       normal: clip([SCENERY_ASSETS.coiledCables]),
       destroyed: circuitDebrisClips,
@@ -1236,7 +1214,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -10 },
     hitboxRadii: { x: 70, y: 35 },
     footprintRadii: { x: 60, y: 30 },
-    healthBarTop: 0.3945,
     visual: {
       normal: clip([SCENERY_ASSETS.monitorBank]),
       destroyed: [clip([DEBRIS_ASSETS.cyanMonitor], 1.18)],
@@ -1269,7 +1246,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: 0 },
     hitboxRadii: circle(30),
     footprintRadii: circle(30),
-    healthBarTop: 0.3125,
     visual: {
       normal: clip([SCENERY_ASSETS.radarDisplay]),
       destroyed: [clip([DEBRIS_ASSETS.cyanMonitor], 1.18)],
@@ -1286,7 +1262,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -15 },
     hitboxRadii: { x: 40, y: 35 },
     footprintRadii: { x: 35, y: 25 },
-    healthBarTop: 0.1367,
     visual: {
       normal: clip([SCENERY_ASSETS.operatorTerminal]),
       destroyed: circuitDebrisClips,
@@ -1319,7 +1294,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -5 },
     hitboxRadii: { x: 40, y: 35 },
     footprintRadii: { x: 40, y: 30 },
-    healthBarTop: 0.4102,
     visual: {
       normal: clip([SCENERY_ASSETS.hologramTable]),
       destroyed: circuitDebrisClips,
@@ -1336,7 +1310,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: 0 },
     hitboxRadii: { x: 35, y: 15 },
     footprintRadii: { x: 35, y: 15 },
-    healthBarTop: 0.6602,
     visual: {
       normal: clip([SCENERY_ASSETS.conduitJunction]),
       destroyed: circuitDebrisClips,
@@ -1369,7 +1342,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: 0 },
     hitboxRadii: { x: 35, y: 15 },
     footprintRadii: { x: 35, y: 15 },
-    healthBarTop: 0.6992,
     visual: {
       normal: clip([SCENERY_ASSETS.floorCables]),
       destroyed: circuitDebrisClips,
@@ -1402,7 +1374,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -10 },
     hitboxRadii: { x: 50, y: 40 },
     footprintRadii: { x: 45, y: 25 },
-    healthBarTop: 0.3242,
     visual: {
       normal: clip([SCENERY_ASSETS.coolantPump]),
       destroyed: circuitDebrisClips,
@@ -1435,7 +1406,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -10 },
     hitboxRadii: { x: 50, y: 25 },
     footprintRadii: { x: 50, y: 15 },
-    healthBarTop: 0.5508,
     visual: {
       normal: clip([SCENERY_ASSETS.barricade]),
       destroyed: circuitDebrisClips,
@@ -1452,7 +1422,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -20 },
     hitboxRadii: { x: 50, y: 35 },
     footprintRadii: { x: 50, y: 15 },
-    healthBarTop: 0.3359,
     visual: {
       normal: clip([SCENERY_ASSETS.maintenanceRack]),
       destroyed: circuitDebrisClips,
@@ -1485,7 +1454,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -5 },
     hitboxRadii: { x: 40, y: 20 },
     footprintRadii: { x: 40, y: 20 },
-    healthBarTop: 0.5781,
     visual: {
       normal: clip([SCENERY_ASSETS.pipeManifold]),
       destroyed: circuitDebrisClips,
@@ -1502,7 +1470,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -15 },
     hitboxRadii: { x: 40, y: 30 },
     footprintRadii: { x: 40, y: 15 },
-    healthBarTop: 0.3711,
     visual: {
       normal: clip([SCENERY_ASSETS.damagedFuseCabinet]),
       destroyed: [DEBRIS_ASSETS.electronicsCabinet, DEBRIS_ASSETS.burntCircuits].map(asset => clip([asset], 1.18)),
@@ -2079,7 +2046,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: 0 },
     hitboxRadii: { x: 50, y: 20 },
     footprintRadii: { x: 50, y: 15 },
-    healthBarTop: 0.6445,
     visual: {
       normal: clip([SCENERY_ASSETS.cableTrunk]),
       destroyed: circuitDebrisClips,
@@ -2096,7 +2062,6 @@ export const DECORATION_DEFINITIONS = {
     hitboxOffset: { x: 0, y: -10 },
     hitboxRadii: { x: 45, y: 35 },
     footprintRadii: { x: 40, y: 30 },
-    healthBarTop: 0.5273,
     visual: {
       normal: clip([SCENERY_ASSETS.spawnerDormant]),
       destroyed: circuitDebris.map(asset => clip([asset], 0.68)),

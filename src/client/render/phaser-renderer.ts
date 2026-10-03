@@ -1865,7 +1865,7 @@ export class PhaserRenderer {
       this.decorations.push(container);
       if (item.destructible && !item.destroyed && item.hp != item.maxHp) {
         const barWidth = 44;
-        const barY = item.visualOffset.y - item.size / 2 + (item.healthBarTop ?? 0) * item.size - 8;
+        const barY = item.hitboxOffset.y - item.hitboxRadii.y - 30;
         const bg = scene.add.rectangle(-barWidth / 2, barY, barWidth, 5, 0x071018).setOrigin(0, 0.5);
         const hp = scene.add.rectangle(
           -barWidth / 2,
@@ -1874,7 +1874,7 @@ export class PhaserRenderer {
           5,
           0x62e6c8,
         ).setOrigin(0, 0.5).setName("hp");
-        const bar = scene.add.container(item.x, item.y, [bg, hp]).setDepth(HEALTH_BAR_DEPTH);
+        const bar = scene.add.container(item.x + item.hitboxOffset.x, item.y, [bg, hp]).setDepth(HEALTH_BAR_DEPTH);
         this.decorationHealthBars.set(item.id, bar);
       }
     }
@@ -2184,7 +2184,7 @@ export class PhaserRenderer {
         sprite.on(Phaser.Animations.Events.ANIMATION_UPDATE, () => this.updateMonsterAssetDataset());
         if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
         const barWidth = item.miniboss ? item.size * 0.72 : 44;
-        const barY = item.healthBarOffsetY;
+        const barY = item.hitboxOffset.y - item.hitboxRadii.y - 30;
         const children: Phaser.GameObjects.GameObject[] = shadow ? [shadow, sprite] : [sprite];
         container = scene.add.container(item.x, item.y, children)
           .setDepth(this.monsterDepth(item));
@@ -2199,7 +2199,7 @@ export class PhaserRenderer {
             scene.add.rectangle(-barWidth / 2, barY, barWidth, barHeight, 0x071018).setOrigin(0, 0.5),
             scene.add.rectangle(-barWidth / 2, barY, barWidth, fillHeight, fillColor).setOrigin(0, 0.5).setName("hp"),
           ];
-          const bar = scene.add.container(item.x, item.y, barChildren).setDepth(HEALTH_BAR_DEPTH);
+          const bar = scene.add.container(item.x + item.hitboxOffset.x, item.y, barChildren).setDepth(HEALTH_BAR_DEPTH);
           this.monsterHealthBars.set(item.id, bar);
         }
         if (!item.dead && !item.bossKind) {
@@ -2217,7 +2217,7 @@ export class PhaserRenderer {
       }
       container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
       const barContainer = this.monsterHealthBars.get(item.id);
-      barContainer?.setPosition(item.x, item.y);
+      barContainer?.setPosition(item.x + item.hitboxOffset.x, item.y);
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
       this.applyMonsterFrame(container, item, performance.now());
       const aura = this.monsterAuras.get(item.id);
@@ -2247,7 +2247,7 @@ export class PhaserRenderer {
       const container = this.monsters.get(item.id);
       if (!container) continue;
       container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
-      this.monsterHealthBars.get(item.id)?.setPosition(item.x, item.y);
+      this.monsterHealthBars.get(item.id)?.setPosition(item.x + item.hitboxOffset.x, item.y);
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
       const previousAsset = sprite.texture.key;
       this.applyMonsterFrame(container, item, now);

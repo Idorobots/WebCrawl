@@ -445,7 +445,6 @@ describe("layout and geometry", () => {
     expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].visual.directions.down?.melee?.origin).toEqual({ x: 0.5, y: 0.5 });
     expect(PLAYER_SPEC.hitboxOffset.y).toBeLessThan(0);
     expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].hitboxOffset.y).toBe(-5);
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].healthBarOffsetY).toBe(-71);
     expect(DECORATION_DEFINITIONS.crateCargo.visualOffset).toEqual({ x: 0, y: -10 });
     expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
   });
@@ -1250,24 +1249,6 @@ describe("monster animation pacing", () => {
   });
 });
 
-describe("health bar geometry", () => {
-  it("raises boss bars above the sprite body and keeps tuned regular bar positions", () => {
-    expect(BOSS_DEFINITIONS["deepseek-summoner"].healthBarOffsetY).toBe(-269.5625);
-    expect(BOSS_DEFINITIONS["qwen-teleporter"].healthBarOffsetY).toBe(-294.875);
-    expect(BOSS_DEFINITIONS["glm-hunter"].healthBarOffsetY).toBe(-345.5);
-    expect(BOSS_DEFINITIONS["kimi-spiral"].healthBarOffsetY).toBe(-278);
-    expect(BOSS_DEFINITIONS["hy4-wave"].healthBarOffsetY).toBe(-315.96875);
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].healthBarOffsetY).toBe(-71);
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-heavy"].healthBarOffsetY).toBe(-104.6);
-  });
-
-  it("aligns decoration bars with measured sprite content", () => {
-    expect(DECORATION_DEFINITIONS.spawner.healthBarTop).toBeCloseTo(0.5273, 2);
-    expect(DECORATION_DEFINITIONS.barricade.healthBarTop).toBeCloseTo(0.5508, 2);
-    expect("healthBarTop" in DECORATION_DEFINITIONS.terminal).toBe(false);
-  });
-});
-
 describe("deterministic room contents", () => {
   const room = node(7, 0, 1, {
     x: 500,
@@ -1719,7 +1700,6 @@ describe("deterministic room contents", () => {
       const definition = REGULAR_MONSTER_DEFINITIONS[miniboss.kind as RegularMonsterKind];
       expect(miniboss.size).toBeCloseTo(definition.size * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.spriteSize).toBeCloseTo(definition.spriteSize * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.healthBarOffsetY).toBeCloseTo((definition.healthBarOffsetY + 8) * MINIBOSS_SIZE_MULTIPLIER - 8);
       expect(miniboss.destroyedVisualOffset.y).toBeCloseTo(definition.destroyedVisualOffset.y * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.visual).toBe(definition.visual);
       expect(miniboss.hitboxRadii).toEqual(definition.hitboxRadii);

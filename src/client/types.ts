@@ -211,8 +211,6 @@ export interface Decoration extends Point, ObjectGeometry {
   visualVariant?: number;
   destructible: boolean;
   size: number;
-  /** Fraction of the sprite height where opaque content starts; aligns health bars with the visible body. */
-  healthBarTop?: number;
   maxHp: number;
   hp: number;
   destroyed: boolean;
@@ -247,7 +245,6 @@ export interface Monster extends Point, ObjectGeometry {
   /** Center of the wreck relative to the monster's world position. */
   destroyedVisualOffset: Point;
   spriteSize: number;
-  healthBarOffsetY: number;
   spawnRoomId: number;
   roomId: number;
   maxHp: number;
