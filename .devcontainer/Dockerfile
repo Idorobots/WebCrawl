@@ -27,6 +27,9 @@ RUN npm config set prefix '~/.local/'
 RUN npm i -g opencode-ai@latest
 RUN mkdir -p ~/.local/share/opencode
 
+# Install ccusage
+RUN npm i -g ccusage@latest
+
 # Update Rust
 RUN rustup default stable
 RUN rustup update
@@ -45,11 +48,8 @@ RUN rtk init --global --opencode
 # Set working directory
 WORKDIR /workspace
 
-# Copy the rest of the code
-COPY . /workspace
-
 # Initialize tokensave & rtk
-RUN tokensave init --git-hook
+# RUN tokensave init --git-hook
 RUN tokensave disable-upload-counter
 RUN rtk telemetry disable
 
