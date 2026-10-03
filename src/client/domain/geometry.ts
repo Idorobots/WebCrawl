@@ -1,5 +1,5 @@
 import type { EllipseRadii, GraphNode, LayoutLink, Point } from "../types";
-import { PLAYER_SPEC, WORLD_GEOMETRY } from "./specs";
+import { PLAYER_SPEC, WORLD_GEOMETRY } from "./world-specs";
 
 export function pointInRoom(x: number, y: number, room: GraphNode, padding: number | EllipseRadii = PLAYER_SPEC.footprintRadii): boolean {
   const dx = Math.abs(x - room.x);

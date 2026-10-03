@@ -2,7 +2,7 @@ import { describe, it } from "vitest";
 import { domToGraph } from "../../src/client/domain/graph";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
 import { pointInCorridor, pointInRoomFloor } from "../../src/client/domain/geometry";
-import { PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS, BOSS_DEFINITIONS } from "../../src/client/domain/specs";
+import { PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS, BOSS_DEFINITIONS } from "../../src/client/domain/world-specs";
 import { buildWallFootprints, wallOverlapsEllipse, WallRectIndex } from "../../src/client/domain/wall-collision";
 import type { EllipseRadii, Point } from "../../src/client/types";
 

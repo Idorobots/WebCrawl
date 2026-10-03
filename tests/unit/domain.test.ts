@@ -97,7 +97,7 @@ import {
   WEAPON_VISUAL_DEFINITIONS,
   WORLD_GEOMETRY,
   type RoomSceneryTheme,
-} from "../../src/client/domain/specs";
+} from "../../src/client/domain/world-specs";
 import {
   DEFAULT_WEAPON,
   MINIBOSS_WEAPON_DROP_CHANCE_PER_10K,
@@ -1701,8 +1701,13 @@ describe("deterministic room contents", () => {
       expect(miniboss.size).toBeCloseTo(definition.size * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.spriteSize).toBeCloseTo(definition.spriteSize * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.destroyedVisualOffset.y).toBeCloseTo(definition.destroyedVisualOffset.y * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.visualOffset.x).toBeCloseTo(definition.visualOffset.x * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.visualOffset.y).toBeCloseTo(definition.visualOffset.y * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.hitboxOffset.x).toBeCloseTo(definition.hitboxOffset.x * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.hitboxOffset.y).toBeCloseTo(definition.hitboxOffset.y * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.visual).toBe(definition.visual);
       expect(miniboss.hitboxRadii).toEqual(definition.hitboxRadii);
+      expect(miniboss.footprintRadii).toEqual(definition.footprintRadii);
       expect(miniboss.maxHp).toBeGreaterThanOrEqual(definition.baseHp * MINIBOSS_HP_MULTIPLIER);
       expect(miniboss.attackDamage).toBeGreaterThanOrEqual(
         Math.ceil(definition.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER),

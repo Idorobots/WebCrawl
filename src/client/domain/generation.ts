@@ -37,7 +37,8 @@ import {
   type DecorationDefinition,
   type RoomSceneryTheme,
   type WeightedDecorationDefinition,
-} from "./specs";
+} from "./world-specs";
+import { scalePoint } from "./object-geometry";
 import { weaponForRoom, type WeaponSource } from "./weapons";
 import { authoredDecorations, authoredLoot, type AuthoredRooms } from "./authored-rooms";
 
@@ -778,12 +779,9 @@ function promoteToMiniboss(monster: Monster): Monster {
     attackDamage: Math.ceil(monster.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER),
     size: monster.size * MINIBOSS_SIZE_MULTIPLIER,
     spriteSize: monster.spriteSize * MINIBOSS_SIZE_MULTIPLIER,
-    visualOffset: { x: monster.visualOffset.x * MINIBOSS_SIZE_MULTIPLIER, y: monster.visualOffset.y * MINIBOSS_SIZE_MULTIPLIER },
-    destroyedVisualOffset: {
-      x: monster.destroyedVisualOffset.x * MINIBOSS_SIZE_MULTIPLIER,
-      y: monster.destroyedVisualOffset.y * MINIBOSS_SIZE_MULTIPLIER,
-    },
-    hitboxOffset: { x: monster.hitboxOffset.x * MINIBOSS_SIZE_MULTIPLIER, y: monster.hitboxOffset.y * MINIBOSS_SIZE_MULTIPLIER },
+    visualOffset: scalePoint(monster.visualOffset, MINIBOSS_SIZE_MULTIPLIER),
+    destroyedVisualOffset: scalePoint(monster.destroyedVisualOffset, MINIBOSS_SIZE_MULTIPLIER),
+    hitboxOffset: scalePoint(monster.hitboxOffset, MINIBOSS_SIZE_MULTIPLIER),
   };
 }
 

@@ -7,7 +7,7 @@ import { buildWallFootprints, WallRectIndex, wallOverlapsEllipse } from "../../s
 import {
   BOSS_DEFINITIONS, DECORATION_DEFINITIONS, LOOT_DEFINITIONS,
   PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS,
-} from "../../src/client/domain/specs";
+} from "../../src/client/domain/world-specs";
 import { weaponKinds } from "../../src/client/domain/weapons";
 
 describe("authored art floor", () => {

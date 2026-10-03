@@ -9,7 +9,7 @@ import {
   PLAYER_SPEC,
   PORTAL_DEFINITION,
   WORLD_GEOMETRY,
-} from "../../src/client/domain/specs";
+} from "../../src/client/domain/world-specs";
 
 // A second WebGL page booting in parallel can consume most of Playwright's
 // default 30-second budget before the assertions get a chance to run.

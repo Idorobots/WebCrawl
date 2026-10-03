@@ -1,5 +1,5 @@
 import type { Monster, Point, Stair } from "../types";
-import { PORTAL_DEFINITION } from "./specs";
+import { PORTAL_DEFINITION } from "./world-specs";
 import { ellipseContainsEllipse } from "./geometry";
 import type { EllipseRadii } from "../types";
 

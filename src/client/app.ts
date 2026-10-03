@@ -99,7 +99,7 @@ import {
   PLAYER_SPEC,
   WEAPON_PICKUP_DEFINITIONS,
   WORLD_GEOMETRY,
-} from "./domain/specs";
+} from "./domain/world-specs";
 import {
   DEFAULT_WEAPON,
   monsterDropsWeapon,

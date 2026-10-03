@@ -3,7 +3,7 @@ import { buildDecorations, weaponPedestalForRoom } from "../../src/client/domain
 import { pointInCorridor, pointInRoomFloor } from "../../src/client/domain/geometry";
 import { domToGraph } from "../../src/client/domain/graph";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
-import { DEFAULT_BULLET_SPEC, PLAYER_SPEC, WORLD_GEOMETRY } from "../../src/client/domain/specs";
+import { DEFAULT_BULLET_SPEC, PLAYER_SPEC, WORLD_GEOMETRY } from "../../src/client/domain/world-specs";
 import {
   buildWallFootprints, wallBlocksSegment, wallHitboxes, wallOverlapsEllipse,
   wallPieceFootprints, WALL_FOOTPRINTS, WALL_HITBOX_SHIFT_Y, WallRectIndex,

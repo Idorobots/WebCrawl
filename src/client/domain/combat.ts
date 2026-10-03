@@ -6,7 +6,7 @@ import {
   ENERGY_DASH_DISTANCE_PER_ENERGY,
   PLAYER_SPEC,
   WORLD_GEOMETRY,
-} from "./specs";
+} from "./world-specs";
 
 export interface EnemyVolleyProjectile {
   direction: Point;

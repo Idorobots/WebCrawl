@@ -50,6 +50,7 @@ export interface Point {
 /** Axis-aligned ellipse half-width and half-height in world pixels. */
 export interface EllipseRadii extends Point {}
 
+/** Runtime geometry: all offsets and radii are in world pixels. */
 export interface ObjectGeometry {
   /** Whether the footprint blocks other actors' movement. */
   obstacle: boolean;
@@ -60,6 +61,16 @@ export interface ObjectGeometry {
   hitboxRadii: EllipseRadii;
   /** Always centered on the object's world position, regardless of blocking. */
   footprintRadii: EllipseRadii;
+}
+
+/** Authored geometry: all offsets and radii are unitless fractions of `size`. */
+export interface RelativeObjectGeometry {
+  size: number;
+  obstacle: boolean;
+  visualOffset: Point;
+  hitboxOffset: Point;
+  hitboxRadii: Point;
+  footprintRadii: Point;
 }
 
 export interface SpriteClip {

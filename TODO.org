@@ -1377,3 +1377,5 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
+- Damage effect should be tied to the size of the bullet that caused it.
+- Explosion effect should be tied to the size of the object.

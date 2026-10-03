@@ -7,7 +7,7 @@ import { doorPositionForSlot } from "./layout";
 import {
   BOSS_DEFINITIONS, DECORATION_DEFINITIONS, LOOT_DEFINITIONS,
   REGULAR_MONSTER_DEFINITIONS,
-} from "./specs";
+} from "./world-specs";
 import { weaponForKind, weaponKinds } from "./weapons";
 
 /** Positions are relative to the center of the room, so a template can be reused anywhere. */

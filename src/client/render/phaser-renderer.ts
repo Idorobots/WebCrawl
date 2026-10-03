@@ -38,7 +38,7 @@ import {
   WORLD_GEOMETRY,
   weaponAsset,
   type LootDefinition,
-} from "../domain/specs";
+} from "../domain/world-specs";
 import { buildWallFootprints, wallHitboxes, type WallRect } from "../domain/wall-collision";
 import { WEAPON_COLORS } from "../domain/weapons";
 import type {
