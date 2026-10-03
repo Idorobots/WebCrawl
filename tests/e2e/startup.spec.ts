@@ -890,7 +890,7 @@ test("keeps generated world coordinates independent of viewport size", async ({ 
   }).toEqual(desktop);
 });
 
-test("keeps an active boss sized consistently when the player leaves its arena", async ({ page }) => {
+test("animates the camera both ways and keeps an active boss sized consistently when leaving its arena", async ({ page }) => {
   test.setTimeout(90_000);
   const bossFixture = "<!doctype html><html><body><main>Boss deck</main></body></html>";
   await stubRemoteFetchFallbacks(page, bossFixture);
@@ -918,6 +918,22 @@ test("keeps an active boss sized consistently when the player leaves its arena",
   };
   await alignPlayerToDoor(page, door, direction);
   const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
+  // Capture inside the browser: round-trip polling can miss the entire zoom.
+  await page.evaluate(() => {
+    const target = window as Window & {
+      __webcrawlScene?: import("phaser").Scene;
+      __webcrawlTest?: { camera: () => { zoom: number } | null };
+      __bossZoomSamples?: number[];
+    };
+    target.__bossZoomSamples = [];
+    target.__webcrawlScene!.game.events.on("postrender", () => {
+      const camera = target.__webcrawlTest?.camera();
+      if (camera) target.__bossZoomSamples!.push(camera.zoom);
+    });
+  });
+  const zoomSamples = () => page.evaluate(() =>
+    (window as Window & { __bossZoomSamples?: number[] }).__bossZoomSamples ?? []
+  );
   await page.keyboard.down(exitKey);
   await expect.poll(async () => {
     const value = await game.getAttribute("data-visited-rooms");
@@ -959,6 +975,33 @@ test("keeps an active boss sized consistently when the player leaves its arena",
       bossRoom: camera.bossRoomId !== null,
     };
   }).toEqual({ zoomedOut: true, bossRoom: true });
+  expect((await zoomSamples()).some(zoom =>
+    zoom > BOSS_CAMERA_SCALE + 0.01 && zoom < CAMERA_SCALE - 0.01
+  )).toBe(true);
+
+  await page.evaluate(() => {
+    (window as Window & { __bossZoomSamples?: number[] }).__bossZoomSamples = [];
+  });
+  const returnKey = { ArrowUp: "ArrowDown", ArrowRight: "ArrowLeft", ArrowDown: "ArrowUp", ArrowLeft: "ArrowRight" }[exitKey]!;
+  await page.keyboard.down(returnKey);
+  try {
+    await expect.poll(() => cameraState(page), { timeout: 10_000 }).toMatchObject({ bossRoomId: null });
+  } finally {
+    await page.keyboard.up(returnKey);
+  }
+  await expect.poll(() => cameraState(page)).toMatchObject({ zoom: CAMERA_SCALE, bossRoomId: null });
+  expect((await zoomSamples()).some(zoom =>
+    zoom > BOSS_CAMERA_SCALE + 0.01 && zoom < CAMERA_SCALE - 0.01
+  )).toBe(true);
+
+  // Re-enter before checking mobile arena framing and persistent boss sizing.
+  await page.keyboard.down(exitKey);
+  try {
+    await expect(game).toHaveAttribute("data-current-room-tag", "main", { timeout: 10_000 });
+  } finally {
+    await page.keyboard.up(exitKey);
+  }
+  await expect.poll(() => cameraState(page)).toMatchObject({ zoom: BOSS_CAMERA_SCALE });
   await page.setViewportSize({ width: 390, height: 720 });
   await expect(bossHud).toBeVisible();
   const mobileHud = await bossHud.boundingBox();

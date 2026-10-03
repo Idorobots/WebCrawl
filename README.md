@@ -97,6 +97,8 @@ The browser smoke test uses Playwright to drive the system Chromium installation
 npm run test:e2e
 ```
 
+The browser suite defaults to two workers to limit contention while Phaser loads and decodes its assets. Override this with `npm run test:e2e -- --workers=N` when needed.
+
 Run the dedicated art-floor browser test with `VITE_ART_DEBUG=true npx playwright test tests/e2e/art-debug.spec.ts`.
 
 The devcontainer installs Chromium at `/usr/bin/chromium`. Set `CHROMIUM_PATH` when Chromium is installed elsewhere:

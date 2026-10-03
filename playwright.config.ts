@@ -9,6 +9,9 @@ const executablePath = process.env.CHROMIUM_PATH
 
 export default defineConfig({
   testDir: "tests/e2e",
+  // Each Phaser boot loads and decodes the full asset set. Limit concurrent
+  // browsers so cold starts stay within the startup assertions' budget.
+  workers: 2,
   use: {
     baseURL: "http://127.0.0.1:3000",
     launchOptions: {
