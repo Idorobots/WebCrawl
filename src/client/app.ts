@@ -13,7 +13,6 @@ import {
   MAX_NODES,
   MOBILE_LAYOUT_QUERY,
   PLAYER_DEFAULT_ASSETS,
-  PLAYER_FRAMES,
   WEAPON_ASSETS,
 } from "./config";
 import {
@@ -127,7 +126,6 @@ import type {
   Monster,
   MonsterState,
   ObstacleState,
-  PlayerAnimation,
   PlayerDirection,
   Point,
   RunStats,
@@ -317,8 +315,6 @@ const runStats: RunStats = {
   shotsFired: 0
 };
 
-let playerWalkFrameIndex = 0;
-let lastPlayerWalkFrameAt = -Infinity;
 let playerSpriteAnimationToken = 0;
 let playerMoving = false;
 let playerShooting = false;
@@ -1555,7 +1551,6 @@ function updateMonsterSpawners(timestamp: number): void {
     spawner.pendingSpawnAt = timestamp + SPAWNER_CHARGE_UP_MS;
     renderer.playSpawnerSpawnSound();
   }
-  renderer.updateDecorationAnimations(currentSpawners, timestamp);
   if (spawned) {
     renderMonsters();
     if (updateFloorPortals()) renderInteractiveObjects();
@@ -1728,21 +1723,6 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
 
 const CONTENT_TOGGLE_FRAME_MS = 180;
 
-function contentPointFrameFor(item: Decoration, now: number): string {
-  const spawn = item.visual.animations?.spawn;
-  const turningFrame = spawn?.frames[0];
-  const onFrame = spawn?.frames[1] ?? turningFrame;
-  const offFrame = item.visual.normal.frames[0]!;
-  if (spawn && turningFrame !== undefined && item.spawnAnimationStartedAt !== undefined) {
-    const elapsed = now - item.spawnAnimationStartedAt;
-    if (item.contentTurningOff) {
-      return elapsed < CONTENT_TOGGLE_FRAME_MS ? turningFrame : offFrame;
-    }
-    return elapsed < CONTENT_TOGGLE_FRAME_MS ? turningFrame : onFrame ?? offFrame;
-  }
-  return item.contentEnabled ? onFrame ?? offFrame : offFrame;
-}
-
 function updateContentPoints(timestamp: number): void {
   let changed = false;
   const occupiedRoomId = roomContainingPoint(player.x, player.y)?.id ?? null;
@@ -1768,7 +1748,6 @@ function updateContentPoints(timestamp: number): void {
       item.contentTurningOff = false;
       item.spawnAnimationStartedAt = timestamp - CONTENT_TOGGLE_FRAME_MS;
     }
-    renderer.applyDecorationFrame(item, contentPointFrameFor(item, timestamp));
   }
   if (changed) renderDecorations();
   renderContentBrowser();
@@ -2498,8 +2477,8 @@ function runGameTick(timestamp: number): void {
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
   updateContentPoints(timestamp);
+  renderer.updateDecorationAnimations(currentDecorations, timestamp);
   renderer.updateShadowOffsets(currentDecorations, timestamp);
-  renderer.updateLootAnimations(currentLoot, timestamp);
 
   rebuildRoomRouting();
 
@@ -2988,39 +2967,16 @@ function checkStairs(): boolean {
   return true;
 }
 
-function playerFramesFor(
-  direction: PlayerDirection = playerDirectionName(),
-  kind: PlayerAnimation = "walk",
-): string[] {
-  return PLAYER_FRAMES[direction]?.[kind] || PLAYER_FRAMES.right.walk;
-}
-
 function playerAssetForDirection(direction: PlayerDirection = playerDirectionName()): string {
   return PLAYER_DEFAULT_ASSETS[direction];
 }
 
-function setPlayerSpriteAsset(asset: string): void {
-  currentPlayerSpriteAsset = asset;
-  renderer.setPlayerAsset(asset);
-}
-
 function updatePlayerFacingAsset(): void {
-  updatePlayerAnimationClasses();
   if (!playerShooting) {
     const direction = playerDirectionName();
-    const frames = playerFramesFor(direction, "walk");
-    setPlayerSpriteAsset(playerMoving
-      ? frames[playerWalkFrameIndex % frames.length]!
-      : playerAssetForDirection(direction));
+    currentPlayerSpriteAsset = playerAssetForDirection(direction);
+    renderer.setPlayerAnimation(direction, playerMoving);
   }
-}
-
-function advancePlayerWalkFrame(timestamp: number): void {
-  if (timestamp - lastPlayerWalkFrameAt < 125) return;
-  lastPlayerWalkFrameAt = timestamp;
-  const frames = playerFramesFor(playerDirectionName(), "walk");
-  playerWalkFrameIndex = (playerWalkFrameIndex + 1) % frames.length;
-  setPlayerSpriteAsset(frames[playerWalkFrameIndex]!);
 }
 
 function playPlayerShootFrames(): void {
@@ -3042,7 +2998,7 @@ function playerDirectionName(): PlayerDirection {
 }
 
 function updatePlayerAnimationClasses(): void {
-  // Frame changes are applied directly to the Phaser player sprite.
+  // CSS player classes are not used by the Phaser sprite.
 }
 
 function setPlayerMoving(moving: boolean, timestamp: number): void {
@@ -3051,17 +3007,8 @@ function setPlayerMoving(moving: boolean, timestamp: number): void {
     playerMoving = moving;
     updatePlayerAnimationClasses();
 
-    if (moving && !playerShooting) {
-      playerWalkFrameIndex = 0;
-      lastPlayerWalkFrameAt = timestamp;
-      updatePlayerFacingAsset();
-    } else if (!moving && !playerShooting) {
-      playerWalkFrameIndex = 0;
-      updatePlayerFacingAsset();
-    }
+    if (!playerShooting) updatePlayerFacingAsset();
   }
-
-  if (moving && !playerShooting) advancePlayerWalkFrame(timestamp);
 }
 
 const movementDirections: Record<string, Point> = {

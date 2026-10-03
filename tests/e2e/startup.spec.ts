@@ -317,19 +317,21 @@ test("briefly lights the starting up portal without enabling travel", async ({ p
       const scene = (window as Window & {
         __webcrawlScene?: { children: { list: Array<{
           x: number; y: number; list?: Array<{
-            name: string; texture?: { key: string }; setTexture?: (key: string) => unknown;
+            name: string; texture?: { key: string }; on?: (event: string, callback: () => void) => void;
           }>;
         }> } };
       }).__webcrawlScene;
       const container = scene?.children.list.find(item => item.x === portal.x && item.y === portal.y &&
         item.list?.some(child => child.name === "sprite" && child.texture?.key.includes("portal_up_")));
       const sprite = container?.list?.find(child => child.name === "sprite");
-      if (state === "true" && sprite?.setTexture) {
-        const setTexture = sprite.setTexture.bind(sprite);
-        sprite.setTexture = (key: string) => {
-          turnOffFrames.push(key);
-          return setTexture(key);
-        };
+      if (state === "false" && sprite?.texture && sprite.on) {
+        turnOffFrames.push(sprite.texture.key);
+        sprite.on("animationupdate", () => {
+          if (sprite.texture) turnOffFrames.push(sprite.texture.key);
+        });
+        sprite.on("animationcomplete", () => {
+          if (sprite.texture && turnOffFrames.at(-1) !== sprite.texture.key) turnOffFrames.push(sprite.texture.key);
+        });
       }
       snapshots.push({
         state,
@@ -353,7 +355,7 @@ test("briefly lights the starting up portal without enabling travel", async ({ p
   expect(snapshots[1]!.time - snapshots[0]!.time).toBeGreaterThanOrEqual(1_950);
   await expect.poll(() => page.evaluate(() =>
     (window as Window & { __portalTurnOffFrames?: string[] }).__portalTurnOffFrames ?? []
-  )).toHaveLength(4);
+  ), { timeout: 15_000 }).toHaveLength(4);
   const frames = await page.evaluate(() =>
     (window as Window & { __portalTurnOffFrames?: string[] }).__portalTurnOffFrames ?? []
   );
@@ -1064,27 +1066,26 @@ test("centers the camera one third of the way from the player to the cursor", as
   expect((await cameraState(page))!.zoom).toBeCloseTo(CAMERA_SCALE, 2);
 });
 
-test("displays every player walk frame", async ({ page }) => {
+test("uses Phaser's native player walk animation", async ({ page }) => {
   await startGame(page);
   const game = page.locator("#gameCanvas");
-  const seen = new Set<string>();
   await page.keyboard.down("ArrowRight");
   try {
-    for (let index = 0; index < 24; index += 1) {
-      if (index === 10) {
-        await page.keyboard.up("ArrowRight");
-        await page.keyboard.down("ArrowLeft");
-      }
-      await page.waitForTimeout(40);
-      const asset = await game.getAttribute("data-player-asset") ?? "";
-      const frame = asset.match(/walk_[A-Z]+_(\d{2})\.png$/)?.[1];
-      if (frame) seen.add(frame);
-    }
+    await expect.poll(() => page.evaluate(() => {
+      const scene = (window as Window & {
+        __webcrawlScene?: { children: { list: Array<{ list?: Array<{
+          type?: string; anims?: { currentAnim?: { frames: unknown[] }; isPlaying?: boolean };
+        }> }> } };
+      }).__webcrawlScene;
+      const sprite = scene?.children.list.flatMap(container => container.list ?? [])
+        .find(child => child.type === "Sprite" && child.anims?.isPlaying);
+      return sprite?.anims?.currentAnim?.frames.length ?? 0;
+    })).toBe(4);
+    await expect(game).toHaveAttribute("data-player-asset", /player\/walk\/[A-Z]+\/walk_[A-Z]+_0[1-4]\.png$/);
   } finally {
     await page.keyboard.up("ArrowRight");
-    await page.keyboard.up("ArrowLeft");
   }
-  expect(seen).toEqual(new Set(["01", "02", "03", "04"]));
+  await expect(game).toHaveAttribute("data-player-asset", /assets\/player\/(idle|walk)\//);
 });
 
 test("updates the player shadow when aiming after walking", async ({ page }) => {

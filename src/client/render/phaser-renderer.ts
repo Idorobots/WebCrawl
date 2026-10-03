@@ -307,10 +307,18 @@ interface AreaLight extends Phaser.GameObjects.Light {
 type EffectLightProfile = NonNullable<SpriteClip["light"]>;
 
 interface KeyedEffect {
-  effect: Phaser.GameObjects.Image;
+  effect: Phaser.GameObjects.Sprite;
   light: Phaser.GameObjects.Light | null;
-  timer: Phaser.Time.TimerEvent | null;
   followPlayer: boolean;
+}
+
+interface AnimatedVisual {
+  clip: SpriteClip;
+  baseSize: number;
+  shadow?: Phaser.GameObjects.Image | null;
+  visualOffset?: Point;
+  shadowPosition?: () => { x: number; y: number; size: number };
+  onFrame?: (frameIndex: number) => void;
 }
 
 function seededUnit(seed: number): number {
@@ -358,10 +366,9 @@ export class PhaserRenderer {
   private debugWallGraphics: Phaser.GameObjects.Graphics | null = null;
   private wallFootprints: WallRect[] = [];
   private decorations: Phaser.GameObjects.Container[] = [];
-  private decorationSprites = new Map<string, Phaser.GameObjects.Image>();
+  private decorationSprites = new Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>();
   private decorationShadows = new Map<string, Phaser.GameObjects.Image>();
   private objects: Phaser.GameObjects.Container[] = [];
-  private lootSprites = new Map<string, Phaser.GameObjects.Image>();
   private portals = new Map<string, Phaser.GameObjects.Container>();
   private portalStartupPreview = false;
   private monsters = new Map<string, Phaser.GameObjects.Container>();
@@ -369,7 +376,7 @@ export class PhaserRenderer {
   private decorationHealthBars = new Map<string, Phaser.GameObjects.Container>();
   private player: Phaser.GameObjects.Container | null = null;
   private cameraTarget: Phaser.GameObjects.Container | null = null;
-  private playerSprite: Phaser.GameObjects.Image | null = null;
+  private playerSprite: Phaser.GameObjects.Sprite | null = null;
   private playerShadow: Phaser.GameObjects.Image | null = null;
   private currentPlayer: Point = { x: 0, y: 0 };
   private currentCameraTarget: Point = { x: 0, y: 0 };
@@ -417,11 +424,12 @@ export class PhaserRenderer {
   private portalAuras = new Map<string, Phaser.GameObjects.Light>();
   private activeEffectLights = new Set<Phaser.GameObjects.Light>();
   private decorationEffectLights = new Map<string, Phaser.GameObjects.Light>();
-  private activeEffects = new Set<Phaser.GameObjects.Image>();
-  private activeEffectTimers = new Set<Phaser.Time.TimerEvent>();
-  private playerFollowingEffects = new Map<Phaser.GameObjects.Image, Phaser.GameObjects.Light | null>();
+  private activeEffects = new Set<Phaser.GameObjects.Sprite>();
+  private effectTimers = new Map<Phaser.GameObjects.Sprite, Phaser.Time.TimerEvent>();
+  private playerFollowingEffects = new Map<Phaser.GameObjects.Sprite, Phaser.GameObjects.Light | null>();
+  private animationKeys = new Map<string, string>();
+  private animatedVisuals = new WeakMap<Phaser.GameObjects.Sprite, AnimatedVisual>();
   private playerStateLight: Phaser.GameObjects.Light | null = null;
-  private lastLootAnimationUpdate = -Infinity;
   private lastDecorationAnimationUpdate = -Infinity;
   private lastShadowOffsetUpdate = -Infinity;
   private keyedEffects = new Map<string, KeyedEffect>();
@@ -628,7 +636,6 @@ export class PhaserRenderer {
     this.decorationSprites.clear();
     this.decorationShadows.clear();
     this.destroyAll(this.objects);
-    this.lootSprites.clear();
     this.destroyPortalObjects();
     for (const object of this.monsters.values()) object.destroy(true);
     this.monsters.clear();
@@ -643,8 +650,8 @@ export class PhaserRenderer {
     this.activeEffectLights.clear();
     for (const light of this.decorationEffectLights.values()) this.scene?.lights.removeLight(light);
     this.decorationEffectLights.clear();
-    for (const timer of this.activeEffectTimers) timer.remove();
-    this.activeEffectTimers.clear();
+    for (const timer of this.effectTimers.values()) timer.remove();
+    this.effectTimers.clear();
     for (const effect of this.activeEffects) effect.destroy();
     this.activeEffects.clear();
     this.keyedEffects.clear();
@@ -1604,28 +1611,23 @@ export class PhaserRenderer {
     }
   }
 
-  private illuminate<T extends Phaser.GameObjects.Image | Phaser.GameObjects.TileSprite>(object: T): T {
+  private illuminate<T extends Phaser.GameObjects.Image | Phaser.GameObjects.Sprite | Phaser.GameObjects.TileSprite>(object: T): T {
     if (this.lightingEnabled) object.setPipeline(ELLIPTICAL_LIGHT_PIPELINE);
     return object;
   }
 
-  private clipAsset(clip: SpriteClip, elapsedMs = 0): string {
-    const rawIndex = Math.max(0, Math.floor(elapsedMs / clip.frameDurationMs));
-    const frameIndex = clip.loop
-      ? rawIndex % clip.frames.length
-      : Math.min(clip.frames.length - 1, rawIndex);
-    return clip.frames[frameIndex]!;
-  }
-
   private applyClip(
-    sprite: Phaser.GameObjects.Image,
+    sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite,
     clip: SpriteClip,
     baseSize: number,
     elapsedMs = 0,
     assetOverride?: string,
     visualOffset?: Point,
   ): void {
-    const asset = assetOverride ?? this.clipAsset(clip, elapsedMs);
+    const rawIndex = Math.max(0, Math.floor(elapsedMs / clip.frameDurationMs));
+    const asset = assetOverride ?? clip.frames[clip.loop
+      ? rawIndex % clip.frames.length
+      : Math.min(clip.frames.length - 1, rawIndex)]!;
     const key = textureKey(asset);
     const textureChanged = this.scene?.textures.exists(key) && sprite.texture.key !== key;
     if (textureChanged) sprite.setTexture(key);
@@ -1642,6 +1644,74 @@ export class PhaserRenderer {
       sprite.setPosition(visualOffset.x, visualOffset.y);
       sprite.setData("visualOffset", visualOffset);
     }
+  }
+
+  private animationKey(clip: SpriteClip): string {
+    const identity = `${clip.frameDurationMs}:${Boolean(clip.loop)}:${clip.frames.join("|")}`;
+    let key = this.animationKeys.get(identity);
+    if (key) return key;
+    key = `webcrawl-clip-${this.animationKeys.size}`;
+    this.scene!.anims.create({
+      key,
+      frames: clip.frames.map(asset => ({ key: textureKey(asset) })),
+      frameRate: 1_000 / clip.frameDurationMs,
+      repeat: clip.loop ? -1 : 0,
+      sortFrames: false,
+      skipMissedFrames: false,
+    });
+    this.animationKeys.set(identity, key);
+    return key;
+  }
+
+  private syncAnimatedVisual(sprite: Phaser.GameObjects.Sprite): void {
+    const visual = this.animatedVisuals.get(sprite);
+    if (!visual) return;
+    const { clip, baseSize, shadow, visualOffset, shadowPosition, onFrame } = visual;
+    const asset = sprite.texture.key.replace(/^asset:/, "");
+    this.applyClip(sprite, clip, baseSize, 0, asset, visualOffset);
+    if (shadow) {
+      this.applyClip(shadow, clip, baseSize, 0, asset, visualOffset);
+      const position = shadowPosition?.();
+      if (position) this.applyShadowOffset(shadow, position.x, position.y, position.size);
+    }
+    onFrame?.(sprite.anims.currentFrame?.index !== undefined ? sprite.anims.currentFrame.index - 1 : 0);
+  }
+
+  private playClip(
+    sprite: Phaser.GameObjects.Sprite,
+    clip: SpriteClip,
+    baseSize: number,
+    { shadow, visualOffset, shadowPosition, onFrame, elapsedMs = 0, timeScale = 1, restart = false }: {
+      shadow?: Phaser.GameObjects.Image | null;
+      visualOffset?: Point;
+      shadowPosition?: () => { x: number; y: number; size: number };
+      onFrame?: (frameIndex: number) => void;
+      elapsedMs?: number;
+      timeScale?: number;
+      restart?: boolean;
+    } = {},
+  ): void {
+    const key = clip.frames.length > 1 ? this.animationKey(clip) : null;
+    const visual = this.animatedVisuals.get(sprite);
+    if (!visual) {
+      sprite.on(Phaser.Animations.Events.ANIMATION_UPDATE, () => this.syncAnimatedVisual(sprite));
+    }
+    this.animatedVisuals.set(sprite, { clip, baseSize, shadow, visualOffset, shadowPosition, onFrame });
+    if (key && (sprite.getData("clipKey") !== key || restart)) {
+      sprite.setData("clipKey", key);
+      sprite.play(key);
+      if (elapsedMs > 0) {
+        const animation = this.scene!.anims.get(key);
+        const index = Math.min(clip.frames.length - 1, Math.floor(elapsedMs / clip.frameDurationMs) % clip.frames.length);
+        sprite.anims.setCurrentFrame(animation.frames[index]!);
+      }
+    } else if (!key && (sprite.getData("clipKey") !== null || sprite.texture.key !== textureKey(clip.frames[0]!))) {
+      sprite.stop();
+      sprite.setData("clipKey", null);
+      sprite.setTexture(textureKey(clip.frames[0]!));
+    }
+    sprite.anims.timeScale = timeScale;
+    this.syncAnimatedVisual(sprite);
   }
 
   private createShadow(asset: string): Phaser.GameObjects.Image | null {
@@ -1689,23 +1759,19 @@ export class PhaserRenderer {
     const spawn = item.visual.animations?.spawn;
     if (spawn && item.spawnAnimationStartedAt !== undefined) {
       if (item.spawner) {
-        // Spawner sequence driven from app.ts. Charge phase (pendingSpawnAt
-        // set): charging frame, switching to ready at 90% of the charge.
-        // Discharge phase (startedAt = spawn moment): discharge flash, brief
-        // ready flash, then settle back onto the dormant (off) frame.
+        // The game controls when the charge and discharge phases start;
+        // Phaser advances the frames within each phase.
         const frames = spawn.frames;
         if (item.pendingSpawnAt !== undefined) {
           const total = Math.max(1, item.pendingSpawnAt - item.spawnAnimationStartedAt);
-          const elapsed = Math.max(0, now - item.spawnAnimationStartedAt);
-          const frame = elapsed < total * 0.9 ? frames[1]! : frames[3]!;
-          return { clip: { ...spawn, frames: [frame], holdLast: true }, elapsed: 0 };
+          return {
+            clip: { ...spawn, frames: [frames[1]!, frames[3]!], frameDurationMs: total * 0.9 },
+            elapsed: Math.max(0, now - item.spawnAnimationStartedAt),
+          };
         }
         const elapsed = Math.max(0, now - item.spawnAnimationStartedAt);
-        if (elapsed < SPAWNER_DISCHARGE_FRAME_MS) {
-          return { clip: { ...spawn, frames: [frames[2]!], holdLast: true }, elapsed: 0 };
-        }
         if (elapsed < SPAWNER_DISCHARGE_FRAME_MS * 2) {
-          return { clip: { ...spawn, frames: [frames[3]!], holdLast: true }, elapsed: 0 };
+          return { clip: { ...spawn, frames: [frames[2]!, frames[3]!], frameDurationMs: SPAWNER_DISCHARGE_FRAME_MS }, elapsed };
         }
         return { clip: item.visual.normal, elapsed: 0 };
       }
@@ -1721,7 +1787,13 @@ export class PhaserRenderer {
           elapsed: Math.max(0, now - item.spawnAnimationStartedAt),
         };
       }
-      return { clip: spawn, elapsed: Math.max(0, now - item.spawnAnimationStartedAt) };
+      const elapsed = Math.max(0, now - item.spawnAnimationStartedAt);
+      return elapsed >= spawn.frames.length * spawn.frameDurationMs
+        ? { clip: { ...spawn, frames: [spawn.frames[spawn.frames.length - 1]!] }, elapsed: 0 }
+        : { clip: spawn, elapsed };
+    }
+    if (item.contentPoint && item.contentEnabled && spawn) {
+      return { clip: { ...spawn, frames: [spawn.frames[spawn.frames.length - 1]!] }, elapsed: 0 };
     }
     return { clip: item.visual.normal, elapsed: 0 };
   }
@@ -1746,10 +1818,6 @@ export class PhaserRenderer {
     };
   }
 
-  private lootAnimationElapsed(clip: SpriteClip, now: number): number {
-    return now % (clip.frames.length * clip.frameDurationMs);
-  }
-
   renderDecorations(items: readonly Decoration[], visited: ReadonlySet<number>): void {
     this.currentDecorations = items;
     this.host.dataset.activeSpawners = String(items.filter(item =>
@@ -1770,13 +1838,19 @@ export class PhaserRenderer {
     for (const item of items) {
       if (!visited.has(item.roomId) || (item.destroyed && !item.visual.destroyed?.length)) continue;
       const state = this.decorationClip(item, performance.now());
-      const asset = this.clipAsset(state.clip, state.elapsed);
-      const sprite = this.illuminate(scene.add.image(0, 0, textureKey(asset)));
+      const asset = state.clip.frames[0]!;
+      const sprite = this.illuminate(item.visual.animations?.spawn
+        ? scene.add.sprite(0, 0, textureKey(asset))
+        : scene.add.image(0, 0, textureKey(asset)));
       const shadow = this.createShadow(asset);
       const visualOffset = this.decorationVisualOffset(item, state.clip);
-      this.applyClip(sprite, state.clip, item.size, state.elapsed, undefined, visualOffset);
+      if (sprite instanceof Phaser.GameObjects.Sprite) {
+        this.playClip(sprite, state.clip, item.size, { shadow, visualOffset, elapsedMs: state.elapsed });
+      } else {
+        this.applyClip(sprite, state.clip, item.size, state.elapsed, undefined, visualOffset);
+        if (shadow) this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, visualOffset);
+      }
       if (shadow) {
-        this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, visualOffset);
         this.applyShadowOffset(shadow, item.x, item.y, item.size);
         this.decorationShadows.set(item.id, shadow);
       }
@@ -1818,31 +1892,16 @@ export class PhaserRenderer {
       if (!sprite) continue;
       const state = this.decorationClip(item, now);
       const visualOffset = this.decorationVisualOffset(item, state.clip);
-      this.applyClip(sprite, state.clip, item.size, state.elapsed, undefined, visualOffset);
+      if (!(sprite instanceof Phaser.GameObjects.Sprite)) continue;
       const shadow = this.decorationShadows.get(item.id);
-      if (shadow) {
-        this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, visualOffset);
-        this.applyShadowOffset(shadow, item.x, item.y, item.size);
-      }
+      this.playClip(sprite, state.clip, item.size, { shadow, visualOffset, elapsedMs: state.elapsed });
+      if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
       this.syncDecorationEffectLight(item, state);
     }
   }
 
   decorationTexture(id: string): string | null {
     return this.decorationSprites.get(id)?.texture.key ?? null;
-  }
-
-  applyDecorationFrame(item: Decoration, asset: string): void {
-    const sprite = this.decorationSprites.get(item.id);
-    if (!sprite) return;
-    const base = item.visual.animations?.spawn ?? item.visual.normal;
-    const clip = { ...base, frames: [asset], holdLast: true };
-    this.applyClip(sprite, clip, item.size, 0, asset, item.visualOffset);
-    const shadow = this.decorationShadows.get(item.id);
-    if (shadow) {
-      this.applyClip(shadow, clip, item.size, 0, asset, item.visualOffset);
-      this.applyShadowOffset(shadow, item.x, item.y, item.size);
-    }
   }
 
   updateShadowOffsets(items: readonly Decoration[], now: number): void {
@@ -1926,7 +1985,6 @@ export class PhaserRenderer {
       delete this.host.dataset.firstLootKind;
     }
     this.destroyAll(this.objects);
-    this.lootSprites.clear();
     this.destroyLights(this.lootAuras);
     this.syncPortals(stairs, visited);
     const scene = this.scene;
@@ -1959,10 +2017,10 @@ export class PhaserRenderer {
       if (!asset || !definition) continue;
       const clip = this.lootClip(item, definition);
       if (clip) {
-        const elapsed = this.lootAnimationElapsed(clip, performance.now());
-        const sprite = this.illuminate(scene.add.image(0, 0, textureKey(this.clipAsset(clip, elapsed))));
-        this.applyClip(sprite, clip, definition.size, elapsed);
-        this.lootSprites.set(item.id, sprite);
+        const sprite = this.illuminate(scene.add.sprite(0, 0, textureKey(clip.frames[0]!)));
+        this.playClip(sprite, clip, definition.size, {
+          elapsedMs: performance.now() % (clip.frames.length * clip.frameDurationMs),
+        });
         this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(yDepth(item.y, 0.5)));
         continue;
       }
@@ -1971,19 +2029,6 @@ export class PhaserRenderer {
     }
     this.refreshLocalLightVisibility(true);
     this.renderDebugGeometry();
-  }
-
-  updateLootAnimations(items: readonly LootItem[], now: number): void {
-    if (now - this.lastLootAnimationUpdate < 100) return;
-    this.lastLootAnimationUpdate = now;
-    for (const item of items) {
-      const sprite = this.lootSprites.get(item.id);
-      if (!sprite) continue;
-      const definition = item.kind === "weapon" ? undefined : LOOT_DEFINITIONS[item.kind];
-      const clip = this.lootClip(item, definition);
-      if (!clip || !definition) continue;
-      this.applyClip(sprite, clip, definition.size, this.lootAnimationElapsed(clip, now));
-    }
   }
 
   private syncPortals(stairs: readonly Stair[], visited: ReadonlySet<number>): void {
@@ -2013,7 +2058,7 @@ export class PhaserRenderer {
             .setData("visualOffset", PORTAL_DEFINITION.visualOffset);
           this.applyShadowOffset(shadow, stair.x, stair.y, PORTAL_DEFINITION.size);
         }
-        const sprite = this.illuminate(scene.add.image(0, 0, textureKey(frame))
+        const sprite = this.illuminate(scene.add.sprite(0, 0, textureKey(frame))
           .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
           .setOrigin(0.5, 0.5)
           .setPosition(PORTAL_DEFINITION.visualOffset.x, PORTAL_DEFINITION.visualOffset.y)
@@ -2021,7 +2066,6 @@ export class PhaserRenderer {
         container = scene.add.container(stair.x, stair.y, shadow ? [shadow, sprite] : [sprite])
           .setDepth(yDepth(stair.y + PORTAL_DEFINITION.orderingOffsetY));
         container.setData("enabled", false);
-        container.setData("animationToken", 0);
         this.portals.set(stair.id, container);
         const portalAura = this.createAuraLight(
           stair.x,
@@ -2053,35 +2097,21 @@ export class PhaserRenderer {
     enabled: boolean,
     initial: boolean,
   ): void {
-    const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
+    const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
     const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
     const frames = PORTAL_DEFINITION.frames[type];
-    const token = Number(container.getData("animationToken") ?? 0) + 1;
-    container.setData("animationToken", token);
     container.setData("enabled", enabled);
-    const applyFrame = (asset: string): void => {
-      sprite.setTexture(textureKey(asset))
-        .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
-        .setOrigin(0.5, 0.5)
-        .setPosition(PORTAL_DEFINITION.visualOffset.x, PORTAL_DEFINITION.visualOffset.y);
-      shadow?.setTexture(textureKey(asset))
-        .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
-        .setOrigin(0.5, 0.5);
+    const clip: SpriteClip = {
+      frames: initial && !enabled ? [frames[0]!] : initial && this.portalStartupPreview
+        ? [frames[frames.length - 1]!] : enabled ? frames : [...frames].reverse(),
+      frameDurationMs: PORTAL_FRAME_MS,
+      sizeScale: 1,
+      origin: { x: 0.5, y: 0.5 },
     };
-    if (initial && !enabled) {
-      applyFrame(frames[0]);
-      return;
-    }
-    if (initial && this.portalStartupPreview) {
-      applyFrame(frames[frames.length - 1]!);
-      return;
-    }
-    const sequence = enabled ? frames : [...frames].reverse();
-    sequence.forEach((asset, index) => {
-      window.setTimeout(() => {
-        if (!container.active || Number(container.getData("animationToken")) !== token) return;
-        applyFrame(asset);
-      }, index * PORTAL_FRAME_MS);
+    this.playClip(sprite, clip, PORTAL_DEFINITION.size, {
+      shadow,
+      visualOffset: PORTAL_DEFINITION.visualOffset,
+      restart: !initial,
     });
   }
 
@@ -2148,16 +2178,11 @@ export class PhaserRenderer {
       }
       if (!container) {
         const frame = this.monsterFrame(item, performance.now());
-        const assetKey = textureKey(frame.asset);
-        const sprite = this.illuminate(scene.add.image(0, 0, assetKey).setName("sprite"));
-        const shadow = this.createShadow(frame.asset);
-        this.applyClip(sprite, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
-          item.dead ? item.destroyedVisualOffset : item.visualOffset);
-        if (shadow) {
-          this.applyClip(shadow, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
-            item.dead ? item.destroyedVisualOffset : item.visualOffset);
-          this.applyShadowOffset(shadow, item.x, item.y, item.size);
-        }
+        const asset = frame.clip.frames[0]!;
+        const sprite = this.illuminate(scene.add.sprite(0, 0, textureKey(asset)).setName("sprite"));
+        const shadow = this.createShadow(asset);
+        sprite.on(Phaser.Animations.Events.ANIMATION_UPDATE, () => this.updateMonsterAssetDataset());
+        if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
         const barWidth = item.miniboss ? item.size * 0.72 : 44;
         const barY = item.healthBarOffsetY;
         const children: Phaser.GameObjects.GameObject[] = shadow ? [shadow, sprite] : [sprite];
@@ -2193,7 +2218,7 @@ export class PhaserRenderer {
       container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
       const barContainer = this.monsterHealthBars.get(item.id);
       barContainer?.setPosition(item.x, item.y);
-      const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
+      const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
       this.applyMonsterFrame(container, item, performance.now());
       const aura = this.monsterAuras.get(item.id);
       if (aura) {
@@ -2223,7 +2248,7 @@ export class PhaserRenderer {
       if (!container) continue;
       container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
       this.monsterHealthBars.get(item.id)?.setPosition(item.x, item.y);
-      const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
+      const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
       const previousAsset = sprite.texture.key;
       this.applyMonsterFrame(container, item, now);
       assetChanged ||= previousAsset !== sprite.texture.key;
@@ -2251,32 +2276,38 @@ export class PhaserRenderer {
   private updateMonsterAssetDataset(): void {
     this.setHostData("renderedMonsters", String(this.monsters.size));
     this.setHostData("monsterAssets", [...this.monsters.values()].flatMap(container => {
-      const sprite = container.getByName("sprite") as Phaser.GameObjects.Image | null;
+      const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite | null;
       return sprite ? [sprite.texture.key.replace(/^asset:/, "")] : [];
     }).join(","));
   }
 
   private applyMonsterFrame(container: Phaser.GameObjects.Container, item: Monster, now: number): void {
     const frame = this.monsterFrame(item, now);
-    const sprite = container.getByName("sprite") as Phaser.GameObjects.Image;
-    this.applyClip(sprite, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
-      item.dead ? item.destroyedVisualOffset : item.visualOffset);
+    const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
     const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
-    if (shadow) {
-      this.applyClip(shadow, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
-        item.dead ? item.destroyedVisualOffset : item.visualOffset);
-      this.applyShadowOffset(shadow, item.x, item.y, item.size);
-    }
+    const attackStartedAt = frame.animation === "melee" || frame.animation === "ranged" ? item.lastAttackAt : null;
+    const restart = attackStartedAt !== null && sprite.getData("attackStartedAt") !== attackStartedAt;
+    sprite.setData("attackStartedAt", attackStartedAt);
+    this.playClip(sprite, frame.clip, item.dead ? item.size : item.spriteSize, {
+      shadow,
+      visualOffset: item.dead ? item.destroyedVisualOffset : item.visualOffset,
+      shadowPosition: () => ({ x: item.x, y: item.y, size: item.size }),
+      elapsedMs: frame.elapsed,
+      timeScale: frame.animation === "walk"
+        ? Math.min(2, Math.max(0.5, item.speed / MONSTER_WALK_REFERENCE_SPEED)) : 1,
+      restart,
+    });
+    if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
   }
 
   private monsterDepth(item: Monster): number {
     return item.dead && item.visual.destroyed?.length ? DEBRIS_DEPTH : yDepth(item.y);
   }
 
-  private monsterFrame(item: Monster, now: number): { asset: string; animation: MonsterAnimation; clip: SpriteClip; elapsed: number } {
+  private monsterFrame(item: Monster, now: number): { animation: MonsterAnimation; clip: SpriteClip; elapsed: number } {
     if (item.dead && item.visual.destroyed?.length) {
       const clip = item.visual.destroyed[item.seed % item.visual.destroyed.length]!;
-      return { asset: clip.frames[0]!, animation: "normal", clip, elapsed: 0 };
+      return { animation: "normal", clip, elapsed: 0 };
     }
     const direction = item.moveDir ?? "down";
     const visual = item.visual.directions[direction] ?? item.visual.directions.down!;
@@ -2284,13 +2315,13 @@ export class PhaserRenderer {
     const attackAnimation = item.attackKind ?? "melee";
     const attackClip = visual[attackAnimation];
     if (attackClip && attackElapsed >= 0 && attackElapsed < attackClip.frames.length * attackClip.frameDurationMs) {
-      return { asset: this.clipAsset(attackClip, attackElapsed), animation: attackAnimation, clip: attackClip, elapsed: attackElapsed };
+      return { animation: attackAnimation, clip: attackClip, elapsed: attackElapsed };
     }
     if (item.moving && visual.walk) {
       const elapsed = monsterWalkElapsed(visual.walk, now, item.seed, item.speed);
-      return { asset: this.clipAsset(visual.walk, elapsed), animation: "walk", clip: visual.walk, elapsed };
+      return { animation: "walk", clip: visual.walk, elapsed };
     }
-    return { asset: visual.normal.frames[0]!, animation: "normal", clip: visual.normal, elapsed: 0 };
+    return { animation: "normal", clip: visual.normal, elapsed: 0 };
   }
 
   renderBullets(items: readonly Bullet[]): void {
@@ -2389,8 +2420,6 @@ export class PhaserRenderer {
     this.currentPlayer.y = position.y;
     this.currentPlayerHp = hp;
     this.currentPlayerMaxHp = maxHp;
-    this.currentPlayerAsset = asset;
-    this.setHostData("playerAsset", asset);
     this.setHostData("playerX", String(Math.round(position.x)));
     this.setHostData("playerY", String(Math.round(position.y)));
     const scene = this.scene;
@@ -2398,18 +2427,20 @@ export class PhaserRenderer {
     const clip = this.playerClipForAsset(asset);
     if (!this.player) {
       this.playerShadow = this.createShadow(asset);
-      this.playerSprite = this.illuminate(scene.add.image(0, 0, textureKey(asset))
+      this.playerSprite = this.illuminate(scene.add.sprite(0, 0, textureKey(asset))
         .setOrigin(clip.origin.x, clip.origin.y));
       this.player = scene.add.container(position.x, position.y, this.playerShadow
         ? [this.playerShadow, this.playerSprite] : [this.playerSprite])
         .setDepth(yDepth(position.y));
+      this.playClip(this.playerSprite, clip, PLAYER_SPEC.spriteSize, {
+        shadow: this.playerShadow,
+        visualOffset: PLAYER_SPEC.visualOffset,
+        onFrame: () => this.setHostData("playerAsset", this.playerSprite!.texture.key.replace(/^asset:/, "")),
+      });
     }
     this.player.setPosition(position.x, position.y).setDepth(yDepth(position.y));
     this.syncPlayerFollowingEffects();
-    if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
-    this.applyClip(this.playerSprite!, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
     if (this.playerShadow) {
-      this.applyClip(this.playerShadow, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
       this.applyShadowOffset(this.playerShadow, position.x, position.y, PLAYER_SPEC.spriteSize);
     }
     this.applyPlayerProtectionTint();
@@ -2608,20 +2639,20 @@ export class PhaserRenderer {
     }
   }
 
-  setPlayerAsset(asset: string): void {
-    if (this.currentPlayerAsset === asset) return;
-    this.currentPlayerAsset = asset;
-    this.setHostData("playerAsset", asset);
-    if (this.playerSprite && this.scene?.textures.exists(textureKey(asset))) {
-      const clip = this.playerClipForAsset(asset);
-      this.playerSprite.setTexture(textureKey(asset));
-      this.applyClip(this.playerSprite, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
-      if (this.playerShadow) {
-        this.applyClip(this.playerShadow, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
-        this.applyShadowOffset(this.playerShadow, this.currentPlayer.x, this.currentPlayer.y, PLAYER_SPEC.spriteSize);
-      }
-      this.applyPlayerProtectionTint();
-    }
+  setPlayerAnimation(direction: string, moving: boolean): void {
+    const visual = PLAYER_SPEC.visual.directions[direction] ?? PLAYER_SPEC.visual.directions.down!;
+    const clip = moving && visual.walk ? visual.walk : visual.normal;
+    this.currentPlayerAsset = clip.frames[0]!;
+    const sprite = this.playerSprite;
+    if (!sprite) return;
+    this.playClip(sprite, clip, PLAYER_SPEC.spriteSize, {
+      shadow: this.playerShadow,
+      visualOffset: PLAYER_SPEC.visualOffset,
+      onFrame: () => this.setHostData("playerAsset", sprite.texture.key.replace(/^asset:/, "")),
+    });
+    this.setHostData("playerAsset", sprite.texture.key.replace(/^asset:/, ""));
+    if (this.playerShadow) this.applyShadowOffset(this.playerShadow, this.currentPlayer.x, this.currentPlayer.y, PLAYER_SPEC.spriteSize);
+    this.applyPlayerProtectionTint();
   }
 
   private setHostData(key: string, value: string): void {
@@ -2659,16 +2690,15 @@ export class PhaserRenderer {
     const key = options.key;
     const existing = key ? this.keyedEffects.get(key) : undefined;
     if (key && existing) {
-      this.resetKeyedEffect(existing, clip, x, y, baseSize, profile, lightColor, followPlayer, key);
+      this.resetKeyedEffect(existing, clip, x, y, baseSize, profile, lightColor, followPlayer);
       return;
     }
-    const effect = scene.add.image(x, y, textureKey(clip.frames[0]!))
+    const effect = scene.add.sprite(x, y, textureKey(clip.frames[0]!))
       .setDepth(OVERHEAD_DEPTH)
       .setBlendMode(Phaser.BlendModes.ADD);
     this.activeEffects.add(effect);
     this.setHostData("lastEffect", clip.frames[0]!);
     this.setHostData("effectSpriteMode", "emissive");
-    this.applyClip(effect, clip, baseSize);
     const light = this.effectLightsEnabled
       ? scene.lights.addLight(x, y, Math.max(52, baseSize * profile.radiusScale), lightColor, profile.intensity)
       : null;
@@ -2680,10 +2710,9 @@ export class PhaserRenderer {
       this.playerFollowingEffects.set(effect, light);
       this.syncPlayerFollowingEffects();
     }
-    const timer = this.startEffectAnimation(effect, clip, baseSize, profile, light, key);
-    if (key) {
-      this.keyedEffects.set(key, { effect, light, timer, followPlayer });
-    }
+    if (key) this.keyedEffects.set(key, { effect, light, followPlayer });
+    effect.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => this.finishEffect(effect, light, key));
+    this.playEffectClip(effect, clip, baseSize, profile, light);
   }
 
   private resetKeyedEffect(
@@ -2695,11 +2724,9 @@ export class PhaserRenderer {
     profile: EffectLightProfile,
     lightColor: number,
     followPlayer: boolean,
-    key: string,
   ): void {
     record.followPlayer = followPlayer;
     record.effect.setPosition(x, y);
-    this.applyClip(record.effect, clip, baseSize);
     if (record.light) {
       record.light.x = x;
       record.light.y = y;
@@ -2713,59 +2740,45 @@ export class PhaserRenderer {
     } else {
       this.playerFollowingEffects.delete(record.effect);
     }
-    if (record.timer) {
-      record.timer.remove();
-      this.activeEffectTimers.delete(record.timer);
-    }
-    record.timer = this.startEffectAnimation(record.effect, clip, baseSize, profile, record.light, key);
+    this.playEffectClip(record.effect, clip, baseSize, profile, record.light, true);
   }
 
-  private startEffectAnimation(
-    effect: Phaser.GameObjects.Image,
+  private playEffectClip(
+    effect: Phaser.GameObjects.Sprite,
     clip: SpriteClip,
     baseSize: number,
     profile: EffectLightProfile,
     light: Phaser.GameObjects.Light | null,
-    key?: string,
-  ): Phaser.Time.TimerEvent {
-    const scene = this.scene!;
-    let frameIndex = 0;
-    const timer = scene.time.addEvent({
-      delay: clip.frameDurationMs,
-      repeat: clip.frames.length - 1,
-      callback: () => {
-        if (!effect.scene || !effect.active) {
-          this.finishEffect(timer, effect, light, key);
-          return;
-        }
-        if (frameIndex >= clip.frames.length - 1) {
-          effect.destroy();
-          this.finishEffect(timer, effect, light, key);
-          return;
-        }
-        frameIndex += 1;
-        this.applyClip(effect, clip, baseSize, frameIndex * clip.frameDurationMs);
-        if (light) {
-          const progress = frameIndex / Math.max(1, clip.frames.length - 1);
-          light.setIntensity(profile.intensity * (1 - progress * 0.45));
-        }
+    restart = false,
+  ): void {
+    this.effectTimers.get(effect)?.remove();
+    this.effectTimers.delete(effect);
+    this.playClip(effect, clip, baseSize, {
+      restart,
+      onFrame: frameIndex => {
+        if (light) light.setIntensity(profile.intensity * (1 - frameIndex / Math.max(1, clip.frames.length - 1) * 0.45));
       },
     });
-    this.activeEffectTimers.add(timer);
-    return timer;
+    if (clip.frames.length === 1) {
+      const timer = this.scene!.time.delayedCall(clip.frameDurationMs, () => {
+        this.effectTimers.delete(effect);
+        this.finishEffect(effect, light, [...this.keyedEffects].find(([, record]) => record.effect === effect)?.[0]);
+      });
+      this.effectTimers.set(effect, timer);
+    }
   }
 
   private finishEffect(
-    timer: Phaser.Time.TimerEvent,
-    effect: Phaser.GameObjects.Image,
+    effect: Phaser.GameObjects.Sprite,
     light: Phaser.GameObjects.Light | null,
     key?: string,
   ): void {
-    timer.remove();
-    this.activeEffectTimers.delete(timer);
+    this.effectTimers.get(effect)?.remove();
+    this.effectTimers.delete(effect);
+    effect.destroy();
     this.activeEffects.delete(effect);
     this.playerFollowingEffects.delete(effect);
-    if (key) this.keyedEffects.delete(key);
+    if (key && this.keyedEffects.get(key)?.effect === effect) this.keyedEffects.delete(key);
     this.syncPlayerFollowingEffects();
     if (light) {
       this.scene?.lights.removeLight(light);

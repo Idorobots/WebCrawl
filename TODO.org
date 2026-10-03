@@ -1235,6 +1235,7 @@ The goal is to be able to generate a room with all its enemies that already incl
 - Configuration settings on the UI - let the player disable dynamic bullet lights & damage lights. It should be stored in the local storage. The UI form should be accessible via a "cog" button on the "login screen".
 * UX improvements, again
 - Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
+- On mobile, the link dialog box covers the input sticks. Input sticks should be rendered on top always.
 
 * Particle system
 - Use for sparks etc.
@@ -1323,6 +1324,7 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Regulatory capture moves the player but doesn't move the camera on mobile
 - Regulatory capture should use the shooting direction as the direction, so that it's usable on mobile
 - Object offsets should be relative to its `size` property.
+- "Access granted" should play only once per level.
 
 * Enemy rebalance
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.
@@ -1361,6 +1363,8 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Zuckerborg Mark1 CEO of DefaceBooks
 - E-LON CEO of A-AI
 
+* Visual bugs
+- Monster shadows are flickering a bit when they move.
 * Visual bugs
 - Generic robot debris look weird, should only use dedicated robot debris
 - Some scenery items have a very weird choice of debris
