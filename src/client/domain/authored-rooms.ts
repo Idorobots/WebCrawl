@@ -16,7 +16,7 @@ export interface AuthoredRoomTemplate {
   height: number;
   decorations?: readonly (Point & { definition: keyof typeof DECORATION_DEFINITIONS })[];
   loot?: readonly (Point & { kind: LootKind; weaponKind?: WeaponKind })[];
-  monsters?: readonly (Point & { kind: MonsterKind })[];
+  monsters?: readonly (Point & { kind: MonsterKind; miniboss?: boolean })[];
 }
 
 export type AuthoredRooms = ReadonlyMap<number, AuthoredRoomTemplate>;
@@ -86,36 +86,46 @@ export function artDebugLevel(): { graph: DungeonGraph; layout: DungeonLayout; r
       height: ENVIRONMENT_SEGMENT_SIZE * 4,
       monsters: [{ kind, x: 0, y: -75 }],
     })),
+    ...enemyKinds.map(kind => ({
+      width: ENVIRONMENT_SEGMENT_SIZE * 4,
+      height: ENVIRONMENT_SEGMENT_SIZE * 4,
+      monsters: [{ kind, miniboss: true, x: 0, y: -75 }],
+    })),
     ...bossKinds.map(kind => ({
       width: ENVIRONMENT_SEGMENT_SIZE * 8,
       height: ENVIRONMENT_SEGMENT_SIZE * 8,
       monsters: [{ kind, x: 0, y: -140 }],
     })),
   ];
-  const nodes: GraphNode[] = templates.map((template, id) => ({
-    id,
-    parentId: id === 0 ? null : id - 1,
-    x: 0,
-    y: 0,
-    tag: id === 0 ? "gallery" : id <= enemyKinds.length ? "enemy" : "boss",
-    depth: id,
-    hrefs: [],
-    coalescedCount: 0,
-    label: id === 0 ? "Art gallery" : String(templates[id]!.monsters![0]!.kind),
-    floorLabel: id === 0 ? "ART GALLERY" : String(templates[id]!.monsters![0]!.kind).toUpperCase(),
-    title: id === 0 ? "Art gallery" : String(templates[id]!.monsters![0]!.kind),
-    contentHtml: null,
-    width: template.width,
-    height: template.height,
-    lootSeed: id,
-    isRoot: id === 0,
-    isBossArena: id > enemyKinds.length,
-    isHidden: false,
-    parentSide: id === 0 ? null : "W",
-    directionFromParent: id === 0 ? null : "E",
-    shape: "rectangle",
-    childCount: id === templates.length - 1 ? 0 : 1,
-  }));
+  const nodes: GraphNode[] = templates.map((template, id) => {
+    const monster = template.monsters?.[0];
+    const isBossArena = !!monster && monster.kind in BOSS_DEFINITIONS;
+    const label = monster ? `${monster.miniboss ? "Miniboss " : ""}${monster.kind}` : "Art gallery";
+    return {
+      id,
+      parentId: id === 0 ? null : id - 1,
+      x: 0,
+      y: 0,
+      tag: id === 0 ? "gallery" : isBossArena ? "boss" : monster?.miniboss ? "miniboss" : "enemy",
+      depth: id,
+      hrefs: [],
+      coalescedCount: 0,
+      label,
+      floorLabel: label.toUpperCase(),
+      title: label,
+      contentHtml: null,
+      width: template.width,
+      height: template.height,
+      lootSeed: id,
+      isRoot: id === 0,
+      isBossArena,
+      isHidden: false,
+      parentSide: id === 0 ? null : "W",
+      directionFromParent: id === 0 ? null : "E",
+      shape: "rectangle",
+      childCount: id === templates.length - 1 ? 0 : 1,
+    };
+  });
   const links: LayoutLink[] = [];
   for (let id = 1; id < nodes.length; id += 1) {
     const source = nodes[id - 1]!;

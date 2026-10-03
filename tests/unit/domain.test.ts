@@ -1399,6 +1399,13 @@ describe("deterministic room contents", () => {
           const decoration = itemIsDecoration ? item : other;
           if (!(decoration as Decoration).obstacle) continue;
         }
+        // Actor placement checks the actual ellipses, including enlarged
+        // miniboss footprints, rather than their enclosing circles.
+        if (!itemIsDecoration || !otherIsDecoration) {
+          expect(footprintsOverlap(item, item.footprintRadii, other, other.footprintRadii), `${item.id} vs ${other.id}`)
+            .toBe(false);
+          continue;
+        }
         const minimum = Math.max(item.footprintRadii.x, item.footprintRadii.y) +
           Math.max(other.footprintRadii.x, other.footprintRadii.y);
         expect(Math.hypot(item.x - other.x, item.y - other.y), `${item.id} vs ${other.id}`)
@@ -1706,8 +1713,10 @@ describe("deterministic room contents", () => {
       expect(miniboss.hitboxOffset.x).toBeCloseTo(definition.hitboxOffset.x * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.hitboxOffset.y).toBeCloseTo(definition.hitboxOffset.y * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.visual).toBe(definition.visual);
-      expect(miniboss.hitboxRadii).toEqual(definition.hitboxRadii);
-      expect(miniboss.footprintRadii).toEqual(definition.footprintRadii);
+      expect(miniboss.hitboxRadii.x).toBeCloseTo(definition.hitboxRadii.x * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.hitboxRadii.y).toBeCloseTo(definition.hitboxRadii.y * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.footprintRadii.x).toBeCloseTo(definition.footprintRadii.x * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.footprintRadii.y).toBeCloseTo(definition.footprintRadii.y * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.maxHp).toBeGreaterThanOrEqual(definition.baseHp * MINIBOSS_HP_MULTIPLIER);
       expect(miniboss.attackDamage).toBeGreaterThanOrEqual(
         Math.ceil(definition.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER),

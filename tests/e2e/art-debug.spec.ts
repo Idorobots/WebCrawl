@@ -4,6 +4,7 @@ import { LIGHT_DETAIL_STORAGE_KEY, type LightDetail } from "../../src/client/ren
 
 test.skip(process.env.VITE_ART_DEBUG !== "true", "Requires a build with VITE_ART_DEBUG=true");
 test.describe.configure({ timeout: 90_000 });
+const { layout } = artDebugLevel();
 
 test("boots directly into the playable, authored art floor without fetching a page", async ({ page }) => {
   const fetches: string[] = [];
@@ -17,7 +18,7 @@ test("boots directly into the playable, authored art floor without fetching a pa
   await expect(page.locator("#loadingScreen")).toBeHidden();
   await expect(page.locator("#gameUi")).toBeVisible();
   await expect(host.locator("canvas")).toBeVisible({ timeout: 30_000 });
-  await expect(host).toHaveAttribute("data-rooms", "13", { timeout: 30_000 });
+  await expect(host).toHaveAttribute("data-rooms", String(layout.nodes.length), { timeout: 30_000 });
   const fps = page.locator("#debugFps");
   if (process.env.VITE_DEBUG === "true") {
     await expect(fps).toBeVisible();
@@ -28,7 +29,6 @@ test("boots directly into the playable, authored art floor without fetching a pa
   await expect(host).toHaveAttribute("data-active-monsters", "0");
   expect(fetches).toEqual([]);
 
-  const { layout } = artDebugLevel();
   const enemyRoom = layout.nodes[1]!;
   await page.evaluate(({ x, y }) => {
     (window as Window & { __webcrawlTest?: { teleportPlayerTo: (x: number, y: number) => void } })
@@ -36,7 +36,23 @@ test("boots directly into the playable, authored art floor without fetching a pa
   }, { x: enemyRoom.x, y: enemyRoom.y + 150 });
   await expect(host).toHaveAttribute("data-active-monsters", "1");
 
-  const bossRoom = layout.nodes[8]!;
+  await page.evaluate(() => {
+    (window as Window & { __webcrawlTest?: { setPlayerInvulnerable: (enabled: boolean) => void } })
+      .__webcrawlTest?.setPlayerInvulnerable(true);
+  });
+  const minibossRooms = layout.nodes.filter(room => room.tag === "miniboss");
+  for (const [index, minibossRoom] of minibossRooms.entries()) {
+    await page.evaluate(({ x, y }) => {
+      (window as Window & { __webcrawlTest?: { teleportPlayerTo: (x: number, y: number) => void } })
+        .__webcrawlTest?.teleportPlayerTo(x, y);
+    }, { x: minibossRoom.x, y: minibossRoom.y + 150 });
+    await expect(host).toHaveAttribute("data-active-minibosses", String(index + 1));
+    await expect(host).toHaveAttribute("data-active-monsters", String(index + 2));
+    await expect(host).toHaveAttribute("data-active-bosses", "0");
+    await expect(page.locator("#bossHud")).toBeHidden();
+  }
+
+  const bossRoom = layout.nodes.find(room => room.isBossArena)!;
   await page.evaluate(({ x, y }) => {
     (window as Window & { __webcrawlTest?: { teleportPlayerTo: (x: number, y: number) => void } })
       .__webcrawlTest?.teleportPlayerTo(x, y);
@@ -53,7 +69,7 @@ for (const detail of ["none", "low", "medium", "high"] as const satisfies readon
     });
     await page.goto("/");
     const host = page.locator("#gameCanvas");
-    await expect(host).toHaveAttribute("data-rooms", "13", { timeout: 30_000 });
+    await expect(host).toHaveAttribute("data-rooms", String(layout.nodes.length), { timeout: 30_000 });
     await expect(host).toHaveAttribute("data-light-detail", detail);
     await expect(host).toHaveAttribute("data-lighting-mode", detail === "none" ? "disabled" : "webgl");
     await expect(host).toHaveAttribute("data-flashlight-active", detail === "none" ? "false" : "true");

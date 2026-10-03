@@ -782,6 +782,8 @@ function promoteToMiniboss(monster: Monster): Monster {
     visualOffset: scalePoint(monster.visualOffset, MINIBOSS_SIZE_MULTIPLIER),
     destroyedVisualOffset: scalePoint(monster.destroyedVisualOffset, MINIBOSS_SIZE_MULTIPLIER),
     hitboxOffset: scalePoint(monster.hitboxOffset, MINIBOSS_SIZE_MULTIPLIER),
+    hitboxRadii: scalePoint(monster.hitboxRadii, MINIBOSS_SIZE_MULTIPLIER),
+    footprintRadii: scalePoint(monster.footprintRadii, MINIBOSS_SIZE_MULTIPLIER),
   };
 }
 
@@ -879,13 +881,13 @@ export function buildMonsters(
   const roomSpecs = layout.nodes.flatMap(room => {
     const template = authoredRooms.get(room.id);
     if (!template) return monsterSpecsForRoom(room, floor);
-    return (template.monsters ?? []).map(({ kind, x, y }, index) => {
+    return (template.monsters ?? []).map(({ kind, miniboss, x, y }, index) => {
       const position = { x: room.x + x, y: room.y + y };
       const monster = kind in BOSS_DEFINITIONS
         ? bossSpecForRoom(room, floor, kind as BossKind)
         : regularMonsterSpec(`${room.id}::authored-monster-${index}`, room.id * 100 + index,
           room.id, position, floor, "room", kind as RegularMonsterKind);
-      return { ...monster, id: `${room.id}::authored-monster-${index}`, ...position };
+      return { ...(miniboss ? promoteToMiniboss(monster) : monster), id: `${room.id}::authored-monster-${index}`, ...position };
     });
   });
   const bossSummons = roomSpecs
@@ -946,9 +948,16 @@ export function buildMonsters(
       const room = rooms[floorSeed % rooms.length]!;
       const candidates = monsters.filter(monster => monster.spawnRoomId === room.id &&
         !monster.bossKind && !monster.spawnSourceId).sort((left, right) => left.id.localeCompare(right.id));
-      const selected = candidates[stableHash(`${floorSeed}|${room.lootSeed}|miniboss-slot`) % candidates.length]!;
-      const promoted = promoteToMiniboss(selected);
-      Object.assign(selected, promoted, { hp: savedStates.get(selected.id)?.hp ?? promoted.maxHp });
+      const firstIndex = stableHash(`${floorSeed}|${room.lootSeed}|miniboss-slot`) % candidates.length;
+      for (let index = 0; index < candidates.length; index += 1) {
+        const selected = candidates[(firstIndex + index) % candidates.length]!;
+        const promoted = promoteToMiniboss(selected);
+        const otherMonsters = monsters.filter(monster => monster !== selected && !monster.dead && monster.obstacle);
+        const position = safeMonsterPosition(promoted, selected, layout, decorations, otherMonsters, playerSpawn, walls);
+        if (!position) continue;
+        Object.assign(selected, promoted, position, { hp: savedStates.get(selected.id)?.hp ?? promoted.maxHp });
+        break;
+      }
     } else if (arenaId !== undefined) {
       // A two-room floor has no regular entrance monsters to promote.
       const root = layout.nodes.find(room => room.isRoot && room.id !== arenaId);

@@ -29,6 +29,7 @@ import { signageFontForUrl, stationAmbientForUrl, STATION_AMBIENT_TRACKS } from 
 import {
   DEFAULT_BULLET_SPEC,
   LOOT_DEFINITIONS,
+  MINIBOSS_SIZE_MULTIPLIER,
   MONSTER_WALK_REFERENCE_SPEED,
   monsterWalkElapsed,
   PLAYER_SPEC,
@@ -2183,7 +2184,8 @@ export class PhaserRenderer {
         const shadow = this.createShadow(asset);
         sprite.on(Phaser.Animations.Events.ANIMATION_UPDATE, () => this.updateMonsterAssetDataset());
         if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
-        const barWidth = item.miniboss ? item.size * 0.72 : 44;
+        const barScale = item.miniboss ? MINIBOSS_SIZE_MULTIPLIER : 1;
+        const barWidth = 44 * barScale;
         const barY = item.hitboxOffset.y - item.hitboxRadii.y - 30;
         const children: Phaser.GameObjects.GameObject[] = shadow ? [shadow, sprite] : [sprite];
         container = scene.add.container(item.x, item.y, children)
@@ -2192,12 +2194,11 @@ export class PhaserRenderer {
         container.setData("dead", item.dead);
         this.monsters.set(item.id, container);
         if (!item.dead && !item.bossKind) {
-          const barHeight = item.miniboss ? 7 : 5;
-          const fillHeight = item.miniboss ? 6 : 5;
+          const barHeight = 5 * barScale;
           const fillColor = item.miniboss ? 0xffc857 : item.speed === 0 ? 0xc07cff : 0xff6b6b;
           const barChildren: Phaser.GameObjects.GameObject[] = [
             scene.add.rectangle(-barWidth / 2, barY, barWidth, barHeight, 0x071018).setOrigin(0, 0.5),
-            scene.add.rectangle(-barWidth / 2, barY, barWidth, fillHeight, fillColor).setOrigin(0, 0.5).setName("hp"),
+            scene.add.rectangle(-barWidth / 2, barY, barWidth, barHeight, fillColor).setOrigin(0, 0.5).setName("hp"),
           ];
           const bar = scene.add.container(item.x + item.hitboxOffset.x, item.y, barChildren).setDepth(HEALTH_BAR_DEPTH);
           this.monsterHealthBars.set(item.id, bar);

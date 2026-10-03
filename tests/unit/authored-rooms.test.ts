@@ -6,15 +6,19 @@ import { layoutOrthogonal } from "../../src/client/domain/layout";
 import { buildWallFootprints, WallRectIndex, wallOverlapsEllipse } from "../../src/client/domain/wall-collision";
 import {
   BOSS_DEFINITIONS, DECORATION_DEFINITIONS, LOOT_DEFINITIONS,
+  MINIBOSS_DAMAGE_MULTIPLIER, MINIBOSS_HP_MULTIPLIER, MINIBOSS_SIZE_MULTIPLIER,
   PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS,
 } from "../../src/client/domain/world-specs";
 import { weaponKinds } from "../../src/client/domain/weapons";
 
 describe("authored art floor", () => {
-  it("has fixed, connected rooms with one room for every enemy and boss kind", () => {
+  it("has fixed, connected rooms with one room for every enemy, miniboss, and boss kind", () => {
     const { graph, layout, rooms } = artDebugLevel();
-    const monsters = buildMonsters(layout, new Map(), new Set([0]), 1, [], undefined, undefined, rooms);
-    const kinds = [...Object.keys(REGULAR_MONSTER_DEFINITIONS), ...Object.keys(BOSS_DEFINITIONS)];
+    const walls = new WallRectIndex(buildWallFootprints(layout));
+    const monsters = buildMonsters(layout, new Map(), new Set([0]), 1, [], undefined, walls, rooms);
+    const enemyKinds = Object.keys(REGULAR_MONSTER_DEFINITIONS);
+    const bossKinds = Object.keys(BOSS_DEFINITIONS);
+    const kinds = [...enemyKinds, ...enemyKinds, ...bossKinds];
 
     expect(layout.nodes).toHaveLength(kinds.length + 1);
     expect(layout.hiddenCount).toBe(0);
@@ -25,7 +29,25 @@ describe("authored art floor", () => {
     expect(monsters).toHaveLength(kinds.length);
     expect(monsters.map(monster => monster.kind)).toEqual(kinds);
     expect(new Set(monsters.map(monster => monster.spawnRoomId)).size).toBe(kinds.length);
-    expect(monsters.every(monster => !monster.miniboss)).toBe(true);
+    expect(monsters.filter(monster => !monster.miniboss && !monster.bossKind).map(monster => monster.kind)).toEqual(enemyKinds);
+    expect(monsters.filter(monster => monster.bossKind).map(monster => monster.kind)).toEqual(bossKinds);
+    const minibosses = monsters.filter(monster => monster.miniboss);
+    expect(minibosses.map(monster => monster.kind)).toEqual(enemyKinds);
+    for (const miniboss of minibosses) {
+      const regular = monsters.find(monster => monster.kind === miniboss.kind && !monster.miniboss)!;
+      expect(miniboss.size).toBeCloseTo(regular.size * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.spriteSize).toBeCloseTo(regular.spriteSize * MINIBOSS_SIZE_MULTIPLIER);
+      expect(miniboss.maxHp).toBe(Math.ceil(regular.maxHp * MINIBOSS_HP_MULTIPLIER));
+      expect(miniboss.attackDamage).toBe(Math.ceil(regular.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER));
+      for (const field of ["hitboxRadii", "hitboxOffset", "visualOffset", "destroyedVisualOffset", "footprintRadii"] as const) {
+        expect(miniboss[field].x).toBeCloseTo(regular[field].x * MINIBOSS_SIZE_MULTIPLIER);
+        expect(miniboss[field].y).toBeCloseTo(regular[field].y * MINIBOSS_SIZE_MULTIPLIER);
+      }
+      const room = layout.nodes.find(room => room.id === miniboss.spawnRoomId)!;
+      expect(room).toMatchObject({ tag: "miniboss", isBossArena: false, label: `Miniboss ${miniboss.kind}` });
+      expect(pointInRoomFloor(miniboss.x, miniboss.y, room)).toBe(true);
+      expect(wallOverlapsEllipse(miniboss, miniboss.footprintRadii, walls)).toBe(false);
+    }
     expect(monsters.every(monster => monster.hp === monster.maxHp)).toBe(true);
   });
 
