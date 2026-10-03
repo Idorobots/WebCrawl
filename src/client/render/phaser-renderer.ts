@@ -69,6 +69,8 @@ import {
   ELLIPTICAL_LIGHT_PIPELINE,
   EllipticalLightPipeline,
 } from "./elliptical-light-pipeline";
+import { supportedMaxLights } from "./light-capacity";
+import type { LightDetail } from "./light-detail";
 
 const textureKey = (asset: string): string => `asset:${asset}`;
 const SEGMENT_SIZE = WORLD_GEOMETRY.segmentSize;
@@ -126,21 +128,6 @@ function doorDepth(door: DoorModulePlan): number {
   return yDepth(door.position.y, 1);
 }
 const PORTAL_FRAME_MS = 125;
-function supportedMaxLights(): number {
-  const configured = Number(import.meta.env.VITE_MAX_LIGHTS);
-  if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
-  if (typeof document === "undefined") return 128;
-  const canvas = document.createElement("canvas");
-  const gl = canvas.getContext("webgl");
-  if (!gl) return 128;
-  const uniformVectors = Number(gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS));
-  gl.getExtension("WEBGL_lose_context")?.loseContext();
-  const capacity = Math.max(4, Math.floor((uniformVectors - 24) / 5));
-  if (capacity >= 256) return 256;
-  if (capacity >= 128) return 128;
-  return capacity;
-}
-
 const MAX_LIGHTS = supportedMaxLights();
 const MAX_BULLET_LIGHTS = Math.min(192, MAX_LIGHTS);
 const BULLET_LIGHTS_ENABLED = import.meta.env.VITE_BULLET_LIGHTS !== "off";
@@ -443,11 +430,28 @@ export class PhaserRenderer {
   private stationAmbientEnabled = false;
   private signageFont = "Prefix";
 
-  constructor(private readonly host: HTMLElement) {}
+  constructor(private readonly host: HTMLElement, private readonly lightDetail: LightDetail) {
+    this.host.dataset.lightDetail = lightDetail;
+  }
+
+  private get shadowsEnabled(): boolean {
+    return this.lightDetail === "medium" || this.lightDetail === "high";
+  }
+
+  private get aurasEnabled(): boolean {
+    return this.lightingEnabled && this.shadowsEnabled;
+  }
+
+  private get effectLightsEnabled(): boolean {
+    return this.lightingEnabled && this.lightDetail === "high";
+  }
 
   start(options?: {
     onBootComplete?: () => void;
     onFrame?: () => void;
+    onUpdate?: (durationMs: number) => void;
+    onRender?: (durationMs: number) => void;
+    onBetweenFrames?: (durationMs: number) => void;
   }): void {
     if (this.game) return;
     this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
@@ -481,6 +485,24 @@ export class PhaserRenderer {
 
       create(): void {
         renderer.attach(this);
+        const { onUpdate, onRender, onBetweenFrames } = options ?? {};
+        if (onUpdate || onRender || onBetweenFrames) {
+          let stepStartedAt = 0;
+          let renderStartedAt = 0;
+          let lastRenderEndedAt: number | null = null;
+          this.game.events.on(Phaser.Core.Events.PRE_STEP, () => {
+            stepStartedAt = performance.now();
+            if (lastRenderEndedAt !== null) onBetweenFrames?.(stepStartedAt - lastRenderEndedAt);
+          });
+          this.game.events.on(Phaser.Core.Events.POST_STEP, () => {
+            renderStartedAt = performance.now();
+            onUpdate?.(renderStartedAt - stepStartedAt);
+          });
+          this.game.events.on(Phaser.Core.Events.POST_RENDER, () => {
+            lastRenderEndedAt = performance.now();
+            onRender?.(lastRenderEndedAt - renderStartedAt);
+          });
+        }
         options?.onBootComplete?.();
       }
 
@@ -545,8 +567,11 @@ export class PhaserRenderer {
 
   private attach(scene: Phaser.Scene): void {
     this.scene = scene;
-    this.lightingEnabled = scene.game.renderer.type === Phaser.WEBGL;
+    this.lightingEnabled = scene.game.renderer.type === Phaser.WEBGL && this.lightDetail !== "none";
     this.host.dataset.lightingMode = this.lightingEnabled ? "webgl" : "disabled";
+    this.host.dataset.auraMode = this.aurasEnabled ? "light2d" : "off";
+    this.host.dataset.bulletGlowMode = BULLET_LIGHTS_ENABLED && this.effectLightsEnabled ? "batched-light2d" : "off";
+    this.host.dataset.maxLights = String(MAX_LIGHTS);
     if (this.lightingEnabled) {
       const webgl = scene.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer;
       this.lightPipeline = webgl.pipelines.add(
@@ -554,16 +579,15 @@ export class PhaserRenderer {
         new EllipticalLightPipeline(scene.game),
       ) as EllipticalLightPipeline;
       scene.lights.enable().setAmbientColor(AMBIENT_LIGHT_COLOR);
-      this.playerStateLight = scene.lights.addLight(0, 0, 110, 0xb7e2ff, 0.48).setVisible(false);
+      if (this.aurasEnabled) {
+        this.playerStateLight = scene.lights.addLight(0, 0, 110, 0xb7e2ff, 0.48).setVisible(false);
+      }
       this.host.dataset.ambientLight = AMBIENT_LIGHT_COLOR.toString(16).padStart(6, "0");
-      this.host.dataset.auraMode = "light2d";
       this.host.dataset.auraFlicker = "false";
-      this.host.dataset.bulletGlowMode = BULLET_LIGHTS_ENABLED ? "batched-light2d" : "off";
       this.host.dataset.bulletShape = "bar";
       this.host.dataset.flickerMode = "occasional-burst-35ms";
       this.host.dataset.flashlightColor = "ffffff";
       this.host.dataset.flashlightRadiusScale = String(FLASHLIGHT_RADIUS_SCALE);
-      this.host.dataset.maxLights = String(MAX_LIGHTS);
       this.host.dataset.portalDownAuraColor = PORTAL_DOWN_AURA_COLOR.toString(16).padStart(6, "0");
       this.host.dataset.portalUpAuraColor = PORTAL_UP_AURA_COLOR.toString(16).padStart(6, "0");
     }
@@ -576,6 +600,7 @@ export class PhaserRenderer {
     this.renderObjects(this.currentStairs, this.currentLoot, this.visited, this.currentLootAssets);
     this.renderMonsters(this.currentMonsters);
     this.renderBullets(this.currentBullets);
+    this.updateEffectLightDataset();
     this.setPlayer(this.currentPlayer, this.currentPlayerHp, this.currentPlayerMaxHp, this.currentPlayerAsset);
     this.applyCameraMode(true);
     this.host.dataset.debugHitboxes = String(SHOW_DEBUG_GEOMETRY);
@@ -1619,7 +1644,8 @@ export class PhaserRenderer {
     }
   }
 
-  private createShadow(asset: string): Phaser.GameObjects.Image {
+  private createShadow(asset: string): Phaser.GameObjects.Image | null {
+    if (!this.shadowsEnabled) return null;
     return this.scene!.add.image(0, 0, textureKey(asset))
       .setName("shadow")
       .setTintFill(0x000000)
@@ -1646,7 +1672,7 @@ export class PhaserRenderer {
     radius: number,
     intensity: number,
   ): Phaser.GameObjects.Light | null {
-    if (!this.lightingEnabled || !this.scene) return null;
+    if (!this.aurasEnabled || !this.scene) return null;
     return this.scene.lights.addLight(x, y, radius, color, intensity);
   }
 
@@ -1749,16 +1775,18 @@ export class PhaserRenderer {
       const shadow = this.createShadow(asset);
       const visualOffset = this.decorationVisualOffset(item, state.clip);
       this.applyClip(sprite, state.clip, item.size, state.elapsed, undefined, visualOffset);
-      this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, visualOffset);
-      this.applyShadowOffset(shadow, item.x, item.y, item.size);
+      if (shadow) {
+        this.applyClip(shadow, state.clip, item.size, state.elapsed, undefined, visualOffset);
+        this.applyShadowOffset(shadow, item.x, item.y, item.size);
+        this.decorationShadows.set(item.id, shadow);
+      }
       const isDebris = item.destroyed ||
         item.kind === "debris" ||
         item.kind === "doorway-debris" ||
         item.definitionId.startsWith("debris");
-      const container = scene.add.container(item.x, item.y, [shadow, sprite])
+      const container = scene.add.container(item.x, item.y, shadow ? [shadow, sprite] : [sprite])
         .setDepth(isDebris ? DEBRIS_DEPTH : yDepth(item.y));
       this.decorationSprites.set(item.id, sprite);
-      this.decorationShadows.set(item.id, shadow);
       this.syncDecorationEffectLight(item, state);
       this.decorations.push(container);
       if (item.destructible && !item.destroyed && item.hp != item.maxHp) {
@@ -1837,7 +1865,7 @@ export class PhaserRenderer {
     const profile = state.clip.light;
     const active = Boolean(profile) && state.elapsed < state.clip.frames.length * state.clip.frameDurationMs;
     let light = this.decorationEffectLights.get(item.id);
-    if (!this.lightingEnabled || !this.scene || !active || !profile) {
+    if (!this.effectLightsEnabled || !this.scene || !active || !profile) {
       if (light) this.scene?.lights.removeLight(light);
       this.decorationEffectLights.delete(item.id);
       this.updateEffectLightDataset();
@@ -1978,17 +2006,20 @@ export class PhaserRenderer {
       let container = this.portals.get(stair.id);
       if (!container) {
         const frame = PORTAL_DEFINITION.frames[stair.type][0];
-        const shadow = this.createShadow(frame)
-          .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
-          .setOrigin(0.5, 0.5)
-          .setData("visualOffset", PORTAL_DEFINITION.visualOffset);
-        this.applyShadowOffset(shadow, stair.x, stair.y, PORTAL_DEFINITION.size);
+        const shadow = this.createShadow(frame);
+        if (shadow) {
+          shadow.setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
+            .setOrigin(0.5, 0.5)
+            .setData("visualOffset", PORTAL_DEFINITION.visualOffset);
+          this.applyShadowOffset(shadow, stair.x, stair.y, PORTAL_DEFINITION.size);
+        }
         const sprite = this.illuminate(scene.add.image(0, 0, textureKey(frame))
           .setDisplaySize(PORTAL_DEFINITION.size, PORTAL_DEFINITION.size)
           .setOrigin(0.5, 0.5)
           .setPosition(PORTAL_DEFINITION.visualOffset.x, PORTAL_DEFINITION.visualOffset.y)
           .setName("sprite"));
-        container = scene.add.container(stair.x, stair.y, [shadow, sprite]).setDepth(yDepth(stair.y + PORTAL_DEFINITION.orderingOffsetY));
+        container = scene.add.container(stair.x, stair.y, shadow ? [shadow, sprite] : [sprite])
+          .setDepth(yDepth(stair.y + PORTAL_DEFINITION.orderingOffsetY));
         container.setData("enabled", false);
         container.setData("animationToken", 0);
         this.portals.set(stair.id, container);
@@ -2122,12 +2153,14 @@ export class PhaserRenderer {
         const shadow = this.createShadow(frame.asset);
         this.applyClip(sprite, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
           item.dead ? item.destroyedVisualOffset : item.visualOffset);
-        this.applyClip(shadow, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
-          item.dead ? item.destroyedVisualOffset : item.visualOffset);
-        this.applyShadowOffset(shadow, item.x, item.y, item.size);
+        if (shadow) {
+          this.applyClip(shadow, frame.clip, item.dead ? item.size : item.spriteSize, frame.elapsed, undefined,
+            item.dead ? item.destroyedVisualOffset : item.visualOffset);
+          this.applyShadowOffset(shadow, item.x, item.y, item.size);
+        }
         const barWidth = item.miniboss ? item.size * 0.72 : 44;
         const barY = item.healthBarOffsetY;
-        const children: Phaser.GameObjects.GameObject[] = [shadow, sprite];
+        const children: Phaser.GameObjects.GameObject[] = shadow ? [shadow, sprite] : [sprite];
         container = scene.add.container(item.x, item.y, children)
           .setDepth(this.monsterDepth(item));
         container.setData("hpWidth", barWidth);
@@ -2176,7 +2209,7 @@ export class PhaserRenderer {
     }
     this.updateMonsterAssetDataset();
     this.refreshLocalLightVisibility(true);
-    this.setHostData("monsterShadows", String(this.monsters.size));
+    this.setHostData("monsterShadows", String(this.shadowsEnabled ? this.monsters.size : 0));
     this.renderDebugGeometry();
   }
 
@@ -2310,7 +2343,7 @@ export class PhaserRenderer {
   }
 
   private syncBulletLights(items: readonly Bullet[]): void {
-    if (!BULLET_LIGHTS_ENABLED || !this.lightingEnabled || !this.scene) return;
+    if (!BULLET_LIGHTS_ENABLED || !this.effectLightsEnabled || !this.scene) return;
     const lightCount = Math.min(items.length, MAX_BULLET_LIGHTS);
     while (this.bulletLights.length < lightCount) {
       this.bulletLights.push(this.scene.lights.addLight(0, 0, 72, 0xffffff, 0.7).setVisible(false));
@@ -2367,15 +2400,18 @@ export class PhaserRenderer {
       this.playerShadow = this.createShadow(asset);
       this.playerSprite = this.illuminate(scene.add.image(0, 0, textureKey(asset))
         .setOrigin(clip.origin.x, clip.origin.y));
-      this.player = scene.add.container(position.x, position.y, [this.playerShadow, this.playerSprite])
+      this.player = scene.add.container(position.x, position.y, this.playerShadow
+        ? [this.playerShadow, this.playerSprite] : [this.playerSprite])
         .setDepth(yDepth(position.y));
     }
     this.player.setPosition(position.x, position.y).setDepth(yDepth(position.y));
     this.syncPlayerFollowingEffects();
     if (scene.textures.exists(textureKey(asset))) this.playerSprite!.setTexture(textureKey(asset));
     this.applyClip(this.playerSprite!, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
-    this.applyClip(this.playerShadow!, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
-    this.applyShadowOffset(this.playerShadow!, position.x, position.y, PLAYER_SPEC.spriteSize);
+    if (this.playerShadow) {
+      this.applyClip(this.playerShadow, clip, PLAYER_SPEC.spriteSize, 0, asset, PLAYER_SPEC.visualOffset);
+      this.applyShadowOffset(this.playerShadow, position.x, position.y, PLAYER_SPEC.spriteSize);
+    }
     this.applyPlayerProtectionTint();
     this.syncPlayerStateLight();
     this.refreshLocalLightVisibility();
@@ -2413,7 +2449,10 @@ export class PhaserRenderer {
 
   private syncPlayerStateLight(): void {
     const light = this.playerStateLight;
-    if (!light) return;
+    if (!light) {
+      this.setHostData("playerLight", "false");
+      return;
+    }
     light.x = this.currentPlayer.x;
     light.y = this.currentPlayer.y + PLAYER_SPEC.hitboxOffset.y;
     light.setColor(this.playerDashTintActive ? 0x4db3ff : this.playerProtectionActive ? 0x78ff9b : 0xb7e2ff);
@@ -2630,7 +2669,7 @@ export class PhaserRenderer {
     this.setHostData("lastEffect", clip.frames[0]!);
     this.setHostData("effectSpriteMode", "emissive");
     this.applyClip(effect, clip, baseSize);
-    const light = this.lightingEnabled
+    const light = this.effectLightsEnabled
       ? scene.lights.addLight(x, y, Math.max(52, baseSize * profile.radiusScale), lightColor, profile.intensity)
       : null;
     if (light) {

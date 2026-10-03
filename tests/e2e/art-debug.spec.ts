@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { artDebugLevel } from "../../src/client/domain/authored-rooms";
+import { LIGHT_DETAIL_STORAGE_KEY, type LightDetail } from "../../src/client/render/light-detail";
 
 test.skip(process.env.VITE_ART_DEBUG !== "true", "Requires a build with VITE_ART_DEBUG=true");
 test.describe.configure({ timeout: 90_000 });
@@ -17,6 +18,13 @@ test("boots directly into the playable, authored art floor without fetching a pa
   await expect(page.locator("#gameUi")).toBeVisible();
   await expect(host.locator("canvas")).toBeVisible({ timeout: 30_000 });
   await expect(host).toHaveAttribute("data-rooms", "13", { timeout: 30_000 });
+  const fps = page.locator("#debugFps");
+  if (process.env.VITE_DEBUG === "true") {
+    await expect(fps).toBeVisible();
+    await expect(fps).toHaveText(/^[1-9]\d* FPS\s+Tick: \d+\.\d{2} ms\s+Phaser update: \d+\.\d{2} ms\s+Render \(CPU\): \d+\.\d{2} ms\s+Between frames: \d+\.\d{2} ms$/, { timeout: 10_000 });
+  } else {
+    await expect(fps).toBeHidden();
+  }
   await expect(host).toHaveAttribute("data-active-monsters", "0");
   expect(fetches).toEqual([]);
 
@@ -36,3 +44,32 @@ test("boots directly into the playable, authored art floor without fetching a pa
   await expect(host).toHaveAttribute("data-active-bosses", "1");
   await expect(page.locator("#bossHud")).toBeVisible();
 });
+
+for (const detail of ["none", "low", "medium", "high"] as const satisfies readonly LightDetail[]) {
+  test(`applies ${detail} lighting to the art floor`, async ({ page }) => {
+    await page.addInitScript(({ key, detail }) => localStorage.setItem(key, detail), {
+      key: LIGHT_DETAIL_STORAGE_KEY,
+      detail,
+    });
+    await page.goto("/");
+    const host = page.locator("#gameCanvas");
+    await expect(host).toHaveAttribute("data-rooms", "13", { timeout: 30_000 });
+    await expect(host).toHaveAttribute("data-light-detail", detail);
+    await expect(host).toHaveAttribute("data-lighting-mode", detail === "none" ? "disabled" : "webgl");
+    await expect(host).toHaveAttribute("data-flashlight-active", detail === "none" ? "false" : "true");
+    if (detail !== "none") {
+      await expect.poll(async () => Number(await host.getAttribute("data-room-lights"))).toBeGreaterThan(0);
+    }
+    await expect(host).toHaveAttribute("data-aura-mode", detail === "medium" || detail === "high" ? "light2d" : "off");
+    await expect(host).toHaveAttribute("data-bullet-glow-mode", detail === "high" ? "batched-light2d" : "off");
+    await expect(host).toHaveAttribute("data-player-light", detail === "medium" || detail === "high" ? "true" : "false");
+    const shadows = Number(await host.getAttribute("data-scenery-shadows"));
+    if (detail === "medium" || detail === "high") expect(shadows).toBeGreaterThan(0);
+    else expect(shadows).toBe(0);
+    const effectLights = await page.evaluate(() => {
+      (window as Window & { __webcrawlTest?: { spawnHealingEffect: () => void } }).__webcrawlTest?.spawnHealingEffect();
+      return document.querySelector<HTMLElement>("#gameCanvas")?.dataset.effectLights;
+    });
+    expect(effectLights).toBe(detail === "high" ? "1" : "0");
+  });
+}

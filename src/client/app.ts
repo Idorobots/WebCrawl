@@ -109,6 +109,8 @@ import {
   weaponForMonster,
 } from "./domain/weapons";
 import type { PhaserRenderer } from "./render/phaser-renderer";
+import { supportedMaxLights } from "./render/light-capacity";
+import { loadLightDetail, storeLightDetail, type LightDetail } from "./render/light-detail";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
 import type {
   Bullet,
@@ -145,6 +147,8 @@ const PLAYER_MAX_HP = DEBUG_MODE ? 1_000 : PLAYER_SPEC.maxHp;
 
 const gameViewport = requireElement<HTMLElement>("#gameViewport");
 const gameCanvasHost = requireElement<HTMLElement>("#gameCanvas");
+const debugFps = requireElement<HTMLElement>("#debugFps");
+debugFps.hidden = !DEBUG_MODE;
 const moveStick = requireElement<HTMLElement>("#moveStick");
 const aimStick = requireElement<HTMLElement>("#aimStick");
 const bailoutButton = requireElement<HTMLButtonElement>("#bailoutButton");
@@ -176,6 +180,13 @@ const bossHudHealthFill = requireElement<HTMLElement>("#bossHudHealthFill");
 const loginLayout = requireElement<HTMLDivElement>("#loginLayout");
 const promptLayout = requireElement<HTMLDivElement>("#promptLayout");
 const loginForm = requireElement<HTMLFormElement>("#loginForm");
+const settingsButton = requireElement<HTMLButtonElement>("#settingsButton");
+const settingsDialog = requireElement<HTMLDialogElement>("#settingsDialog");
+const settingsCloseButton = requireElement<HTMLButtonElement>("#settingsCloseButton");
+const settingsForm = requireElement<HTMLFormElement>("#settingsForm");
+const lightDetailSelect = requireElement<HTMLSelectElement>("#lightDetailSelect");
+let lightDetail: LightDetail = loadLightDetail(supportedMaxLights());
+lightDetailSelect.value = lightDetail;
 const loginFields = [
   requireElement<HTMLInputElement>("#loginUsername"),
   requireElement<HTMLInputElement>("#loginPassword"),
@@ -277,11 +288,21 @@ let lastDroppedWeapon: LootItem | null = null;
 let queuedLootDrops: LootItem[] = [];
 const temporarilyBlockedLoot = new Set<string>();
 
-const GAME_TICK_INTERVAL_MS = 1_000 / 60;
+const GAME_TICK_INTERVAL_MS = 1_000 / 120;
 let gameAnimationFrame: number | null = null;
 let lastGameTick: number | null = null;
 let nextGameTick: number | null = null;
 let lastPlayerInputFrameAt: number | null = null;
+let fpsSampleStart: number | null = null;
+let fpsSampleFrames = 0;
+let tickSampleCount = 0;
+let tickSampleTotalMs = 0;
+let updateSampleCount = 0;
+let updateSampleTotalMs = 0;
+let renderSampleCount = 0;
+let renderSampleTotalMs = 0;
+let betweenFrameSampleCount = 0;
+let betweenFrameSampleTotalMs = 0;
 let gameLoopSuspended = false;
 
 const lootInventory: LootInventory = { credits: 0, crystals: 0, cores: 0, energy: 0, medkits: 0 };
@@ -2446,6 +2467,15 @@ function gameTick(timestamp: number): void {
   nextGameTick = nextGameTick === null
     ? timestamp + GAME_TICK_INTERVAL_MS
     : Math.max(timestamp + GAME_TICK_INTERVAL_MS, nextGameTick + GAME_TICK_INTERVAL_MS);
+  const startedAt = DEBUG_MODE ? performance.now() : 0;
+  runGameTick(timestamp);
+  if (DEBUG_MODE) {
+    tickSampleTotalMs += performance.now() - startedAt;
+    tickSampleCount += 1;
+  }
+}
+
+function runGameTick(timestamp: number): void {
   renderer.updateLighting(timestamp);
   renderer.updateFootsteps(timestamp);
   updateMinimapVisibility(timestamp);
@@ -2592,6 +2622,29 @@ function gameTick(timestamp: number): void {
 
 function updatePlayerInputFrame(): void {
   const now = performance.now();
+  if (DEBUG_MODE) {
+    if (fpsSampleStart === null) fpsSampleStart = now;
+    else fpsSampleFrames += 1;
+    const elapsed = now - fpsSampleStart;
+    if (elapsed >= 1_000) {
+      const tickMs = tickSampleCount ? (tickSampleTotalMs / tickSampleCount).toFixed(2) : "--";
+      const updateMs = updateSampleCount ? (updateSampleTotalMs / updateSampleCount).toFixed(2) : "--";
+      const renderMs = renderSampleCount ? (renderSampleTotalMs / renderSampleCount).toFixed(2) : "--";
+      const betweenFramesMs = betweenFrameSampleCount
+        ? (betweenFrameSampleTotalMs / betweenFrameSampleCount).toFixed(2) : "--";
+      debugFps.textContent = `${Math.round(fpsSampleFrames * 1_000 / elapsed)} FPS\nTick: ${tickMs} ms\nPhaser update: ${updateMs} ms\nRender (CPU): ${renderMs} ms\nBetween frames: ${betweenFramesMs} ms`;
+      fpsSampleStart = now;
+      fpsSampleFrames = 0;
+      tickSampleCount = 0;
+      tickSampleTotalMs = 0;
+      updateSampleCount = 0;
+      updateSampleTotalMs = 0;
+      renderSampleCount = 0;
+      renderSampleTotalMs = 0;
+      betweenFrameSampleCount = 0;
+      betweenFrameSampleTotalMs = 0;
+    }
+  }
   if (gameAnimationFrame === null || teleportPauseActive || !playerAlive || !currentLayout) {
     lastPlayerInputFrameAt = null;
     return;
@@ -3940,7 +3993,7 @@ async function loadPage(
 
 async function loadRenderer(): Promise<void> {
   const { PhaserRenderer } = await import("./render/phaser-renderer");
-  renderer = new PhaserRenderer(gameCanvasHost);
+  renderer = new PhaserRenderer(gameCanvasHost, lightDetail);
 }
 
 async function startArtDebug(): Promise<void> {
@@ -3970,6 +4023,18 @@ function startRenderer(): Promise<void> {
   return new Promise((resolve) => {
     renderer.start({
       onFrame: updatePlayerInputFrame,
+      onUpdate: DEBUG_MODE ? (durationMs) => {
+        updateSampleTotalMs += durationMs;
+        updateSampleCount += 1;
+      } : undefined,
+      onRender: DEBUG_MODE ? (durationMs) => {
+        renderSampleTotalMs += durationMs;
+        renderSampleCount += 1;
+      } : undefined,
+      onBetweenFrames: DEBUG_MODE ? (durationMs) => {
+        betweenFrameSampleTotalMs += durationMs;
+        betweenFrameSampleCount += 1;
+      } : undefined,
       onBootComplete: () => {
         window.clearTimeout(loadingBootGuardTimer);
         loadingBootGuardTimer = undefined;
@@ -4104,6 +4169,8 @@ function spawnWelcomePrompt(): void {
 function startWelcomeSession(): void {
   if (welcomeSessionStarted) return;
   welcomeSessionStarted = true;
+  if (settingsDialog.open) settingsDialog.close();
+  settingsButton.hidden = true;
   playButtonClick();
   playWelcomeAmbient();
   promptLayout.classList.add("open");
@@ -4118,6 +4185,23 @@ function startWelcomeSession(): void {
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
   startWelcomeSession();
+});
+
+settingsButton.addEventListener("click", () => {
+  settingsDialog.showModal();
+  settingsButton.setAttribute("aria-expanded", "true");
+  lightDetailSelect.focus();
+});
+
+settingsCloseButton.addEventListener("click", () => settingsDialog.close());
+settingsDialog.addEventListener("close", () => {
+  settingsButton.setAttribute("aria-expanded", "false");
+  if (!settingsButton.hidden) settingsButton.focus();
+});
+settingsForm.addEventListener("submit", event => event.preventDefault());
+lightDetailSelect.addEventListener("change", () => {
+  lightDetail = lightDetailSelect.value as LightDetail;
+  storeLightDetail(lightDetail);
 });
 
 for (const field of loginFields) {
@@ -4138,7 +4222,7 @@ for (const field of loginFields) {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" || welcomeSessionStarted || loginLayout.hidden) return;
-  if (event.target instanceof Element && event.target.closest("#loginForm")) return;
+  if (settingsDialog.open || (event.target instanceof Element && event.target.closest("#loginForm, #settingsButton"))) return;
   event.preventDefault();
   loginForm.requestSubmit();
 });

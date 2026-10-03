@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { BOSS_CAMERA_SCALE, CAMERA_SCALE, MOBILE_CAMERA_SCALE } from "../../src/client/config";
+import { LIGHT_DETAIL_STORAGE_KEY } from "../../src/client/render/light-detail";
 import {
   BOSS_DEFINITIONS,
   PLAYER_DAMAGE_INVULNERABILITY_MS,
@@ -31,6 +32,7 @@ async function signIn(page: Page): Promise<void> {
 }
 
 async function startGame(page: Page): Promise<void> {
+  await page.addInitScript(key => localStorage.setItem(key, "high"), LIGHT_DETAIL_STORAGE_KEY);
   const fixture = fs.readFileSync(path.resolve("tests/fixtures/page.html"), "utf8");
   await stubRemoteFetchFallbacks(page, fixture);
   await page.route("**/api/fetch?**", (route) => route.fulfill({

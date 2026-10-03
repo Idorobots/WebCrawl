@@ -997,6 +997,166 @@ turns into:
 [W][W][W]
 [ ][ ][ ]
 
+* DONE Consistent collision detection
+:LOGBOOK:
+- State "DONE"       from              [2026-10-01 Thu 19:45]
+:END:
+- Replace movement anchors with footprints
+- Refactor the object specs to include hitbox, footprint and visual offsets configs.
+- Use hitboxes for player/bullet collision detection and damage calcualation.
+- Use hitboxes for enemy/bullet collision detection and damage calcualation.
+- Use hitboxes for player/pickup collision detection.
+- Use the footprints for player/scenery collision detection and blocking.
+- Use the footprints for enemy/scenery collision detection and blocking.
+- Define dedicated footprints for walls, use the same footprint as a hitbox, but shifted by 0.25 SEGMENT_SIZE up.
+- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
+
+* DONE Additional scenery
+:LOGBOOK:
+- State "DONE"       from              [2026-09-27 Sun 16:49]
+:END:
+There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
+
+More scenery items & enemies now have dedicated debris sprites. Please add them to the game.
+
+There are several backgrounds now, these could be used as an alternative for the current dark "technology" background. Each URL visited should deterministically determine which background to use for those levels.
+
+Similarly, there are multiple font files available now. Please randomize which font file is used for the level signage.
+
+Similarly, there are multiple ambient station sounds available. Please randomize which ambient space station sound is used.
+
+* DONE Performance optimization, again
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 12:10]
+:END:
+- Do not re-load the previous level - when a player goes down a floor, do not remove the state for the previous floor. When the player goes back a floor just re-use the stored state instead of loading the game again.
+- Use point lights for damage & explosion effects.
+- Use point lights for room/corridor lighting.
+- Batch point light rendering together.
+
+* DONE Performance optimization, again
+:LOGBOOK:
+- State "DONE"       from              [2026-09-26 Sat 20:27]
+:END:
+- Cull discovered rooms that are far away
+* DONE UX improvements, again
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 17:25]
+:END:
+- The error screen and final score screens should take the user back to the welcome screen, but without having to "log back in".
+- Use the URL and the HTML content for level generation seed, not just the HTML contents.
+- Show just 3 weapon icons on the welcome prompt on mobile
+
+* DONE Asset changes
+:LOGBOOK:
+- State "DONE"       from              [2026-09-27 Sun 15:24]
+:END:
+- Change the RAM sticks to holographic, nonexistent RAM sticks
+- Use broken floor tiles sparingly
+- Use the pistol graphic as the default weapon
+
+* DONE Gameplay mechanics
+:LOGBOOK:
+- State "DONE"       from              [2026-09-25 Fri 00:07]
+:END:
+- Exploding barrels should damage objects around them.
+- Regulatory Capture should be triggerable whenever the energy bar is non-empty. The distance travelled and damage dealt should be proportional to the amount of energy spent at once (more energy used, the longer the player travels and deals more damage). The max energy should be increased to 10. When the bar is fully charged, make it annimate a "shine" animation (like in Street Fighter).
+- Portals should enable when all monsters on a floor are killed.
+- "Dedicated" crates should have a higher likelyhood of dropping a specific loot - medical crates should have a higher likelyhood of dropping medkits, etc.
+
+* DONE Gameplay mechanics
+:LOGBOOK:
+- State "DONE"       from              [2026-09-25 Fri 14:34]
+:END:
+- Show the link URL when player comes close to a portal (similarly to how the content browser shows its content).
+- Play a sound when portals activate once all enemies are destroyed - alerts/access_granted
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 13:38]
+:END:
+- "I'm feeling lucky" button doesn't work after an error and redirect back into the welcome screen.
+- Resizing the canvas (for instance by changing mobile orientation) does not reflect in the game proportions.
+- Game fetches the random wikipedia page and attempts to fetch the redirect, but if that fails it then tries to fetch the random page via the backend, which does not follow redirects. It should fetch the redirected-to URL via the backend.
+
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-23 Wed 17:53]
+:END:
+- Health bars should appear on top of everything else in game.
+- Scenery and monsters are never placed near the top wall edge.
+
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-24 Thu 23:34]
+:END:
+- Player has no shadow. The players shadow should behave the same as all other shadows.
+- Spawners seem to always leave ammo crates as loot, it should be randomized like the other scenery objects.
+- Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
+- Monsters get stuck on doors again during pathfinding.
+
+* DONE Visual bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-27 Sun 15:37]
+:END:
+- In long corridors often scenery is placed on the same spot.
+- There seem to be no debris floor tiles in corridors, they should occur as ofter as in the rooms.
+
+* CANCELLED Gameplay mechanics
+:LOGBOOK:
+- State "CANCELLED"  from              [2026-09-26 Sat 17:30] \\
+  nah
+:END:
+- Up portals should be active always (except in the initial room on floor 1).
+
+* DONE UI improvements
+:LOGBOOK:
+- State "DONE"       from              [2026-09-25 Fri 12:53]
+:END:
+- Annimate the health/energy/ammo bars whenever they change.
+- Player's health bar should flash when almost depleted (< 20%).
+
+* DONE Boss fights
+:LOGBOOK:
+- State "DONE"       from              [2026-09-27 Sun 15:21]
+:END:
+- Script element should no longer be boss arenas. Instead, the most distant room should be promoted to a boss arena. Use the level hash to break ties.
+
+- Each floor should have at least one mini-boss monster - if none are generated initially, select a room distinct to the boss arena at random and promote one of monsters in there to a mini-boss status. Make this deterministic, based on the level hash.
+
+- Portals should activate after all bosses & revealed monsters on the level are defeated.
+
+* DONE Boss rebalance
+:LOGBOOK:
+- State "DONE"       from              [2026-09-27 Sun 23:53]
+:END:
+- Bosses should have multiple stages with different attack patterns depending on their HP. Let's go for three stages, with the final one being the most "intense" one.
+- Remove the "stage" from the boss name.
+- Remove the boss "rings" that are underneath them.
+- Boss health bar & name should show at the bottom of the screen (above the UI panels) whenever the boss is discovered and alive.
+- Some bosses are pretty hard to kill now due to the ungodly number of bullets produced. Can you please change the patterns to make them more playable and also more interesting? Here are some themes: a boss that tries to catch the player and kill them with melee but additionally shoots a sparse ring of bullets once in a while, it should also charge the player from time to time (stop briefly then charge with extra speed); a boss that is bullet-wave themed with each stage sending a wider wave; a boss that sends spirals of bullets, with each stage changing the spiral shape to be tighter and tighter; a boss that summons monsters and shoots from a distance; a boss that teleports and sends sparse rings of bullets, each stage it teleports more frequently.
+
+* DONE Room layout
+:LOGBOOK:
+- State "DONE"       from              [2026-09-26 Sat 17:23]
+:END:
+- Lax the max rooms/max subcorridors limits for larger layouts
+- Add content browsers for combined rooms
+- Zero length corridors - make rooms attach directly to the neighbouring rooms.
+
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-09-26 Sat 20:54]
+:END:
+- Barel damage should also cause the player to emit damage sound
+- Lights in undiscovered rooms are active. These should only activate after discovery.
+- Destroyed content browsers should not "work" - currently they are still playing the sound and show the content browser popup.
+- When all children are coalesced into a node, its content should be coalesced as well - use the current nodes HTML instead of an array of its children HTML contents.
+- Script rooms don't need a content browser. Omit content browsers when there's no readable content.
+- All monsters in a room seem to be dropping the same loot.
+- Floor signage should appear below any debris floor tiles.
+- Directly-connected rooms should reveal as soon as player walks up 0.5 segment away from the door.
+- Multiple spawners can appear on the same spot
+
 * Wall refactor, again
 - Add wall T-junctions for directly-connected rooms.
 * Door refactor, continued
@@ -1057,63 +1217,19 @@ It's OK if the specs are not entirely static - it's perfectly fine to have a fun
 
 The goal is to be able to generate a room with all its enemies that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
-* DONE Consistent collision detection
+* CANCELLED Performance optimization, again
 :LOGBOOK:
-- State "DONE"       from              [2026-10-01 Thu 19:45]
+- State "CANCELLED"  from              [2026-10-03 Sat 17:11] \\
+  These were related to the lights.
 :END:
-- Replace movement anchors with footprints
-- Refactor the object specs to include hitbox, footprint and visual offsets configs.
-- Use hitboxes for player/bullet collision detection and damage calcualation.
-- Use hitboxes for enemy/bullet collision detection and damage calcualation.
-- Use hitboxes for player/pickup collision detection.
-- Use the footprints for player/scenery collision detection and blocking.
-- Use the footprints for enemy/scenery collision detection and blocking.
-- Define dedicated footprints for walls, use the same footprint as a hitbox, but shifted by 0.25 SEGMENT_SIZE up.
-- Revise the footprints & hitboxes of scenery objects - hitboxes should be centered around the "mass" of the scenery item, while footprints ought to be an outline of the projection of those "masses" to the ground.
-
-
-* DONE Additional scenery
-:LOGBOOK:
-- State "DONE"       from              [2026-09-27 Sun 16:49]
-:END:
-There's more scenery assets available now, please add them to the game. This also includes additional themes for the rooms, take that into account as well.
-
-More scenery items & enemies now have dedicated debris sprites. Please add them to the game.
-
-There are several backgrounds now, these could be used as an alternative for the current dark "technology" background. Each URL visited should deterministically determine which background to use for those levels.
-
-Similarly, there are multiple font files available now. Please randomize which font file is used for the level signage.
-
-Similarly, there are multiple ambient station sounds available. Please randomize which ambient space station sound is used.
-
-* DONE Performance optimization, again
-:LOGBOOK:
-- State "DONE"       from              [2026-09-23 Wed 12:10]
-:END:
-- Do not re-load the previous level - when a player goes down a floor, do not remove the state for the previous floor. When the player goes back a floor just re-use the stored state instead of loading the game again.
-- Use point lights for damage & explosion effects.
-- Use point lights for room/corridor lighting.
-- Batch point light rendering together.
-
-* DONE Performance optimization, again
-:LOGBOOK:
-- State "DONE"       from              [2026-09-26 Sat 20:27]
-:END:
-- Cull discovered rooms that are far away
+- The more rooms are revealed, the worse the performance
+- When the player is outside of the active boss arena, the performance tanks dramatically.
 * Performance optimization, again
 - Phaser 4 update?
 - WebWorkers for pathing/collision detection, etc?
-- The more rooms are revealed, the worse the performance
-- When the player is outside of the active boss arena, the performance tanks dramatically.
 
-* DONE UX improvements, again
-:LOGBOOK:
-- State "DONE"       from              [2026-09-23 Wed 17:25]
-:END:
-- The error screen and final score screens should take the user back to the welcome screen, but without having to "log back in".
-- Use the URL and the HTML content for level generation seed, not just the HTML contents.
-- Show just 3 weapon icons on the welcome prompt on mobile
-
+* UX improvements, again
+- Configuration settings on the UI - let the player disable dynamic bullet lights & damage lights. It should be stored in the local storage. The UI form should be accessible via a "cog" button on the "login screen".
 * UX improvements, again
 - Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
 
@@ -1123,29 +1239,6 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 - Rooms need random wall lights in yellow, blue and red variants.
 - Sprites that have a light on them need lighting.
 
-* DONE Asset changes
-:LOGBOOK:
-- State "DONE"       from              [2026-09-27 Sun 15:24]
-:END:
-- Change the RAM sticks to holographic, nonexistent RAM sticks
-- Use broken floor tiles sparingly
-- Use the pistol graphic as the default weapon
-
-* DONE Gameplay mechanics
-:LOGBOOK:
-- State "DONE"       from              [2026-09-25 Fri 00:07]
-:END:
-- Exploding barrels should damage objects around them.
-- Regulatory Capture should be triggerable whenever the energy bar is non-empty. The distance travelled and damage dealt should be proportional to the amount of energy spent at once (more energy used, the longer the player travels and deals more damage). The max energy should be increased to 10. When the bar is fully charged, make it annimate a "shine" animation (like in Street Fighter).
-- Portals should enable when all monsters on a floor are killed.
-- "Dedicated" crates should have a higher likelyhood of dropping a specific loot - medical crates should have a higher likelyhood of dropping medkits, etc.
-
-* DONE Gameplay mechanics
-:LOGBOOK:
-- State "DONE"       from              [2026-09-25 Fri 14:34]
-:END:
-- Show the link URL when player comes close to a portal (similarly to how the content browser shows its content).
-- Play a sound when portals activate once all enemies are destroyed - alerts/access_granted
 * Player mechanics
 - Player's damage multiplier - initially set to 1.0, will be used in the future.
 - Player's shot rate multiplier - initially set to 1.0, will be used in the future.
@@ -1156,13 +1249,6 @@ Similarly, there are multiple ambient station sounds available. Please randomize
 * Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
-
-* CANCELLED Gameplay mechanics
-:LOGBOOK:
-- State "CANCELLED"  from              [2026-09-26 Sat 17:30] \\
-  nah
-:END:
-- Up portals should be active always (except in the initial room on floor 1).
 
 * Minimap overhaul
 - Minimap should be circular
@@ -1223,70 +1309,11 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 
 - Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
 
-* DONE Bugs
-:LOGBOOK:
-- State "DONE"       from              [2026-09-23 Wed 13:38]
-:END:
-- "I'm feeling lucky" button doesn't work after an error and redirect back into the welcome screen.
-- Resizing the canvas (for instance by changing mobile orientation) does not reflect in the game proportions.
-- Game fetches the random wikipedia page and attempts to fetch the redirect, but if that fails it then tries to fetch the random page via the backend, which does not follow redirects. It should fetch the redirected-to URL via the backend.
-
-* DONE Bugs
-:LOGBOOK:
-- State "DONE"       from              [2026-09-23 Wed 17:53]
-:END:
-- Health bars should appear on top of everything else in game.
-- Scenery and monsters are never placed near the top wall edge.
-
-* DONE Bugs
-:LOGBOOK:
-- State "DONE"       from              [2026-09-24 Thu 23:34]
-:END:
-- Player has no shadow. The players shadow should behave the same as all other shadows.
-- Spawners seem to always leave ammo crates as loot, it should be randomized like the other scenery objects.
-- Pathfinding sometimes works in a weird way when compound corridors are involved - often enemies skip attacking the player, go to the end of the corridor and only then attempt to attack the player.
-- Monsters get stuck on doors again during pathfinding.
-
-* DONE Visual bugs
-:LOGBOOK:
-- State "DONE"       from              [2026-09-27 Sun 15:37]
-:END:
-- In long corridors often scenery is placed on the same spot.
-- There seem to be no debris floor tiles in corridors, they should occur as ofter as in the rooms.
-
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Sentries sometimes don't shoot even though there's a clear line of sight to the player. Scenery should be ignored by monster line-of-sight computation for shooting.
 - Monster's line-of-sight computation takes descructible scenery as blocking, which shouldn't be the case.
 - Mini-bosses hitbox & footprint should be scaled just like their size.
-
-* DONE UI improvements
-:LOGBOOK:
-- State "DONE"       from              [2026-09-25 Fri 12:53]
-:END:
-- Annimate the health/energy/ammo bars whenever they change.
-- Player's health bar should flash when almost depleted (< 20%).
-
-
-* DONE Boss fights
-:LOGBOOK:
-- State "DONE"       from              [2026-09-27 Sun 15:21]
-:END:
-- Script element should no longer be boss arenas. Instead, the most distant room should be promoted to a boss arena. Use the level hash to break ties.
-
-- Each floor should have at least one mini-boss monster - if none are generated initially, select a room distinct to the boss arena at random and promote one of monsters in there to a mini-boss status. Make this deterministic, based on the level hash.
-
-- Portals should activate after all bosses & revealed monsters on the level are defeated.
-
-* DONE Boss rebalance
-:LOGBOOK:
-- State "DONE"       from              [2026-09-27 Sun 23:53]
-:END:
-- Bosses should have multiple stages with different attack patterns depending on their HP. Let's go for three stages, with the final one being the most "intense" one.
-- Remove the "stage" from the boss name.
-- Remove the boss "rings" that are underneath them.
-- Boss health bar & name should show at the bottom of the screen (above the UI panels) whenever the boss is discovered and alive.
-- Some bosses are pretty hard to kill now due to the ungodly number of bullets produced. Can you please change the patterns to make them more playable and also more interesting? Here are some themes: a boss that tries to catch the player and kill them with melee but additionally shoots a sparse ring of bullets once in a while, it should also charge the player from time to time (stop briefly then charge with extra speed); a boss that is bullet-wave themed with each stage sending a wider wave; a boss that sends spirals of bullets, with each stage changing the spiral shape to be tighter and tighter; a boss that summons monsters and shoots from a distance; a boss that teleports and sends sparse rings of bullets, each stage it teleports more frequently.
 
 * Enemy rebalance
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.
@@ -1306,33 +1333,11 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Should play one of the alert sounds while the boss fight is starting and then transition to the boss music.
 - Play boss music until the boss is killed (or player is killed).
 
-* DONE Room layout
-:LOGBOOK:
-- State "DONE"       from              [2026-09-26 Sat 17:23]
-:END:
-- Lax the max rooms/max subcorridors limits for larger layouts
-- Add content browsers for combined rooms
-- Zero length corridors - make rooms attach directly to the neighbouring rooms.
-
 * Room layout
 - We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
 - A level can consist of only the initial room. Should be handled gracefully by placing an "I'm feeling lucky" portal within it.
 - When a floor has no links at all, add a random link (same as I'm feeling lucky button) to one of the rooms. If there is a boss arena, place the link in that arena.
 - Some rooms should be generated empty (without any monsters).
-
-* DONE Bugs
-:LOGBOOK:
-- State "DONE"       from              [2026-09-26 Sat 20:54]
-:END:
-- Barel damage should also cause the player to emit damage sound
-- Lights in undiscovered rooms are active. These should only activate after discovery.
-- Destroyed content browsers should not "work" - currently they are still playing the sound and show the content browser popup.
-- When all children are coalesced into a node, its content should be coalesced as well - use the current nodes HTML instead of an array of its children HTML contents.
-- Script rooms don't need a content browser. Omit content browsers when there's no readable content.
-- All monsters in a room seem to be dropping the same loot.
-- Floor signage should appear below any debris floor tiles.
-- Directly-connected rooms should reveal as soon as player walks up 0.5 segment away from the door.
-- Multiple spawners can appear on the same spot
 
 * Hidden rooms
 `display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.
@@ -1353,7 +1358,7 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Asset sizes are arbitrary, need to be tuned
 - Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
 - When entering a boss arena, camera jumps up immediately, while exiting it animates nicely. It should animate nicely both ways.
-- Sentry ballistic directional annimations are scaled weird.
+- Sentry ballistic directional animations are scaled weird.
 - Site favicon
-- Hitboxes on various scenery items are misaligned
+- Healthbars on various scenery items are misaligned
 - Some scenery objects should be placed only on walls as decorations

@@ -99,6 +99,30 @@
       </section>
     </div>
     </div>
+    <button id="settingsButton" class="welcome-settings-button" type="button" aria-label="Settings" aria-haspopup="dialog" aria-controls="settingsDialog" aria-expanded="false" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M10 2h4l.5 2.2 1.6.7 2-.9 2.8 2.8-.9 2 .7 1.6L23 11v2l-2.3.5-.7 1.6.9 2-2.8 2.8-2-.9-1.6.7L14 22h-4l-.5-2.3-1.6-.7-2 .9-2.8-2.8.9-2-.7-1.6L1 13v-2l2.3-.5.7-1.6-.9-2 2.8-2.8 2 .9 1.6-.7L10 2Z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    </button>
+    <dialog id="settingsDialog" aria-labelledby="settingsTitle">
+      <header class="settings-dialog-header">
+        <h2 id="settingsTitle">Settings</h2>
+        <button id="settingsCloseButton" type="button" aria-label="Close settings">×</button>
+      </header>
+      <form id="settingsForm">
+        <fieldset class="settings-section">
+          <legend>Graphics</legend>
+          <label for="lightDetailSelect">Light detail</label>
+          <select id="lightDetailSelect" name="lightDetail">
+            <option value="none">None</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </fieldset>
+      </form>
+    </dialog>
   </div>
 
   <div id="gameUi" hidden>
@@ -137,6 +161,11 @@
 
     <main id="gameViewport">
       <div id="gameCanvas" role="img" aria-label="WebCrawl dungeon"></div>
+      <div id="debugFps" hidden>-- FPS
+Tick: -- ms
+Phaser update: -- ms
+Render (CPU): -- ms
+Between frames: -- ms</div>
     </main>
 
     <div id="mobileControls">

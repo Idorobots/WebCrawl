@@ -79,22 +79,23 @@ void main ()
 
         for (int index = 0; index < kMaxLights; ++index)
         {
-            if (index < uLightCount)
-            {
-                Light light = uLights[index];
-                vec2 planarDirection = (light.position.xy / res) - (gl_FragCoord.xy / res);
-                vec3 pointLightDir = vec3(planarDirection, 0.1);
-                vec3 lightDir = vec3(planarDirection, mix(0.1, 2.0, light.areaSoftness));
-                vec3 lightNormal = normalize(lightDir);
-                float distToSurf = length(pointLightDir) * uCamera.w;
-                float planarDistance = length(planarDirection) * uCamera.w;
-                float diffuseFactor = max(dot(normal, lightNormal), 0.0);
-                float radius = (light.radius / res.x * uCamera.w) * uCamera.w;
-                float pointAttenuation = clamp(1.0 - distToSurf * distToSurf / (radius * radius), 0.0, 1.0);
-                float areaAttenuation = 1.0 - smoothstep(0.1, 1.0, planarDistance / max(radius, 0.0001));
-                float attenuation = mix(pointAttenuation, areaAttenuation, light.areaSoftness);
-                finalColor += attenuation * light.color * diffuseFactor * light.intensity;
-            }
+            if (index >= uLightCount) break;
+
+            Light light = uLights[index];
+            vec2 planarDirection = (light.position.xy / res) - (gl_FragCoord.xy / res);
+            float planarDistance = length(planarDirection) * uCamera.w;
+            float radius = (light.radius / res.x * uCamera.w) * uCamera.w;
+            if (planarDistance >= radius) continue;
+
+            vec3 pointLightDir = vec3(planarDirection, 0.1);
+            vec3 lightDir = vec3(planarDirection, mix(0.1, 2.0, light.areaSoftness));
+            vec3 lightNormal = normalize(lightDir);
+            float distToSurf = length(pointLightDir) * uCamera.w;
+            float diffuseFactor = max(dot(normal, lightNormal), 0.0);
+            float pointAttenuation = clamp(1.0 - distToSurf * distToSurf / (radius * radius), 0.0, 1.0);
+            float areaAttenuation = 1.0 - smoothstep(0.1, 1.0, planarDistance / max(radius, 0.0001));
+            float attenuation = mix(pointAttenuation, areaAttenuation, light.areaSoftness);
+            finalColor += attenuation * light.color * diffuseFactor * light.intensity;
         }
 
         if (flashlightAttenuation > 0.0)

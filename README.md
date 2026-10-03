@@ -40,9 +40,11 @@ To start with 1,000 HP for debugging, set the Vite compile-time flag before star
 VITE_DEBUG=true npm run dev
 ```
 
-For a debug production build, run `VITE_DEBUG=true npm run build` before `npm start`. Restart Vite or rebuild after changing the flag. Collision overlays use the separate `VITE_DEBUG_HITBOXES=true` flag.
+For a debug production build, run `VITE_DEBUG=true npm run build` before `npm start`. Restart Vite or rebuild after changing the flag. Debug builds display FPS and frame timings in the game; collision overlays use the separate `VITE_DEBUG_HITBOXES=true` flag.
 
 To enter the playable art gallery directly, run `VITE_ART_DEBUG=true npm run dev` (or set the flag when building). This skips the welcome screens and remote page fetch. The fixed floor starts with every scenery object, decoration, pickup, and weapon variant in the gallery, followed by one room per enemy kind and one per boss. They use the usual combat and pickup rules. Room templates in `src/client/domain/authored-rooms.ts` use room-local coordinates and can also be supplied to the regular layout/content builders for future handcrafted rooms.
+
+The cog in the login screen's lower-right corner opens Settings. Light detail is saved in the browser: None removes lighting and shadows; Low keeps room lights and the flashlight; Medium adds shadows and auras; High also adds bullet and effect lights. With no saved preference, the level is selected from the available WebGL light capacity. `VITE_MAX_LIGHTS` still controls the renderer's maximum simultaneous lights.
 
 For a small local crawl, enter `http://127.0.0.1:5173/test-level.html` in the game's URL field. The test page has three rooms and two links back to alternate routes through the same level. With the production server, use `http://127.0.0.1:3000/test-level.html` instead.
 
