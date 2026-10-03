@@ -1365,12 +1365,12 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 
 * Visual bugs
 - Monster shadows are flickering a bit when they move.
+- When entering a boss arena, camera jumps up immediately, while exiting it animates nicely. It should animate nicely both ways.
 * Visual bugs
 - Generic robot debris look weird, should only use dedicated robot debris
 - Some scenery items have a very weird choice of debris
 - Asset sizes are arbitrary, need to be tuned
 - Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
-- When entering a boss arena, camera jumps up immediately, while exiting it animates nicely. It should animate nicely both ways.
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Healthbars on various scenery items are misaligned

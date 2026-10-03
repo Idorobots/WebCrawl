@@ -2836,12 +2836,9 @@ export class PhaserRenderer {
     camera.startFollow(this.cameraTarget!, false, CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_LERP);
     camera.setDeadzone();
     const zoom = (this.cameraRoom ? BOSS_CAMERA_SCALE : CAMERA_SCALE) * this.cameraScaleFactor();
-    if (this.cameraRoom) {
-      camera.setZoom(zoom);
-      return;
-    }
     if (immediate) {
-      camera.setZoom(zoom).centerOn(this.currentCameraTarget.x, this.currentCameraTarget.y);
+      camera.setZoom(zoom);
+      if (!this.cameraRoom) camera.centerOn(this.currentCameraTarget.x, this.currentCameraTarget.y);
     } else {
       camera.zoomTo(zoom, CAMERA_TRANSITION_MS, "Sine.easeInOut", true);
     }
