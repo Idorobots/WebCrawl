@@ -441,6 +441,73 @@ test("sounds the portal warning only on the first floor of a run", async ({ page
   )).toEqual(["true", "false", "true", "false", "true", "false"]);
 });
 
+test("announces portal access once per level, including revisits and cancelled announcements", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => {
+    const floors: Array<string | undefined> = [];
+    (window as Window & { __portalAccessFloors?: typeof floors }).__portalAccessFloors = floors;
+    Object.defineProperty(window, "__webcrawlScene", {
+      configurable: true,
+      set(scene: { sound: { add: (key: string, ...args: unknown[]) => unknown } }) {
+        Object.defineProperty(window, "__webcrawlScene", { configurable: true, writable: true, value: scene });
+        const add = scene.sound.add.bind(scene.sound);
+        scene.sound.add = (key, ...args) => {
+          if (key === "sfx-portal-activation") {
+            floors.push(document.querySelector<HTMLElement>("#gameCanvas")?.dataset.floor);
+          }
+          return add(key, ...args);
+        };
+      },
+    });
+  });
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  const announcements = () => page.evaluate(() =>
+    (window as Window & { __portalAccessFloors?: Array<string | undefined> }).__portalAccessFloors ?? []
+  );
+  const clearFloor = () => page.evaluate(() => {
+    const api = (window as Window & { __webcrawlTest?: {
+      setPlayerInvulnerable: (enabled: boolean) => void;
+      defeatAllMonsters: () => void;
+    } }).__webcrawlTest;
+    api?.setPlayerInvulnerable(true);
+    api?.defeatAllMonsters();
+  });
+  const nextFloor = () => page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: { navigate: (url: string) => Promise<void> } })
+      .__webcrawlTest?.navigate("https://example.com/next")
+  );
+  const previousFloor = () => page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: { goBack: () => Promise<void> } })
+      .__webcrawlTest?.goBack()
+  );
+
+  // Leaving before the delay expires must not consume floor one's announcement.
+  await clearFloor();
+  await nextFloor();
+  await expect(game).toHaveAttribute("data-floor", "2");
+  await expect(game).toHaveAttribute("data-portal-intro", "false");
+  expect(await announcements()).toEqual([]);
+
+  await previousFloor();
+  await expect(game).toHaveAttribute("data-floor", "1");
+  await expect.poll(announcements).toEqual(["1"]);
+
+  await nextFloor();
+  await expect(game).toHaveAttribute("data-floor", "2");
+  await clearFloor();
+  await expect.poll(announcements).toEqual(["1", "2"]);
+
+  await previousFloor();
+  await expect(game).toHaveAttribute("data-floor", "1");
+  await expect(game).toHaveAttribute("data-portal-intro", "false");
+  expect(await announcements()).toEqual(["1", "2"]);
+  await nextFloor();
+  await expect(game).toHaveAttribute("data-floor", "2");
+  await expect(game).toHaveAttribute("data-portal-intro", "false");
+  expect(await announcements()).toEqual(["1", "2"]);
+});
+
 test("loads the server-hosted three-room test level", async ({ page }) => {
   const levelUrl = "http://127.0.0.1:3000/test-level.html";
   await page.goto("/");

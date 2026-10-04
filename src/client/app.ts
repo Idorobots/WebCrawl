@@ -221,6 +221,7 @@ let currentPageUrl: string | null = null;
 let currentStateId: string | null = null;
 let gameStarted = false;
 let initialFloorPortalIntroPending = true;
+const portalActivationAnnouncedLevels = new Set<string>();
 const navigationHistory: string[] = [];
 const navigationReturnRooms: Array<number | null> = [];
 
@@ -1043,6 +1044,7 @@ function resetRunState(): void {
   renderer?.setPortalStartupPreview(false);
   cancelPortalActivationSound();
   initialFloorPortalIntroPending = true;
+  portalActivationAnnouncedLevels.clear();
   currentPageUrl = null;
   currentStateId = null;
   navigationHistory.length = 0;
@@ -1439,7 +1441,8 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string, playerSpawn?: Poi
 
 function updateFloorPortals(): boolean {
   const changed = updatePortalAvailability(currentStairs, currentMonsters, visitedRooms);
-  if (changed && !currentStairs.some(stair => stair.enabled)) cancelPortalActivationSound();
+  if (currentStairs.some(stair => stair.enabled)) schedulePortalActivationSound();
+  else cancelPortalActivationSound();
   updatePortalContacts(
     currentStairs,
     player,
@@ -1465,8 +1468,10 @@ function schedulePortalIntroEnd(playSound: boolean): void {
   if (playSound) {
     portalIntroSoundTimer = window.setTimeout(() => {
       portalIntroSoundTimer = null;
-      if (hasBlockingPortalMonsters(currentMonsters, visitedRooms) &&
+      if (initialFloorPortalIntroPending && floorNumber() === 1 &&
+          hasBlockingPortalMonsters(currentMonsters, visitedRooms) &&
           currentStairs.some(stair => stair.url !== null && !stair.enabled)) {
+        initialFloorPortalIntroPending = false;
         renderer.playPortalShutdownSound();
       }
     }, PORTAL_INTRO_SOUND_DELAY_MS);
@@ -1478,10 +1483,13 @@ function schedulePortalIntroEnd(playSound: boolean): void {
 }
 
 function schedulePortalActivationSound(): void {
-  cancelPortalActivationSound();
+  const stateId = currentStateId;
+  if (!stateId || portalActivationAnnouncedLevels.has(stateId) || portalActivationSoundTimer !== null) return;
   portalActivationSoundTimer = window.setTimeout(() => {
     portalActivationSoundTimer = null;
-    if (!playerAlive || gameUi.hidden || !currentStairs.some(stair => stair.enabled)) return;
+    if (currentStateId !== stateId || !playerAlive || gameUi.hidden ||
+        !currentStairs.some(stair => stair.enabled)) return;
+    portalActivationAnnouncedLevels.add(stateId);
     renderer.playPortalActivationSound();
   }, PORTAL_ACTIVATION_SOUND_DELAY_MS);
 }
@@ -1703,9 +1711,7 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
     } else {
       runStats.slowKills += 1;
     }
-    if (updateFloorPortals() && currentStairs.some(stair => stair.enabled)) {
-      schedulePortalActivationSound();
-    }
+    updateFloorPortals();
 
     if (killsCountEl) killsCountEl.textContent = String(runStats.kills);
     updateHudPanels();
@@ -1926,7 +1932,8 @@ function hasLineOfSight(from: Point, to: Point): boolean {
 function visiblePlayerAimPoint(from: Point): Point | null {
   return visiblePlayerHitPoint(
     playerCollisionCenter(), Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y),
-    point => hasLineOfSight(from, point),
+    // Scenery can intercept projectiles, but only walls block shooting visibility.
+    point => wallLineOfSight(from, point),
   );
 }
 
@@ -3826,7 +3833,6 @@ function renderGraph(
   updateLootUi();
   startGameLoop();
   const playIntroSound = initialFloorPortalIntroPending && floorNumber() === 1;
-  initialFloorPortalIntroPending = false;
   schedulePortalIntroEnd(playIntroSound);
 
   setStatus(
