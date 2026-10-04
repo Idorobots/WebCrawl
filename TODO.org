@@ -1343,10 +1343,14 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Regulatory capture moves the player but doesn't center the camera on mobile
 - Regulatory capture should use the shooting direction as the direction, so that it's usable on mobile
 
-* Bugs
-- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-10-04 Sun 19:25]
+:END:
 - Minibosses often get stuck on corners and scenery. If that is the case they should destroy the scenery.
 - Minibosses fail pathing and freeze in place when the player enters a place they can't path to.
+* Bugs
+- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 * DONE Enemy rebalance
 :LOGBOOK:
 - State "DONE"       from              [2026-10-04 Sun 14:05]

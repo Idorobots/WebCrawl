@@ -279,6 +279,8 @@ export interface Monster extends Point, RelativeObjectGeometry {
   nextPathRefreshAt?: number;
   lastPathSearchAt?: number;
   blockedMoveCount?: number;
+  /** Keep the blocked route direction while a miniboss clears its obstacle. */
+  blockedWaypoint?: Point;
   escapeDirection?: Point;
   escapeUntil?: number;
   attackSequence?: number;

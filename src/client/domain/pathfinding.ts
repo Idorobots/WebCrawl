@@ -9,22 +9,38 @@ interface Bounds {
   maxY: number;
 }
 
-/** Failed searches stay asleep until scenery near the failed attempt is destroyed. */
+interface PathTarget extends Point {
+  roomId: number | null;
+}
+
+/** Static failures sleep until scenery changes; moving targets can opt into recovery. */
 export class FailedPathCache {
-  private readonly failures = new WeakMap<Point, readonly Pick<Decoration, "destroyed">[]>();
+  private readonly failures = new WeakMap<Point, {
+    scenery: readonly Pick<Decoration, "destroyed">[];
+    target?: PathTarget;
+    retryAt: number;
+  }>();
 
   has(actor: Point): boolean {
     return this.failures.has(actor);
   }
 
-  remember(actor: Point, scenery: Iterable<Pick<Decoration, "destroyed">>): void {
-    this.failures.set(actor, [...scenery].filter(item => !item.destroyed));
+  remember(actor: Point, scenery: Iterable<Pick<Decoration, "destroyed">>, target?: PathTarget, retryAt = Infinity): void {
+    this.failures.set(actor, {
+      scenery: [...scenery].filter(item => !item.destroyed),
+      target: target ? { ...target } : undefined,
+      retryAt,
+    });
   }
 
-  unchanged(actor: Point): boolean {
-    const scenery = this.failures.get(actor);
-    if (!scenery) return false;
-    if (scenery.some(item => item.destroyed)) {
+  unchanged(actor: Point, target?: PathTarget, timestamp = performance.now()): boolean {
+    const failure = this.failures.get(actor);
+    if (!failure) return false;
+    const targetChanged = target && failure.target && (
+      target.roomId !== failure.target.roomId ||
+      Math.hypot(target.x - failure.target.x, target.y - failure.target.y) >= WORLD_GEOMETRY.pathGridStep * 4
+    );
+    if (failure.scenery.some(item => item.destroyed) || targetChanged || timestamp >= failure.retryAt) {
       this.forget(actor);
       return false;
     }
@@ -137,22 +153,29 @@ export function chooseReachablePath(
   step: number,
   maxIterations: number,
   boundsFor: (target: Point) => Bounds,
-): { path: Point[]; targetIndex: number } | null {
+  allowPartial = false,
+): { path: Point[]; targetIndex: number; partial?: boolean } | null {
+  let partialRoute: { path: Point[]; targetIndex: number; partial: true } | null = null;
   for (let index = 0; index < targets.length; index += 1) {
     const target = targets[index]!;
-    if (!isWalkable(target)) continue;
+    const targetWalkable = isWalkable(target);
+    if (!targetWalkable && !allowPartial) continue;
     let path: Point[] | null = null;
-    if (walkableSegment(start, target, isWalkable)) {
+    if (targetWalkable && walkableSegment(start, target, isWalkable)) {
       path = [target];
     } else {
       const longRoute = Math.hypot(target.x - start.x, target.y - start.y) > step * 32;
-      if (longRoute) path = aStarPath(start, target, isWalkable, step * 2, maxIterations, boundsFor(target));
+      if (longRoute && targetWalkable) path = aStarPath(start, target, isWalkable, step * 2, maxIterations, boundsFor(target));
       path ??= aStarPath(start, target, isWalkable, step,
-        index === 0 && longRoute ? Math.max(maxIterations, 6000) : maxIterations, boundsFor(target));
+        !allowPartial && index === 0 && longRoute ? Math.max(maxIterations, 6000) : maxIterations,
+        boundsFor(target), allowPartial);
     }
-    if (path) return { path, targetIndex: index };
+    if (!path) continue;
+    const end = path[path.length - 1]!;
+    if (end.x === target.x && end.y === target.y) return { path, targetIndex: index };
+    partialRoute ??= { path, targetIndex: index, partial: true };
   }
-  return null;
+  return partialRoute;
 }
 
 /** Find a nearby position for a larger actor when the target hugs a wall. */
@@ -187,8 +210,10 @@ export function aStarPath(
   step = 20,
   maxIterations = 2500,
   bounds?: Bounds,
+  allowPartial = false,
 ): Point[] | null {
-  if (!isWalkable(goal)) return null;
+  const goalWalkable = isWalkable(goal);
+  if (!goalWalkable && !allowPartial) return null;
 
   const inBounds = (point: Point): boolean => {
     if (!bounds) return true;
@@ -209,6 +234,18 @@ export function aStarPath(
   const open: AStarNode[] = [];
   const previous = new Map<string, string | null>();
   const bestCost = new Map<string, number>();
+  const pathTo = (key: string): Point[] => {
+    const path: Point[] = [];
+    let cursor: string | null = key;
+    while (cursor) {
+      const [x = 0, y = 0] = cursor.split(",").map(Number);
+      path.push({ x, y });
+      cursor = previous.get(cursor) ?? null;
+    }
+    return [start, ...path.reverse()];
+  };
+  let closestKey: string | null = null;
+  let closestDistance = Math.hypot(goal.x - start.x, goal.y - start.y);
   const gridX = Math.round(start.x / step) * step;
   const gridY = Math.round(start.y / step) * step;
   // An actor can stand near a wall while its nearest snapped grid point is
@@ -230,16 +267,14 @@ export function aStarPath(
     if (!current) break;
     const currentKey = pointKey(current.x, current.y);
     if (current.g > (bestCost.get(currentKey) ?? Infinity)) continue;
-    if (Math.hypot(goal.x - current.x, goal.y - current.y) <= step * Math.SQRT2 &&
+    const goalDistance = Math.hypot(goal.x - current.x, goal.y - current.y);
+    if (allowPartial && goalDistance < closestDistance - 0.001) {
+      closestKey = currentKey;
+      closestDistance = goalDistance;
+    }
+    if (goalWalkable && goalDistance <= step * Math.SQRT2 &&
       walkableSegment(current, goal, isWalkable)) {
-      const path: Point[] = [goal, { x: current.x, y: current.y }];
-      let cursor = previous.get(currentKey) ?? null;
-      while (cursor) {
-        const [x = 0, y = 0] = cursor.split(",").map(Number);
-        path.push({ x, y });
-        cursor = previous.get(cursor) ?? null;
-      }
-      return [start, ...path.reverse()];
+      return [...pathTo(currentKey), goal];
     }
 
     for (const neighbor of neighbors) {
@@ -272,7 +307,7 @@ export function aStarPath(
     }
   }
 
-  return null;
+  return allowPartial && closestKey ? pathTo(closestKey) : null;
 }
 
 export function monsterEscapeStep(

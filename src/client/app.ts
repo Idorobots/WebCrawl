@@ -1956,11 +1956,15 @@ function nearbyPathScenery(monster: Monster): Set<Decoration> {
 }
 
 function monsterPathIsUnreachable(monster: Monster): boolean {
-  return failedMonsterPaths.unchanged(monster);
+  return failedMonsterPaths.unchanged(monster, monster.miniboss ? { ...player, roomId: currentRoomId } : undefined);
 }
 
 function rememberUnreachableMonsterPath(monster: Monster): void {
-  failedMonsterPaths.remember(monster, nearbyPathScenery(monster));
+  // Stagger miniboss retries so unreachable targets cannot trigger a burst of
+  // expensive searches every frame; player movement can still wake them early.
+  failedMonsterPaths.remember(monster, nearbyPathScenery(monster),
+    monster.miniboss ? { ...player, roomId: currentRoomId } : undefined,
+    monster.miniboss ? performance.now() + 2_000 + monster.seed % 500 : Infinity);
 }
 
 function monsterApproachPoint(monster: Monster): Point | null {
@@ -2013,16 +2017,18 @@ function updateMonsterPath(
     start, fallback ? [target, fallback] : [target], walkable,
     WORLD_GEOMETRY.pathGridStep, 1800,
     destination => monsterPathBounds(monster, destination, fallback),
+    monster.miniboss,
   );
   const destination = route?.targetIndex === 1 ? fallback! : target;
   monster.path = route?.path ?? [];
+  if (route) monster.blockedWaypoint = undefined;
   monster.pathIndex = route && route.path.length > 1 ? 1 : 0;
   monster.pathPursuitRoomId = targetRoomId;
   monster.pathTargetRoomId = route?.targetIndex === 1 ? fallback!.id : targetRoomId;
   monster.pathTargetX = destination.x;
   monster.pathTargetY = destination.y;
   monster.nextPathRefreshAt = timestamp + MONSTER_PATH_REFRESH_MS;
-  if (!route) rememberUnreachableMonsterPath(monster);
+  if (!route || route.partial) rememberUnreachableMonsterPath(monster);
   else failedMonsterPaths.forget(monster);
 }
 
@@ -2043,7 +2049,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
   const waypoint = monster.path?.[monster.pathIndex ?? 0];
   if (!waypoint) {
     monster.moveDir = null;
-    attackBlockingScenery(monster, target, timestamp);
+    attackBlockingScenery(monster, monster.miniboss ? monster.blockedWaypoint ?? target : target, timestamp);
     return;
   }
   const dx = waypoint.x - monster.x;
@@ -2060,6 +2066,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     monster.moveDir = null;
     monster.moving = false;
     monster.blockedMoveCount = 0;
+    if (monster.miniboss) attackBlockingScenery(monster, target, timestamp);
     return;
   }
 
@@ -2081,6 +2088,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     monster.y = nextY;
     monster.moving = true;
     monster.blockedMoveCount = 0;
+    monster.blockedWaypoint = undefined;
     return;
   }
 
@@ -2098,14 +2106,16 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     monster.y = candidate.y;
     monster.moving = true;
     monster.blockedMoveCount = 0;
+    monster.blockedWaypoint = undefined;
     return;
   }
 
   monster.path = [];
+  if (monster.miniboss) monster.blockedWaypoint = { ...waypoint };
   monster.nextPathRefreshAt = 0;
   monster.blockedMoveCount = (monster.blockedMoveCount ?? 0) + 1;
-  if (monster.blockedMoveCount < 4) return;
-  if (attackBlockingScenery(monster, target, timestamp)) return;
+  if (monster.blockedMoveCount < 4 && !monster.miniboss) return;
+  if (attackBlockingScenery(monster, monster.miniboss ? waypoint : target, timestamp)) return;
   const escaped = monsterEscapeStep(
     monster,
     { x: dx, y: dy },
@@ -2122,6 +2132,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     monster.y = escaped.y;
     monster.moving = true;
     monster.blockedMoveCount = 0;
+    monster.blockedWaypoint = undefined;
   } else {
     rememberUnreachableMonsterPath(monster);
   }
@@ -3361,6 +3372,7 @@ function teleportPlayerTo(x: number, y: number): void {
     damagePlayer: (amount: number) => void;
     spawnHealingEffect: () => void;
     primeSpawnerSpawn: () => Pick<Monster, "id" | "x" | "y"> | null;
+    primeMinibossSceneryBlock: () => { monster: Monster; blocker: Decoration } | null;
     primeMonsterAttackAnimation: () => number;
     gameTickAt: () => number | null;
     stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y" | "url" | "enabled">>;
@@ -3426,6 +3438,20 @@ function teleportPlayerTo(x: number, y: number): void {
     updateMonsterSpawners(now);
     const monster = currentMonsters.find(item => item.id === id);
     return monster ? { id: monster.id, x: monster.x, y: monster.y } : null;
+  },
+  primeMinibossSceneryBlock(): { monster: Monster; blocker: Decoration } | null {
+    const monster = currentMonsters.find(item => item.miniboss && item.speed > 0 && item.attackPattern !== "melee");
+    const blocker = currentDecorations.find(item => item.roomId === currentRoomId &&
+      item.obstacle && item.destructible && !item.destroyed);
+    if (!monster || !blocker || currentRoomId === null) return null;
+    Object.assign(monster, {
+      x: blocker.x, y: blocker.y, roomId: currentRoomId, spawnRoomId: currentRoomId,
+      active: true, hp: monster.maxHp, path: [], pathIndex: 0, blockedWaypoint: undefined,
+      attackWarmupUntil: 0, lastAttackAt: -Infinity, lastPathSearchAt: -Infinity, nextPathRefreshAt: 0,
+    });
+    failedMonsterPaths.forget(monster);
+    renderMonsters();
+    return { monster, blocker };
   },
   primeMonsterAttackAnimation(): number {
     const now = performance.now();

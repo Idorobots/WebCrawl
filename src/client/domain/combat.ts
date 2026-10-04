@@ -27,19 +27,21 @@ export function monsterMeleeRange(monster: Pick<Monster, "size" | "attackRange" 
     footprint.y + PLAYER_SPEC.footprintRadii.y) + WORLD_GEOMETRY.pathGridStep * 2);
 }
 
-/** Choose reachable scenery immediately blocking a melee walker's next steps. */
+/** Choose scenery blocking a melee walker or moving miniboss's next steps. */
 export function meleeBlockingScenery(
   monster: Monster,
   target: Point,
   decorations: Iterable<Decoration>,
 ): Decoration | null {
-  if (monster.bossKind || monster.speed <= 0 || monster.attackPattern !== "melee") return null;
+  if (monster.bossKind || monster.speed <= 0 || (!monster.miniboss && monster.attackPattern !== "melee")) return null;
   const dx = target.x - monster.x;
   const dy = target.y - monster.y;
   const distance = Math.hypot(dx, dy);
-  if (distance < 0.001) return null;
+  if (distance < 0.001 && !monster.miniboss) return null;
   const reach = WORLD_GEOMETRY.pathGridStep * 2;
-  const step = { x: monster.x + dx / distance * reach, y: monster.y + dy / distance * reach };
+  const step = distance < 0.001 ? monster
+    : { x: monster.x + dx / distance * reach, y: monster.y + dy / distance * reach };
+  const footprint = worldPoint(monster, "footprintRadii");
   let closest: Decoration | null = null;
   let closestDistance = Infinity;
   for (const item of decorations) {
@@ -47,9 +49,12 @@ export function meleeBlockingScenery(
     const itemDx = item.x - monster.x;
     const itemDy = item.y - monster.y;
     const itemDistance = Math.hypot(itemDx, itemDy);
-    if (itemDx * dx + itemDy * dy <= 0 && itemDistance > 0.001) continue;
-    if (!sweptEllipsesOverlap(monster, step, worldPoint(monster, "footprintRadii"), item,
-      worldPoint(item, "footprintRadii"))) continue;
+    const itemFootprint = worldPoint(item, "footprintRadii");
+    // Large actors can snag a prop beside or behind them at a corner. Allow
+    // them to clear anything touching their footprint, not just directly ahead.
+    const touching = monster.miniboss && ellipsesOverlap(monster, footprint, item, itemFootprint, true);
+    if (!touching && itemDx * dx + itemDy * dy <= 0 && itemDistance > 0.001) continue;
+    if (!touching && !sweptEllipsesOverlap(monster, step, footprint, item, itemFootprint)) continue;
     if (itemDistance < closestDistance) {
       closest = item;
       closestDistance = itemDistance;
