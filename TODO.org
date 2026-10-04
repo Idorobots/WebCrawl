@@ -1225,9 +1225,10 @@ The goal is to be able to generate a room with all its enemies that already incl
 - The more rooms are revealed, the worse the performance
 - When the player is outside of the active boss arena, the performance tanks dramatically.
 * Performance optimization, again
+- When monsters don't have a proper path to the player, the performance tanks dramatically. The "no path to player" situation should be detected and the monsters' paths should only be recomputed if it or another monster nearby moved, or if some scenery/other monster was destroyed
+* Performance optimization, again
 - Phaser 4 update?
 - WebWorkers for pathing/collision detection, etc?
-- When monsters don't have a proper path to the player, the performance tanks dramatically. The "no path to player" situation should be detected and the monsters' paths should only be recomputed if it or another monster nearby moved, or if some scenery/other monster was destroyed
 
 * DONE UX improvements, again
 :LOGBOOK:
@@ -1323,13 +1324,13 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - "Access granted" should play only once per level, whenever the condition arises for the first time.
 - "System infiltrated" should play only once on the first floor.
 - Sentries sometimes don't shoot even though there's a clear line of sight to the player. Scenery should be ignored by monster line-of-sight computation for shooting.
+- Monster's line-of-sight computation takes descructible scenery as blocking, which shouldn't be the case.
+- Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
 
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Regulatory capture moves the player but doesn't center the camera on mobile
 - Regulatory capture should use the shooting direction as the direction, so that it's usable on mobile
-- Monster's line-of-sight computation takes descructible scenery as blocking, which shouldn't be the case.
-- Melee walkers that get stuck on scenery should deal damage to it to eventually destroy it.
 
 * DONE Enemy rebalance
 :LOGBOOK:

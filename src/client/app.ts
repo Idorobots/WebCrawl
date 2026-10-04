@@ -45,6 +45,7 @@ import {
   bossCrushedScenery,
   energyDashPower,
   enemyVolleyProjectiles,
+  meleeBlockingScenery,
   monsterAttackIsReady,
   MONSTER_ATTACK_WARMUP_MS,
   monsterEngagementRange,
@@ -79,7 +80,7 @@ import {
 } from "./domain/generation";
 import { contentPagesForRoom, domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
-import { chooseReachablePath, monsterEscapeStep, walkableApproachPoint, walkableSegment } from "./domain/pathfinding";
+import { chooseReachablePath, FailedPathCache, monsterEscapeStep, walkableApproachPoint, walkableSegment } from "./domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, hasBlockingPortalMonsters, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
 import { forSpatialCells, indexMonsterHitboxes, monsterCollisionCandidates, spatialCellKey } from "./domain/spatial";
@@ -255,6 +256,8 @@ let wallProjectileHitboxes = new WallRectIndex([]);
 let obstacleCells = new Map<string, Set<Decoration>>();
 let damageableCells = new Map<string, Set<Decoration>>();
 let monsterCells = new Map<string, Set<Monster>>();
+const failedMonsterPaths = new FailedPathCache();
+const MONSTER_PATH_REFRESH_MS = 420;
 const discoveredRoomsByPage = new Map<string, Set<number>>();
 const monsterStatesByPage = new Map<string, Map<string, MonsterState>>();
 
@@ -1925,8 +1928,8 @@ function hasLineOfSight(from: Point, to: Point): boolean {
   const floorFrom = { x: from.x, y: from.y - PLAYER_SPEC.hitboxOffset.y };
   const floorTo = { x: to.x, y: to.y - PLAYER_SPEC.hitboxOffset.y };
   return wallLineOfSight(from, to) &&
-    walkableSegment(from, to, point => !pointBlockedByDecoration(point.x, point.y, DEFAULT_BULLET_SPEC.radius)) &&
-    walkableSegment(floorFrom, floorTo, point => !pointBlockedByDecoration(point.x, point.y, DEFAULT_BULLET_SPEC.radius));
+    walkableSegment(from, to, point => !pointBlockedByDecoration(point.x, point.y, DEFAULT_BULLET_SPEC.radius, true)) &&
+    walkableSegment(floorFrom, floorTo, point => !pointBlockedByDecoration(point.x, point.y, DEFAULT_BULLET_SPEC.radius, true));
 }
 
 function visiblePlayerAimPoint(from: Point): Point | null {
@@ -1937,7 +1940,31 @@ function visiblePlayerAimPoint(from: Point): Point | null {
   );
 }
 
+function nearbyPathScenery(monster: Monster): Set<Decoration> {
+  const radius = WORLD_GEOMETRY.spatialCellSize;
+  const scenery = new Set<Decoration>();
+  forSpatialCells(
+    monster.x - radius, monster.x + radius, monster.y - radius, monster.y + radius,
+    key => {
+      for (const item of obstacleCells.get(key) ?? []) {
+        if (item.obstacle && item.destructible && !item.destroyed &&
+            footprintsOverlap(monster, radius, item, worldPoint(item, "footprintRadii"))) scenery.add(item);
+      }
+    },
+  );
+  return scenery;
+}
+
+function monsterPathIsUnreachable(monster: Monster): boolean {
+  return failedMonsterPaths.unchanged(monster);
+}
+
+function rememberUnreachableMonsterPath(monster: Monster): void {
+  failedMonsterPaths.remember(monster, nearbyPathScenery(monster));
+}
+
 function monsterApproachPoint(monster: Monster): Point | null {
+  if (monsterPathIsUnreachable(monster)) return null;
   return walkableApproachPoint(
     player,
     monster,
@@ -1972,9 +1999,12 @@ function updateMonsterPath(
   fallback?: GraphNode,
 ): void {
   if (monster.speed === 0) return;
+  if (monsterPathIsUnreachable(monster)) return;
   if (monster.pathPursuitRoomId !== targetRoomId) monster.nextPathRefreshAt = 0;
   if (timestamp < (monster.nextPathRefreshAt ?? 0)) return;
+  if (timestamp - (monster.lastPathSearchAt ?? -Infinity) < MONSTER_PATH_REFRESH_MS) return;
 
+  monster.lastPathSearchAt = timestamp;
   const start = { x: monster.x, y: monster.y };
   // Route around fixed geometry; a player in a doorway must not make the
   // route disappear. Each movement step still respects the player's footprint.
@@ -1991,13 +2021,29 @@ function updateMonsterPath(
   monster.pathTargetRoomId = route?.targetIndex === 1 ? fallback!.id : targetRoomId;
   monster.pathTargetX = destination.x;
   monster.pathTargetY = destination.y;
-  monster.nextPathRefreshAt = timestamp + 420;
+  monster.nextPathRefreshAt = timestamp + MONSTER_PATH_REFRESH_MS;
+  if (!route) rememberUnreachableMonsterPath(monster);
+  else failedMonsterPaths.forget(monster);
+}
+
+function attackBlockingScenery(monster: Monster, target: Point, timestamp: number): boolean {
+  if (!monsterAttackIsReady(monster, timestamp)) return false;
+  const item = meleeBlockingScenery(monster, target, obstacleCells.get(spatialCellKey(monster.x, monster.y)) ?? []);
+  if (!item || !wallLineOfSight(monster, item)) return false;
+  monster.moveDir = cardinalDirection(item.x - monster.x, item.y - monster.y);
+  monster.attackKind = "melee";
+  monster.lastAttackAt = timestamp;
+  renderer.playMeleeSound();
+  damageObstacle(item, monster.attackDamage);
+  if (!item.destroyed && !monster.dead && !monster.path?.length) rememberUnreachableMonsterPath(monster);
+  return true;
 }
 
 function moveMonsterTowards(monster: Monster, target: Point, dt: number, timestamp: number): void {
   const waypoint = monster.path?.[monster.pathIndex ?? 0];
   if (!waypoint) {
     monster.moveDir = null;
+    attackBlockingScenery(monster, target, timestamp);
     return;
   }
   const dx = waypoint.x - monster.x;
@@ -2059,6 +2105,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
   monster.nextPathRefreshAt = 0;
   monster.blockedMoveCount = (monster.blockedMoveCount ?? 0) + 1;
   if (monster.blockedMoveCount < 4) return;
+  if (attackBlockingScenery(monster, target, timestamp)) return;
   const escaped = monsterEscapeStep(
     monster,
     { x: dx, y: dy },
@@ -2075,6 +2122,8 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     monster.y = escaped.y;
     monster.moving = true;
     monster.blockedMoveCount = 0;
+  } else {
+    rememberUnreachableMonsterPath(monster);
   }
 }
 
@@ -2517,6 +2566,7 @@ function runGameTick(timestamp: number): void {
       monster.nextPathRefreshAt = Infinity;
       continue;
     }
+    if (monster.nextPathRefreshAt === Infinity) monster.nextPathRefreshAt = 0;
 
     // Newly-appeared monsters stand still until their attack warmup elapses.
     if (monster.attackWarmupUntil !== undefined && timestamp < monster.attackWarmupUntil) {
@@ -2758,9 +2808,14 @@ function rebuildSpatialIndexes(): void {
   }
 }
 
-function pointBlockedByDecoration(x: number, y: number, radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii): boolean {
+function pointBlockedByDecoration(
+  x: number,
+  y: number,
+  radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii,
+  ignoreDestructible = false,
+): boolean {
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
-    if (!item.obstacle || item.destroyed) continue;
+    if (!item.obstacle || item.destroyed || (ignoreDestructible && item.destructible)) continue;
 
     if (footprintsOverlap({ x, y }, radius, item, worldPoint(item, "footprintRadii"))) return true;
   }

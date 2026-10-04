@@ -27,6 +27,37 @@ export function monsterMeleeRange(monster: Pick<Monster, "size" | "attackRange" 
     footprint.y + PLAYER_SPEC.footprintRadii.y) + WORLD_GEOMETRY.pathGridStep * 2);
 }
 
+/** Choose reachable scenery immediately blocking a melee walker's next steps. */
+export function meleeBlockingScenery(
+  monster: Monster,
+  target: Point,
+  decorations: Iterable<Decoration>,
+): Decoration | null {
+  if (monster.bossKind || monster.speed <= 0 || monster.attackPattern !== "melee") return null;
+  const dx = target.x - monster.x;
+  const dy = target.y - monster.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 0.001) return null;
+  const reach = WORLD_GEOMETRY.pathGridStep * 2;
+  const step = { x: monster.x + dx / distance * reach, y: monster.y + dy / distance * reach };
+  let closest: Decoration | null = null;
+  let closestDistance = Infinity;
+  for (const item of decorations) {
+    if (!item.obstacle || !item.destructible || item.destroyed) continue;
+    const itemDx = item.x - monster.x;
+    const itemDy = item.y - monster.y;
+    const itemDistance = Math.hypot(itemDx, itemDy);
+    if (itemDx * dx + itemDy * dy <= 0 && itemDistance > 0.001) continue;
+    if (!sweptEllipsesOverlap(monster, step, worldPoint(monster, "footprintRadii"), item,
+      worldPoint(item, "footprintRadii"))) continue;
+    if (itemDistance < closestDistance) {
+      closest = item;
+      closestDistance = itemDistance;
+    }
+  }
+  return closest;
+}
+
 export function enemyVolleyProjectiles(
   direction: Point,
   pattern: MonsterAttackPattern,

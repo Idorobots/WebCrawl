@@ -1,4 +1,4 @@
-import type { DungeonLayout, Point } from "../types";
+import type { Decoration, DungeonLayout, Point } from "../types";
 import { connectedRoomAdjacency } from "./corridor-junctions";
 import { WORLD_GEOMETRY } from "./specs";
 
@@ -7,6 +7,33 @@ interface Bounds {
   maxX: number;
   minY: number;
   maxY: number;
+}
+
+/** Failed searches stay asleep until scenery near the failed attempt is destroyed. */
+export class FailedPathCache {
+  private readonly failures = new WeakMap<Point, readonly Pick<Decoration, "destroyed">[]>();
+
+  has(actor: Point): boolean {
+    return this.failures.has(actor);
+  }
+
+  remember(actor: Point, scenery: Iterable<Pick<Decoration, "destroyed">>): void {
+    this.failures.set(actor, [...scenery].filter(item => !item.destroyed));
+  }
+
+  unchanged(actor: Point): boolean {
+    const scenery = this.failures.get(actor);
+    if (!scenery) return false;
+    if (scenery.some(item => item.destroyed)) {
+      this.forget(actor);
+      return false;
+    }
+    return true;
+  }
+
+  forget(actor: Point): void {
+    this.failures.delete(actor);
+  }
 }
 
 export function revealedRoomPath(

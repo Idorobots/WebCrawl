@@ -277,6 +277,7 @@ export interface Monster extends Point, RelativeObjectGeometry {
   pathTargetX?: number;
   pathTargetY?: number;
   nextPathRefreshAt?: number;
+  lastPathSearchAt?: number;
   blockedMoveCount?: number;
   escapeDirection?: Point;
   escapeUntil?: number;
