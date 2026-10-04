@@ -1284,6 +1284,11 @@ function renderDecorations(): void {
   renderer.renderDecorations(currentDecorations, visitedRooms);
 }
 
+function bulletDamageEffectSize(bullet?: Bullet): number | undefined {
+  // A radius-6 bullet produces a 72-unit impact, regardless of the target size.
+  return bullet ? (bullet.radius ?? DEFAULT_BULLET_SPEC.radius) * 12 : undefined;
+}
+
 function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void {
   if (!applyObstacleDamage(item, amount)) return;
 
@@ -1316,7 +1321,11 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
       item.x,
       item.y + worldPoint(item, "hitboxOffset").y,
       item.size,
-      { key: `decoration:${item.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
+      {
+        key: `decoration:${item.id}`,
+        lightColor: bullet ? renderer.bulletColor(bullet) : undefined,
+        size: bulletDamageEffectSize(bullet),
+      },
     );
     renderer.playDamageSound();
     saveObstacleState(item);
@@ -1612,7 +1621,11 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
     player.x,
     player.y + PLAYER_SPEC.hitboxOffset.y,
     PLAYER_SPEC.spriteSize,
-    { key: "player", lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
+    {
+      key: "player",
+      lightColor: bullet ? renderer.bulletColor(bullet) : undefined,
+      size: bulletDamageEffectSize(bullet),
+    },
   );
   renderer.playPlayerHurtSound();
 
@@ -1713,7 +1726,11 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
       monster.x,
       monster.y + worldPoint(monster, "hitboxOffset").y,
       monster.size,
-      { key: `monster:${monster.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
+      {
+        key: `monster:${monster.id}`,
+        lightColor: bullet ? renderer.bulletColor(bullet) : undefined,
+        size: bulletDamageEffectSize(bullet),
+      },
     );
     renderer.playDamageSound();
     saveMonsterState(monster);
@@ -2370,7 +2387,7 @@ function updateBullets(dt: number): void {
           bullet.x,
           bullet.y,
           PLAYER_SPEC.spriteSize,
-          { lightColor: renderer.bulletColor(bullet) },
+          { lightColor: renderer.bulletColor(bullet), size: bulletDamageEffectSize(bullet) },
         );
         renderer.playDamageSound();
         alive = false;

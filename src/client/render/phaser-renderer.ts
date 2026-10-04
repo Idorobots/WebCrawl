@@ -2690,17 +2690,23 @@ export class PhaserRenderer {
     x: number,
     y: number,
     baseSize: number,
-    options: { key?: string; lightColor?: number; followPlayer?: boolean } = {},
+    options: { key?: string; lightColor?: number; followPlayer?: boolean; size?: number } = {},
   ): void {
     const scene = this.scene;
     if (!scene || !clip?.frames.length) return;
+    if (options.size !== undefined) {
+      // Explicit world-space sizes replace the clip's target-relative scale.
+      clip = { ...clip, sizeScale: 1 };
+      baseSize = options.size;
+    }
     const profile = clip.light ?? EFFECT_LIGHT_FALLBACK;
+    const lightRadius = Math.max(options.size === undefined ? 52 : 0, baseSize * profile.radiusScale);
     const lightColor = options.lightColor ?? profile.color;
     const followPlayer = options.followPlayer ?? false;
     const key = options.key;
     const existing = key ? this.keyedEffects.get(key) : undefined;
     if (key && existing) {
-      this.resetKeyedEffect(existing, clip, x, y, baseSize, profile, lightColor, followPlayer);
+      this.resetKeyedEffect(existing, clip, x, y, baseSize, profile, lightRadius, lightColor, followPlayer);
       return;
     }
     const effect = scene.add.sprite(x, y, textureKey(clip.frames[0]!))
@@ -2710,7 +2716,7 @@ export class PhaserRenderer {
     this.setHostData("lastEffect", clip.frames[0]!);
     this.setHostData("effectSpriteMode", "emissive");
     const light = this.effectLightsEnabled
-      ? scene.lights.addLight(x, y, Math.max(52, baseSize * profile.radiusScale), lightColor, profile.intensity)
+      ? scene.lights.addLight(x, y, lightRadius, lightColor, profile.intensity)
       : null;
     if (light) {
       this.activeEffectLights.add(light);
@@ -2732,6 +2738,7 @@ export class PhaserRenderer {
     y: number,
     baseSize: number,
     profile: EffectLightProfile,
+    lightRadius: number,
     lightColor: number,
     followPlayer: boolean,
   ): void {
@@ -2741,7 +2748,7 @@ export class PhaserRenderer {
       record.light.x = x;
       record.light.y = y;
       record.light.setColor(lightColor);
-      record.light.setRadius(Math.max(52, baseSize * profile.radiusScale));
+      record.light.setRadius(lightRadius);
       record.light.setIntensity(profile.intensity);
     }
     if (followPlayer) {

@@ -1317,7 +1317,6 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Player muzzle offset is wrong, needs to be configurable.
 - Object's hitbox and visual offsets should be relative to its `size` property.
 - Mini-bosses' hitbox, hitbox offset, visual offset, footprint and health bar size should be scaled just like their size.
-
 - Scenery should have a configurable amount of hitpoints, Let's go for something between 1 and 20 based on the hitbox size (X + Y radius).
 
 * Bugs
@@ -1369,6 +1368,7 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Monster shadows are flickering a bit when they move.
 - When entering a boss arena, camera jumps up immediately, while exiting it animates nicely. It should animate nicely both ways.
 - Healthbars on various scenery items are misaligned
+- Damage effect should be tied to the size of the bullet that caused it.
 * Visual bugs
 - Generic robot debris look weird, should only use dedicated robot debris
 - Some scenery items have a very weird choice of debris
@@ -1377,5 +1377,4 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
-- Damage effect should be tied to the size of the bullet that caused it.
-- Explosion effect should be tied to the size of the object.
+- Explosion effect should be tied to the size of the exploding object.
