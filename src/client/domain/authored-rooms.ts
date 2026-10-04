@@ -3,6 +3,7 @@ import type {
   BossKind, Decoration, DungeonGraph, DungeonLayout, GraphNode, LayoutLink,
   LootItem, LootKind, MonsterKind, Point, WeaponKind,
 } from "../types";
+import { stableHash } from "./hash";
 import { doorPositionForSlot } from "./layout";
 import {
   BOSS_DEFINITIONS, DECORATION_DEFINITIONS, LOOT_DEFINITIONS,
@@ -30,6 +31,7 @@ export function authoredDecorations(room: GraphNode, template: AuthoredRoomTempl
       roomId: room.id,
       x: room.x + x,
       y: room.y + y,
+      visualVariant: stableHash(`${room.lootSeed}|authored-decor|${index}`),
       maxHp: type.hp,
       destroyed: false,
       dropKind: null,

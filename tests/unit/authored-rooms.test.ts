@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { artDebugLevel } from "../../src/client/domain/authored-rooms";
+import { artDebugLevel, authoredDecorations, type AuthoredRoomTemplate } from "../../src/client/domain/authored-rooms";
 import { applyObstacleDamage } from "../../src/client/domain/combat";
 import { footprintsOverlap, pointInRoomFloor } from "../../src/client/domain/geometry";
 import { buildDecorations, buildInteractiveObjects, buildMonsters } from "../../src/client/domain/generation";
@@ -99,6 +99,29 @@ describe("authored art floor", () => {
     }
   });
 
+  it("varies debris per object deterministically using the room seed", () => {
+    const room = artDebugLevel().layout.nodes[0]!;
+    const template: AuthoredRoomTemplate = {
+      width: room.width,
+      height: room.height,
+      decorations: Array.from({ length: 12 }, (_, index) => ({
+        definition: "barrelRed", x: index * 100, y: 0,
+      })),
+    };
+    const debris = (objects: ReturnType<typeof authoredDecorations>) => objects.map(item => {
+      const clips = item.visual.destroyed!;
+      return clips[item.visualVariant! % clips.length]!.frames[0];
+    });
+    const original = debris(authoredDecorations(room, template));
+
+    expect(new Set(original).size).toBeGreaterThan(1);
+    expect(debris(authoredDecorations(room, template))).toEqual(original);
+    expect(debris(authoredDecorations({ ...room, id: room.id + 1, x: 500, y: 500 }, template)))
+      .toEqual(original);
+    expect(debris(authoredDecorations({ ...room, lootSeed: room.lootSeed + 1 }, template)))
+      .not.toEqual(original);
+  });
+
   it("can place templates in another layout and restore their ordinary game state", () => {
     const art = artDebugLevel();
     const graph = { ...art.graph, nodes: art.graph.nodes.slice(0, 2), links: art.graph.links.slice(0, 1) };
@@ -110,6 +133,9 @@ describe("authored art floor", () => {
     const savedDecorations = new Map([["0::authored-decor-0", { hp: 2, destroyed: true }]]);
     const decorations = buildDecorations(layout, savedDecorations, 1, undefined, rooms);
     expect(decorations[0]).toMatchObject({ hp: 2, maxHp: DECORATION_DEFINITIONS.plantViolet.hp, destroyed: true });
+    const initialDecorations = buildDecorations(layout, new Map(), 1, undefined, rooms);
+    expect(decorations.map(item => item.visualVariant))
+      .toEqual(initialDecorations.map(item => item.visualVariant));
 
     const initialLoot = buildInteractiveObjects(layout, "art-debug", null, new Set(), undefined, rooms).loot;
     expect(buildInteractiveObjects(layout, "art-debug", null, new Set([initialLoot[0]!.id]), undefined, rooms).loot)

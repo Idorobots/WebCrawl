@@ -1227,6 +1227,7 @@ The goal is to be able to generate a room with all its enemies that already incl
 * Performance optimization, again
 - Phaser 4 update?
 - WebWorkers for pathing/collision detection, etc?
+- When monsters don't have a proper path to the player, the performance tanks dramatically. The "no path to player" situation should be detected and the monsters' paths should only be recomputed if it or another monster nearby moved, or if some scenery/other monster was destroyed
 
 * DONE UX improvements, again
 :LOGBOOK:
@@ -1253,6 +1254,7 @@ The goal is to be able to generate a room with all its enemies that already incl
 * Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
+- "Up" portals should always be available, even if the boss monster is not defeated.
 
 * Minimap overhaul
 - Minimap should be circular
@@ -1326,6 +1328,7 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Regulatory capture moves the player but doesn't center the camera on mobile
 - Regulatory capture should use the shooting direction as the direction, so that it's usable on mobile
 - "Access granted" should play only once per level, whenever the condition arises for the first time.
+- "System infiltrated" should play only once on the first floor.
 
 * Enemy rebalance
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.

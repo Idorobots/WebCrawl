@@ -193,7 +193,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     destroyedVisualOffset: { x: 0, y: -0.315 },
     hitboxOffset: { x: 0, y: -0.043478260869565216 },
     hitboxRadii: { x: 0.21739130434782608, y: 0.21739130434782608 },
-    footprintRadii: { x: 0.21739130434782608, y: 0.21739130434782608 },
+    footprintRadii: { x: 0.19, y: 0.19 },
     size: 230,
     spriteSize: 230,
     baseHp: 8,
@@ -301,7 +301,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     destroyedVisualOffset: { x: 0, y: -0.315 },
     hitboxOffset: { x: 0, y: -0.043478260869565216 },
     hitboxRadii: { x: 0.21739130434782608, y: 0.21739130434782608 },
-    footprintRadii: { x: 0.21739130434782608, y: 0.21739130434782608 },
+    footprintRadii: { x: 0.19, y: 0.19 },
     size: 230,
     spriteSize: 230,
     baseHp: 8,
@@ -830,7 +830,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.24390243902439024),
     visual: {
       normal: clip([SCENERY_ASSETS.barrelRed]),
-      destroyed: [DEBRIS_ASSETS.barrelRedCrushed, DEBRIS_ASSETS.barrelRedShards, DEBRIS_ASSETS.redBarrelWreck].map(asset => clip([asset], 1.18)),
+      destroyed: [DEBRIS_ASSETS.barrelRedCrushed, DEBRIS_ASSETS.barrelRedShards, DEBRIS_ASSETS.redBarrelWreck, DEBRIS_ASSETS.orangeFuelBarrel].map(asset => clip([asset], 1.18)),
       animations: { damage: sceneryDamage, destroy: barrelExplosion },
     },
   },
@@ -864,7 +864,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.24390243902439024),
     visual: {
       normal: clip([SCENERY_ASSETS.barrelHazard]),
-      destroyed: [DEBRIS_ASSETS.barrelHazardBands, DEBRIS_ASSETS.yellowBarrelWreck, DEBRIS_ASSETS.mixedBarrelParts].map(asset => clip([asset], 1.18)),
+      destroyed: [DEBRIS_ASSETS.barrelHazardBands, DEBRIS_ASSETS.yellowBarrelWreck, DEBRIS_ASSETS.orangeFuelBarrel].map(asset => clip([asset], 1.18)),
       animations: { damage: sceneryDamage, destroy: barrelExplosion },
     },
   },
@@ -1578,7 +1578,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.28, y: 0.1 },
     visual: {
       normal: clip([SCENERY_ASSETS.fuelPumpSkid]),
-      destroyed: [DEBRIS_ASSETS.turbine, DEBRIS_ASSETS.greenChemicalBarrel, DEBRIS_ASSETS.orangeFuelBarrel].map(asset => clip([asset])),
+      destroyed: [DEBRIS_ASSETS.turbine, DEBRIS_ASSETS.greenChemicalBarrel].map(asset => clip([asset])),
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -2523,7 +2523,7 @@ export const PORTAL_DEFINITION = {
   visualOffset: { x: 0, y: -0.2 },
   hitboxOffset: { x: 0, y: 0 },
   hitboxRadii: circle(0),
-  footprintRadii: { x: 0.26666666666666666, y: 0.16666666666666666 },
+  footprintRadii: { x: 0.3, y: 0.2 },
   origin: { x: 0.5, y: 0.875 },
   // Depth-ordering anchor sits slightly above the sprite anchor so actors
   // near the pedestal base render in front of the portal.
