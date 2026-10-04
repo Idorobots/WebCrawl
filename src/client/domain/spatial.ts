@@ -1,5 +1,6 @@
 import type { Monster, Point } from "../types";
 import { WORLD_GEOMETRY } from "./specs";
+import { worldPoint } from "./object-geometry";
 
 const SPATIAL_CELL_SIZE = WORLD_GEOMETRY.spatialCellSize;
 
@@ -28,13 +29,15 @@ export function indexMonsterHitboxes(monsters: readonly Monster[]): Map<string, 
   for (const monster of monsters) {
     // An inactive monster may be activated when its room is revealed later in the same tick.
     if (monster.dead) continue;
-    const centerX = monster.x + monster.hitboxOffset.x;
-    const centerY = monster.y + monster.hitboxOffset.y;
+    const offset = worldPoint(monster, "hitboxOffset");
+    const radii = worldPoint(monster, "hitboxRadii");
+    const centerX = monster.x + offset.x;
+    const centerY = monster.y + offset.y;
     forSpatialCells(
-      centerX - monster.hitboxRadii.x,
-      centerX + monster.hitboxRadii.x,
-      centerY - monster.hitboxRadii.y,
-      centerY + monster.hitboxRadii.y,
+      centerX - radii.x,
+      centerX + radii.x,
+      centerY - radii.y,
+      centerY + radii.y,
       key => {
         const cell = cells.get(key) ?? new Set<Monster>();
         cell.add(monster);

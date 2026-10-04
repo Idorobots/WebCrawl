@@ -1,5 +1,6 @@
 import type { Decoration, EllipseRadii, Monster, MonsterAttackPattern, Point } from "../types";
 import { ellipseRadii, ellipsesOverlap, sweptEllipsesOverlap } from "./geometry";
+import { worldPoint } from "./object-geometry";
 import {
   BARREL_EXPLOSION_RADIUS,
   ENERGY_DASH_DAMAGE_PER_ENERGY,
@@ -20,8 +21,8 @@ export function monsterEngagementRange(
 }
 
 /** Melee must reach an actor standing just beyond the two occupied floor ellipses. */
-export function monsterMeleeRange(monster: Pick<Monster, "attackRange" | "footprintRadii">): number {
-  const footprint = monster.footprintRadii;
+export function monsterMeleeRange(monster: Pick<Monster, "size" | "attackRange" | "footprintRadii">): number {
+  const footprint = worldPoint(monster, "footprintRadii");
   return Math.max(monster.attackRange, Math.max(footprint.x + PLAYER_SPEC.footprintRadii.x,
     footprint.y + PLAYER_SPEC.footprintRadii.y) + WORLD_GEOMETRY.pathGridStep * 2);
 }
@@ -62,7 +63,7 @@ export function applyObstacleDamage(item: Decoration, damage: number): boolean {
 }
 
 /** Sweep the boss's footprint across one movement step so fast charges cannot skip scenery. */
-export function bossCrushedScenery<T extends Pick<Decoration, "x" | "y" | "footprintRadii" | "destructible" | "destroyed">>(
+export function bossCrushedScenery<T extends Pick<Decoration, "size" | "x" | "y" | "footprintRadii" | "destructible" | "destroyed">>(
   from: Point,
   to: Point,
   bossRadius: number | EllipseRadii,
@@ -70,7 +71,7 @@ export function bossCrushedScenery<T extends Pick<Decoration, "x" | "y" | "footp
 ): T[] {
   return decorations.filter(item => {
     if (!item.destructible || item.destroyed) return false;
-    return sweptEllipsesOverlap(from, to, ellipseRadii(bossRadius), item, item.footprintRadii);
+    return sweptEllipsesOverlap(from, to, ellipseRadii(bossRadius), item, worldPoint(item, "footprintRadii"));
   });
 }
 
@@ -98,7 +99,7 @@ export function projectileHitsDecoration(
   projectileRadius: number | EllipseRadii,
 ): boolean {
   return ellipsesOverlap(
-    { x: item.x + item.hitboxOffset.x, y: item.y + item.hitboxOffset.y }, item.hitboxRadii,
+    actorCollisionCenter(item, worldPoint(item, "hitboxOffset")), worldPoint(item, "hitboxRadii"),
     projectile, ellipseRadii(projectileRadius), true,
   );
 }
@@ -118,7 +119,7 @@ export function barrelExplosionTargets(
   monsters: readonly Monster[],
   player: Point,
 ): { decorations: Decoration[]; monsters: Monster[]; hitsPlayer: boolean } {
-  const center = actorCollisionCenter(barrel, barrel.hitboxOffset);
+  const center = actorCollisionCenter(barrel, worldPoint(barrel, "hitboxOffset"));
   return {
     decorations: decorations.filter(item =>
       item !== barrel && item.destructible && !item.destroyed &&
@@ -126,8 +127,8 @@ export function barrelExplosionTargets(
     ),
     monsters: monsters.filter(monster =>
       monster.active && !monster.dead && projectileHitsCircle(
-        actorCollisionCenter(monster, monster.hitboxOffset),
-        monster.hitboxRadii,
+        actorCollisionCenter(monster, worldPoint(monster, "hitboxOffset")),
+        worldPoint(monster, "hitboxRadii"),
         center,
         BARREL_EXPLOSION_RADIUS,
       )

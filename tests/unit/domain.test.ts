@@ -69,6 +69,7 @@ import {
 } from "../../src/client/domain/generation";
 import { coalesceLeaves, contentPagesForRoom, domToGraph } from "../../src/client/domain/graph";
 import { stableHash } from "../../src/client/domain/hash";
+import { worldPoint } from "../../src/client/domain/object-geometry";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, doorCapacity, doorPositionForSlot, layoutOrthogonal } from "../../src/client/domain/layout";
 import { aStarPath, chooseReachablePath, monsterEscapeStep, revealedRoomPath, walkableApproachPoint, walkableSegment } from "../../src/client/domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "../../src/client/domain/portals";
@@ -378,9 +379,9 @@ describe("layout and geometry", () => {
 
   it("keeps actor damage hitboxes separate from occupied floor space", () => {
     const monster = { ...REGULAR_MONSTER_DEFINITIONS["sentry-light"], x: 0, y: 0 };
-    const position = { x: monster.x + PLAYER_SPEC.footprintRadii.x + monster.footprintRadii.x, y: monster.y };
-    expect(footprintsOverlap(position, PLAYER_SPEC.footprintRadii, monster, monster.footprintRadii)).toBe(false);
-    expect(footprintsOverlap(position, PLAYER_SPEC.hitboxRadii, monster, monster.hitboxRadii)).toBe(true);
+    const position = { x: monster.x + PLAYER_SPEC.footprintRadii.x + worldPoint(monster, "footprintRadii").x, y: monster.y };
+    expect(footprintsOverlap(position, PLAYER_SPEC.footprintRadii, monster, worldPoint(monster, "footprintRadii"))).toBe(false);
+    expect(footprintsOverlap(position, PLAYER_SPEC.hitboxRadii, monster, worldPoint(monster, "hitboxRadii"))).toBe(true);
   });
 
   it("blocks entering occupied footprints but lets actors escape an existing overlap", () => {
@@ -409,7 +410,7 @@ describe("layout and geometry", () => {
     const item = {
       ...DECORATION_DEFINITIONS.crateCargo,
       id: "ellipse-crate", roomId: 0, x: 100, y: 100, hp: 1, maxHp: 1, destroyed: false, dropKind: null,
-      hitboxOffset: { x: 20, y: -30 }, hitboxRadii: { x: 12, y: 4 },
+      size: 100, hitboxOffset: { x: 0.2, y: -0.3 }, hitboxRadii: { x: 0.12, y: 0.04 },
     };
     expect(projectileHitsDecoration(item, { x: 132, y: 70 }, 1)).toBe(true);
     expect(projectileHitsDecoration(item, { x: 120, y: 76 }, 1)).toBe(false);
@@ -418,8 +419,8 @@ describe("layout and geometry", () => {
 
   it("keeps melee attacks in reach without overlapping the player footprint", () => {
     const heavy = REGULAR_MONSTER_DEFINITIONS["melee-heavy"];
-    const monster = { attackRange: heavy.attackRange, footprintRadii: heavy.footprintRadii };
-    expect(monsterMeleeRange(monster)).toBeGreaterThan(monster.footprintRadii.x + PLAYER_SPEC.footprintRadii.x);
+    const monster = { size: heavy.size, attackRange: heavy.attackRange, footprintRadii: heavy.footprintRadii };
+    expect(monsterMeleeRange(monster)).toBeGreaterThan(worldPoint(monster, "footprintRadii").x + PLAYER_SPEC.footprintRadii.x);
     expect(monsterMeleeRange(monster)).toBeGreaterThanOrEqual(monster.attackRange);
   });
 
@@ -444,8 +445,8 @@ describe("layout and geometry", () => {
     expect(REGULAR_MONSTER_DEFINITIONS["sentry-light"].spriteSize).toBe(248.5);
     expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].visual.directions.down?.melee?.origin).toEqual({ x: 0.5, y: 0.5 });
     expect(PLAYER_SPEC.hitboxOffset.y).toBeLessThan(0);
-    expect(REGULAR_MONSTER_DEFINITIONS["melee-light"].hitboxOffset.y).toBe(-5);
-    expect(DECORATION_DEFINITIONS.crateCargo.visualOffset).toEqual({ x: 0, y: -10 });
+    expect(worldPoint(REGULAR_MONSTER_DEFINITIONS["melee-light"], "hitboxOffset").y).toBe(-5);
+    expect(worldPoint(DECORATION_DEFINITIONS.crateCargo, "visualOffset")).toEqual({ x: 0, y: -10 });
     expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
   });
 
@@ -457,13 +458,13 @@ describe("layout and geometry", () => {
         expect(debris.origin).toEqual({ x: 0.5, y: 0.5 });
       }
     }
-    expect(DECORATION_DEFINITIONS.plantViolet.visualOffset.y).toBe(-20);
-    expect(DECORATION_DEFINITIONS.reactorPylon.visualOffset.y).toBe(-40);
-    expect(DECORATION_DEFINITIONS.spawner.visualOffset.y).toBe(-55);
-    expect(DECORATION_DEFINITIONS.contentBrowser.visualOffset.y).toBe(-35);
-    expect(DECORATION_DEFINITIONS.crateCargo.hitboxOffset.y).toBe(-10);
-    expect(DECORATION_DEFINITIONS.reagentRack.hitboxOffset.y).toBe(-15);
-    expect(DECORATION_DEFINITIONS.spawner.hitboxOffset.y).toBe(-10);
+    expect(worldPoint(DECORATION_DEFINITIONS.plantViolet, "visualOffset").y).toBe(-20);
+    expect(worldPoint(DECORATION_DEFINITIONS.reactorPylon, "visualOffset").y).toBe(-40);
+    expect(worldPoint(DECORATION_DEFINITIONS.spawner, "visualOffset").y).toBe(-55);
+    expect(worldPoint(DECORATION_DEFINITIONS.contentBrowser, "visualOffset").y).toBe(-35);
+    expect(worldPoint(DECORATION_DEFINITIONS.crateCargo, "hitboxOffset").y).toBe(-10);
+    expect(worldPoint(DECORATION_DEFINITIONS.reagentRack, "hitboxOffset").y).toBe(-15);
+    expect(worldPoint(DECORATION_DEFINITIONS.spawner, "hitboxOffset").y).toBe(-10);
   });
 
   it("places every room deterministically with owned, routed corridors", () => {
@@ -637,7 +638,7 @@ describe("layout and geometry", () => {
           const blocked = decorations.some(item =>
             item.obstacle &&
             !item.destroyed &&
-            footprintsOverlap(point, MAX_REGULAR_MONSTER_FOOTPRINT, item, item.footprintRadii)
+            footprintsOverlap(point, MAX_REGULAR_MONSTER_FOOTPRINT, item, worldPoint(item, "footprintRadii"))
           );
           return inFloor && !blocked;
         },
@@ -706,11 +707,11 @@ describe("layout and geometry", () => {
       for (const kind of ["melee-light", "melee-heavy"] as const) {
         const spec = REGULAR_MONSTER_DEFINITIONS[kind];
         const monster = { x: player.x + 100, y: player.y + 110 };
-        const footprint = spec.footprintRadii;
+        const footprint = worldPoint(spec, "footprintRadii");
         const walkable = (point: Point) => actorClearOfWalls(layout, point, footprint, walls) &&
           !footprintsOverlap(point, footprint, player, PLAYER_SPEC.footprintRadii);
         const clearShot = (point: Point) => !wallBlocksSegment(
-          actorCollisionCenter(point, spec.hitboxOffset), actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset),
+          actorCollisionCenter(point, worldPoint(spec, "hitboxOffset")), actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset),
           { x: DEFAULT_BULLET_SPEC.radius, y: DEFAULT_BULLET_SPEC.radius }, hitboxes,
         );
         expect(actorClearOfWalls(layout, player, PLAYER_SPEC.footprintRadii, walls)).toBe(true);
@@ -1259,6 +1260,60 @@ describe("deterministic room contents", () => {
   });
   const layout = { nodes: [room], links: [], hiddenCount: 0 };
 
+  it("assigns integer scenery HP from 1 to 20 in hitbox-size order", () => {
+    const definitions = Object.values(DECORATION_DEFINITIONS).sort((left, right) => {
+      const a = worldPoint(left, "hitboxRadii");
+      const b = worldPoint(right, "hitboxRadii");
+      return (a.x + a.y) - (b.x + b.y);
+    });
+    for (const [index, definition] of definitions.entries()) {
+      expect(Number.isInteger(definition.hp), definition.definitionId).toBe(true);
+      expect(definition.hp, definition.definitionId).toBeGreaterThanOrEqual(1);
+      expect(definition.hp, definition.definitionId).toBeLessThanOrEqual(20);
+      if (index > 0) {
+        expect(definition.hp, definition.definitionId).toBeGreaterThanOrEqual(definitions[index - 1]!.hp);
+      }
+    }
+  });
+
+  it("uses configured scenery HP across room and corridor seeds and floors", () => {
+    const hpByDefinitionId = new Map<string, number>(Object.values(DECORATION_DEFINITIONS).map(definition =>
+      [definition.definitionId, definition.hp]
+    ));
+    const rooms = Array.from({ length: 20 }, (_, index) => ({
+      ...room,
+      id: 10_000 + index,
+      x: index * ROOM_WIDTH * 5,
+      tag: "section",
+      lootSeed: stableHash(`scenery-hp-room-${index}`),
+    }));
+    const source = rooms[0]!;
+    const target = rooms[1]!;
+    const link: LayoutLink = {
+      id: "scenery-hp-corridor",
+      source,
+      target,
+      direction: "E",
+      targetDirection: "W",
+      ownerRoomId: source.id,
+      width: WORLD_GEOMETRY.corridorHalfWidth * 2,
+      points: [
+        { x: source.x + source.width / 2, y: source.y },
+        { x: target.x - target.width / 2, y: target.y },
+      ],
+    };
+    for (const floor of [1, 10, 20]) {
+      const corridorItems = decorationSpecsForCorridor(link, floor);
+      expect(corridorItems.length).toBeGreaterThan(0);
+      const items = [...rooms.flatMap(room => decorationSpecsForRoom(room, floor)), ...corridorItems];
+      for (const item of items) {
+        const hp = hpByDefinitionId.get(item.definitionId)!;
+        expect(item.hp, item.id).toBe(hp);
+        expect(item.maxHp, item.id).toBe(hp);
+      }
+    }
+  });
+
   it("repeats decoration and monster specifications exactly", () => {
     const decorations = decorationSpecsForRoom(room);
     expect(decorations).toEqual(decorationSpecsForRoom(room));
@@ -1290,8 +1345,8 @@ describe("deterministic room contents", () => {
       const decorations = decorationSpecsForRoom(candidate, 10);
       for (const [index, item] of decorations.entries()) {
         for (const other of decorations.slice(index + 1)) {
-          const minimum = Math.max(10, item.footprintRadii.x, item.footprintRadii.y) +
-            Math.max(10, other.footprintRadii.x, other.footprintRadii.y) + 8;
+          const minimum = Math.max(10, worldPoint(item, "footprintRadii").x, worldPoint(item, "footprintRadii").y) +
+            Math.max(10, worldPoint(other, "footprintRadii").x, worldPoint(other, "footprintRadii").y) + 8;
           expect(Math.hypot(item.x - other.x, item.y - other.y)).toBeGreaterThanOrEqual(minimum);
         }
       }
@@ -1351,10 +1406,10 @@ describe("deterministic room contents", () => {
     const relocated = monsters.find(monster => monster.id === original.id)!;
     expect(relocated).toBeDefined();
     expect(relocated).not.toMatchObject({ x: original.x, y: original.y });
-    expect(monsterPositionIsClear(relocated, relocated.footprintRadii, combatLayout, [blocker])).toBe(true);
+    expect(monsterPositionIsClear(relocated, worldPoint(relocated, "footprintRadii"), combatLayout, [blocker])).toBe(true);
     expect(monsterPositionIsClear(
-      { x: blocker.x + blocker.footprintRadii.x + relocated.footprintRadii.x - 1, y: blocker.y },
-      relocated.footprintRadii, combatLayout, [blocker],
+      { x: blocker.x + worldPoint(blocker, "footprintRadii").x + worldPoint(relocated, "footprintRadii").x - 1, y: blocker.y },
+      worldPoint(relocated, "footprintRadii"), combatLayout, [blocker],
     )).toBe(false);
   });
 
@@ -1372,7 +1427,7 @@ describe("deterministic room contents", () => {
     const monsters = buildMonsters(layout, new Map(), new Set([combatRoom.id]), 1, [], arrival);
     expect(monsters.some(monster => monster.id === first.id)).toBe(true);
     expect(monsters.every(monster =>
-      !footprintsOverlap(monster, monster.footprintRadii, arrival, PLAYER_SPEC.footprintRadii)
+      !footprintsOverlap(monster, worldPoint(monster, "footprintRadii"), arrival, PLAYER_SPEC.footprintRadii)
     )).toBe(true);
   });
 
@@ -1402,12 +1457,12 @@ describe("deterministic room contents", () => {
         // Actor placement checks the actual ellipses, including enlarged
         // miniboss footprints, rather than their enclosing circles.
         if (!itemIsDecoration || !otherIsDecoration) {
-          expect(footprintsOverlap(item, item.footprintRadii, other, other.footprintRadii), `${item.id} vs ${other.id}`)
+          expect(footprintsOverlap(item, worldPoint(item, "footprintRadii"), other, worldPoint(other, "footprintRadii")), `${item.id} vs ${other.id}`)
             .toBe(false);
           continue;
         }
-        const minimum = Math.max(item.footprintRadii.x, item.footprintRadii.y) +
-          Math.max(other.footprintRadii.x, other.footprintRadii.y);
+        const minimum = Math.max(worldPoint(item, "footprintRadii").x, worldPoint(item, "footprintRadii").y) +
+          Math.max(worldPoint(other, "footprintRadii").x, worldPoint(other, "footprintRadii").y);
         expect(Math.hypot(item.x - other.x, item.y - other.y), `${item.id} vs ${other.id}`)
           .toBeGreaterThanOrEqual(minimum);
       }
@@ -1625,7 +1680,7 @@ describe("deterministic room contents", () => {
     expect(scout).toBeDefined();
     expect(heavy).toBeDefined();
     expect(scout!.size).toBeLessThan(heavy!.size);
-    expect(scout!.hitboxRadii.x).toBeLessThan(heavy!.hitboxRadii.x);
+    expect(worldPoint(scout!, "hitboxRadii").x).toBeLessThan(worldPoint(heavy!, "hitboxRadii").x);
   });
 
   it("generates all seven deterministic archetypes with distinct combat roles", () => {
@@ -1707,16 +1762,12 @@ describe("deterministic room contents", () => {
       const definition = REGULAR_MONSTER_DEFINITIONS[miniboss.kind as RegularMonsterKind];
       expect(miniboss.size).toBeCloseTo(definition.size * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.spriteSize).toBeCloseTo(definition.spriteSize * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.destroyedVisualOffset.y).toBeCloseTo(definition.destroyedVisualOffset.y * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.visualOffset.x).toBeCloseTo(definition.visualOffset.x * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.visualOffset.y).toBeCloseTo(definition.visualOffset.y * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.hitboxOffset.x).toBeCloseTo(definition.hitboxOffset.x * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.hitboxOffset.y).toBeCloseTo(definition.hitboxOffset.y * MINIBOSS_SIZE_MULTIPLIER);
+      for (const field of ["destroyedVisualOffset", "visualOffset", "hitboxOffset", "hitboxRadii", "footprintRadii"] as const) {
+        expect(miniboss[field]).toEqual(definition[field]);
+        expect(worldPoint(miniboss, field).x).toBeCloseTo(worldPoint(definition, field).x * MINIBOSS_SIZE_MULTIPLIER);
+        expect(worldPoint(miniboss, field).y).toBeCloseTo(worldPoint(definition, field).y * MINIBOSS_SIZE_MULTIPLIER);
+      }
       expect(miniboss.visual).toBe(definition.visual);
-      expect(miniboss.hitboxRadii.x).toBeCloseTo(definition.hitboxRadii.x * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.hitboxRadii.y).toBeCloseTo(definition.hitboxRadii.y * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.footprintRadii.x).toBeCloseTo(definition.footprintRadii.x * MINIBOSS_SIZE_MULTIPLIER);
-      expect(miniboss.footprintRadii.y).toBeCloseTo(definition.footprintRadii.y * MINIBOSS_SIZE_MULTIPLIER);
       expect(miniboss.maxHp).toBeGreaterThanOrEqual(definition.baseHp * MINIBOSS_HP_MULTIPLIER);
       expect(miniboss.attackDamage).toBeGreaterThanOrEqual(
         Math.ceil(definition.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER),
@@ -1848,7 +1899,7 @@ describe("deterministic room contents", () => {
     expect(glmHunter.visual).toBe(BOSS_DEFINITIONS["glm-hunter"].visual);
     expect(glmHunter.spriteSize).toBe(BOSS_DEFINITIONS["glm-hunter"].spriteSize);
     expect(glmHunter.destroyedVisualOffset).toEqual(BOSS_DEFINITIONS["glm-hunter"].destroyedVisualOffset);
-    expect(glmHunter.attackRange).toBeGreaterThanOrEqual(glmHunter.footprintRadii.x + PLAYER_SPEC.footprintRadii.x);
+    expect(glmHunter.attackRange).toBeGreaterThanOrEqual(worldPoint(glmHunter, "footprintRadii").x + PLAYER_SPEC.footprintRadii.x);
     expect(GLM_HUNTER_ATTACKS.chargeWindupMs).toBeGreaterThan(0);
     expect(GLM_HUNTER_ATTACKS.initialChargeDelayMs).toBeGreaterThan(GLM_HUNTER_ATTACKS.chargeWindupMs);
 
@@ -1981,7 +2032,7 @@ describe("deterministic room contents", () => {
     expect(restored.roomId).toBe(999);
     expect(restored.x).toBe(destination.x);
     expect(restored.y).toBe(destination.y);
-    expect(pointInRoom(restored.x, restored.y, room, restored.hitboxRadii)).toBe(false);
+    expect(pointInRoom(restored.x, restored.y, room, worldPoint(restored, "hitboxRadii"))).toBe(false);
   });
 
   it("subtracts the projectile's full damage from obstacle HP", () => {
@@ -2028,18 +2079,18 @@ describe("deterministic room contents", () => {
     };
     const destroyed = { ...crate, id: "destroyed-crate", destroyed: true };
     const indestructible = { ...crate, id: "pedestal", destructible: false };
-    const distant = { ...crate, id: "distant-crate", x: barrel.x + BARREL_EXPLOSION_RADIUS + crate.hitboxRadii.x + 1 };
+    const distant = { ...crate, id: "distant-crate", x: barrel.x + BARREL_EXPLOSION_RADIUS + worldPoint(crate, "hitboxRadii").x + 1 };
     const monsterSpec = monsterSpecForSpawner(barrel, 1, 0);
     const monster = {
       ...monsterSpec,
       active: true,
       hp: 10,
-      y: barrel.y + barrel.hitboxOffset.y - monsterSpec.hitboxOffset.y,
+      y: barrel.y + worldPoint(barrel, "hitboxOffset").y - worldPoint(monsterSpec, "hitboxOffset").y,
     };
     const dead = { ...monster, id: "dead-monster", dead: true };
     const inactive = { ...monster, id: "inactive-monster", active: false };
-    const farMonster = { ...monster, id: "far-monster", x: barrel.x + BARREL_EXPLOSION_RADIUS + monster.hitboxRadii.x + 1 };
-    const player = { x: barrel.x, y: barrel.y + barrel.hitboxOffset.y - PLAYER_SPEC.hitboxOffset.y };
+    const farMonster = { ...monster, id: "far-monster", x: barrel.x + BARREL_EXPLOSION_RADIUS + worldPoint(monster, "hitboxRadii").x + 1 };
+    const player = { x: barrel.x, y: barrel.y + worldPoint(barrel, "hitboxOffset").y - PLAYER_SPEC.hitboxOffset.y };
 
     expect(barrelExplosionTargets(
       barrel,
@@ -2058,20 +2109,20 @@ describe("deterministic room contents", () => {
     const crate: Decoration = {
       ...DECORATION_DEFINITIONS.crateCargo,
       id: "edge-crate", roomId: room.id,
-      x: barrel.x + BARREL_EXPLOSION_RADIUS + DECORATION_DEFINITIONS.crateCargo.hitboxRadii.x,
-      y: barrel.y + barrel.hitboxOffset.y - DECORATION_DEFINITIONS.crateCargo.hitboxOffset.y,
+      x: barrel.x + BARREL_EXPLOSION_RADIUS + worldPoint(DECORATION_DEFINITIONS.crateCargo, "hitboxRadii").x,
+      y: barrel.y + worldPoint(barrel, "hitboxOffset").y - worldPoint(DECORATION_DEFINITIONS.crateCargo, "hitboxOffset").y,
       maxHp: 4, hp: 4, destroyed: false, dropKind: null,
     };
     const player = {
       x: barrel.x + BARREL_EXPLOSION_RADIUS + PLAYER_SPEC.hitboxRadii.x,
-      y: barrel.y + barrel.hitboxOffset.y - PLAYER_SPEC.hitboxOffset.y,
+      y: barrel.y + worldPoint(barrel, "hitboxOffset").y - PLAYER_SPEC.hitboxOffset.y,
     };
     const monsterSpec = monsterSpecForSpawner(barrel, 1, 1);
     const monster = {
       ...monsterSpec,
       active: true,
-      x: barrel.x + BARREL_EXPLOSION_RADIUS + monsterSpec.hitboxRadii.x,
-      y: barrel.y + barrel.hitboxOffset.y - monsterSpec.hitboxOffset.y,
+      x: barrel.x + BARREL_EXPLOSION_RADIUS + worldPoint(monsterSpec, "hitboxRadii").x,
+      y: barrel.y + worldPoint(barrel, "hitboxOffset").y - worldPoint(monsterSpec, "hitboxOffset").y,
     };
 
     expect(barrelExplosionTargets(barrel, [crate], [monster], player)).toMatchObject({
@@ -2088,16 +2139,17 @@ describe("deterministic room contents", () => {
   it("finds monster hitboxes across spatial cell boundaries and refreshes after movement", () => {
     const template = monsterSpecsForRoom(node(9_001, 0, 1, { isRoot: false }))[0]!;
     const cellSize = WORLD_GEOMETRY.spatialCellSize;
-    const centerOffsetY = template.hitboxOffset.y;
+    const centerOffsetY = worldPoint(template, "hitboxOffset").y;
+    const radii = worldPoint(template, "hitboxRadii");
     const near = {
       ...template,
-      x: cellSize - template.hitboxRadii.x / 2,
-      y: cellSize - template.hitboxRadii.y / 2 - centerOffsetY,
+      x: cellSize - radii.x / 2,
+      y: cellSize - radii.y / 2 - centerOffsetY,
       active: false,
     };
     const far = { ...template, id: "far-monster", x: cellSize * 6 };
     const dead = { ...near, id: "dead-monster", dead: true };
-    const hit = { x: cellSize + template.hitboxRadii.x / 2, y: cellSize + template.hitboxRadii.y / 2 };
+    const hit = { x: cellSize + radii.x / 2, y: cellSize + radii.y / 2 };
 
     const cells = indexMonsterHitboxes([near, far, dead]);
     // Index inactive monsters so discovering a room during a tick can activate them immediately.
@@ -2119,8 +2171,9 @@ describe("deterministic room contents", () => {
       ...template,
       x: cell - 60,
       y: cell + 5,
-      hitboxOffset: { x: 70, y: -10 },
-      hitboxRadii: { x: 3, y: 7 },
+      size: 100,
+      hitboxOffset: { x: 0.7, y: -0.1 },
+      hitboxRadii: { x: 0.03, y: 0.07 },
     };
     const cells = indexMonsterHitboxes([monster]);
     expect(monsterCollisionCandidates(cells, { x: cell + 10, y: cell - 5 }, 0)).toEqual(new Set([monster]));
@@ -2140,10 +2193,10 @@ describe("deterministic room contents", () => {
       dropKind: null,
     };
     expect(item.hitboxOffset.y).toBeLessThan(0);
-    expect(projectileHitsDecoration(item, { x: item.x + item.hitboxOffset.x, y: item.y + item.hitboxOffset.y }, 1)).toBe(true);
+    expect(projectileHitsDecoration(item, { x: item.x + worldPoint(item, "hitboxOffset").x, y: item.y + worldPoint(item, "hitboxOffset").y }, 1)).toBe(true);
     expect(projectileHitsDecoration(item, {
-      x: item.x + item.hitboxOffset.x,
-      y: item.y + item.hitboxOffset.y - item.hitboxRadii.y - 2,
+      x: item.x + worldPoint(item, "hitboxOffset").x,
+      y: item.y + worldPoint(item, "hitboxOffset").y - worldPoint(item, "hitboxRadii").y - 2,
     }, 1)).toBe(false);
   });
 
@@ -2246,7 +2299,7 @@ describe("deterministic room contents", () => {
         `${prefix}parts.png`,
       ]);
       expect(definition.visual.destroyed?.every(clip => clip.origin.y === 0.5)).toBe(true);
-      expect(definition.destroyedVisualOffset.y).toBeCloseTo(
+      expect(worldPoint(definition, "destroyedVisualOffset").y).toBeCloseTo(
         -definition.size * definition.visual.destroyed![0]!.sizeScale * 0.4375,
       );
     }
@@ -2432,7 +2485,7 @@ describe("deterministic room contents", () => {
     expect(replenishWeaponAmmo(DEFAULT_WEAPON, null)).toBeNull();
   });
 
-  it("adds stronger, persistent monster spawners as floors deepen", () => {
+  it("adds more frequent, persistent monster spawners with configured HP as floors deepen", () => {
     const combatRooms = Array.from({ length: 500 }, (_, index) => node(index + 2_000, 0, 1, {
       tag: "section",
       isRoot: false,
@@ -2481,7 +2534,9 @@ describe("deterministic room contents", () => {
     const earlySpawners = floorOne.filter(item => item.spawner);
     const deepSpawners = floorTen.filter(item => item.spawner);
 
-    expect(deepSpawners[0]!.maxHp).toBeGreaterThan(earlySpawners[0]!.maxHp);
+    expect([...earlySpawners, ...deepSpawners].every(item =>
+      item.hp === DECORATION_DEFINITIONS.spawner.hp && item.maxHp === DECORATION_DEFINITIONS.spawner.hp
+    )).toBe(true);
     expect(earlySpawners[0]!.spawnIntervalMs).toBe(30_000);
     expect(deepSpawners[0]!.spawnIntervalMs).toBe(21_000);
     expect(deepSpawners[0]!.spawnIntervalMs).toBeLessThan(earlySpawners[0]!.spawnIntervalMs ?? Infinity);
@@ -2509,7 +2564,7 @@ describe("deterministic room contents", () => {
     // capacity depends on obstacle layout, but the restored state must be
     // honored wherever it fits.
     const placedBeforeSave = buildMonsters(combatLayout, new Map(), new Set([combatRoom.id]), 10, restoredDecorations)
-      .map(item => ({ x: item.x, y: item.y, footprintRadii: item.footprintRadii }));
+      .map(item => ({ x: item.x, y: item.y, footprintRadii: worldPoint(item, "footprintRadii") }));
     let savedPosition: Point | undefined;
     for (let ring = 0; ring <= 9 && !savedPosition; ring += 1) {
       for (let index = 0; index < 24; index += 1) {
@@ -2518,7 +2573,7 @@ describe("deterministic room contents", () => {
           x: reinforcement.x + Math.cos(angle) * 45 * ring,
           y: reinforcement.y + Math.sin(angle) * 45 * ring,
         };
-        if (monsterPositionIsClear(position, reinforcement.footprintRadii, combatLayout, restoredDecorations, placedBeforeSave)) {
+        if (monsterPositionIsClear(position, worldPoint(reinforcement, "footprintRadii"), combatLayout, restoredDecorations, placedBeforeSave)) {
           savedPosition = position;
           break;
         }
@@ -2548,7 +2603,7 @@ describe("deterministic room contents", () => {
     });
     expect(monsterPositionIsClear(
       restoredReinforcement,
-      restoredReinforcement.footprintRadii,
+      worldPoint(restoredReinforcement, "footprintRadii"),
       combatLayout,
       restoredDecorations,
     )).toBe(true);
@@ -2598,8 +2653,8 @@ describe("deterministic room contents", () => {
       for (const other of placed) {
         if (spawner.id === other.id) continue;
         expect(Math.hypot(spawner.x - other.x, spawner.y - other.y)).toBeGreaterThanOrEqual(
-          Math.max(10, spawner.footprintRadii.x, spawner.footprintRadii.y) +
-          Math.max(10, other.footprintRadii.x, other.footprintRadii.y) + 8,
+          Math.max(10, worldPoint(spawner, "footprintRadii").x, worldPoint(spawner, "footprintRadii").y) +
+          Math.max(10, worldPoint(other, "footprintRadii").x, worldPoint(other, "footprintRadii").y) + 8,
         );
       }
     }
@@ -2708,6 +2763,8 @@ describe("deterministic room contents", () => {
       destructible: true,
       obstacle: false,
       dropKind: "credit",
+      hp: DECORATION_DEFINITIONS.contentBrowser.hp,
+      maxHp: DECORATION_DEFINITIONS.contentBrowser.hp,
     });
     expect(browser.dropCount).toBeGreaterThanOrEqual(3);
     expect(browser.dropCount).toBeLessThanOrEqual(7);

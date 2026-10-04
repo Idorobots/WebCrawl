@@ -24,15 +24,13 @@ export type AuthoredRooms = ReadonlyMap<number, AuthoredRoomTemplate>;
 export function authoredDecorations(room: GraphNode, template: AuthoredRoomTemplate): Decoration[] {
   return (template.decorations ?? []).map(({ definition, x, y }, index) => {
     const type = DECORATION_DEFINITIONS[definition];
-    const hp = type.destructible ? 5 : 0;
     return {
       ...type,
       id: `${room.id}::authored-decor-${index}`,
       roomId: room.id,
       x: room.x + x,
       y: room.y + y,
-      maxHp: hp,
-      hp,
+      maxHp: type.hp,
       destroyed: false,
       dropKind: null,
       ...(definition === "spawner" ? { spawner: true, spawnIntervalMs: 30_000, spawnedCount: 0 } : {}),

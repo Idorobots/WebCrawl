@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { artDebugLevel } from "../../src/client/domain/authored-rooms";
+import { applyObstacleDamage } from "../../src/client/domain/combat";
 import { footprintsOverlap, pointInRoomFloor } from "../../src/client/domain/geometry";
 import { buildDecorations, buildInteractiveObjects, buildMonsters } from "../../src/client/domain/generation";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
+import { worldPoint } from "../../src/client/domain/object-geometry";
 import { buildWallFootprints, WallRectIndex, wallOverlapsEllipse } from "../../src/client/domain/wall-collision";
 import {
   BOSS_DEFINITIONS, DECORATION_DEFINITIONS, LOOT_DEFINITIONS,
@@ -40,13 +42,14 @@ describe("authored art floor", () => {
       expect(miniboss.maxHp).toBe(Math.ceil(regular.maxHp * MINIBOSS_HP_MULTIPLIER));
       expect(miniboss.attackDamage).toBe(Math.ceil(regular.attackDamage * MINIBOSS_DAMAGE_MULTIPLIER));
       for (const field of ["hitboxRadii", "hitboxOffset", "visualOffset", "destroyedVisualOffset", "footprintRadii"] as const) {
-        expect(miniboss[field].x).toBeCloseTo(regular[field].x * MINIBOSS_SIZE_MULTIPLIER);
-        expect(miniboss[field].y).toBeCloseTo(regular[field].y * MINIBOSS_SIZE_MULTIPLIER);
+        expect(miniboss[field]).toEqual(regular[field]);
+        expect(worldPoint(miniboss, field).x).toBeCloseTo(worldPoint(regular, field).x * MINIBOSS_SIZE_MULTIPLIER);
+        expect(worldPoint(miniboss, field).y).toBeCloseTo(worldPoint(regular, field).y * MINIBOSS_SIZE_MULTIPLIER);
       }
       const room = layout.nodes.find(room => room.id === miniboss.spawnRoomId)!;
       expect(room).toMatchObject({ tag: "miniboss", isBossArena: false, label: `Miniboss ${miniboss.kind}` });
       expect(pointInRoomFloor(miniboss.x, miniboss.y, room)).toBe(true);
-      expect(wallOverlapsEllipse(miniboss, miniboss.footprintRadii, walls)).toBe(false);
+      expect(wallOverlapsEllipse(miniboss, worldPoint(miniboss, "footprintRadii"), walls)).toBe(false);
     }
     expect(monsters.every(monster => monster.hp === monster.maxHp)).toBe(true);
   });
@@ -66,25 +69,33 @@ describe("authored art floor", () => {
       .toEqual(weaponKinds());
 
     for (const [index, item] of decorations.entries()) {
+      const definition = Object.values(DECORATION_DEFINITIONS).find(definition => definition.definitionId === item.definitionId)!;
+      expect(item.hp, item.definitionId).toBe(definition.hp);
+      expect(item.maxHp, item.definitionId).toBe(definition.hp);
+      if (!item.destructible) {
+        expect(applyObstacleDamage(item, definition.hp + 1)).toBe(false);
+        expect(item.hp).toBe(definition.hp);
+        expect(item.destroyed).toBe(false);
+      }
       expect(pointInRoomFloor(item.x, item.y, gallery)).toBe(true);
-      expect(wallOverlapsEllipse(item, item.footprintRadii, walls)).toBe(false);
+      expect(wallOverlapsEllipse(item, worldPoint(item, "footprintRadii"), walls)).toBe(false);
       for (const other of decorations.slice(index + 1)) {
         if (item.obstacle && other.obstacle) {
-          expect(footprintsOverlap(item, item.footprintRadii, other, other.footprintRadii)).toBe(false);
+          expect(footprintsOverlap(item, worldPoint(item, "footprintRadii"), other, worldPoint(other, "footprintRadii"))).toBe(false);
         }
       }
     }
     for (const item of loot) {
       expect(pointInRoomFloor(item.x, item.y, gallery)).toBe(true);
       expect(decorations.some(decor => decor.obstacle &&
-        footprintsOverlap(item, PLAYER_SPEC.footprintRadii, decor, decor.footprintRadii))).toBe(false);
+        footprintsOverlap(item, PLAYER_SPEC.footprintRadii, decor, worldPoint(decor, "footprintRadii")))).toBe(false);
     }
     expect(decorations.some(item => item.obstacle &&
-      footprintsOverlap(gallery, PLAYER_SPEC.footprintRadii, item, item.footprintRadii))).toBe(false);
+      footprintsOverlap(gallery, PLAYER_SPEC.footprintRadii, item, worldPoint(item, "footprintRadii")))).toBe(false);
     for (let x = gallery.x; x < gallery.x + gallery.width / 2; x += 40) {
       expect(decorations.some(item => item.obstacle &&
         footprintsOverlap({ x, y: gallery.y }, PLAYER_SPEC.footprintRadii,
-          item, item.footprintRadii))).toBe(false);
+          item, worldPoint(item, "footprintRadii")))).toBe(false);
     }
   });
 
@@ -98,7 +109,7 @@ describe("authored art floor", () => {
 
     const savedDecorations = new Map([["0::authored-decor-0", { hp: 2, destroyed: true }]]);
     const decorations = buildDecorations(layout, savedDecorations, 1, undefined, rooms);
-    expect(decorations[0]).toMatchObject({ hp: 2, destroyed: true });
+    expect(decorations[0]).toMatchObject({ hp: 2, maxHp: DECORATION_DEFINITIONS.plantViolet.hp, destroyed: true });
 
     const initialLoot = buildInteractiveObjects(layout, "art-debug", null, new Set(), undefined, rooms).loot;
     expect(buildInteractiveObjects(layout, "art-debug", null, new Set([initialLoot[0]!.id]), undefined, rooms).loot)

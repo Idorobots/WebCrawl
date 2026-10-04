@@ -34,6 +34,7 @@ import {
   type BossStage,
 } from "./domain/boss-attacks";
 import { artDebugLevel, type AuthoredRooms } from "./domain/authored-rooms";
+import { worldPoint } from "./domain/object-geometry";
 import { signageFontForUrl } from "./domain/level-style";
 import {
   actorAimDirection,
@@ -1313,7 +1314,7 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
     renderer.spawnEffect(
       item.visual.animations?.damage,
       item.x,
-      item.y + item.hitboxOffset.y,
+      item.y + worldPoint(item, "hitboxOffset").y,
       item.size,
       { key: `decoration:${item.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
     );
@@ -1340,7 +1341,7 @@ function crushSceneryAlongFootprint(from: Point, to: Point, radius: EllipseRadii
 }
 
 function crushSceneryUnderBoss(monster: Monster, from: Point): void {
-  crushSceneryAlongFootprint(from, monster, monster.footprintRadii);
+  crushSceneryAlongFootprint(from, monster, worldPoint(monster, "footprintRadii"));
 }
 
 function monsterStateMapForPage(pageUrl: string): Map<string, MonsterState> {
@@ -1558,7 +1559,7 @@ function updateMonsterSpawners(timestamp: number): void {
 }
 
 function findSpawnerSpawnPosition(monster: Monster, spawner: Decoration): Point | null {
-  const sideDistance = spawner.footprintRadii.x + monster.footprintRadii.x + 8;
+  const sideDistance = worldPoint(spawner, "footprintRadii").x + worldPoint(monster, "footprintRadii").x + 8;
   // Spawn beside the spawner so actor and scenery footprints do not overlap.
   const spawnOffsets: Point[] = [
     { x: sideDistance, y: 0 }, { x: -sideDistance, y: 0 },
@@ -1710,7 +1711,7 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
     renderer.spawnEffect(
       monster.visual.effects?.damage,
       monster.x,
-      monster.y + monster.hitboxOffset.y,
+      monster.y + worldPoint(monster, "hitboxOffset").y,
       monster.size,
       { key: `monster:${monster.id}`, lightColor: bullet ? renderer.bulletColor(bullet) : undefined },
     );
@@ -1775,11 +1776,12 @@ function queueEnemyBullet(
     forwardOffset?: number;
   } = {},
 ): void {
-  const muzzleDistance = Math.max(Math.max(monster.hitboxRadii.x, monster.hitboxRadii.y) + radius + 5, monster.size * 0.42);
+  const hitboxRadii = worldPoint(monster, "hitboxRadii");
+  const muzzleDistance = Math.max(Math.max(hitboxRadii.x, hitboxRadii.y) + radius + 5, monster.size * 0.42);
   const origin = actorProjectileOrigin(
     monster,
     direction,
-    monster.hitboxOffset,
+    worldPoint(monster, "hitboxOffset"),
     muzzleDistance,
     lateralOffset,
   );
@@ -1791,7 +1793,7 @@ function queueEnemyBullet(
     y: origin.y + direction.y * forwardOffset,
     vx: direction.x * speed,
     vy: direction.y * speed,
-    depthOffsetY: -monster.hitboxOffset.y,
+    depthOffsetY: -worldPoint(monster, "hitboxOffset").y,
     traveled: 0,
     radius,
     maxDistance,
@@ -1817,7 +1819,7 @@ function fireBossVolley(monster: Monster, target: Point, timestamp: number, ring
   const sequence = monster.attackSequence ?? 0;
   const aimed = actorAimDirection(
     monster,
-    monster.hitboxOffset,
+    worldPoint(monster, "hitboxOffset"),
     target,
   );
   const stage = bossStage(monster.hp, monster.maxHp);
@@ -1859,10 +1861,10 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
       y: boss.y + Math.sin(angle + slot * Math.PI / 6) * distance * scale,
     }))).find(point =>
       roomContainingPoint(point.x, point.y)?.id === boss.roomId &&
-      isWalkable(point.x, point.y, minion.footprintRadii) &&
-      !footprintsOverlap(point, minion.footprintRadii, player, PLAYER_SPEC.footprintRadii) &&
+      isWalkable(point.x, point.y, worldPoint(minion, "footprintRadii")) &&
+      !footprintsOverlap(point, worldPoint(minion, "footprintRadii"), player, PLAYER_SPEC.footprintRadii) &&
       currentMonsters.every(other => other.dead ||
-        !footprintsOverlap(point, minion.footprintRadii, other, other.footprintRadii))
+        !footprintsOverlap(point, worldPoint(minion, "footprintRadii"), other, worldPoint(other, "footprintRadii")))
     );
     if (!position) break;
     minion.x = position.x;
@@ -1874,7 +1876,7 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
     currentMonsters.push(minion);
     saveMonsterState(minion);
     renderer.spawnEffect(PLAYER_SPEC.visual.effects?.teleport, minion.x,
-      minion.y + minion.hitboxOffset.y, minion.size);
+      minion.y + worldPoint(minion, "hitboxOffset").y, minion.size);
     added += 1;
   }
   boss.summonedCount = summonedCount + added;
@@ -1888,7 +1890,7 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
 }
 
 function monsterMoveIsClear(monster: Monster, to: Point, checkPlayer = true): boolean {
-  return !wallBlocksSegment(monster, to, monster.footprintRadii, wallFootprints) &&
+  return !wallBlocksSegment(monster, to, worldPoint(monster, "footprintRadii"), wallFootprints) &&
     walkableSegment(monster, to, point => isMonsterWalkable(monster, point.x, point.y, checkPlayer));
 }
 
@@ -1917,10 +1919,10 @@ function monsterApproachPoint(monster: Monster): Point | null {
     monster,
     point => isMonsterWalkable(monster, point.x, point.y),
     point => monster.bossKind
-      ? wallLineOfSight(actorCollisionCenter(point, monster.hitboxOffset), playerCollisionCenter())
-      : hasLineOfSight(actorCollisionCenter(point, monster.hitboxOffset), playerCollisionCenter()),
-    Math.max(monster.footprintRadii.x + PLAYER_SPEC.footprintRadii.x,
-      monster.footprintRadii.y + PLAYER_SPEC.footprintRadii.y) + WORLD_GEOMETRY.pathGridStep * 2,
+      ? wallLineOfSight(actorCollisionCenter(point, worldPoint(monster, "hitboxOffset")), playerCollisionCenter())
+      : hasLineOfSight(actorCollisionCenter(point, worldPoint(monster, "hitboxOffset")), playerCollisionCenter()),
+    Math.max(worldPoint(monster, "footprintRadii").x + PLAYER_SPEC.footprintRadii.x,
+      worldPoint(monster, "footprintRadii").y + PLAYER_SPEC.footprintRadii.y) + WORLD_GEOMETRY.pathGridStep * 2,
   );
 }
 
@@ -2003,7 +2005,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
       : (dy < 0 ? "up" : "down");
 
   const walkable = (point: Point): boolean => isMonsterWalkable(monster, point.x, point.y);
-  if (!wallBlocksSegment(monster, { x: nextX, y: nextY }, monster.footprintRadii, wallFootprints) &&
+  if (!wallBlocksSegment(monster, { x: nextX, y: nextY }, worldPoint(monster, "footprintRadii"), wallFootprints) &&
       walkableSegment(monster, { x: nextX, y: nextY }, walkable)) {
     monster.x = nextX;
     monster.y = nextY;
@@ -2019,7 +2021,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     : [verticalStep, horizontalStep];
   for (const candidate of axisSteps) {
     if (Math.hypot(candidate.x - monster.x, candidate.y - monster.y) <= 0.001) continue;
-    if (wallBlocksSegment(monster, candidate, monster.footprintRadii, wallFootprints) ||
+    if (wallBlocksSegment(monster, candidate, worldPoint(monster, "footprintRadii"), wallFootprints) ||
         !walkableSegment(monster, candidate, walkable)) continue;
     monster.moveDir = cardinalDirection(candidate.x - monster.x, candidate.y - monster.y);
     monster.x = candidate.x;
@@ -2037,7 +2039,7 @@ function moveMonsterTowards(monster: Monster, target: Point, dt: number, timesta
     monster,
     { x: dx, y: dy },
     Math.max(step, 6),
-    point => !wallBlocksSegment(monster, point, monster.footprintRadii, wallFootprints) &&
+    point => !wallBlocksSegment(monster, point, worldPoint(monster, "footprintRadii"), wallFootprints) &&
       walkableSegment(monster, point, walkable),
     monster.seed + monster.blockedMoveCount,
   );
@@ -2057,14 +2059,14 @@ function teleportBoss(monster: Monster, playerRoom: GraphNode, timestamp: number
     roomContainingPoint(point.x, point.y)?.id === playerRoom.id &&
     isMonsterWalkable(monster, point.x, point.y) &&
     Math.hypot(point.x - monster.x, point.y - monster.y) >= 140 &&
-    Math.hypot(point.x - player.x, point.y - player.y) >= Math.max(monster.footprintRadii.x + PLAYER_SPEC.footprintRadii.x,
-      monster.footprintRadii.y + PLAYER_SPEC.footprintRadii.y) + 120 &&
+    Math.hypot(point.x - player.x, point.y - player.y) >= Math.max(worldPoint(monster, "footprintRadii").x + PLAYER_SPEC.footprintRadii.x,
+      worldPoint(monster, "footprintRadii").y + PLAYER_SPEC.footprintRadii.y) + 120 &&
     currentMonsters.every(other => other === monster || other.dead ||
-      Math.hypot(point.x - other.x, point.y - other.y) >= Math.max(monster.footprintRadii.x + other.footprintRadii.x,
-        monster.footprintRadii.y + other.footprintRadii.y) + 12);
+      Math.hypot(point.x - other.x, point.y - other.y) >= Math.max(worldPoint(monster, "footprintRadii").x + worldPoint(other, "footprintRadii").x,
+        worldPoint(monster, "footprintRadii").y + worldPoint(other, "footprintRadii").y) + 12);
   const destination = bossTeleportDestination(player, monster.attackSequence ?? 0, 320, clear,
     point => hasLineOfSight(
-      actorCollisionCenter(point, monster.hitboxOffset),
+      actorCollisionCenter(point, worldPoint(monster, "hitboxOffset")),
       playerCollisionCenter(),
     ));
   if (!destination) {
@@ -2073,7 +2075,7 @@ function teleportBoss(monster: Monster, playerRoom: GraphNode, timestamp: number
   }
 
   const effect = PLAYER_SPEC.visual.effects?.teleport;
-  const effectOffsetY = monster.hitboxOffset.y;
+  const effectOffsetY = worldPoint(monster, "hitboxOffset").y;
   renderer.spawnEffect(effect, monster.x, monster.y + effectOffsetY, monster.size);
   monster.x = destination.x;
   monster.y = destination.y;
@@ -2156,7 +2158,7 @@ function updateGlmCharge(monster: Monster, dt: number, timestamp: number, stage:
         monster.chargeUntil = timestamp;
       }
       if (!monster.chargeHit && Math.hypot(monster.x - player.x, monster.y - player.y) <= monster.attackRange &&
-        hasLineOfSight(actorCollisionCenter(monster, monster.hitboxOffset), playerCollisionCenter())) {
+        hasLineOfSight(actorCollisionCenter(monster, worldPoint(monster, "hitboxOffset")), playerCollisionCenter())) {
         monster.chargeHit = true;
         monster.attackKind = "melee";
         monster.lastAttackAt = timestamp;
@@ -2227,7 +2229,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): boolean | 
   monster.moveDir = cardinalDirection(player.x - monster.x, player.y - monster.y);
   const aimPoint = playerDistance <= monster.projectileRange
     ? visiblePlayerAimPoint(actorCollisionCenter(monster,
-      monster.hitboxOffset)) : null;
+      worldPoint(monster, "hitboxOffset"))) : null;
 
   if (monster.bossKind === "deepseek-summoner") {
     if (monster.nextSpecialAt === undefined) monster.nextSpecialAt = timestamp + 1_300;
@@ -2265,7 +2267,7 @@ function updateBoss(monster: Monster, dt: number, timestamp: number): boolean | 
   }
 
   if (playerDistance <= monsterMeleeRange(monster) && attackReady &&
-    hasLineOfSight(actorCollisionCenter(monster, monster.hitboxOffset), playerCollisionCenter())) {
+    hasLineOfSight(actorCollisionCenter(monster, worldPoint(monster, "hitboxOffset")), playerCollisionCenter())) {
     monster.attackKind = "melee";
     monster.lastAttackAt = timestamp;
     renderer.playMeleeSound();
@@ -2380,8 +2382,8 @@ function updateBullets(dt: number): void {
           if (!monster.active || monster.dead) continue;
 
           if (projectileHitsCircle(
-            actorCollisionCenter(monster, monster.hitboxOffset),
-            monster.hitboxRadii,
+            actorCollisionCenter(monster, worldPoint(monster, "hitboxOffset")),
+            worldPoint(monster, "hitboxRadii"),
             bullet,
             bulletRadius,
           )) {
@@ -2520,7 +2522,7 @@ function runGameTick(timestamp: number): void {
       const target = playerCollisionCenter();
       const monsterCenter = actorCollisionCenter(
         monster,
-        monster.hitboxOffset,
+        worldPoint(monster, "hitboxOffset"),
       );
       monster.moveDir = cardinalDirection(target.x - monsterCenter.x, target.y - monsterCenter.y);
       const playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
@@ -2531,7 +2533,7 @@ function runGameTick(timestamp: number): void {
       ) {
         shootEnemyVolley(monster, actorAimDirection(
           monster,
-          monster.hitboxOffset,
+          worldPoint(monster, "hitboxOffset"),
           aimPoint,
         ), timestamp);
       }
@@ -2546,7 +2548,7 @@ function runGameTick(timestamp: number): void {
     const target = playerCollisionCenter();
     let monsterCenter = actorCollisionCenter(
       monster,
-      monster.hitboxOffset,
+      worldPoint(monster, "hitboxOffset"),
     );
     let playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
     let aimPoint = monster.attackPattern !== "melee" && playerDistance <= monsterEngagementRange(monster)
@@ -2562,7 +2564,7 @@ function runGameTick(timestamp: number): void {
       moveMonsterTowards(monster, targetPoint, dt, timestamp);
       monsterCenter = actorCollisionCenter(
         monster,
-        monster.hitboxOffset,
+        worldPoint(monster, "hitboxOffset"),
       );
       playerDistance = Math.hypot(target.x - monsterCenter.x, target.y - monsterCenter.y);
       if (monster.attackPattern !== "melee" && playerDistance <= monsterEngagementRange(monster)) {
@@ -2587,7 +2589,7 @@ function runGameTick(timestamp: number): void {
     ) {
       shootEnemyVolley(monster, actorAimDirection(
         monster,
-        monster.hitboxOffset,
+        worldPoint(monster, "hitboxOffset"),
         aimPoint,
       ), timestamp);
     }
@@ -2706,8 +2708,9 @@ function rebuildSpatialIndexes(): void {
   }
   for (const item of currentDecorations) {
     if (item.obstacle) {
-      const extentX = item.footprintRadii.x + margin;
-      const extentY = item.footprintRadii.y + margin;
+      const footprint = worldPoint(item, "footprintRadii");
+      const extentX = footprint.x + margin;
+      const extentY = footprint.y + margin;
       forSpatialCells(item.x - extentX, item.x + extentX, item.y - extentY, item.y + extentY, key => {
         const cell = obstacleCells.get(key) ?? new Set();
         cell.add(item);
@@ -2715,9 +2718,12 @@ function rebuildSpatialIndexes(): void {
       });
     }
     if (item.destructible) {
-      const extentX = Math.max(item.hitboxRadii.x + Math.abs(item.hitboxOffset.x), item.footprintRadii.x) +
+      const hitbox = worldPoint(item, "hitboxRadii");
+      const offset = worldPoint(item, "hitboxOffset");
+      const footprint = worldPoint(item, "footprintRadii");
+      const extentX = Math.max(hitbox.x + Math.abs(offset.x), footprint.x) +
         Math.max(24, PLAYER_SPEC.hitboxRadii.x);
-      const extentY = Math.max(item.hitboxRadii.y + Math.abs(item.hitboxOffset.y), item.footprintRadii.y) +
+      const extentY = Math.max(hitbox.y + Math.abs(offset.y), footprint.y) +
         Math.max(24, PLAYER_SPEC.hitboxRadii.y);
       forSpatialCells(item.x - extentX, item.x + extentX, item.y - extentY, item.y + extentY, key => {
         const cell = damageableCells.get(key) ?? new Set();
@@ -2732,7 +2738,7 @@ function pointBlockedByDecoration(x: number, y: number, radius: number | Ellipse
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
     if (!item.obstacle || item.destroyed) continue;
 
-    if (footprintsOverlap({ x, y }, radius, item, item.footprintRadii)) return true;
+    if (footprintsOverlap({ x, y }, radius, item, worldPoint(item, "footprintRadii"))) return true;
   }
 
   return false;
@@ -2742,11 +2748,11 @@ function pointBlockedByDecoration(x: number, y: number, radius: number | Ellipse
 function slideObstaclesNear(x: number, y: number): EllipseObstacle[] {
   const scenery = [...(obstacleCells.get(spatialCellKey(x, y)) ?? [])]
     .filter(item => item.obstacle && !item.destroyed)
-    .map(item => ({ x: item.x, y: item.y, radii: item.footprintRadii }));
+    .map(item => ({ x: item.x, y: item.y, radii: worldPoint(item, "footprintRadii") }));
   const actors = currentMonsters
     .filter(monster => monster.obstacle && monster.active && !monster.dead &&
-      footprintsOverlap({ x, y }, PLAYER_SPEC.footprintRadii, monster, monster.footprintRadii))
-    .map(monster => ({ x: monster.x, y: monster.y, radii: monster.footprintRadii }));
+      footprintsOverlap({ x, y }, PLAYER_SPEC.footprintRadii, monster, worldPoint(monster, "footprintRadii")))
+    .map(monster => ({ x: monster.x, y: monster.y, radii: worldPoint(monster, "footprintRadii") }));
   return [...scenery, ...actors];
 }
 
@@ -2781,20 +2787,21 @@ function isPlayerWalkable(x: number, y: number, allowEscape = true): boolean {
   return currentMonsters.every(monster => !monster.active || monster.dead ||
     !monster.obstacle ||
     (allowEscape
-      ? footprintMoveIsClear(player, { x, y }, PLAYER_SPEC.footprintRadii, monster, monster.footprintRadii)
-      : !footprintsOverlap({ x, y }, PLAYER_SPEC.footprintRadii, monster, monster.footprintRadii)));
+      ? footprintMoveIsClear(player, { x, y }, PLAYER_SPEC.footprintRadii, monster, worldPoint(monster, "footprintRadii"))
+      : !footprintsOverlap({ x, y }, PLAYER_SPEC.footprintRadii, monster, worldPoint(monster, "footprintRadii"))));
 }
 
 function isMonsterWalkable(monster: Monster, x: number, y: number, checkPlayer = true): boolean {
-  if (!isGeometryWalkable(x, y, monster.footprintRadii)) return false;
+  const footprint = worldPoint(monster, "footprintRadii");
+  if (!isGeometryWalkable(x, y, footprint)) return false;
   if (checkPlayer && playerAlive && PLAYER_SPEC.obstacle &&
-    !footprintMoveIsClear(monster, { x, y }, monster.footprintRadii, player, PLAYER_SPEC.footprintRadii)) return false;
+    !footprintMoveIsClear(monster, { x, y }, footprint, player, PLAYER_SPEC.footprintRadii)) return false;
   if (isBoss(monster)) return true;
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
     if (!item.obstacle || item.destroyed) continue;
-    if (!footprintsOverlap({ x, y }, monster.footprintRadii, item, item.footprintRadii)) continue;
+    if (!footprintsOverlap({ x, y }, footprint, item, worldPoint(item, "footprintRadii"))) continue;
     if (item.id === monster.spawnSourceId) {
-      if (footprintMoveIsClear(monster, { x, y }, monster.footprintRadii, item, item.footprintRadii)) continue;
+      if (footprintMoveIsClear(monster, { x, y }, footprint, item, worldPoint(item, "footprintRadii"))) continue;
     }
     return false;
   }
@@ -2802,14 +2809,15 @@ function isMonsterWalkable(monster: Monster, x: number, y: number, checkPlayer =
 }
 
 function monsterSpawnPositionIsClear(monster: Monster, position: Point): boolean {
-  if (!isGeometryWalkable(position.x, position.y, monster.footprintRadii)) return false;
+  const footprint = worldPoint(monster, "footprintRadii");
+  if (!isGeometryWalkable(position.x, position.y, footprint)) return false;
   for (const item of currentDecorations) {
     if (!item.obstacle || item.destroyed) continue;
-    if (footprintsOverlap(position, monster.footprintRadii, item, item.footprintRadii)) return false;
+    if (footprintsOverlap(position, footprint, item, worldPoint(item, "footprintRadii"))) return false;
   }
-  if (PLAYER_SPEC.obstacle && footprintsOverlap(position, monster.footprintRadii, player, PLAYER_SPEC.footprintRadii)) return false;
+  if (PLAYER_SPEC.obstacle && footprintsOverlap(position, footprint, player, PLAYER_SPEC.footprintRadii)) return false;
   return currentMonsters.every(item => item.dead || !item.obstacle ||
-    !footprintsOverlap(position, monster.footprintRadii, item, item.footprintRadii));
+    !footprintsOverlap(position, footprint, item, worldPoint(item, "footprintRadii")));
 }
 
 function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
@@ -3154,8 +3162,8 @@ function applyEnergyDashDamage(): void {
   for (const monster of monsterCollisionCandidates(monsterCells, center, Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y))) {
     if (!monster.active || monster.dead || dash.hitTargets.has(monster.id)) continue;
     if (projectileHitsCircle(
-      actorCollisionCenter(monster, monster.hitboxOffset),
-      monster.hitboxRadii,
+      actorCollisionCenter(monster, worldPoint(monster, "hitboxOffset")),
+      worldPoint(monster, "hitboxRadii"),
       center,
       PLAYER_SPEC.hitboxRadii,
     )) {

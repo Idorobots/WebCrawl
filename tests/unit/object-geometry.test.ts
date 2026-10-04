@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveGeometry } from "../../src/client/domain/object-geometry";
+import { resolveGeometry, worldPoint } from "../../src/client/domain/object-geometry";
+import { artDebugLevel } from "../../src/client/domain/authored-rooms";
+import { buildDecorations, buildMonsters } from "../../src/client/domain/generation";
+import { projectileHitsDecoration } from "../../src/client/domain/combat";
+import { indexMonsterHitboxes, monsterCollisionCandidates } from "../../src/client/domain/spatial";
 import * as relative from "../../src/client/domain/specs";
 import * as world from "../../src/client/domain/world-specs";
 
@@ -9,12 +13,12 @@ describe("size-relative object geometry", () => {
     expect(world.PLAYER_SPEC.hitboxOffset).toEqual({ x: 0, y: -25 });
     expect(world.PLAYER_SPEC.hitboxRadii).toEqual({ x: 28, y: 28 });
     expect(world.PLAYER_SPEC.footprintRadii).toEqual({ x: 20, y: 20 });
-    const manipulator = world.DECORATION_DEFINITIONS.roboticManipulator;
+    const manipulator = resolveGeometry(world.DECORATION_DEFINITIONS.roboticManipulator);
     expect(manipulator.visualOffset).toEqual({ x: -15, y: -40 });
     expect(manipulator.hitboxOffset).toEqual({ x: -5, y: -50 });
     expect(manipulator.hitboxRadii).toEqual({ x: 35, y: 50 });
     expect(manipulator.footprintRadii).toEqual({ x: 40, y: 25 });
-    expect(world.BOSS_DEFINITIONS["glm-hunter"].destroyedVisualOffset).toEqual({ x: 0, y: -78.75 });
+    expect(worldPoint(world.BOSS_DEFINITIONS["glm-hunter"], "destroyedVisualOffset")).toEqual({ x: 0, y: -78.75 });
     expect(world.PORTAL_DEFINITION.visualOffset).toEqual({ x: 0, y: -30 });
     expect(world.PORTAL_DEFINITION.footprintRadii).toEqual({ x: 40, y: 25 });
     expect(world.LOOT_DEFINITIONS.medkit.footprintRadii).toEqual({ x: 20, y: 20 });
@@ -59,12 +63,49 @@ describe("size-relative object geometry", () => {
     }
   });
 
-  it("uses resolved world geometry in every weighted scenery pool", () => {
+  it("uses the same relative definitions in every weighted scenery pool", () => {
     for (const theme of Object.values(world.ROOM_SCENERY_THEMES)) {
       for (const entry of [...theme.primary, ...theme.accents]) {
         const definition = Object.values(world.DECORATION_DEFINITIONS).find(item => item.definitionId === entry.definition.definitionId);
         expect(entry.definition).toBe(definition);
       }
     }
+  });
+
+  it("keeps runtime scenery and actors relative and responds to size changes at collision boundaries", () => {
+    const { layout, rooms } = artDebugLevel();
+    const decorations = buildDecorations(layout, new Map(), 1, undefined, rooms);
+    const monsters = buildMonsters(layout, new Map(), new Set(), 1, decorations, undefined, undefined, rooms);
+    for (const item of decorations) {
+      const definition = Object.values(relative.DECORATION_DEFINITIONS).find(definition => definition.definitionId === item.definitionId)!;
+      expect(item.hitboxRadii).toEqual(definition.hitboxRadii);
+      expect(item.visualOffset).toEqual(definition.visualOffset);
+    }
+    for (const monster of monsters) {
+      const definition = monster.bossKind
+        ? relative.BOSS_DEFINITIONS[monster.bossKind]
+        : relative.REGULAR_MONSTER_DEFINITIONS[monster.kind as keyof typeof relative.REGULAR_MONSTER_DEFINITIONS];
+      expect(monster.hitboxRadii).toEqual(definition.hitboxRadii);
+      expect(monster.footprintRadii).toEqual(definition.footprintRadii);
+      expect(monster.destroyedVisualOffset).toEqual(definition.destroyedVisualOffset);
+    }
+    const crate = decorations.find(item => item.definitionId === "crate-cargo")!;
+    const projectile = { x: crate.x + 45, y: crate.y - 20 };
+    expect(projectileHitsDecoration(crate, projectile, 1)).toBe(false);
+    crate.size *= 2;
+    expect(projectileHitsDecoration(crate, projectile, 1)).toBe(true);
+    expect(crate.hitboxRadii).toEqual(relative.DECORATION_DEFINITIONS.crateCargo.hitboxRadii);
+    crate.hitboxRadii = { ...crate.hitboxRadii };
+    crate.hitboxRadii.x *= 0.5;
+    expect(projectileHitsDecoration(crate, projectile, 1)).toBe(false);
+
+    const monster = monsters.find(monster => !monster.miniboss && !monster.bossKind)!;
+    const radii = worldPoint(monster, "hitboxRadii");
+    monster.x = world.WORLD_GEOMETRY.spatialCellSize - radii.x * 1.25;
+    monster.y = 0;
+    const hit = { x: monster.x + radii.x * 1.5, y: worldPoint(monster, "hitboxOffset").y * 2 };
+    expect(monsterCollisionCandidates(indexMonsterHitboxes([monster]), hit, 0).has(monster)).toBe(false);
+    monster.size *= 2;
+    expect(monsterCollisionCandidates(indexMonsterHitboxes([monster]), hit, 0).has(monster)).toBe(true);
   });
 });

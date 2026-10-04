@@ -129,10 +129,10 @@ describe("boss attacks", () => {
 
   it("crushes scenery along a boss's swept path but leaves distant or destroyed items intact", () => {
     const scenery = [
-      { x: 40, y: 12, footprintRadii: { x: 6, y: 6 }, destructible: true, destroyed: false },
-      { x: 70, y: 50, footprintRadii: { x: 6, y: 6 }, destructible: true, destroyed: false },
-      { x: 90, y: 0, footprintRadii: { x: 6, y: 6 }, destructible: true, destroyed: true },
-      { x: 20, y: 0, footprintRadii: { x: 6, y: 6 }, destructible: false, destroyed: false },
+      { x: 40, y: 12, size: 100, footprintRadii: { x: 0.06, y: 0.06 }, destructible: true, destroyed: false },
+      { x: 70, y: 50, size: 100, footprintRadii: { x: 0.06, y: 0.06 }, destructible: true, destroyed: false },
+      { x: 90, y: 0, size: 100, footprintRadii: { x: 0.06, y: 0.06 }, destructible: true, destroyed: true },
+      { x: 20, y: 0, size: 100, footprintRadii: { x: 0.06, y: 0.06 }, destructible: false, destroyed: false },
     ];
     expect(bossCrushedScenery({ x: 0, y: 0 }, { x: 100, y: 0 }, 10, scenery))
       .toEqual([scenery[0]]);
@@ -140,8 +140,8 @@ describe("boss attacks", () => {
   });
 
   it("sweeps elliptical footprints without skipping scenery between charge endpoints", () => {
-    const near = { x: 50, y: 18,
-      footprintRadii: { x: 4, y: 16 }, destructible: true, destroyed: false };
+    const near = { x: 50, y: 18, size: 100,
+      footprintRadii: { x: 0.04, y: 0.16 }, destructible: true, destroyed: false };
     const far = { ...near, y: 22 };
     expect(bossCrushedScenery({ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 8, y: 4 }, [near, far]))
       .toEqual([near]);

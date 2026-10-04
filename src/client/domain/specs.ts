@@ -31,8 +31,8 @@ import type {
 
 const circle = (radius: number) => ({ x: radius, y: radius });
 
-// Object offsets and radii below are unitless fractions of `size`. Runtime
-// consumers resolve them to world pixels through world-specs.ts.
+// Object offsets and radii below stay unitless fractions of `size` in runtime
+// state. Collision and rendering resolve them through object-geometry.ts.
 
 const clip = (
   frames: readonly string[],
@@ -312,7 +312,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     attackRange: 400,
     attackRangePerDifficulty: 20,
     maxAttackRangeBonus: 100,
-    attackDamage: 3,
+    attackDamage: 2,
     attackCooldownMs: 1_000,
     cooldownReductionPerDifficulty: 30,
     minAttackCooldownMs: 500,
@@ -565,7 +565,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     speedPerDifficulty: 5,
     maxSpeedBonus: 50,
     attackRange: 120,
-    attackDamage: 3,
+    attackDamage: 5,
     attackDamageDifficultyDivisor: 3,
     attackCooldownMs: 1_200,
     cooldownReductionPerDifficulty: 25,
@@ -675,6 +675,8 @@ export interface DecorationDefinition extends RelativeObjectGeometry {
   kind: string;
   visual: ObjectVisualDefinition;
   destructible: boolean;
+  /** Starting HP (1–20), statically tuned from the world-space hitbox radius sum. */
+  hp: number;
 }
 
 const plantDebris = [
@@ -698,6 +700,7 @@ const circuitDebrisClips = circuitDebris.map(asset => clip([asset], 1.18));
 export const DECORATION_DEFINITIONS = {
   plantViolet: {
     definitionId: "plant-violet",
+    hp: 5,
     kind: "plant",
     size: 95,
     destructible: true,
@@ -714,6 +717,7 @@ export const DECORATION_DEFINITIONS = {
   },
   plantGreen: {
     definitionId: "plant-green",
+    hp: 5,
     kind: "plant",
     size: 120,
     destructible: true,
@@ -730,6 +734,7 @@ export const DECORATION_DEFINITIONS = {
   },
   plantMagenta: {
     definitionId: "plant-magenta",
+    hp: 5,
     kind: "plant",
     size: 95,
     destructible: true,
@@ -746,6 +751,7 @@ export const DECORATION_DEFINITIONS = {
   },
   plantTeal: {
     definitionId: "plant-teal",
+    hp: 3,
     kind: "plant",
     size: 80,
     destructible: true,
@@ -762,6 +768,7 @@ export const DECORATION_DEFINITIONS = {
   },
   plantAmber: {
     definitionId: "plant-amber",
+    hp: 3,
     kind: "plant",
     size: 80,
     destructible: true,
@@ -778,6 +785,7 @@ export const DECORATION_DEFINITIONS = {
   },
   planterDivider: {
     definitionId: "planter-divider",
+    hp: 11,
     kind: "plant",
     size: 200,
     destructible: true,
@@ -794,6 +802,7 @@ export const DECORATION_DEFINITIONS = {
   },
   barrelRed: {
     definitionId: "barrel-red",
+    hp: 2,
     kind: "barrel",
     size: 82,
     destructible: true,
@@ -810,6 +819,7 @@ export const DECORATION_DEFINITIONS = {
   },
   barrelCoolant: {
     definitionId: "barrel-coolant",
+    hp: 2,
     kind: "barrel",
     size: 82,
     destructible: true,
@@ -826,6 +836,7 @@ export const DECORATION_DEFINITIONS = {
   },
   barrelHazard: {
     definitionId: "barrel-hazard",
+    hp: 2,
     kind: "barrel",
     size: 82,
     destructible: true,
@@ -842,6 +853,7 @@ export const DECORATION_DEFINITIONS = {
   },
   crateCargo: {
     definitionId: "crate-cargo",
+    hp: 5,
     kind: "crate",
     size: 70,
     destructible: true,
@@ -858,6 +870,7 @@ export const DECORATION_DEFINITIONS = {
   },
   crateArmored: {
     definitionId: "crate-armored",
+    hp: 5,
     kind: "crate",
     size: 70,
     destructible: true,
@@ -874,6 +887,7 @@ export const DECORATION_DEFINITIONS = {
   },
   crateAmmo: {
     definitionId: "crate-ammo",
+    hp: 5,
     kind: "crate",
     size: 70,
     destructible: true,
@@ -890,6 +904,7 @@ export const DECORATION_DEFINITIONS = {
   },
   crateMedical: {
     definitionId: "crate-medical",
+    hp: 5,
     kind: "crate",
     size: 70,
     destructible: true,
@@ -906,6 +921,7 @@ export const DECORATION_DEFINITIONS = {
   },
   terminal: {
     definitionId: "terminal",
+    hp: 7,
     kind: "terminal",
     size: 93,
     destructible: true,
@@ -922,6 +938,7 @@ export const DECORATION_DEFINITIONS = {
   },
   specimenTank: {
     definitionId: "specimen-tank",
+    hp: 11,
     kind: "machinery",
     size: 155,
     destructible: true,
@@ -938,6 +955,7 @@ export const DECORATION_DEFINITIONS = {
   },
   researchBench: {
     definitionId: "research-bench",
+    hp: 11,
     kind: "machinery",
     size: 135,
     destructible: true,
@@ -954,6 +972,7 @@ export const DECORATION_DEFINITIONS = {
   },
   reagentRack: {
     definitionId: "reagent-rack",
+    hp: 11,
     kind: "scenery",
     size: 155,
     destructible: true,
@@ -970,6 +989,7 @@ export const DECORATION_DEFINITIONS = {
   },
   refrigerator: {
     definitionId: "refrigerator",
+    hp: 12,
     kind: "machinery",
     size: 145,
     destructible: true,
@@ -986,6 +1006,7 @@ export const DECORATION_DEFINITIONS = {
   },
   roboticManipulator: {
     definitionId: "robotic-manipulator",
+    hp: 10,
     kind: "machinery",
     size: 145,
     destructible: true,
@@ -1002,6 +1023,7 @@ export const DECORATION_DEFINITIONS = {
   },
   medicalCabinet: {
     definitionId: "medical-cabinet",
+    hp: 12,
     kind: "machinery",
     size: 145,
     destructible: true,
@@ -1018,6 +1040,7 @@ export const DECORATION_DEFINITIONS = {
   },
   diagnosticScanner: {
     definitionId: "diagnostic-scanner",
+    hp: 19,
     kind: "machinery",
     size: 190,
     destructible: true,
@@ -1034,6 +1057,7 @@ export const DECORATION_DEFINITIONS = {
   },
   medicalBed: {
     definitionId: "medical-bed",
+    hp: 8,
     kind: "machinery",
     size: 120,
     destructible: true,
@@ -1050,6 +1074,7 @@ export const DECORATION_DEFINITIONS = {
   },
   vitalsMonitor: {
     definitionId: "vitals-monitor",
+    hp: 4,
     kind: "machinery",
     size: 70,
     destructible: true,
@@ -1066,6 +1091,7 @@ export const DECORATION_DEFINITIONS = {
   },
   ivStand: {
     definitionId: "iv-stand",
+    hp: 8,
     kind: "machinery",
     size: 120,
     destructible: true,
@@ -1082,6 +1108,7 @@ export const DECORATION_DEFINITIONS = {
   },
   surgicalCart: {
     definitionId: "surgical-cart",
+    hp: 8,
     kind: "machinery",
     size: 110,
     destructible: true,
@@ -1098,6 +1125,7 @@ export const DECORATION_DEFINITIONS = {
   },
   resuscitationUnit: {
     definitionId: "resuscitation-unit",
+    hp: 9,
     kind: "machinery",
     size: 110,
     destructible: true,
@@ -1114,6 +1142,7 @@ export const DECORATION_DEFINITIONS = {
   },
   decontaminationShower: {
     definitionId: "decontamination-shower",
+    hp: 13,
     kind: "machinery",
     size: 145,
     destructible: true,
@@ -1130,6 +1159,7 @@ export const DECORATION_DEFINITIONS = {
   },
   supplyTrolley: {
     definitionId: "supply-trolley",
+    hp: 8,
     kind: "machinery",
     size: 110,
     destructible: true,
@@ -1146,6 +1176,7 @@ export const DECORATION_DEFINITIONS = {
   },
   pipeValve: {
     definitionId: "pipe-valve",
+    hp: 2,
     kind: "scenery",
     size: 95,
     destructible: true,
@@ -1162,6 +1193,7 @@ export const DECORATION_DEFINITIONS = {
   },
   pipeElbow: {
     definitionId: "pipe-elbow",
+    hp: 5,
     kind: "scenery",
     size: 70,
     destructible: true,
@@ -1178,9 +1210,10 @@ export const DECORATION_DEFINITIONS = {
   },
   coiledCables: {
     definitionId: "coiled-cables",
+    hp: 4,
     kind: "scenery",
     size: 70,
-    destructible: true,
+    destructible: false,
     obstacle: false,
     visualOffset: { x: 0, y: -0.14285714285714285 },
     hitboxOffset: { x: 0, y: 0 },
@@ -1194,6 +1227,7 @@ export const DECORATION_DEFINITIONS = {
   },
   monitorBank: {
     definitionId: "monitor-bank",
+    hp: 14,
     kind: "machinery",
     size: 155,
     destructible: true,
@@ -1210,6 +1244,7 @@ export const DECORATION_DEFINITIONS = {
   },
   serverRack: {
     definitionId: "server-rack",
+    hp: 12,
     kind: "machinery",
     size: 155,
     destructible: true,
@@ -1226,6 +1261,7 @@ export const DECORATION_DEFINITIONS = {
   },
   radarDisplay: {
     definitionId: "radar-display",
+    hp: 5,
     kind: "machinery",
     size: 80,
     destructible: true,
@@ -1242,6 +1278,7 @@ export const DECORATION_DEFINITIONS = {
   },
   operatorTerminal: {
     definitionId: "operator-terminal",
+    hp: 8,
     kind: "machinery",
     size: 100,
     destructible: true,
@@ -1258,6 +1295,7 @@ export const DECORATION_DEFINITIONS = {
   },
   communicationsCabinet: {
     definitionId: "communications-cabinet",
+    hp: 9,
     kind: "machinery",
     size: 155,
     destructible: true,
@@ -1274,6 +1312,7 @@ export const DECORATION_DEFINITIONS = {
   },
   hologramTable: {
     definitionId: "hologram-table",
+    hp: 8,
     kind: "machinery",
     size: 125,
     destructible: true,
@@ -1290,6 +1329,7 @@ export const DECORATION_DEFINITIONS = {
   },
   conduitJunction: {
     definitionId: "conduit-junction",
+    hp: 3,
     kind: "scenery",
     size: 120,
     destructible: true,
@@ -1306,6 +1346,7 @@ export const DECORATION_DEFINITIONS = {
   },
   powerCabinet: {
     definitionId: "power-cabinet",
+    hp: 11,
     kind: "machinery",
     size: 120,
     destructible: true,
@@ -1322,6 +1363,7 @@ export const DECORATION_DEFINITIONS = {
   },
   floorCables: {
     definitionId: "floor-cables",
+    hp: 3,
     kind: "scenery",
     size: 120,
     destructible: true,
@@ -1338,6 +1380,7 @@ export const DECORATION_DEFINITIONS = {
   },
   reactorPylon: {
     definitionId: "reactor-pylon",
+    hp: 14,
     kind: "machinery",
     size: 180,
     destructible: true,
@@ -1354,6 +1397,7 @@ export const DECORATION_DEFINITIONS = {
   },
   coolantPump: {
     definitionId: "coolant-pump",
+    hp: 11,
     kind: "machinery",
     size: 156,
     destructible: true,
@@ -1370,6 +1414,7 @@ export const DECORATION_DEFINITIONS = {
   },
   energyCapacitor: {
     definitionId: "energy-capacitor",
+    hp: 17,
     kind: "machinery",
     size: 180,
     destructible: true,
@@ -1386,6 +1431,7 @@ export const DECORATION_DEFINITIONS = {
   },
   barricade: {
     definitionId: "barricade",
+    hp: 8,
     kind: "machinery",
     size: 155,
     destructible: false,
@@ -1402,6 +1448,7 @@ export const DECORATION_DEFINITIONS = {
   },
   maintenanceRack: {
     definitionId: "maintenance-rack",
+    hp: 10,
     kind: "machinery",
     size: 155,
     destructible: true,
@@ -1418,6 +1465,7 @@ export const DECORATION_DEFINITIONS = {
   },
   hydraulicSupport: {
     definitionId: "hydraulic-support",
+    hp: 13,
     kind: "machinery",
     size: 150,
     destructible: true,
@@ -1434,6 +1482,7 @@ export const DECORATION_DEFINITIONS = {
   },
   pipeManifold: {
     definitionId: "pipe-manifold",
+    hp: 5,
     kind: "scenery",
     size: 120,
     destructible: true,
@@ -1450,6 +1499,7 @@ export const DECORATION_DEFINITIONS = {
   },
   damagedFuseCabinet: {
     definitionId: "damaged-fuse-cabinet",
+    hp: 7,
     kind: "machinery",
     size: 120,
     destructible: true,
@@ -1466,6 +1516,7 @@ export const DECORATION_DEFINITIONS = {
   },
   batteryBank: {
     definitionId: "battery-bank",
+    hp: 13,
     kind: "machinery",
     size: 180,
     destructible: true,
@@ -1482,6 +1533,7 @@ export const DECORATION_DEFINITIONS = {
   },
   coolantReservoir: {
     definitionId: "coolant-reservoir",
+    hp: 14,
     kind: "machinery",
     size: 145,
     destructible: true,
@@ -1498,6 +1550,7 @@ export const DECORATION_DEFINITIONS = {
   },
   fuelPumpSkid: {
     definitionId: "fuel-pump-skid",
+    hp: 20,
     kind: "machinery",
     size: 250,
     destructible: true,
@@ -1514,6 +1567,7 @@ export const DECORATION_DEFINITIONS = {
   },
   heavyMotor: {
     definitionId: "heavy-motor",
+    hp: 12,
     kind: "machinery",
     size: 160,
     destructible: true,
@@ -1530,6 +1584,7 @@ export const DECORATION_DEFINITIONS = {
   },
   engineToolCart: {
     definitionId: "engine-tool-cart",
+    hp: 8,
     kind: "machinery",
     size: 110,
     destructible: true,
@@ -1546,6 +1601,7 @@ export const DECORATION_DEFINITIONS = {
   },
   pressureGauge: {
     definitionId: "pressure-gauge",
+    hp: 18,
     kind: "machinery",
     size: 200,
     destructible: true,
@@ -1562,6 +1618,7 @@ export const DECORATION_DEFINITIONS = {
   },
   turbineGenerator: {
     definitionId: "turbine-generator",
+    hp: 13,
     kind: "machinery",
     size: 160,
     destructible: true,
@@ -1578,6 +1635,7 @@ export const DECORATION_DEFINITIONS = {
   },
   ventilationBlower: {
     definitionId: "ventilation-blower",
+    hp: 18,
     kind: "machinery",
     size: 160,
     destructible: true,
@@ -1594,6 +1652,7 @@ export const DECORATION_DEFINITIONS = {
   },
   heatExchanger: {
     definitionId: "heat-exchanger",
+    hp: 15,
     kind: "machinery",
     size: 160,
     destructible: true,
@@ -1610,6 +1669,7 @@ export const DECORATION_DEFINITIONS = {
   },
   evacuationKiosk: {
     definitionId: "evacuation-kiosk",
+    hp: 7,
     kind: "machinery",
     size: 100,
     destructible: true,
@@ -1626,6 +1686,7 @@ export const DECORATION_DEFINITIONS = {
   },
   dockingClamp: {
     definitionId: "docking-clamp",
+    hp: 10,
     kind: "machinery",
     size: 150,
     destructible: true,
@@ -1642,6 +1703,7 @@ export const DECORATION_DEFINITIONS = {
   },
   oxygenTankRack: {
     definitionId: "oxygen-tank-rack",
+    hp: 14,
     kind: "machinery",
     size: 120,
     destructible: true,
@@ -1658,6 +1720,7 @@ export const DECORATION_DEFINITIONS = {
   },
   openEscapeCapsule: {
     definitionId: "open-escape-capsule",
+    hp: 20,
     kind: "machinery",
     size: 220,
     destructible: true,
@@ -1674,6 +1737,7 @@ export const DECORATION_DEFINITIONS = {
   },
   sealedEscapeCapsule: {
     definitionId: "sealed-escape-capsule",
+    hp: 18,
     kind: "machinery",
     size: 200,
     destructible: true,
@@ -1690,6 +1754,7 @@ export const DECORATION_DEFINITIONS = {
   },
   emergencyBeacon: {
     definitionId: "emergency-beacon",
+    hp: 7,
     kind: "machinery",
     size: 130,
     destructible: true,
@@ -1706,6 +1771,7 @@ export const DECORATION_DEFINITIONS = {
   },
   lifeboatPod: {
     definitionId: "lifeboat-pod",
+    hp: 17,
     kind: "machinery",
     size: 200,
     destructible: true,
@@ -1722,6 +1788,7 @@ export const DECORATION_DEFINITIONS = {
   },
   survivalCase: {
     definitionId: "survival-case",
+    hp: 5,
     kind: "machinery",
     size: 85,
     destructible: true,
@@ -1738,6 +1805,7 @@ export const DECORATION_DEFINITIONS = {
   },
   boardingSteps: {
     definitionId: "boarding-steps",
+    hp: 13,
     kind: "scenery",
     size: 155,
     destructible: true,
@@ -1754,6 +1822,7 @@ export const DECORATION_DEFINITIONS = {
   },
   cargoPallet: {
     definitionId: "cargo-pallet",
+    hp: 8,
     kind: "scenery",
     size: 155,
     destructible: true,
@@ -1770,6 +1839,7 @@ export const DECORATION_DEFINITIONS = {
   },
   cargoShelf: {
     definitionId: "cargo-shelf",
+    hp: 14,
     kind: "machinery",
     size: 165,
     destructible: true,
@@ -1786,6 +1856,7 @@ export const DECORATION_DEFINITIONS = {
   },
   loadingGantry: {
     definitionId: "loading-gantry",
+    hp: 16,
     kind: "machinery",
     size: 170,
     destructible: true,
@@ -1802,6 +1873,7 @@ export const DECORATION_DEFINITIONS = {
   },
   steelCrateStack: {
     definitionId: "steel-crate-stack",
+    hp: 15,
     kind: "machinery",
     size: 135,
     destructible: true,
@@ -1818,6 +1890,7 @@ export const DECORATION_DEFINITIONS = {
   },
   toolLocker: {
     definitionId: "tool-locker",
+    hp: 13,
     kind: "machinery",
     size: 135,
     destructible: true,
@@ -1834,6 +1907,7 @@ export const DECORATION_DEFINITIONS = {
   },
   weighingPlatform: {
     definitionId: "weighing-platform",
+    hp: 7,
     kind: "machinery",
     size: 105,
     destructible: true,
@@ -1850,6 +1924,7 @@ export const DECORATION_DEFINITIONS = {
   },
   canisterRack: {
     definitionId: "canister-rack",
+    hp: 15,
     kind: "machinery",
     size: 160,
     destructible: true,
@@ -1866,6 +1941,7 @@ export const DECORATION_DEFINITIONS = {
   },
   palletJack: {
     definitionId: "pallet-jack",
+    hp: 7,
     kind: "machinery",
     size: 120,
     destructible: true,
@@ -1882,6 +1958,7 @@ export const DECORATION_DEFINITIONS = {
   },
   luggageStack: {
     definitionId: "luggage-stack",
+    hp: 10,
     kind: "machinery",
     size: 120,
     destructible: true,
@@ -1898,6 +1975,7 @@ export const DECORATION_DEFINITIONS = {
   },
   entertainmentScreen: {
     definitionId: "entertainment-screen",
+    hp: 13,
     kind: "machinery",
     size: 150,
     destructible: true,
@@ -1914,6 +1992,7 @@ export const DECORATION_DEFINITIONS = {
   },
   bunkBed: {
     definitionId: "bunk-bed",
+    hp: 15,
     kind: "machinery",
     size: 150,
     destructible: true,
@@ -1930,6 +2009,7 @@ export const DECORATION_DEFINITIONS = {
   },
   metalChair: {
     definitionId: "metal-chair",
+    hp: 3,
     kind: "machinery",
     size: 95,
     destructible: true,
@@ -1946,6 +2026,7 @@ export const DECORATION_DEFINITIONS = {
   },
   showerSink: {
     definitionId: "shower-sink",
+    hp: 15,
     kind: "machinery",
     size: 160,
     destructible: true,
@@ -1962,6 +2043,7 @@ export const DECORATION_DEFINITIONS = {
   },
   personalLocker: {
     definitionId: "personal-locker",
+    hp: 8,
     kind: "machinery",
     size: 120,
     destructible: true,
@@ -1978,6 +2060,7 @@ export const DECORATION_DEFINITIONS = {
   },
   sofa: {
     definitionId: "sofa",
+    hp: 11,
     kind: "machinery",
     size: 140,
     destructible: true,
@@ -1994,6 +2077,7 @@ export const DECORATION_DEFINITIONS = {
   },
   kitchenette: {
     definitionId: "kitchenette",
+    hp: 15,
     kind: "machinery",
     size: 160,
     destructible: true,
@@ -2010,6 +2094,7 @@ export const DECORATION_DEFINITIONS = {
   },
   messTable: {
     definitionId: "mess-table",
+    hp: 8,
     kind: "machinery",
     size: 130,
     destructible: true,
@@ -2026,6 +2111,7 @@ export const DECORATION_DEFINITIONS = {
   },
   cableTrunk: {
     definitionId: "cable-trunk",
+    hp: 7,
     kind: "scenery",
     size: 120,
     destructible: true,
@@ -2042,6 +2128,7 @@ export const DECORATION_DEFINITIONS = {
   },
   spawner: {
     definitionId: "monster-spawner",
+    hp: 9,
     kind: "monster-spawner",
     size: 205,
     destructible: true,
@@ -2071,6 +2158,7 @@ export const DECORATION_DEFINITIONS = {
   },
   contentBrowser: {
     definitionId: "content-browser",
+    hp: 2,
     kind: "content-browser",
     size: 135,
     destructible: true,
@@ -2094,6 +2182,7 @@ export const DECORATION_DEFINITIONS = {
   },
   debrisCircuit: {
     definitionId: "debris-circuit",
+    hp: 1,
     kind: "debris",
     size: 90,
     destructible: false,
@@ -2109,6 +2198,7 @@ export const DECORATION_DEFINITIONS = {
   },
   debrisMetal: {
     definitionId: "debris-metal",
+    hp: 1,
     kind: "debris",
     size: 90,
     destructible: false,
@@ -2124,6 +2214,7 @@ export const DECORATION_DEFINITIONS = {
   },
   pedestal: {
     definitionId: "weapon-pedestal",
+    hp: 3,
     kind: "weapon-pedestal",
     size: 108,
     destructible: false,
@@ -2145,16 +2236,6 @@ export const OBSTACLE_DEFINITIONS: readonly DecorationDefinition[] = Object.valu
 export const SCENERY_DEFINITIONS: readonly DecorationDefinition[] = [
   DECORATION_DEFINITIONS.debrisCircuit,
   DECORATION_DEFINITIONS.debrisMetal,
-  DECORATION_DEFINITIONS.reagentRack,
-  DECORATION_DEFINITIONS.pipeValve,
-  DECORATION_DEFINITIONS.pipeElbow,
-  DECORATION_DEFINITIONS.coiledCables,
-  DECORATION_DEFINITIONS.conduitJunction,
-  DECORATION_DEFINITIONS.floorCables,
-  DECORATION_DEFINITIONS.pipeManifold,
-  DECORATION_DEFINITIONS.cableTrunk,
-  DECORATION_DEFINITIONS.cargoPallet,
-  DECORATION_DEFINITIONS.boardingSteps,
 ];
 
 export type RoomSceneryTheme = "lab" | "control" | "arena" | "medical" | "engine" | "escape" | "storage" | "living";
@@ -2186,11 +2267,17 @@ export const ROOM_SCENERY_THEMES: Readonly<Record<RoomSceneryTheme, RoomSceneryT
       weighted(DECORATION_DEFINITIONS.roboticManipulator),
       weighted(DECORATION_DEFINITIONS.reagentRack),
       weighted(DECORATION_DEFINITIONS.pipeValve),
-      weighted(DECORATION_DEFINITIONS.coiledCables),
+      weighted(DECORATION_DEFINITIONS.reagentRack),
+      weighted(DECORATION_DEFINITIONS.canisterRack),
+      weighted(DECORATION_DEFINITIONS.canisterRack),
     ],
     accents: [
+      weighted(DECORATION_DEFINITIONS.coiledCables),
       weighted(DECORATION_DEFINITIONS.barrelCoolant, 2),
+      weighted(DECORATION_DEFINITIONS.plantAmber),
       weighted(DECORATION_DEFINITIONS.plantGreen),
+      weighted(DECORATION_DEFINITIONS.plantViolet),
+      weighted(DECORATION_DEFINITIONS.plantTeal),
       weighted(DECORATION_DEFINITIONS.crateCargo),
       weighted(DECORATION_DEFINITIONS.debrisCircuit),
     ],
@@ -2205,14 +2292,14 @@ export const ROOM_SCENERY_THEMES: Readonly<Record<RoomSceneryTheme, RoomSceneryT
       weighted(DECORATION_DEFINITIONS.operatorTerminal, 2),
       weighted(DECORATION_DEFINITIONS.communicationsCabinet),
       weighted(DECORATION_DEFINITIONS.hologramTable),
-      weighted(DECORATION_DEFINITIONS.conduitJunction),
-      weighted(DECORATION_DEFINITIONS.powerCabinet),
-      weighted(DECORATION_DEFINITIONS.floorCables),
     ],
     accents: [
       weighted(DECORATION_DEFINITIONS.crateArmored, 2),
-      weighted(DECORATION_DEFINITIONS.crateAmmo, 2),
+      weighted(DECORATION_DEFINITIONS.plantAmber),
+      weighted(DECORATION_DEFINITIONS.plantGreen),
       weighted(DECORATION_DEFINITIONS.plantViolet),
+      weighted(DECORATION_DEFINITIONS.plantTeal),
+      weighted(DECORATION_DEFINITIONS.crateCargo),
       weighted(DECORATION_DEFINITIONS.debrisCircuit),
     ],
   },
@@ -2220,16 +2307,13 @@ export const ROOM_SCENERY_THEMES: Readonly<Record<RoomSceneryTheme, RoomSceneryT
     primaryPercent: 78,
     primary: [
       weighted(DECORATION_DEFINITIONS.reactorPylon, 2),
-      weighted(DECORATION_DEFINITIONS.coolantPump, 2),
       weighted(DECORATION_DEFINITIONS.energyCapacitor, 2),
       weighted(DECORATION_DEFINITIONS.barricade, 3),
-      weighted(DECORATION_DEFINITIONS.maintenanceRack),
       weighted(DECORATION_DEFINITIONS.hydraulicSupport),
-      weighted(DECORATION_DEFINITIONS.pipeManifold),
       weighted(DECORATION_DEFINITIONS.damagedFuseCabinet),
-      weighted(DECORATION_DEFINITIONS.cableTrunk),
     ],
     accents: [
+      weighted(DECORATION_DEFINITIONS.cableTrunk),
       weighted(DECORATION_DEFINITIONS.barrelHazard, 3),
       weighted(DECORATION_DEFINITIONS.crateAmmo, 2),
       weighted(DECORATION_DEFINITIONS.crateArmored),
@@ -2252,6 +2336,9 @@ export const ROOM_SCENERY_THEMES: Readonly<Record<RoomSceneryTheme, RoomSceneryT
     ],
     accents: [
       weighted(DECORATION_DEFINITIONS.crateCargo),
+      weighted(DECORATION_DEFINITIONS.plantAmber),
+      weighted(DECORATION_DEFINITIONS.plantGreen),
+      weighted(DECORATION_DEFINITIONS.plantViolet),
       weighted(DECORATION_DEFINITIONS.plantTeal),
       weighted(DECORATION_DEFINITIONS.debrisCircuit),
     ],
@@ -2273,6 +2360,12 @@ export const ROOM_SCENERY_THEMES: Readonly<Record<RoomSceneryTheme, RoomSceneryT
       weighted(DECORATION_DEFINITIONS.damagedFuseCabinet),
     ],
     accents: [
+      weighted(DECORATION_DEFINITIONS.coiledCables),
+      weighted(DECORATION_DEFINITIONS.pipeValve),
+      weighted(DECORATION_DEFINITIONS.pipeElbow),
+      weighted(DECORATION_DEFINITIONS.pipeManifold),
+      weighted(DECORATION_DEFINITIONS.conduitJunction),
+      weighted(DECORATION_DEFINITIONS.floorCables),
       weighted(DECORATION_DEFINITIONS.barrelCoolant, 2),
       weighted(DECORATION_DEFINITIONS.pipeValve),
       weighted(DECORATION_DEFINITIONS.cableTrunk),
@@ -2307,7 +2400,6 @@ export const ROOM_SCENERY_THEMES: Readonly<Record<RoomSceneryTheme, RoomSceneryT
       weighted(DECORATION_DEFINITIONS.steelCrateStack, 2),
       weighted(DECORATION_DEFINITIONS.toolLocker),
       weighted(DECORATION_DEFINITIONS.weighingPlatform),
-      weighted(DECORATION_DEFINITIONS.canisterRack),
       weighted(DECORATION_DEFINITIONS.palletJack),
       weighted(DECORATION_DEFINITIONS.luggageStack),
       weighted(DECORATION_DEFINITIONS.cargoPallet),
@@ -2336,6 +2428,9 @@ export const ROOM_SCENERY_THEMES: Readonly<Record<RoomSceneryTheme, RoomSceneryT
     accents: [
       weighted(DECORATION_DEFINITIONS.plantGreen, 2),
       weighted(DECORATION_DEFINITIONS.plantAmber),
+      weighted(DECORATION_DEFINITIONS.plantGreen),
+      weighted(DECORATION_DEFINITIONS.plantViolet),
+      weighted(DECORATION_DEFINITIONS.plantTeal),
       weighted(DECORATION_DEFINITIONS.crateCargo),
       weighted(DECORATION_DEFINITIONS.debrisCircuit),
     ],

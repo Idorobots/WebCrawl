@@ -137,7 +137,8 @@ describe("physical wall pieces", () => {
     ];
     expect(scenery.length).toBeGreaterThan(0);
     for (const item of scenery) {
-      expect(wallOverlapsEllipse(item, item.footprintRadii, adjustedWalls), item.id).toBe(false);
+      expect(wallOverlapsEllipse(item, worldPoint(item, "footprintRadii"), adjustedWalls), item.id).toBe(false);
     }
   });
 });
+import { worldPoint } from "../../src/client/domain/object-geometry";

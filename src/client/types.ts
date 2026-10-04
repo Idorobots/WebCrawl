@@ -50,26 +50,17 @@ export interface Point {
 /** Axis-aligned ellipse half-width and half-height in world pixels. */
 export interface EllipseRadii extends Point {}
 
-/** Runtime geometry: all offsets and radii are in world pixels. */
-export interface ObjectGeometry {
-  /** Whether the footprint blocks other actors' movement. */
-  obstacle: boolean;
-  /** Sprite center relative to the object's world position. Visuals only. */
-  visualOffset: Point;
-  /** Damage hitbox center relative to the object's world position. */
-  hitboxOffset: Point;
-  hitboxRadii: EllipseRadii;
-  /** Always centered on the object's world position, regardless of blocking. */
-  footprintRadii: EllipseRadii;
-}
-
-/** Authored geometry: all offsets and radii are unitless fractions of `size`. */
+/** Object geometry, in specifications and runtime state: unitless fractions of `size`. */
 export interface RelativeObjectGeometry {
   size: number;
+  /** Whether the footprint blocks other actors' movement. */
   obstacle: boolean;
+  /** Sprite center offset as a fraction of size. Visuals only. */
   visualOffset: Point;
+  /** Damage hitbox center offset as a fraction of size. */
   hitboxOffset: Point;
   hitboxRadii: Point;
+  /** Centered on the object's world position, regardless of blocking. */
   footprintRadii: Point;
 }
 
@@ -213,7 +204,7 @@ export interface WeaponProjectile {
   damage: number;
 }
 
-export interface Decoration extends Point, ObjectGeometry {
+export interface Decoration extends Point, RelativeObjectGeometry {
   id: string;
   definitionId: string;
   roomId: number;
@@ -221,7 +212,6 @@ export interface Decoration extends Point, ObjectGeometry {
   visual: ObjectVisualDefinition;
   visualVariant?: number;
   destructible: boolean;
-  size: number;
   maxHp: number;
   hp: number;
   destroyed: boolean;
@@ -248,12 +238,12 @@ export interface ObstacleState {
   spawnedCount?: number;
 }
 
-export interface Monster extends Point, ObjectGeometry {
+export interface Monster extends Point, RelativeObjectGeometry {
   id: string;
   seed: number;
   kind: MonsterKind;
   visual: ActorVisualDefinition;
-  /** Center of the wreck relative to the monster's world position. */
+  /** Wreck center offset as a fraction of size. */
   destroyedVisualOffset: Point;
   spriteSize: number;
   spawnRoomId: number;
@@ -262,7 +252,6 @@ export interface Monster extends Point, ObjectGeometry {
   hp: number;
   speed: number;
   fast: boolean;
-  size: number;
   bossKind?: BossKind;
   miniboss: boolean;
   attackPattern: MonsterAttackPattern;

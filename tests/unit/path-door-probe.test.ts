@@ -1,6 +1,7 @@
 import { describe, it } from "vitest";
 import { domToGraph } from "../../src/client/domain/graph";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
+import { worldPoint } from "../../src/client/domain/object-geometry";
 import { pointInCorridor, pointInRoomFloor } from "../../src/client/domain/geometry";
 import { PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS, BOSS_DEFINITIONS } from "../../src/client/domain/world-specs";
 import { buildWallFootprints, wallOverlapsEllipse, WallRectIndex } from "../../src/client/domain/wall-collision";
@@ -17,8 +18,8 @@ describe("doorway walkability detail", () => {
 
     const radii = new Map<string, EllipseRadii>([
       ["player", PLAYER_SPEC.footprintRadii],
-      ...Object.entries(REGULAR_MONSTER_DEFINITIONS).map(([kind, def]) => [kind, def.footprintRadii] as const),
-      ...Object.entries(BOSS_DEFINITIONS).map(([kind, def]) => [kind, def.footprintRadii] as const),
+      ...Object.entries(REGULAR_MONSTER_DEFINITIONS).map(([kind, def]) => [kind, worldPoint(def, "footprintRadii")] as const),
+      ...Object.entries(BOSS_DEFINITIONS).map(([kind, def]) => [kind, worldPoint(def, "footprintRadii")] as const),
     ]);
 
     for (const [kind, radius] of radii) {

@@ -1318,6 +1318,8 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Object's hitbox and visual offsets should be relative to its `size` property.
 - Mini-bosses' hitbox, hitbox offset, visual offset, footprint and health bar size should be scaled just like their size.
 
+- Scenery should have a configurable amount of hitpoints, Let's go for something between 1 and 20 based on the hitbox size (X + Y radius).
+
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Sentries sometimes don't shoot even though there's a clear line of sight to the player. Scenery should be ignored by monster line-of-sight computation for shooting.
@@ -1325,8 +1327,6 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Regulatory capture moves the player but doesn't center the camera on mobile
 - Regulatory capture should use the shooting direction as the direction, so that it's usable on mobile
 - "Access granted" should play only once per level, whenever the condition arises for the first time.
-
-- Scenery should have a configurable amount of hitpoints, Let's go for something between 1 and 20 based on the hitbox size (X + Y radius).
 
 * Enemy rebalance
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.
