@@ -1407,3 +1407,4 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
+- Pickups are rendered on top of enemies. Pickups should be rendered on a lower layer, always appearing under monsters and the player.

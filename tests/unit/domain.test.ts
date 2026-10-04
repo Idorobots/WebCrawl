@@ -1684,6 +1684,70 @@ describe("deterministic room contents", () => {
     expect(worldPoint(scout!, "hitboxRadii").x).toBeLessThan(worldPoint(heavy!, "hitboxRadii").x);
   });
 
+  describe("floor-weighted monster appearances", () => {
+    const sampleRoom = node(90_000, 0, 1, { tag: "article", isRoot: false });
+    const spawner: Decoration = {
+      ...DECORATION_DEFINITIONS.spawner,
+      id: "appearance-spawner", roomId: sampleRoom.id, x: 0, y: 0,
+      maxHp: 1, hp: 1, destroyed: false, dropKind: null,
+    };
+    const boss = bossSpecForRoom(sampleRoom, 1, "deepseek-summoner");
+    const generators = {
+      rooms: (floor: number, index: number) => monsterSpecsForRoom({
+        ...sampleRoom,
+        id: sampleRoom.id + index,
+        lootSeed: stableHash(`appearance-room-${index}`),
+      }, floor),
+      reinforcements: (floor: number, index: number) => [monsterSpecForSpawner(spawner, floor, index)],
+      summons: (floor: number, index: number) => [monsterSpecForBossSummon(boss, floor, index)],
+    };
+
+    for (const [source, generate] of Object.entries(generators)) {
+      it(`starts ${source} mostly melee and progressively increases shooters and sentries`, () => {
+        const samples = [1, 3, 7, 20].map(floor => {
+          const counts = Object.fromEntries(Object.keys(REGULAR_MONSTER_DEFINITIONS)
+            .map(kind => [kind, 0])) as Record<RegularMonsterKind, number>;
+          let total = 0;
+          for (let index = 0; index < 4_000; index += 1) {
+            for (const monster of generate(floor, index)) {
+              counts[monster.kind as RegularMonsterKind] += 1;
+              total += 1;
+            }
+          }
+          // Even the rarest archetype must remain reachable on floor one.
+          for (const [kind, count] of Object.entries(counts)) {
+            expect(count, `${source}: ${kind} on floor ${floor}`).toBeGreaterThan(0);
+          }
+          const melee = (counts["melee-light"] + counts["melee-heavy"]) / total;
+          const shooters = (counts["shooter-light"] + counts["shooter-heavy"]) / total;
+          const sentries = (counts["sentry-light"] + counts["sentry-heavy"] + counts["sentry-scatter"]) / total;
+          return { melee, shooters, sentries, counts, total };
+        });
+
+        const first = samples[0]!;
+        expect(first.melee).toBeGreaterThan(0.80);
+        expect(first.melee).toBeLessThan(0.90);
+        expect(first.counts["melee-light"] / first.total).toBeGreaterThan(0.40);
+        expect(first.counts["melee-heavy"] / first.total).toBeGreaterThan(0.30);
+        expect(first.shooters).toBeGreaterThan(0.08);
+        expect(first.shooters).toBeLessThan(0.16);
+        expect(first.sentries).toBeGreaterThan(0.01);
+        expect(first.sentries).toBeLessThan(0.05);
+        for (let index = 1; index < samples.length; index += 1) {
+          expect(samples[index]!.shooters).toBeGreaterThan(samples[index - 1]!.shooters);
+          expect(samples[index]!.sentries).toBeGreaterThan(samples[index - 1]!.sentries);
+          expect(samples[index]!.melee).toBeLessThan(samples[index - 1]!.melee);
+        }
+        const deepest = samples[samples.length - 1]!;
+        for (const kind of Object.keys(first.counts) as RegularMonsterKind[]) {
+          if (kind.startsWith("melee-")) continue;
+          expect(deepest.counts[kind] / deepest.total).toBeGreaterThan(first.counts[kind] / first.total);
+        }
+        expect(generate(7, 42)).toEqual(generate(7, 42));
+      });
+    }
+  });
+
   it("generates all seven deterministic archetypes with distinct combat roles", () => {
     const rooms = Array.from({ length: 600 }, (_, index) => node(index + 10_000, 0, 1, {
       tag: "article",

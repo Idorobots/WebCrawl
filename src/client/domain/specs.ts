@@ -150,6 +150,20 @@ export const ENERGY_DASH_SPEED = 1_300;
 export const ENERGY_DASH_DAMAGE_PER_ENERGY = 23.5 / 5;
 export const ENERGY_DASH_TURN_RATE = Math.PI * 2;
 
+// Appearance weights total 100 at both ends of the depth curve. Every
+// archetype remains possible, even before shooters and sentries become common.
+export const MONSTER_APPEARANCE_WEIGHTS: Record<RegularMonsterKind, { firstFloor: number; deepFloor: number }> = {
+  "melee-light": { firstFloor: 48, deepFloor: 15 },
+  "melee-heavy": { firstFloor: 37, deepFloor: 20 },
+  "shooter-light": { firstFloor: 8, deepFloor: 25 },
+  "shooter-heavy": { firstFloor: 4, deepFloor: 15 },
+  "sentry-light": { firstFloor: 1.5, deepFloor: 10 },
+  "sentry-heavy": { firstFloor: 1, deepFloor: 9 },
+  "sentry-scatter": { firstFloor: 0.5, deepFloor: 6 },
+};
+// Five floors below the first floor reaches half of the deep-floor mix.
+export const MONSTER_APPEARANCE_HALF_DEPTH = 5;
+
 interface MonsterDefinition extends RelativeObjectGeometry {
   destroyedVisualOffset: RelativeObjectGeometry["visualOffset"];
   kind: RegularMonsterKind;

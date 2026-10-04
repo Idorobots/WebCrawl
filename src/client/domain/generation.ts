@@ -27,6 +27,8 @@ import {
   MINIBOSS_DAMAGE_MULTIPLIER,
   MINIBOSS_HP_MULTIPLIER,
   MINIBOSS_SIZE_MULTIPLIER,
+  MONSTER_APPEARANCE_HALF_DEPTH,
+  MONSTER_APPEARANCE_WEIGHTS,
   MONSTER_SPAWN_PROFILES,
   PLAYER_SPEC,
   PORTAL_DEFINITION,
@@ -605,19 +607,24 @@ function monsterCountForRoom(room: GraphNode, floor: number, densityFactor = 1):
 }
 
 function monsterKindForSeed(seed: number, difficulty = 0): RegularMonsterKind {
-  const sentryChance = Math.min(42, 18 + difficulty * 3);
-  if ((seed >>> 6) % 100 < sentryChance) {
-    const sentryRoll = (seed >>> 16) % 100;
-    if (sentryRoll < 40) return "sentry-light";
-    if (sentryRoll < 75) return "sentry-heavy";
-    return "sentry-scatter";
+  // Approach the deep-floor mix smoothly rather than cutting off any species
+  // or making a sudden difficulty jump at a particular floor.
+  const progression = difficulty / (difficulty + MONSTER_APPEARANCE_HALF_DEPTH);
+  const weights = (Object.entries(MONSTER_APPEARANCE_WEIGHTS) as Array<[
+    RegularMonsterKind, { firstFloor: number; deepFloor: number },
+  ]>).map(([kind, { firstFloor, deepFloor }]) => ({
+    kind,
+    weight: firstFloor + (deepFloor - firstFloor) * progression,
+  }));
+  const totalWeight = weights.reduce((sum, entry) => sum + entry.weight, 0);
+  // Use an appearance-specific roll so HP and other seed-based stats do not
+  // bias the archetype, and retain enough precision for rare first-floor rolls.
+  let roll = stableHash(`${seed}|monster-appearance`) / 0x1_0000_0000 * totalWeight;
+  for (const { kind, weight } of weights) {
+    if (roll < weight) return kind;
+    roll -= weight;
   }
-
-  const walkerRoll = (seed >>> 12) % 100;
-  if (walkerRoll < 28) return "melee-heavy";
-  if (walkerRoll < 55) return "melee-light";
-  if (walkerRoll < 80) return "shooter-light";
-  return "shooter-heavy";
+  return weights[weights.length - 1]!.kind;
 }
 
 const BOSS_KINDS: BossKind[] = ["deepseek-summoner", "qwen-teleporter", "glm-hunter", "kimi-spiral", "hy4-wave"];
