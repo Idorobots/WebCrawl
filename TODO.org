@@ -1381,8 +1381,30 @@ There should be no doors generated leading to these hidden rooms, only walls wit
 
 * Ambush rooms
 Look empty, but monsters lurk in large scenery crates and burst out of it a few seconds after the player enters the room.
-* Vending machines
-- Use RAM sticks to purchase medkits, ammo and energy.
+* DONE Vending machines
+:LOGBOOK:
+- State "DONE"       from              [2026-10-04 Sun 22:50]
+:END:
+I'd like to add a concept of vending machines to the game. The player will be able to use RAM sticks to purchase medkits, ammo, energy etc from those vending machines.
+A vending machine is a blocking, destructible scenery item identical in size to the lab refrigerator. The specs for footprints and hitboxes should match the lab refrigerator.
+
+Vending machines come in several types:
+- medical - vend medkits costing 20 RAM sticks each,
+- ammo - vend ammo crates costing 10 RAM sticks each,
+- energy - vend energy crates costing 15 RAM sticks each,
+- crystal - vend crystals costing 100 RAM sticks each.
+
+The costs of items in a vending machine should raise on lower floors by 10% per floor.
+
+A player can "walk into" a vending machine to make a purchase. The vending machine object should move organically away from the player and then return to it's previous position as if the player pushed the vending machine and it were on a spring. If the player has enough RAM sticks, those RAM sticks are deduced and the vending machine spawns a loot item of that sort nearby. If the player doesn't have enough RAM sticks, the machine just moves and no loot is spawned.
+
+Each vending machine should have a capacity of items stored within, that's randomized and deterministic (1 to 5 max based on room hash). If the player spends the entire capacity, the vending machine should explode and deal 1 damage to the player. It should become destroyed then.
+When a vending machine is destroyed it (either by spending the entire capacity or by shooting at it) has a 25% chance of dropping the type of item the machine is vending.
+
+Vending machines should be fairly rare, with the crystal vending machine twice as rare as the others. The medical vending machines should only appear in medical-themed rooms.
+
+Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png for the assets. Use the barrel explosion effect for the destruction of a vending machine.
+
 * CEOs
 - Samario CEO of ClosedNS - a techbro tycoon
 - Zuckerborg Mark1 CEO of DefaceBooks - a not quite human android

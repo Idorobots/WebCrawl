@@ -10,6 +10,7 @@ import {
   REGULAR_MONSTER_DEFINITIONS,
 } from "./world-specs";
 import { weaponForKind, weaponKinds } from "./weapons";
+import { vendingStateForSeed } from "./vending";
 
 /** Positions are relative to the center of the room, so a template can be reused anywhere. */
 export interface AuthoredRoomTemplate {
@@ -25,16 +26,19 @@ export type AuthoredRooms = ReadonlyMap<number, AuthoredRoomTemplate>;
 export function authoredDecorations(room: GraphNode, template: AuthoredRoomTemplate): Decoration[] {
   return (template.decorations ?? []).map(({ definition, x, y }, index) => {
     const type = DECORATION_DEFINITIONS[definition];
+    const seed = stableHash(`${room.lootSeed}|authored-decor|${index}`);
+    const vendingKind = "vendingKind" in type ? type.vendingKind : undefined;
     return {
       ...type,
       id: `${room.id}::authored-decor-${index}`,
       roomId: room.id,
       x: room.x + x,
       y: room.y + y,
-      visualVariant: stableHash(`${room.lootSeed}|authored-decor|${index}`),
+      visualVariant: seed,
       maxHp: type.hp,
       destroyed: false,
       dropKind: null,
+      ...(vendingKind ? vendingStateForSeed(seed, vendingKind) : {}),
       ...(definition === "spawner" ? { spawner: true, spawnIntervalMs: 30_000, spawnedCount: 0 } : {}),
     };
   });

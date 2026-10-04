@@ -35,6 +35,10 @@ import {
 } from "./domain/boss-attacks";
 import { artDebugLevel, type AuthoredRooms } from "./domain/authored-rooms";
 import { worldPoint } from "./domain/object-geometry";
+import {
+  bumpsVendingMachine, purchaseVendingItem, touchingVendingMachine,
+  vendingLootPosition, vendingPrice, vendingWreck, VENDING_DEPLETION_DELAY_MS, VENDING_PRODUCTS,
+} from "./domain/vending";
 import { signageFontForUrl } from "./domain/level-style";
 import {
   actorAimDirection,
@@ -161,6 +165,7 @@ const linkMenu = requireElement<HTMLDivElement>("#linkMenu");
 const contentBrowserEl = requireElement<HTMLElement>("#contentBrowser");
 const portalPreviewEl = requireElement<HTMLElement>("#portalPreview");
 const portalPreviewUrlEl = requireElement<HTMLElement>("#portalPreviewUrl");
+const vendingPreviewEl = requireElement<HTMLElement>("#vendingPreview");
 const CONTENT_BROWSER_RADIUS = 112;
 const PORTAL_PREVIEW_RADIUS = 112;
 let visibleContentPointId: string | null = null;
@@ -241,6 +246,8 @@ let currentStairs: Stair[] = [];
 let currentLoot: LootItem[] = [];
 let currentMonsters: Monster[] = [];
 let currentDecorations: Decoration[] = [];
+let currentVendingMachines: Decoration[] = [];
+const vendingContacts = new Map<string, number>();
 let currentSpawners: Decoration[] = [];
 const destroyedObstaclesByPage = new Map<string, Map<string, ObstacleState>>();
 let visitedRooms = new Set<number>();
@@ -342,7 +349,10 @@ let portalActivationSoundTimer: number | null = null;
 
 function setTeleportPaused(active: boolean): void {
   teleportPauseActive = active;
-  if (active) queuedPlayerShot = false;
+  if (active) {
+    queuedPlayerShot = false;
+    hideVendingPreview();
+  }
   gameCanvasHost.dataset.gamePaused = String(active);
 }
 const heldMovementKeys = new Set<string>();
@@ -455,6 +465,37 @@ function renderPortalPreview(): void {
     visiblePortalId = closest.id;
   }
   portalPreviewEl.hidden = false;
+}
+
+function hideVendingPreview(): void {
+  vendingPreviewEl.hidden = true;
+}
+
+function renderVendingPreview(): void {
+  if (gameUi.hidden || !playerAlive || teleportPauseActive) {
+    hideVendingPreview();
+    return;
+  }
+  let closest: Decoration | null = null;
+  let closestDistance = PORTAL_PREVIEW_RADIUS * PORTAL_PREVIEW_RADIUS;
+  for (const item of currentVendingMachines) {
+    if (!item.vendingKind || item.destroyed || !item.vendingRemaining || !visitedRooms.has(item.roomId)) continue;
+    const distance = distanceSquared(player, item);
+    if (distance <= closestDistance) {
+      closest = item;
+      closestDistance = distance;
+    }
+  }
+  if (!closest?.vendingKind) {
+    hideVendingPreview();
+    return;
+  }
+  const price = `$${vendingPrice(closest.vendingKind, floorNumber())}`;
+  if (vendingPreviewEl.textContent !== price) vendingPreviewEl.textContent = price;
+  // Stack above a nearby portal's popup when both are visible.
+  const portalHeight = portalPreviewEl.hidden ? 0 : portalPreviewEl.getBoundingClientRect().height + 8;
+  vendingPreviewEl.style.setProperty("--portal-preview-height", `${portalHeight}px`);
+  vendingPreviewEl.hidden = false;
 }
 
 function renderContentBrowser(): void {
@@ -968,6 +1009,7 @@ function recordHighScore(): { scores: HighScore[]; rank: number | null } {
 }
 
 function showDeathModal(): void {
+  hideVendingPreview();
   const { scores, rank } = recordHighScore();
   renderer?.stopStationAmbient();
 
@@ -1080,6 +1122,7 @@ function returnToWelcome(): void {
   hideLinkMenu();
   hideContentBrowser();
   hidePortalPreview();
+  hideVendingPreview();
   urlBar.hidden = true;
   gameUi.hidden = true;
   gameUi.classList.remove("game-ui-ready");
@@ -1269,6 +1312,7 @@ function saveObstacleState(item: Decoration): void {
     destroyed: item.destroyed,
     contentUnlocked: item.contentUnlocked,
     spawnedCount: item.spawnedCount,
+    vendingRemaining: item.vendingRemaining,
   });
 }
 
@@ -1289,6 +1333,53 @@ function renderDecorations(): void {
   renderer.renderDecorations(currentDecorations, visitedRooms);
 }
 
+function nearbyVendingLootPosition(item: Decoration): Point | null {
+  if (!item.vendingKind) return null;
+  const kind = VENDING_PRODUCTS[item.vendingKind].kind;
+  const radii = LOOT_DEFINITIONS[kind].footprintRadii;
+  const room = currentRoomsById.get(item.roomId);
+  return vendingLootPosition(item, room ?? player, point =>
+    isGeometryWalkable(point.x, point.y, radii) &&
+    !pointBlockedByDecoration(point.x, point.y, radii) &&
+    !wallBlocksSegment(item, point, radii, wallFootprints));
+}
+
+function bumpVendingMachine(item: Decoration, timestamp: number): void {
+  if (!item.vendingKind || !currentPageUrl) return;
+  vendingContacts.set(item.id, Math.hypot(player.x - item.x, player.y - item.y));
+  renderer.pushVendingMachine(item, player, timestamp);
+  const product = VENDING_PRODUCTS[item.vendingKind];
+  const price = vendingPrice(item.vendingKind, floorNumber());
+  if (lootInventory.credits < price) {
+    renderer.playVendingSound("error");
+    setStatus(`${product.name} costs ${price} RAM · Not enough RAM`);
+    return;
+  }
+  const position = nearbyVendingLootPosition(item);
+  if (!position) {
+    setStatus(`${product.name} · No space to dispense`);
+    return;
+  }
+  const result = purchaseVendingItem(item, lootInventory.credits, floorNumber());
+  if (!result.purchased) return;
+  lootInventory.credits = result.credits;
+  const drop: LootItem = {
+    id: `${floorIdentity(currentPageUrl)}::${item.id}::vend-${item.vendingCapacity! - item.vendingRemaining!}`,
+    roomId: item.roomId,
+    ...position,
+    kind: product.kind,
+  };
+  extraLootForCurrentPage().push(drop);
+  currentLoot.push(drop);
+  renderer.playVendingSound("coin");
+  if (result.depleted) item.vendingExhaustedAt = timestamp + VENDING_DEPLETION_DELAY_MS;
+  saveObstacleState(item);
+  updateLootUi();
+  renderVendingPreview();
+  renderInteractiveObjects();
+  setStatus(`${product.name} dispensed · ${price} RAM · ${item.vendingRemaining} remaining`);
+}
+
 function bulletDamageEffectSize(bullet?: Bullet): number | undefined {
   // A radius-6 bullet produces a 72-unit impact, regardless of the target size.
   return bullet ? (bullet.radius ?? DEFAULT_BULLET_SPEC.radius) * 12 : undefined;
@@ -1298,6 +1389,8 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
   if (!applyObstacleDamage(item, amount)) return;
 
   if (item.hp <= 0) {
+    const depleted = item.vendingExhaustedAt !== undefined;
+    item.vendingExhaustedAt = undefined;
     item.destroyed = true;
     if (item.contentPoint) {
       item.contentEnabled = false;
@@ -1305,15 +1398,28 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
       item.spawnAnimationStartedAt = undefined;
     }
     saveObstacleState(item);
+    const destroyedItem = { ...item };
     renderer.spawnExplosion(item.visual.animations?.destroy, item.x, item.y, item.size);
     renderer.playExplosionSound();
+    // Keep the same object reference so existing obstacle cells immediately see the wreck.
+    if (item.vendingKind) Object.assign(item, vendingWreck(item));
     renderDecorations();
     if (currentPageUrl) {
-      const drops = createSceneryDrops([item], floorIdentity(currentPageUrl), collectedLoot);
+      const drops = createSceneryDrops([destroyedItem], floorIdentity(currentPageUrl), collectedLoot);
+      if (item.vendingKind) {
+        const position = nearbyVendingLootPosition(item) ?? item;
+        for (const drop of drops) {
+          drop.x = position.x;
+          drop.y = position.y;
+          extraLootForCurrentPage().push(drop);
+        }
+      }
       currentLoot.push(...drops);
       if (drops.length) renderInteractiveObjects();
     }
     renderContentBrowser();
+    renderVendingPreview();
+    if (depleted) applyPlayerDamage(1);
     if (item.kind === "barrel") {
       const targets = barrelExplosionTargets(item, currentDecorations, currentMonsters, player);
       for (const decoration of targets.decorations) damageObstacle(decoration, BARREL_EXPLOSION_DAMAGE);
@@ -1418,6 +1524,7 @@ function saveCurrentFloorState(): void {
   if (!currentPageUrl || !currentStateId) return;
   discoveredRoomsByPage.set(currentStateId, new Set(visitedRooms));
   for (const item of currentDecorations) {
+    if (item.vendingExhaustedAt !== undefined && !item.destroyed) damageObstacle(item, item.hp);
     if (item.destructible) saveObstacleState(item);
   }
   for (const monster of currentMonsters) saveMonsterState(monster);
@@ -1779,6 +1886,7 @@ function updateContentPoints(timestamp: number): void {
   if (changed) renderDecorations();
   renderContentBrowser();
   renderPortalPreview();
+  renderVendingPreview();
 }
 
 function queueEnemyBullet(
@@ -2597,6 +2705,11 @@ function runGameTick(timestamp: number): void {
       const teleported = updateBoss(monster, dt, timestamp);
       if (teleported) crushSceneryUnderBoss(monster, monster);
       else if (from.x !== monster.x || from.y !== monster.y) crushSceneryUnderBoss(monster, from);
+      if (pointBlockedByDecoration(monster.x, monster.y, worldPoint(monster, "footprintRadii"), true)) {
+        monster.x = from.x;
+        monster.y = from.y;
+        monster.moving = false;
+      }
       continue;
     }
 
@@ -2685,6 +2798,11 @@ function runGameTick(timestamp: number): void {
 
 function updatePlayerInputFrame(): void {
   const now = performance.now();
+  renderer.updateVendingPushes(now);
+  // Finish the last vend even if player death has stopped the gameplay tick.
+  for (const item of currentVendingMachines) {
+    if (item.vendingExhaustedAt !== undefined && now >= item.vendingExhaustedAt) damageObstacle(item, item.hp);
+  }
   if (DEBUG_MODE) {
     if (fpsSampleStart === null) fpsSampleStart = now;
     else fpsSampleFrames += 1;
@@ -2886,9 +3004,8 @@ function isMonsterWalkable(monster: Monster, x: number, y: number, checkPlayer =
   if (!isGeometryWalkable(x, y, footprint)) return false;
   if (checkPlayer && playerAlive && PLAYER_SPEC.obstacle &&
     !footprintMoveIsClear(monster, { x, y }, footprint, player, PLAYER_SPEC.footprintRadii)) return false;
-  if (isBoss(monster)) return true;
   for (const item of obstacleCells.get(spatialCellKey(x, y)) ?? []) {
-    if (!item.obstacle || item.destroyed) continue;
+    if (!item.obstacle || item.destroyed || (isBoss(monster) && item.destructible)) continue;
     if (!footprintsOverlap({ x, y }, footprint, item, worldPoint(item, "footprintRadii"))) continue;
     if (item.id === monster.spawnSourceId) {
       if (footprintMoveIsClear(monster, { x, y }, footprint, item, worldPoint(item, "footprintRadii"))) continue;
@@ -3126,6 +3243,17 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
     return;
   }
 
+  for (const item of currentVendingMachines) {
+    const closest = vendingContacts.get(item.id);
+    if (closest === undefined) continue;
+    const distance = Math.hypot(player.x - item.x, player.y - item.y);
+    if (item.destroyed || (!touchingVendingMachine(player, item) && distance > closest + 8)) {
+      vendingContacts.delete(item.id);
+    } else {
+      vendingContacts.set(item.id, Math.min(closest, distance));
+    }
+  }
+
   let inputX = 0;
   let inputY = 0;
   if (touchMoveVector) {
@@ -3159,6 +3287,12 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
     x: player.x + dx,
     y: player.y + dy,
   };
+
+  if (!wallBlocksSegment(player, next, PLAYER_SPEC.footprintRadii, wallFootprints)) {
+    const machine = currentVendingMachines.find(item => visitedRooms.has(item.roomId) &&
+      !vendingContacts.has(item.id) && bumpsVendingMachine(player, next, item));
+    if (machine) bumpVendingMachine(machine, timestamp);
+  }
 
   let moved = false;
   if (!wallBlocksSegment(player, next, PLAYER_SPEC.footprintRadii, wallFootprints) &&
@@ -3306,7 +3440,7 @@ function updateEnergyDash(dt: number): void {
   const remaining = dash.maxDistance - dash.traveled;
   const distance = Math.min(ENERGY_DASH_SPEED * dt, remaining);
   if (distance > 0) {
-    // Sweep short steps against walls; the dash passes through actors and crushes scenery.
+    // Pass through actors and destructible scenery, but stop at permanent obstacles.
     const steps = Math.ceil(distance / (Math.min(PLAYER_SPEC.footprintRadii.x, PLAYER_SPEC.footprintRadii.y) / 2));
     const step = distance / steps;
     for (let index = 0; index < steps; index += 1) {
@@ -3315,11 +3449,17 @@ function updateEnergyDash(dt: number): void {
         y: player.y + dash.dirY * step,
       };
       if (!isGeometryWalkable(next.x, next.y, PLAYER_SPEC.footprintRadii) ||
+          pointBlockedByDecoration(next.x, next.y, PLAYER_SPEC.footprintRadii, true) ||
           wallBlocksSegment(player, next, PLAYER_SPEC.footprintRadii, wallFootprints)) {
         dash.traveled = dash.maxDistance;
         break;
       }
       crushSceneryAlongFootprint(player, next, PLAYER_SPEC.footprintRadii);
+      // Crushing a vending machine creates a blocking wreck within this step.
+      if (pointBlockedByDecoration(next.x, next.y, PLAYER_SPEC.footprintRadii, true)) {
+        dash.traveled = dash.maxDistance;
+        break;
+      }
       player = next;
       dash.traveled += step;
       applyEnergyDashDamage();
@@ -3363,6 +3503,8 @@ function teleportPlayerTo(x: number, y: number): void {
     setPlayerInvulnerable: (enabled: boolean) => void;
     grantCrystals: (count: number) => void;
     grantEnergy: (count: number) => void;
+    grantRam: (count: number) => void;
+    vendingMachines: () => Array<Pick<Decoration, "id" | "x" | "y" | "roomId" | "kind" | "obstacle" | "destructible" | "vendingKind" | "vendingCapacity" | "vendingRemaining" | "destroyed" | "dropKind"> & { price: number }>;
     energy: () => number;
     dashing: () => boolean;
     useCrystal: () => boolean;
@@ -3415,6 +3557,16 @@ function teleportPlayerTo(x: number, y: number): void {
     lootInventory.energy = Math.min(PLAYER_ENERGY_MAX, Math.max(0, lootInventory.energy + count));
     updateLootUi();
   },
+  grantRam(count: number): void {
+    lootInventory.credits = Math.max(0, lootInventory.credits + count);
+    updateLootUi();
+  },
+  vendingMachines: () => currentVendingMachines.map(item => ({
+    id: item.id, x: item.x, y: item.y, roomId: item.roomId, vendingKind: item.vendingKind,
+    vendingCapacity: item.vendingCapacity, vendingRemaining: item.vendingRemaining,
+    kind: item.kind, obstacle: item.obstacle, destructible: item.destructible,
+    destroyed: item.destroyed, dropKind: item.dropKind, price: vendingPrice(item.vendingKind!, floorNumber()),
+  })),
   energy: () => lootInventory.energy,
   dashing: () => energyDash !== null,
   useCrystal: () => activateCrystalInvulnerability(),
@@ -3867,6 +4019,7 @@ function renderGraph(
   hideLinkMenu();
   hideContentBrowser();
   hidePortalPreview();
+  hideVendingPreview();
 
   const layout = preparedLayout ?? layoutOrthogonal(graph, authoredRooms ?? undefined);
   currentAuthoredRooms = authoredRooms;
@@ -3892,9 +4045,11 @@ function renderGraph(
   currentStairs = objects.stairs;
   currentLoot = objects.loot;
   currentDecorations = buildDecorations(layout, pageUrl);
+  currentVendingMachines = currentDecorations.filter(item => item.vendingKind);
+  vendingContacts.clear();
   currentSpawners = currentDecorations.filter(item => item.spawner);
   rebuildSpatialIndexes();
-  currentLoot.push(...createSceneryDrops(currentDecorations, floorIdentity(pageUrl), collectedLoot));
+  currentLoot.push(...createSceneryDrops(currentDecorations.filter(item => !item.vendingKind), floorIdentity(pageUrl), collectedLoot));
 
   const root =
     layout.nodes.find(node => node.isRoot) ||
@@ -3974,6 +4129,7 @@ async function loadPage(
   rendererReady: (() => Promise<void>) | null = null,
 ): Promise<void> {
   const retainedPointerPosition = pointerInViewport ? pointerClientPosition : null;
+  hideVendingPreview();
   resetPlayerInput();
   portalTransitioning = false;
   const requestId = ++currentRequest;
@@ -4092,6 +4248,8 @@ async function startArtDebug(): Promise<void> {
   loadingScreen.hidden = true;
   gameUi.hidden = false;
   resetRunState();
+  lootInventory.credits = 200;
+  lootInventory.energy = PLAYER_ENERGY_MAX;
   equipDefaultWeapon();
   updateHudPanels();
   try {

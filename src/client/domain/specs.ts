@@ -27,6 +27,7 @@ import type {
   WeaponKind,
   WeaponPlacement,
   RelativeObjectGeometry,
+  VendingKind,
 } from "../types";
 
 const circle = (radius: number) => ({ x: radius, y: radius });
@@ -691,6 +692,7 @@ export interface DecorationDefinition extends RelativeObjectGeometry {
   destructible: boolean;
   /** Starting HP (1–20), statically tuned from the world-space hitbox radius sum. */
   hp: number;
+  vendingKind?: VendingKind;
 }
 
 const plantDebris = [
@@ -727,6 +729,31 @@ const barrelExplosion = clip(BARREL_EXPLOSION_FRAMES, 2.8, { x: 0.5, y: 0.84375 
 });
 const objectExplosion = explosionEffect(1.5);
 const sceneryDamage = damageEffect(0.55);
+
+const REFRIGERATOR_GEOMETRY = {
+  size: 145,
+  visualOffset: { x: 0, y: -0.20689655172413793 },
+  hitboxOffset: { x: 0, y: -0.20689655172413793 },
+  hitboxRadii: { x: 0.2413793103448276, y: 0.41379310344827586 },
+  footprintRadii: circle(0.2413793103448276),
+};
+
+function vendingDefinition(vendingKind: VendingKind, asset: string, debris: string): DecorationDefinition {
+  return {
+    ...REFRIGERATOR_GEOMETRY,
+    definitionId: `vending-${vendingKind}`,
+    kind: "vending",
+    vendingKind,
+    hp: 12,
+    destructible: true,
+    obstacle: true,
+    visual: {
+      normal: clip([asset]),
+      destroyed: [clip([debris])],
+      animations: { damage: sceneryDamage, destroy: barrelExplosion },
+    },
+  };
+}
 
 export const DECORATION_DEFINITIONS = {
   plantViolet: {
@@ -1019,16 +1046,12 @@ export const DECORATION_DEFINITIONS = {
     },
   },
   refrigerator: {
+    ...REFRIGERATOR_GEOMETRY,
     definitionId: "refrigerator",
     hp: 12,
     kind: "machinery",
-    size: 145,
     destructible: true,
     obstacle: true,
-    visualOffset: { x: 0, y: -0.20689655172413793 },
-    hitboxOffset: { x: 0, y: -0.20689655172413793 },
-    hitboxRadii: { x: 0.2413793103448276, y: 0.41379310344827586 },
-    footprintRadii: circle(0.2413793103448276),
     visual: {
       normal: clip([SCENERY_ASSETS.refrigerator]),
       destroyed: deviceDebris,
@@ -2259,7 +2282,18 @@ export const DECORATION_DEFINITIONS = {
       destroyed: [],
     },
   },
+  vendingMedical: vendingDefinition("medical", SCENERY_ASSETS.vendingMedical, DEBRIS_ASSETS.vendingMedical),
+  vendingAmmo: vendingDefinition("ammo", SCENERY_ASSETS.vendingAmmo, DEBRIS_ASSETS.vendingGeneric),
+  vendingEnergy: vendingDefinition("energy", SCENERY_ASSETS.vendingEnergy, DEBRIS_ASSETS.vendingGeneric),
+  vendingCrystal: vendingDefinition("crystal", SCENERY_ASSETS.vendingCrystal, DEBRIS_ASSETS.vendingGeneric),
 } as const satisfies Record<string, DecorationDefinition>;
+
+export const VENDING_DEFINITIONS: Readonly<Record<VendingKind, DecorationDefinition>> = {
+  medical: DECORATION_DEFINITIONS.vendingMedical,
+  ammo: DECORATION_DEFINITIONS.vendingAmmo,
+  energy: DECORATION_DEFINITIONS.vendingEnergy,
+  crystal: DECORATION_DEFINITIONS.vendingCrystal,
+};
 
 export const OBSTACLE_DEFINITIONS: readonly DecorationDefinition[] = Object.values(DECORATION_DEFINITIONS)
   .filter(definition => definition.obstacle);

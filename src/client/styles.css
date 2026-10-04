@@ -857,7 +857,8 @@ button:hover {
 }
 
 #contentBrowser,
-#portalPreview {
+#portalPreview,
+#vendingPreview {
   position: fixed;
   z-index: 40;
   bottom: 126px;
@@ -878,8 +879,18 @@ button:hover {
 #contentBrowser { right: 24px; }
 #portalPreview { left: 24px; }
 
+#vendingPreview {
+  left: 24px;
+  bottom: calc(126px + var(--portal-preview-height, 0px));
+  width: max-content;
+  padding: 8px 12px;
+  font-size: 14px;
+  pointer-events: none;
+}
+
 #contentBrowser[hidden],
-#portalPreview[hidden] { display: none; }
+#portalPreview[hidden],
+#vendingPreview[hidden] { display: none; }
 
 #contentBrowser h2,
 #portalPreview h2 {
@@ -2773,6 +2784,13 @@ body {
   }
   #portalPreview { left: 8px; }
   #contentBrowser:not([hidden]) + #portalPreview { bottom: calc(38vh + 16px); }
+  #vendingPreview {
+    left: 8px;
+    bottom: calc(8px + var(--portal-preview-height, 0px));
+  }
+  #contentBrowser:not([hidden]) ~ #vendingPreview {
+    bottom: calc(38vh + 16px + var(--portal-preview-height, 0px));
+  }
 }
 
 @media (max-width: 720px) {

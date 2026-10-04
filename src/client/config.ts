@@ -142,6 +142,10 @@ export const SCENERY_ASSETS = {
   researchBench: asset("scenery/lab/research_bench.png"),
   reagentRack: asset("scenery/lab/reagent_rack.png"),
   refrigerator: asset("scenery/lab/refrigerator.png"),
+  vendingMedical: asset("scenery/vending/vending_medical.png"),
+  vendingAmmo: asset("scenery/vending/vending_ammo.png"),
+  vendingEnergy: asset("scenery/vending/vending_energy.png"),
+  vendingCrystal: asset("scenery/vending/vending_crystal.png"),
   roboticManipulator: asset("scenery/lab/robotic_manipulator.png"),
   medicalCabinet: asset("scenery/medical/sealed_medical_cabinet.png"),
   diagnosticScanner: asset("scenery/medical/diagnostic_scanner_arch_on_compact_base.png"),
@@ -218,6 +222,8 @@ export const SCENERY_ASSETS = {
 } as const;
 
 export const DEBRIS_ASSETS = {
+  vendingMedical: asset("debris/vending_medical.png"),
+  vendingGeneric: asset("debris/vending_generic.png"),
   barrelRedCrushed: asset("debris/barrel_red_crushed.png"),
   barrelCoolantRuptured: asset("debris/barrel_coolant_ruptured.png"),
   barrelHazardBands: asset("debris/barrel_hazard_bands.png"),

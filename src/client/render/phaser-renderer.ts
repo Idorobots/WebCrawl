@@ -26,6 +26,7 @@ import {
 import { backgroundAssetForUrl } from "../domain/background";
 import { bossStage } from "../domain/boss-attacks";
 import { resolveGeometry, worldPoint } from "../domain/object-geometry";
+import { vendingSpringOffset, VENDING_SPRING_DURATION_MS } from "../domain/vending";
 import { signageFontForUrl, stationAmbientForUrl, STATION_AMBIENT_TRACKS } from "../domain/level-style";
 import {
   DEFAULT_BULLET_SPEC,
@@ -90,8 +91,8 @@ type StaticObject =
 const ROOM_FLOOR_DEPTH = -2;
 const CORRIDOR_FLOOR_DEPTH = -4;
 const CORRIDOR_MARKING_DEPTH = -1.75;
-const PICKUP_DEPTH = -1.6;
 const DEBRIS_DEPTH = -1.5;
+const PICKUP_DEPTH = -1.4;
 const Y_DEPTH_OFFSET = 4_000_000;
 const OVERHEAD_DEPTH = 8_000_000;
 const HEALTH_BAR_DEPTH = 10_000_000;
@@ -170,6 +171,8 @@ const ONE_SHOT_SOUNDS: Readonly<Record<string, string>> = {
   "sfx-portal-shutdown": "sounds/alerts/system_infiltrated.mp3",
   "sfx-spawner-spawn": "sounds/scenery/spawner/spawn.mp3",
   "sfx-content-toggle": "sounds/scenery/content/toggle.mp3",
+  "sfx-vending-coin": "sounds/scenery/vending/coin.mp3",
+  "sfx-vending-error": "sounds/scenery/vending/error.mp3",
   "sfx-lights-flicker": "sounds/scenery/lights/flicker.mp3",
   "sfx-player-hurt": "sounds/death/player/damage.mp3",
   "sfx-player-death": "sounds/death/player/wilhelm.mp3",
@@ -371,6 +374,8 @@ export class PhaserRenderer {
   private decorations: Phaser.GameObjects.Container[] = [];
   private decorationSprites = new Map<string, Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>();
   private decorationShadows = new Map<string, Phaser.GameObjects.Image>();
+  private decorationContainers = new Map<string, Phaser.GameObjects.Container>();
+  private vendingPushes = new Map<string, { item: Decoration; startedAt: number; direction: Point }>();
   private objects: Phaser.GameObjects.Container[] = [];
   private portals = new Map<string, Phaser.GameObjects.Container>();
   private portalStartupPreview = false;
@@ -638,6 +643,8 @@ export class PhaserRenderer {
     this.destroyAll(this.decorations);
     this.decorationSprites.clear();
     this.decorationShadows.clear();
+    this.decorationContainers.clear();
+    this.vendingPushes.clear();
     this.destroyAll(this.objects);
     this.destroyPortalObjects();
     for (const object of this.monsters.values()) object.destroy(true);
@@ -745,6 +752,10 @@ export class PhaserRenderer {
 
   playPickupSound(kind: "generic" | "ram" | "weapon"): void {
     this.playOneShot(`sfx-pickup-${kind}`);
+  }
+
+  playVendingSound(kind: "coin" | "error"): void {
+    this.playOneShot(`sfx-vending-${kind}`);
   }
 
   playPortalSound(type: "up" | "down"): void {
@@ -1833,6 +1844,7 @@ export class PhaserRenderer {
     this.destroyAll(this.decorations);
     this.decorationSprites.clear();
     this.decorationShadows.clear();
+    this.decorationContainers.clear();
     for (const bar of this.decorationHealthBars.values()) bar.destroy(true);
     this.decorationHealthBars.clear();
     for (const light of this.decorationEffectLights.values()) this.scene?.lights.removeLight(light);
@@ -1864,6 +1876,10 @@ export class PhaserRenderer {
         item.definitionId.startsWith("debris");
       const container = scene.add.container(item.x, item.y, shadow ? [shadow, sprite] : [sprite])
         .setDepth(isDebris ? DEBRIS_DEPTH : yDepth(item.y));
+      if (item.vendingKind) {
+        container.setName(`vending:${item.id}`);
+      }
+      this.decorationContainers.set(item.id, container);
       this.decorationSprites.set(item.id, sprite);
       this.syncDecorationEffectLight(item, state);
       this.decorations.push(container);
@@ -1884,6 +1900,7 @@ export class PhaserRenderer {
       }
     }
     this.setHostData("sceneryShadows", String(this.decorationShadows.size));
+    this.updateVendingPushes(performance.now());
     this.refreshLocalLightVisibility(true);
     this.renderDebugGeometry();
   }
@@ -1909,12 +1926,35 @@ export class PhaserRenderer {
     return this.decorationSprites.get(id)?.texture.key ?? null;
   }
 
+  pushVendingMachine(item: Decoration, player: Point, timestamp: number): void {
+    const dx = item.x - player.x;
+    const dy = item.y - player.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    this.vendingPushes.set(item.id, {
+      item, startedAt: timestamp, direction: { x: dx / distance, y: dy / distance },
+    });
+  }
+
+  updateVendingPushes(now: number): void {
+    for (const [id, push] of this.vendingPushes) {
+      const { item, startedAt, direction } = push;
+      const elapsed = now - startedAt;
+      const stationary = item.destroyed || !item.destructible;
+      const offset = stationary ? { x: 0, y: 0 } : vendingSpringOffset(direction, elapsed);
+      this.decorationContainers.get(id)?.setPosition(item.x + offset.x, item.y + offset.y);
+      const hitbox = worldPoint(item, "hitboxOffset");
+      this.decorationHealthBars.get(id)?.setPosition(item.x + hitbox.x + offset.x, item.y + offset.y);
+      if (stationary || elapsed >= VENDING_SPRING_DURATION_MS) this.vendingPushes.delete(id);
+    }
+  }
+
   updateShadowOffsets(items: readonly Decoration[], now: number): void {
     if (now - this.lastShadowOffsetUpdate < 50) return;
     this.lastShadowOffsetUpdate = now;
     for (const item of items) {
       const shadow = this.decorationShadows.get(item.id);
-      if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
+      const container = this.decorationContainers.get(item.id);
+      if (shadow) this.applyShadowOffset(shadow, container?.x ?? item.x, container?.y ?? item.y, item.size);
     }
     for (const container of this.portals.values()) {
       const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;

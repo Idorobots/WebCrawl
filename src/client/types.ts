@@ -10,6 +10,7 @@ export type PlayerDirection =
   | "upLeft";
 export type PlayerAnimation = "normal" | "walk";
 export type LootKind = "credit" | "crystal" | "core" | "medkit" | "energy" | "weapon";
+export type VendingKind = "medical" | "ammo" | "energy" | "crystal";
 export type BossKind = "deepseek-summoner" | "qwen-teleporter" | "glm-hunter" | "kimi-spiral" | "hy4-wave";
 export type RegularMonsterKind =
   | "melee-heavy"
@@ -217,6 +218,11 @@ export interface Decoration extends Point, RelativeObjectGeometry {
   destroyed: boolean;
   dropKind: LootKind | null;
   dropCount?: number;
+  vendingKind?: VendingKind;
+  vendingCapacity?: number;
+  vendingRemaining?: number;
+  /** Runtime-only deadline for the final bump's destruction. */
+  vendingExhaustedAt?: number;
   contentPoint?: boolean;
   contentUnlocked?: boolean;
   contentEnabled?: boolean;
@@ -236,6 +242,7 @@ export interface ObstacleState {
   contentUnlocked?: boolean;
   contentEnabled?: boolean;
   spawnedCount?: number;
+  vendingRemaining?: number;
 }
 
 export interface Monster extends Point, RelativeObjectGeometry {

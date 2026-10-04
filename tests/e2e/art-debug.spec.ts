@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { artDebugLevel } from "../../src/client/domain/authored-rooms";
+import { PLAYER_ENERGY_MAX } from "../../src/client/domain/world-specs";
 import { LIGHT_DETAIL_STORAGE_KEY, type LightDetail } from "../../src/client/render/light-detail";
 
 test.skip(process.env.VITE_ART_DEBUG !== "true", "Requires a build with VITE_ART_DEBUG=true");
@@ -27,6 +28,9 @@ test("boots directly into the playable, authored art floor without fetching a pa
     await expect(fps).toBeHidden();
   }
   await expect(host).toHaveAttribute("data-active-monsters", "0");
+  await expect(host).toHaveAttribute("data-credits", "200");
+  await expect(host).toHaveAttribute("data-energy", String(PLAYER_ENERGY_MAX));
+  await expect(page.locator("#hudEnergyFill")).toHaveAttribute("style", /width:\s*100%/);
   expect(fetches).toEqual([]);
 
   const enemyRoom = layout.nodes[1]!;

@@ -35,6 +35,7 @@ import {
   REGULAR_MONSTER_DEFINITIONS,
   ROOM_SCENERY_THEMES,
   SCENERY_DEFINITIONS,
+  VENDING_DEFINITIONS,
   WORLD_GEOMETRY,
   type DecorationDefinition,
   type RoomSceneryTheme,
@@ -43,6 +44,7 @@ import {
 import { worldPoint } from "./object-geometry";
 import { weaponForRoom, type WeaponSource } from "./weapons";
 import { authoredDecorations, authoredLoot, type AuthoredRooms } from "./authored-rooms";
+import { vendingDropForSeed, vendingKindForRoom, vendingStateForSeed, vendingWreck } from "./vending";
 
 export function lootKindForSeed(seed: number): LootKind {
   return lootKindForRoll((seed >>> 3) % 100);
@@ -196,6 +198,8 @@ const FAVORED_CRATE_LOOT: Readonly<Record<string, LootKind>> = {
 };
 
 export function sceneryDropKindForSeed(seed: number, definitionId?: string): LootKind | null {
+  const vending = Object.values(VENDING_DEFINITIONS).find(type => type.definitionId === definitionId);
+  if (vending?.vendingKind) return vendingDropForSeed(seed, vending.vendingKind);
   if (stableHash(`${seed}|drop`) % 100 >= 30) return null;
 
   const favoredKind = definitionId ? FAVORED_CRATE_LOOT[definitionId] : undefined;
@@ -290,7 +294,8 @@ export function decorationSpecsForRoom(
   const seed = stableHash(`${room.lootSeed}|decor`);
   const difficulty = floorDifficulty(floor);
   const count = Math.max(5, Math.floor(roomSegmentArea(room) * sceneryDensityForFloor(floor))) + (seed % 3);
-  const theme = ROOM_SCENERY_THEMES[roomSceneryThemeForRoom(room)];
+  const themeId = roomSceneryThemeForRoom(room);
+  const theme = ROOM_SCENERY_THEMES[themeId];
   const slots = roomDecorationSlots(room, seed);
   const spawnerRate = Math.min(82, 12 + difficulty * 6);
   const spawnerRoomRoll = stableHash(`${room.lootSeed}|spawner-rate`) % 100;
@@ -325,7 +330,27 @@ export function decorationSpecsForRoom(
     });
   }
   const decorations: Decoration[] = [];
-  for (let index = 0; index < count; index += 1) {
+  const vendingKind = vendingKindForRoom(room, themeId === "medical", ROOM_SCENERY_THEME_IDS.length);
+  if (vendingKind) {
+    const type = VENDING_DEFINITIONS[vendingKind];
+    const slotIndex = slots.findIndex(position => decorationFits(position, type, room, spawners, walls));
+    if (slotIndex >= 0) {
+      const [position] = slots.splice(slotIndex, 1);
+      const itemSeed = stableHash(`${room.lootSeed}|vending`);
+      decorations.push({
+        ...type,
+        id: `${room.id}::vending`,
+        roomId: room.id,
+        ...position!,
+        visualVariant: itemSeed,
+        maxHp: type.hp,
+        destroyed: false,
+        ...vendingStateForSeed(itemSeed, vendingKind),
+      });
+    }
+  }
+  const sceneryCount = count - decorations.length;
+  for (let index = 0; index < sceneryCount; index += 1) {
     const itemSeed = stableHash(`${room.lootSeed}|decor|${index}`);
     const usePrimary = itemSeed % 100 < theme.primaryPercent;
     let pool = usePrimary ? theme.primary : theme.accents;
@@ -525,14 +550,16 @@ export function buildDecorations(
     ...corridorItems,
   ].map((item) => {
     const state = savedStates.get(item.id);
-    return {
+    const restored = {
       ...item,
       hp: state?.hp ?? item.hp,
       destroyed: state?.destroyed ?? false,
       contentUnlocked: state?.contentUnlocked ?? state?.contentEnabled ?? item.contentUnlocked,
       contentEnabled: false,
       spawnedCount: state?.spawnedCount ?? item.spawnedCount,
+      vendingRemaining: state?.vendingRemaining ?? item.vendingRemaining,
     };
+    return restored.vendingKind && restored.destroyed ? vendingWreck(restored) : restored;
   });
 }
 
