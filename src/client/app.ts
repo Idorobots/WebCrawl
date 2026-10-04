@@ -1444,7 +1444,7 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string, playerSpawn?: Poi
 
 function updateFloorPortals(): boolean {
   const changed = updatePortalAvailability(currentStairs, currentMonsters, visitedRooms);
-  if (currentStairs.some(stair => stair.enabled)) schedulePortalActivationSound();
+  if (currentStairs.some(stair => stair.type === "down" && stair.enabled)) schedulePortalActivationSound();
   else cancelPortalActivationSound();
   updatePortalContacts(
     currentStairs,
@@ -1491,7 +1491,7 @@ function schedulePortalActivationSound(): void {
   portalActivationSoundTimer = window.setTimeout(() => {
     portalActivationSoundTimer = null;
     if (currentStateId !== stateId || !playerAlive || gameUi.hidden ||
-        !currentStairs.some(stair => stair.enabled)) return;
+        !currentStairs.some(stair => stair.type === "down" && stair.enabled)) return;
     portalActivationAnnouncedLevels.add(stateId);
     renderer.playPortalActivationSound();
   }, PORTAL_ACTIVATION_SOUND_DELAY_MS);

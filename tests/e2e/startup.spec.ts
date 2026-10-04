@@ -441,7 +441,7 @@ test("sounds the portal warning only on the first floor of a run", async ({ page
   )).toEqual(["true", "false", "true", "false", "true", "false"]);
 });
 
-test("announces portal access once per level, including revisits and cancelled announcements", async ({ page }) => {
+test("announces down-portal access once per level, including revisits and cancelled announcements", async ({ page }) => {
   test.setTimeout(120_000);
   await page.addInitScript(() => {
     const floors: Array<string | undefined> = [];
@@ -487,6 +487,17 @@ test("announces portal access once per level, including revisits and cancelled a
   await nextFloor();
   await expect(game).toHaveAttribute("data-floor", "2");
   await expect(game).toHaveAttribute("data-portal-intro", "false");
+  const portals = await page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: {
+      stairs: () => Array<{ type: string; enabled: boolean }>;
+    } }).__webcrawlTest?.stairs() ?? []
+  );
+  expect(portals.find(portal => portal.type === "up")?.enabled).toBe(true);
+  const downPortals = portals.filter(portal => portal.type === "down");
+  expect(downPortals.length).toBeGreaterThan(0);
+  expect(downPortals.every(portal => !portal.enabled)).toBe(true);
+  // An available return portal must stay silent past the activation delay.
+  await page.waitForTimeout(1_200);
   expect(await announcements()).toEqual([]);
 
   await previousFloor();

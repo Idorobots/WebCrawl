@@ -1258,12 +1258,15 @@ The goal is to be able to generate a room with all its enemies that already incl
 - Player's critical damage chance - initially set to 0%, will be used in the future. When damage is applied to monsters/scenery check for critical damage chance and apply the regular bullet damage times 3.
 - Player's aim aid - initially set to 0 on desktop and 0.2 on mobile. It should be a parameter that "pulls" player's bullets towards the closest enemy (closest to the bullet). At zero it doesn't affect the bullet trajectory, at any non-zero value it should slightly curve the bullet towards the enemy.
 
-* Gameplay mechanics
+* DONE Gameplay mechanics
+:LOGBOOK:
+- State "DONE"       from              [2026-10-04 Sun 15:37]
+:END:
 - "Up" portals should always be available, even if the boss monster is not defeated.
+- Use separate monster appearance propabilities depending on the floor - mostly melee scouts and heavies on the first floor, progressively more common harder enemies on subsequent floors.
 * Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
-- Use separate monster appearance propabilities depending on the floor - mostly melee scouts and heavies on the first floor, progressively more common harder enemies on subsequent floors.
 
 * Minimap overhaul
 - Minimap should be circular
