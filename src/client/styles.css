@@ -1989,7 +1989,7 @@ body {
 #mobileControls {
   position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 50; /* Keep touch controls above content and portal previews. */
   display: none;
   pointer-events: none;
 }

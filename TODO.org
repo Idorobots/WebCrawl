@@ -1238,7 +1238,10 @@ The goal is to be able to generate a room with all its enemies that already incl
 - State "DONE"       from              [2026-10-03 Sat 17:43]
 :END:
 - Configuration settings on the UI - let the player disable dynamic bullet lights & damage lights. It should be stored in the local storage. The UI form should be accessible via a "cog" button on the "login screen".
-* UX improvements, again
+* DONE UX improvements, again
+:LOGBOOK:
+- State "DONE"       from              [2026-10-04 Sun 15:06]
+:END:
 - Player inputs are laggy - there's a noticable delay from first movement input to the player character actually moving. Can we shorten that delay somehow? Similarly, for shooting it behaves the same, let's shorten that delay as well. This affects both mobile and full platforms.
 - On mobile, the link preview box covers the input sticks. Input sticks should be rendered on top always.
 
@@ -1374,7 +1377,7 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 * CEOs
 - Samario CEO of ClosedNS - a techbro tycoon
 - Zuckerborg Mark1 CEO of DefaceBooks - a not quite human android
-- E-LON CEO of A-AI - a martian alien
+- E-LON CEO of Y-AI - three martian aliens larping as a CEO
 * Player characters
 - Astronaut
 - Spider-bot
