@@ -1360,9 +1360,16 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 * Vending machines
 - Use RAM sticks to purchase medkits, ammo and energy.
 * CEOs
-- Samario CEO of ClosedNS
-- Zuckerborg Mark1 CEO of DefaceBooks
-- E-LON CEO of A-AI
+- Samario CEO of ClosedNS - a techbro tycoon
+- Zuckerborg Mark1 CEO of DefaceBooks - a not quite human android
+- E-LON CEO of A-AI - a martian alien
+
+* CANCELLED Visual bugs
+:LOGBOOK:
+- State "CANCELLED"  from              [2026-10-04 Sun 11:08] \\
+  Could not reproduce.
+:END:
+- Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
 
 * Visual bugs
 - Monster shadows are flickering a bit when they move.
@@ -1373,7 +1380,6 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Generic robot debris look weird, should only use dedicated robot debris
 - Some scenery items have a very weird choice of debris
 - Asset sizes are arbitrary, need to be tuned
-- Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations

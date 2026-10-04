@@ -1300,7 +1300,7 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
       item.spawnAnimationStartedAt = undefined;
     }
     saveObstacleState(item);
-    renderer.spawnEffect(item.visual.animations?.destroy, item.x, item.y, item.size);
+    renderer.spawnExplosion(item.visual.animations?.destroy, item.x, item.y, item.size);
     renderer.playExplosionSound();
     renderDecorations();
     if (currentPageUrl) {
@@ -1539,7 +1539,7 @@ function updateMonsterSpawners(timestamp: number): void {
       delete spawner.pendingSpawnAt;
       saveObstacleState(spawner);
       saveMonsterState(monster);
-      renderer.spawnEffect(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
+      renderer.spawnExplosion(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
       spawned = true;
       continue;
     }
@@ -1690,7 +1690,7 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
   if (monster.hp <= 0) {
     monster.dead = true;
     monster.deathAnimating = true;
-    renderer.spawnEffect(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
+    renderer.spawnExplosion(monster.visual.effects?.destroy, monster.x, monster.y, monster.size);
     renderer.playExplosionSound();
     runStats.kills += 1;
 

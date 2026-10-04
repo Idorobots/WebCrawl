@@ -2685,6 +2685,12 @@ export class PhaserRenderer {
     return PLAYER_SPEC.visual.directions.down!.normal;
   }
 
+  spawnExplosion(clip: SpriteClip | undefined, x: number, y: number, objectSize: number): void {
+    if (!clip) return;
+    // The burst and its light share the exploding object's current world-space size.
+    this.spawnEffect(clip, x, y, objectSize, { size: objectSize * clip.sizeScale });
+  }
+
   spawnEffect(
     clip: SpriteClip | undefined,
     x: number,
