@@ -1411,8 +1411,12 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - Generic robot debris look weird, should only use dedicated robot debris
 - Some scenery items have a very weird choice of debris
 - Asset sizes are arbitrary, need to be tuned
+* DONE Visual bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-10-04 Sun 20:03]
+:END:
+- Pickups are rendered on top of enemies. Pickups should be rendered on a lower layer, always appearing under monsters and the player.
 * Visual bugs
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
-- Pickups are rendered on top of enemies. Pickups should be rendered on a lower layer, always appearing under monsters and the player.

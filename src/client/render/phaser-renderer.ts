@@ -90,6 +90,7 @@ type StaticObject =
 const ROOM_FLOOR_DEPTH = -2;
 const CORRIDOR_FLOOR_DEPTH = -4;
 const CORRIDOR_MARKING_DEPTH = -1.75;
+const PICKUP_DEPTH = -1.6;
 const DEBRIS_DEPTH = -1.5;
 const Y_DEPTH_OFFSET = 4_000_000;
 const OVERHEAD_DEPTH = 8_000_000;
@@ -2015,7 +2016,7 @@ export class PhaserRenderer {
         const sprite = this.illuminate(scene.add.image(0, yOffset, textureKey(weaponAsset(item.weapon.kind)))
           .setDisplaySize(definition.size, definition.size)
           .setOrigin(visual.origin.x, visual.origin.y));
-        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(yDepth(item.y, 0.5)));
+        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(PICKUP_DEPTH));
         continue;
       }
       const definition = item.kind === "weapon" ? undefined : LOOT_DEFINITIONS[item.kind];
@@ -2027,11 +2028,11 @@ export class PhaserRenderer {
         this.playClip(sprite, clip, definition.size, {
           elapsedMs: performance.now() % (clip.frames.length * clip.frameDurationMs),
         });
-        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(yDepth(item.y, 0.5)));
+        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(PICKUP_DEPTH));
         continue;
       }
       const sprite = this.illuminate(scene.add.image(0, 0, textureKey(asset)).setDisplaySize(definition.size, definition.size));
-      this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(yDepth(item.y, 0.5)));
+      this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(PICKUP_DEPTH));
     }
     this.refreshLocalLightVisibility(true);
     this.renderDebugGeometry();
