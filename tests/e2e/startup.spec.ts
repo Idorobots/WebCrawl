@@ -797,7 +797,7 @@ test("restores the previous floor from its snapshot without re-fetching it", asy
   await expect(game).toHaveAttribute("data-floor", "2", { timeout: 10_000 });
 });
 
-test("spawns beside the up portal and enables it after clearing the floor", async ({ page }) => {
+test("spawns beside an enabled up portal and returns without clearing the floor", async ({ page }) => {
   test.setTimeout(90_000);
   await startGame(page);
   const game = page.locator("#gameCanvas");
@@ -833,20 +833,22 @@ test("spawns beside the up portal and enables it after clearing the floor", asyn
     y: Math.round(entryPortal.y + PORTAL_DEFINITION.spawnOffset.y),
   });
   expect(state.contacts).not.toContain(entryPortal.id);
-  expect(entryPortal.enabled).toBe(false);
-  const clearedUpPortal = await page.evaluate(() => {
-    const api = (window as Window & {
-      __webcrawlTest?: {
-        defeatAllMonsters: () => void;
-        stairs: () => Array<{ type: string; enabled: boolean }>;
-      };
-    }).__webcrawlTest;
-    api?.defeatAllMonsters();
-    return api?.stairs().find(stair => stair.type === "up")?.enabled;
-  });
-  expect(clearedUpPortal).toBe(true);
+  expect(entryPortal.enabled).toBe(true);
+  expect(state.stairs.some(stair => stair.type === "down" && !stair.enabled)).toBe(true);
   await page.waitForTimeout(500);
   await expect(game).toHaveAttribute("data-floor", "2");
+
+  await page.keyboard.down("ArrowUp");
+  try {
+    await expect(game).toHaveAttribute("data-floor", "1", { timeout: 10_000 });
+  } finally {
+    await page.keyboard.up("ArrowUp");
+  }
+  expect(await page.evaluate(() =>
+    (window as Window & { __webcrawlTest?: {
+      stairs: () => Array<{ type: string; enabled: boolean }>;
+    } }).__webcrawlTest?.stairs().find(stair => stair.type === "up")?.enabled
+  )).toBe(false);
 });
 
 test("previews portal URLs by proximity even before portals are active", async ({ page }) => {
@@ -885,7 +887,7 @@ test("previews portal URLs by proximity even before portals are active", async (
   );
   const up = secondFloorStairs.find(stair => stair.type === "up");
   if (!up) throw new Error("Expected an up portal on floor two");
-  expect(up.enabled).toBe(false);
+  expect(up.enabled).toBe(true);
   expect(up.url).toBe("https://example.com/start");
   await expect(previewUrl).toHaveText(up.url!);
   await expect(game).toHaveAttribute("data-floor", "2");

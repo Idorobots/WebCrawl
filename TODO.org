@@ -1259,9 +1259,11 @@ The goal is to be able to generate a room with all its enemies that already incl
 - Player's aim aid - initially set to 0 on desktop and 0.2 on mobile. It should be a parameter that "pulls" player's bullets towards the closest enemy (closest to the bullet). At zero it doesn't affect the bullet trajectory, at any non-zero value it should slightly curve the bullet towards the enemy.
 
 * Gameplay mechanics
+- "Up" portals should always be available, even if the boss monster is not defeated.
+* Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
-- "Up" portals should always be available, even if the boss monster is not defeated.
+- Use separate monster appearance propabilities depending on the floor - mostly melee scouts and heavies on the first floor, progressively more common harder enemies on subsequent floors.
 
 * Minimap overhaul
 - Minimap should be circular
@@ -1349,7 +1351,6 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Walkig shooter bullet range should be reduced.
 * Enemy rebalance continued
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
-- Use separate monster appearance propabilities depending on the floor - no sentries on floor 0, etc.
 - Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
 
 * Boss fights continued

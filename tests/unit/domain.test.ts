@@ -1104,9 +1104,9 @@ describe("portal entry", () => {
     expect(closestPortalWithUrl(portals, { x: 300, y: 100 }, 80)).toBeNull();
   });
 
-  it("requires the boss and every enemy from revealed rooms, but ignores unrevealed enemies", () => {
+  it("keeps return portals open while down portals require the boss and enemies from revealed rooms", () => {
     const down = { ...portal };
-    const up = { ...portal, id: "room-1::portal-up", type: "up" as const, url: "https://example.com/previous" };
+    const up = { ...portal, id: "room-1::portal-up", type: "up" as const, url: "https://example.com/previous", enabled: false };
     const firstFloorUp = { ...up, id: "room-0::portal-up", url: null };
     const stairs = [down, up, firstFloorUp];
     const monsters = [
@@ -1118,7 +1118,7 @@ describe("portal entry", () => {
     const revealed = new Set([0]);
 
     expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
-    expect(stairs.map(stair => stair.enabled)).toEqual([false, false, false]);
+    expect(stairs.map(stair => stair.enabled)).toEqual([false, true, false]);
     expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(false);
 
     monsters[1]!.dead = true; // The boss blocks even before its room is revealed.
@@ -1129,14 +1129,15 @@ describe("portal entry", () => {
 
     revealed.add(2);
     expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
-    expect(stairs.map(stair => stair.enabled)).toEqual([false, false, false]);
+    expect(stairs.map(stair => stair.enabled)).toEqual([false, true, false]);
     monsters[2]!.dead = true;
     expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
     expect(stairs.map(stair => stair.enabled)).toEqual([true, true, false]);
 
-    // Reinforcements from a revealed room also relock portals.
+    // Reinforcements relock down portals, but cannot prevent returning.
     monsters.push({ dead: false, spawnRoomId: 2, roomId: 3, bossKind: undefined });
     expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
+    expect(stairs.map(stair => stair.enabled)).toEqual([false, true, false]);
     monsters[4]!.dead = true;
     expect(updatePortalAvailability(stairs, monsters, revealed)).toBe(true);
     expect(stairs.map(stair => stair.enabled)).toEqual([true, true, false]);

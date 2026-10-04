@@ -55,7 +55,7 @@ export function updatePortalAvailability(
   const floorCleared = !hasBlockingPortalMonsters(monsters, revealedRooms);
   let changed = false;
   for (const portal of portals) {
-    const enabled = floorCleared && portal.url !== null;
+    const enabled = portal.url !== null && (portal.type === "up" || floorCleared);
     if (portal.enabled === enabled) continue;
     portal.enabled = enabled;
     changed = true;
