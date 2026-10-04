@@ -1376,11 +1376,11 @@ Look empty, but monsters lurk in large scenery crates and burst out of it a few 
 - When entering a boss arena, camera jumps up immediately, while exiting it animates nicely. It should animate nicely both ways.
 - Healthbars on various scenery items are misaligned
 - Damage effect should be tied to the size of the bullet that caused it.
-* Visual bugs
+- Explosion effect should be tied to the size of the exploding object.
 - Generic robot debris look weird, should only use dedicated robot debris
 - Some scenery items have a very weird choice of debris
 - Asset sizes are arbitrary, need to be tuned
+* Visual bugs
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
-- Explosion effect should be tied to the size of the exploding object.

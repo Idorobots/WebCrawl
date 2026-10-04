@@ -50,7 +50,7 @@ const explosionEffect = (sizeScale = 0.8): SpriteClip =>
   clip(EXPLOSION_FRAMES, sizeScale, { x: 0.5, y: 0.5 }, 1_000 / 12, {
     light: { color: 0xffa34d, radiusScale: 1.15, intensity: 1.5 },
   });
-const monsterDebris = (assets: readonly string[], sizeScale: number): readonly SpriteClip[] =>
+const monsterDebris = (assets: readonly string[], sizeScale: number = 1): readonly SpriteClip[] =>
   assets.map(asset => clip([asset], sizeScale));
 
 function monsterDirections(frames: MonsterFrameSet): ActorVisualDefinition["directions"] {
@@ -184,7 +184,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.heavy),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.heavyWreck, DEBRIS_ASSETS.heavyParts, DEBRIS_ASSETS.robotLegs, DEBRIS_ASSETS.servoMotors], 0.72),
+      destroyed: monsterDebris([DEBRIS_ASSETS.heavyWreck, DEBRIS_ASSETS.heavyParts], 0.9),
     },
     attackPattern: "melee",
     fast: false,
@@ -220,7 +220,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.scout),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.scoutWreck, DEBRIS_ASSETS.scoutParts, DEBRIS_ASSETS.spiderChassis], 0.72),
+      destroyed: monsterDebris([DEBRIS_ASSETS.scoutWreck, DEBRIS_ASSETS.scoutParts]),
     },
     attackPattern: "melee",
     fast: true,
@@ -256,7 +256,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.scout),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.scoutWreck, DEBRIS_ASSETS.scoutParts, DEBRIS_ASSETS.spiderChassis], 0.72),
+      destroyed: monsterDebris([DEBRIS_ASSETS.scoutWreck, DEBRIS_ASSETS.scoutParts]),
     },
     attackPattern: "single",
     fast: true,
@@ -292,7 +292,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.heavy),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.heavyWreck, DEBRIS_ASSETS.heavyParts, DEBRIS_ASSETS.robotLegs, DEBRIS_ASSETS.servoMotors], 0.72),
+      destroyed: monsterDebris([DEBRIS_ASSETS.heavyWreck, DEBRIS_ASSETS.heavyParts], 0.9),
     },
     attackPattern: "single",
     fast: false,
@@ -328,7 +328,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.sentryBallistic),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.sentryBallisticWreck, DEBRIS_ASSETS.sentryBallisticParts, DEBRIS_ASSETS.turretHousing], 0.72),
+      destroyed: monsterDebris([DEBRIS_ASSETS.sentryBallisticWreck, DEBRIS_ASSETS.sentryBallisticParts]),
     },
     attackPattern: "single",
     fast: false,
@@ -365,7 +365,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.sentryTwin),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.sentryTwinWreck, DEBRIS_ASSETS.sentryTwinParts, DEBRIS_ASSETS.turretHousing], 0.72),
+      destroyed: monsterDebris([DEBRIS_ASSETS.sentryTwinWreck, DEBRIS_ASSETS.sentryTwinParts]),
     },
     attackPattern: "double",
     fast: false,
@@ -401,7 +401,7 @@ export const REGULAR_MONSTER_DEFINITIONS: Record<RegularMonsterKind, MonsterDefi
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.sentryEnergy),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.sentryEnergyWreck, DEBRIS_ASSETS.sentryEnergyParts, DEBRIS_ASSETS.purpleEnergyCoil], 0.72),
+      destroyed: monsterDebris([DEBRIS_ASSETS.sentryEnergyWreck, DEBRIS_ASSETS.sentryEnergyParts]),
     },
     attackPattern: "scatter",
     fast: false,
@@ -480,7 +480,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.bossArc),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.bossArcWreck, DEBRIS_ASSETS.bossArcParts], 0.5),
+      destroyed: monsterDebris([DEBRIS_ASSETS.bossArcWreck, DEBRIS_ASSETS.bossArcParts, DEBRIS_ASSETS.purpleEnergyCoil]),
     },
     label: "DEEPSEEK",
     color: 0xd975ff,
@@ -513,7 +513,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.bossLaser),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.bossLaserWreck, DEBRIS_ASSETS.bossLaserParts], 0.5),
+      destroyed: monsterDebris([DEBRIS_ASSETS.bossLaserWreck, DEBRIS_ASSETS.bossLaserParts]),
     },
     label: "QWEN",
     color: 0x55e3cf,
@@ -546,7 +546,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.bossFortress),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.bossFortressWreck, DEBRIS_ASSETS.bossFortressParts], 0.45),
+      destroyed: monsterDebris([DEBRIS_ASSETS.bossFortressWreck, DEBRIS_ASSETS.bossFortressParts]),
     },
     label: "GLM",
     color: 0xff8b4d,
@@ -579,7 +579,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.bossMissile),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.bossMissileWreck, DEBRIS_ASSETS.bossMissileParts, DEBRIS_ASSETS.missilePod], 0.5),
+      destroyed: monsterDebris([DEBRIS_ASSETS.bossMissileWreck, DEBRIS_ASSETS.bossMissileParts]),
     },
     label: "KIMI",
     color: 0x5fe0c0,
@@ -612,7 +612,7 @@ export const BOSS_DEFINITIONS: Record<BossKind, BossDefinition> = {
     visual: {
       directions: monsterDirections(MONSTER_FRAMES.bossSiege),
       effects: monsterEffects,
-      destroyed: monsterDebris([DEBRIS_ASSETS.bossSiegeWreck, DEBRIS_ASSETS.bossSiegeParts], 0.5),
+      destroyed: monsterDebris([DEBRIS_ASSETS.bossSiegeWreck, DEBRIS_ASSETS.bossSiegeParts]),
     },
     label: "Hy4",
     color: 0xffd166,
@@ -684,8 +684,27 @@ const plantDebris = [
   DEBRIS_ASSETS.plantMagentaPot,
   DEBRIS_ASSETS.plantDryLeaves,
   DEBRIS_ASSETS.plantRoots,
-] as const;
-const circuitDebris = [DEBRIS_ASSETS.genericCircuit, DEBRIS_ASSETS.genericMetal] as const;
+].map(asset => clip([asset]));
+const circuitDebris = [
+  DEBRIS_ASSETS.genericCircuit,
+  DEBRIS_ASSETS.burntCircuits
+].map(asset => clip([asset]));
+const deviceDebris = [
+  DEBRIS_ASSETS.genericMetal,
+  DEBRIS_ASSETS.electronicsCabinet
+].map(asset => clip([asset]));
+const robotDebris = [
+  DEBRIS_ASSETS.genericCircuit,
+  DEBRIS_ASSETS.burntCircuits,
+  DEBRIS_ASSETS.genericMetal,
+  DEBRIS_ASSETS.robotLegs,
+  DEBRIS_ASSETS.robotTorso,
+  DEBRIS_ASSETS.spiderChassis,
+  DEBRIS_ASSETS.robotLimbs
+].map(asset => clip([asset]));
+const genericDebris = [
+  DEBRIS_ASSETS.genericMetal
+].map(asset => clip([asset], 0.8));
 const plantBreak = clip(EFFECT_FRAMES.plantBreak, 1.45, { x: 0.5, y: 0.5 }, 100, {
   light: { color: 0x65e6c4, radiusScale: 0.8, intensity: 0.8 },
 });
@@ -694,8 +713,6 @@ const barrelExplosion = clip(BARREL_EXPLOSION_FRAMES, 2.8, { x: 0.5, y: 0.84375 
 });
 const objectExplosion = explosionEffect(1.5);
 const sceneryDamage = damageEffect(0.55);
-const plantDebrisClips = plantDebris.map(asset => clip([asset], 1.18));
-const circuitDebrisClips = circuitDebris.map(asset => clip([asset], 1.18));
 
 export const DECORATION_DEFINITIONS = {
   plantViolet: {
@@ -711,7 +728,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.3157894736842105),
     visual: {
       normal: clip([SCENERY_ASSETS.plantViolet]),
-      destroyed: plantDebrisClips,
+      destroyed: plantDebris,
       animations: { damage: sceneryDamage, destroy: plantBreak },
     },
   },
@@ -728,7 +745,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.25),
     visual: {
       normal: clip([SCENERY_ASSETS.plantGreen]),
-      destroyed: plantDebrisClips,
+      destroyed: plantDebris,
       animations: { damage: sceneryDamage, destroy: plantBreak },
     },
   },
@@ -745,7 +762,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.3157894736842105),
     visual: {
       normal: clip([SCENERY_ASSETS.plantMagenta]),
-      destroyed: plantDebrisClips,
+      destroyed: plantDebris,
       animations: { damage: sceneryDamage, destroy: plantBreak },
     },
   },
@@ -762,7 +779,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.3125),
     visual: {
       normal: clip([SCENERY_ASSETS.plantTeal]),
-      destroyed: plantDebrisClips,
+      destroyed: plantDebris,
       animations: { damage: sceneryDamage, destroy: plantBreak },
     },
   },
@@ -779,7 +796,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.3125),
     visual: {
       normal: clip([SCENERY_ASSETS.plantAmber]),
-      destroyed: plantDebrisClips,
+      destroyed: plantDebris,
       animations: { damage: sceneryDamage, destroy: plantBreak },
     },
   },
@@ -796,7 +813,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.25, y: 0.1 },
     visual: {
       normal: clip([SCENERY_ASSETS.planterDivider]),
-      destroyed: plantDebrisClips,
+      destroyed: plantDebris,
       animations: { damage: sceneryDamage, destroy: plantBreak },
     },
   },
@@ -949,7 +966,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.1935483870967742),
     visual: {
       normal: clip([SCENERY_ASSETS.specimenTank]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -966,7 +983,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.4444444444444444, y: 0.18518518518518517 },
     visual: {
       normal: clip([SCENERY_ASSETS.researchBench]),
-      destroyed: circuitDebrisClips,
+      destroyed: circuitDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -983,7 +1000,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3870967741935484, y: 0.16129032258064516 },
     visual: {
       normal: clip([SCENERY_ASSETS.reagentRack]),
-      destroyed: circuitDebrisClips,
+      destroyed: circuitDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1000,7 +1017,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.2413793103448276),
     visual: {
       normal: clip([SCENERY_ASSETS.refrigerator]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1017,7 +1034,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.27586206896551724, y: 0.1724137931034483 },
     visual: {
       normal: clip([SCENERY_ASSETS.roboticManipulator]),
-      destroyed: circuitDebrisClips,
+      destroyed: [...deviceDebris, ...circuitDebris],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1034,7 +1051,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.2413793103448276, y: 0.1724137931034483 },
     visual: {
       normal: clip([SCENERY_ASSETS.medicalCabinet]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1102,7 +1119,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.16666666666666666),
     visual: {
       normal: clip([SCENERY_ASSETS.ivStand]),
-      destroyed: circuitDebrisClips,
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1119,7 +1136,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.36363636363636365, y: 0.22727272727272727 },
     visual: {
       normal: clip([SCENERY_ASSETS.surgicalCart]),
-      destroyed: circuitDebrisClips,
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1153,7 +1170,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.2413793103448276),
     visual: {
       normal: clip([SCENERY_ASSETS.decontaminationShower]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1170,7 +1187,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.36363636363636365, y: 0.22727272727272727 },
     visual: {
       normal: clip([SCENERY_ASSETS.supplyTrolley]),
-      destroyed: circuitDebrisClips,
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1187,7 +1204,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3157894736842105, y: 0.15789473684210525 },
     visual: {
       normal: clip([SCENERY_ASSETS.pipeValve]),
-      destroyed: circuitDebrisClips,
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1204,7 +1221,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.42857142857142855),
     visual: {
       normal: clip([SCENERY_ASSETS.pipeElbow]),
-      destroyed: circuitDebrisClips,
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1221,7 +1238,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.42857142857142855, y: 0.35714285714285715 },
     visual: {
       normal: clip([SCENERY_ASSETS.coiledCables]),
-      destroyed: circuitDebrisClips,
+      destroyed: circuitDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1289,7 +1306,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.35, y: 0.25 },
     visual: {
       normal: clip([SCENERY_ASSETS.operatorTerminal]),
-      destroyed: circuitDebrisClips,
+      destroyed: [clip([DEBRIS_ASSETS.cyanMonitor], 1.18)],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1306,7 +1323,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.1935483870967742),
     visual: {
       normal: clip([SCENERY_ASSETS.communicationsCabinet]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1323,7 +1340,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.32, y: 0.24 },
     visual: {
       normal: clip([SCENERY_ASSETS.hologramTable]),
-      destroyed: circuitDebrisClips,
+      destroyed: [clip([DEBRIS_ASSETS.cyanMonitor], 1.18)],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1340,7 +1357,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.2916666666666667, y: 0.125 },
     visual: {
       normal: clip([SCENERY_ASSETS.conduitJunction]),
-      destroyed: circuitDebrisClips,
+      destroyed: circuitDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1357,7 +1374,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3333333333333333, y: 0.25 },
     visual: {
       normal: clip([SCENERY_ASSETS.powerCabinet]),
-      destroyed: [clip([DEBRIS_ASSETS.electronicsCabinet], 1.18)],
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1374,7 +1391,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.2916666666666667, y: 0.125 },
     visual: {
       normal: clip([SCENERY_ASSETS.floorCables]),
-      destroyed: circuitDebrisClips,
+      destroyed: circuitDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1391,7 +1408,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.2222222222222222, y: 0.16666666666666666 },
     visual: {
       normal: clip([SCENERY_ASSETS.reactorPylon]),
-      destroyed: circuitDebrisClips,
+      destroyed: [clip([DEBRIS_ASSETS.purpleEnergyCoil], 1.18)],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1408,7 +1425,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.28846153846153844, y: 0.16025641025641027 },
     visual: {
       normal: clip([SCENERY_ASSETS.coolantPump]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1442,7 +1459,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3225806451612903, y: 0.0967741935483871 },
     visual: {
       normal: clip([SCENERY_ASSETS.barricade]),
-      destroyed: circuitDebrisClips,
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1459,7 +1476,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3225806451612903, y: 0.0967741935483871 },
     visual: {
       normal: clip([SCENERY_ASSETS.maintenanceRack]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1468,7 +1485,7 @@ export const DECORATION_DEFINITIONS = {
     hp: 13,
     kind: "machinery",
     size: 150,
-    destructible: true,
+    destructible: false,
     obstacle: true,
     visualOffset: { x: 0, y: -0.3 },
     hitboxOffset: { x: 0, y: -0.26666666666666666 },
@@ -1476,7 +1493,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.26666666666666666, y: 0.13333333333333333 },
     visual: {
       normal: clip([SCENERY_ASSETS.hydraulicSupport]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1493,7 +1510,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3333333333333333, y: 0.16666666666666666 },
     visual: {
       normal: clip([SCENERY_ASSETS.pipeManifold]),
-      destroyed: circuitDebrisClips,
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1527,7 +1544,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3611111111111111, y: 0.1388888888888889 },
     visual: {
       normal: clip([SCENERY_ASSETS.batteryBank]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1561,7 +1578,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.28, y: 0.1 },
     visual: {
       normal: clip([SCENERY_ASSETS.fuelPumpSkid]),
-      destroyed: [DEBRIS_ASSETS.turbine, DEBRIS_ASSETS.greenChemicalBarrel, DEBRIS_ASSETS.orangeFuelBarrel].map(asset => clip([asset], 1.18)),
+      destroyed: [DEBRIS_ASSETS.turbine, DEBRIS_ASSETS.greenChemicalBarrel, DEBRIS_ASSETS.orangeFuelBarrel].map(asset => clip([asset])),
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1595,7 +1612,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.36363636363636365, y: 0.22727272727272727 },
     visual: {
       normal: clip([SCENERY_ASSETS.engineToolCart]),
-      destroyed: circuitDebrisClips,
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1612,7 +1629,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.35, y: 0.175 },
     visual: {
       normal: clip([SCENERY_ASSETS.pressureGauge]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1646,7 +1663,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.375, y: 0.15625 },
     visual: {
       normal: clip([SCENERY_ASSETS.ventilationBlower]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1663,7 +1680,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.21875, y: 0.15625 },
     visual: {
       normal: clip([SCENERY_ASSETS.heatExchanger]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1680,7 +1697,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.3),
     visual: {
       normal: clip([SCENERY_ASSETS.evacuationKiosk]),
-      destroyed: circuitDebrisClips,
+      destroyed: circuitDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1731,7 +1748,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.18181818181818182, y: 0.11363636363636363 },
     visual: {
       normal: clip([SCENERY_ASSETS.openEscapeCapsule]),
-      destroyed: [clip([DEBRIS_ASSETS.escapePod], 1.18)],
+      destroyed: [clip([DEBRIS_ASSETS.escapePod])],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1748,7 +1765,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.2, y: 0.125 },
     visual: {
       normal: clip([SCENERY_ASSETS.sealedEscapeCapsule]),
-      destroyed: [clip([DEBRIS_ASSETS.escapePod], 1.18)],
+      destroyed: [clip([DEBRIS_ASSETS.escapePod])],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1765,7 +1782,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.15384615384615385, y: 0.15384615384615385 },
     visual: {
       normal: clip([SCENERY_ASSETS.emergencyBeacon]),
-      destroyed: circuitDebrisClips,
+      destroyed: circuitDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1782,7 +1799,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.4, y: 0.15 },
     visual: {
       normal: clip([SCENERY_ASSETS.lifeboatPod]),
-      destroyed: [clip([DEBRIS_ASSETS.escapePod], 1.18)],
+      destroyed: [clip([DEBRIS_ASSETS.escapePod])],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1799,7 +1816,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.35294117647058826),
     visual: {
       normal: clip([SCENERY_ASSETS.survivalCase]),
-      destroyed: circuitDebrisClips,
+      destroyed: [clip([DEBRIS_ASSETS.crateCargo])],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1816,7 +1833,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3225806451612903, y: 0.22580645161290322 },
     visual: {
       normal: clip([SCENERY_ASSETS.boardingSteps]),
-      destroyed: [clip([DEBRIS_ASSETS.pallet], 1.18)],
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1833,7 +1850,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3225806451612903, y: 0.0967741935483871 },
     visual: {
       normal: clip([SCENERY_ASSETS.cargoPallet]),
-      destroyed: [clip([DEBRIS_ASSETS.pallet], 1.18)],
+      destroyed: [clip([DEBRIS_ASSETS.pallet])],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1867,7 +1884,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.4117647058823529, y: 0.11764705882352941 },
     visual: {
       normal: clip([SCENERY_ASSETS.loadingGantry]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1901,7 +1918,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.2962962962962963, y: 0.18518518518518517 },
     visual: {
       normal: clip([SCENERY_ASSETS.toolLocker]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1918,7 +1935,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.3333333333333333, y: 0.23809523809523808 },
     visual: {
       normal: clip([SCENERY_ASSETS.weighingPlatform]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1952,7 +1969,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.4166666666666667, y: 0.125 },
     visual: {
       normal: clip([SCENERY_ASSETS.palletJack]),
-      destroyed: circuitDebrisClips,
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1969,7 +1986,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.4166666666666667, y: 0.16666666666666666 },
     visual: {
       normal: clip([SCENERY_ASSETS.luggageStack]),
-      destroyed: circuitDebrisClips,
+      destroyed: [clip([DEBRIS_ASSETS.storageShelf])],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -1986,7 +2003,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.4, y: 0.13333333333333333 },
     visual: {
       normal: clip([SCENERY_ASSETS.entertainmentScreen]),
-      destroyed: circuitDebrisClips,
+      destroyed: [...deviceDebris, ...circuitDebris],
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -2020,7 +2037,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: circle(0.21052631578947367),
     visual: {
       normal: clip([SCENERY_ASSETS.metalChair]),
-      destroyed: [clip([DEBRIS_ASSETS.kitchenette], 1.18)],
+      destroyed: genericDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -2037,7 +2054,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.375, y: 0.125 },
     visual: {
       normal: clip([SCENERY_ASSETS.showerSink]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -2054,7 +2071,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.20833333333333334, y: 0.16666666666666666 },
     visual: {
       normal: clip([SCENERY_ASSETS.personalLocker]),
-      destroyed: circuitDebrisClips,
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -2105,7 +2122,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.34615384615384615, y: 0.11538461538461539 },
     visual: {
       normal: clip([SCENERY_ASSETS.messTable]),
-      destroyed: [clip([DEBRIS_ASSETS.kitchenette], 1.18)],
+      destroyed: deviceDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -2122,7 +2139,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.4166666666666667, y: 0.125 },
     visual: {
       normal: clip([SCENERY_ASSETS.cableTrunk]),
-      destroyed: circuitDebrisClips,
+      destroyed: circuitDebris,
       animations: { damage: sceneryDamage, destroy: objectExplosion },
     },
   },
@@ -2139,7 +2156,7 @@ export const DECORATION_DEFINITIONS = {
     footprintRadii: { x: 0.1951219512195122, y: 0.14634146341463414 },
     visual: {
       normal: clip([SCENERY_ASSETS.spawnerDormant]),
-      destroyed: circuitDebris.map(asset => clip([asset], 0.68)),
+      destroyed: genericDebris,
       animations: {
         damage: damageEffect(0.4),
         destroy: explosionEffect(0.72),
@@ -2163,13 +2180,13 @@ export const DECORATION_DEFINITIONS = {
     size: 135,
     destructible: true,
     obstacle: false,
-    visualOffset: { x: 0, y: -0.25925925925925924 },
+    visualOffset: { x: 0, y: -0.3 },
     hitboxOffset: { x: 0, y: 0 },
     hitboxRadii: { x: 0.18518518518518517, y: 0.14814814814814814 },
     footprintRadii: { x: 0.18518518518518517, y: 0.14814814814814814 },
     visual: {
       normal: clip([SCENERY_ASSETS.contentBrowserOff]),
-      destroyed: circuitDebris.map(asset => clip([asset], 0.8)),
+      destroyed: deviceDebris,
       animations: {
         damage: damageEffect(0.4),
         destroy: explosionEffect(0.72),
@@ -2236,6 +2253,22 @@ export const OBSTACLE_DEFINITIONS: readonly DecorationDefinition[] = Object.valu
 export const SCENERY_DEFINITIONS: readonly DecorationDefinition[] = [
   DECORATION_DEFINITIONS.debrisCircuit,
   DECORATION_DEFINITIONS.debrisMetal,
+  ...robotDebris.map(debris => ({
+    definitionId: "debris-robot",
+    hp: 1,
+    kind: "debris",
+    size: 90,
+    destructible: false,
+    obstacle: false,
+    visualOffset: { x: 0, y: -0.2222222222222222 },
+    hitboxOffset: { x: 0, y: -0.2222222222222222 },
+    hitboxRadii: circle(0.2222222222222222),
+    footprintRadii: circle(0.2222222222222222),
+    visual: {
+      normal: debris,
+      destroyed: [],
+    },
+  }))
 ];
 
 export type RoomSceneryTheme = "lab" | "control" | "arena" | "medical" | "engine" | "escape" | "storage" | "living";
