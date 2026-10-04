@@ -44,6 +44,90 @@ test("centers the flashlight on the player before any input", async ({ page }) =
   }).toBeLessThanOrEqual(1);
 });
 
+for (const aim of ["initial facing", "released aim stick"] as const) {
+  test(`Capture follows ${aim} and keeps the camera on the avatar`, async ({ page }) => {
+    await startMobileGame(page);
+
+    if (aim === "released aim stick") {
+      await page.evaluate(() => {
+        // Leave a previous viewport touch to the left, then face right with
+        // the aim stick. Synthetic touches deliberately omit pointerleave.
+        const viewport = document.querySelector<HTMLElement>("#gameViewport")!;
+        const bounds = viewport.getBoundingClientRect();
+        const touch = { bubbles: true, pointerType: "touch", pointerId: 1, button: 0,
+          clientX: bounds.left + bounds.width * 0.25, clientY: bounds.top + bounds.height / 2 };
+        viewport.dispatchEvent(new PointerEvent("pointerdown", touch));
+        viewport.dispatchEvent(new PointerEvent("pointerup", touch));
+
+        const stick = document.querySelector<HTMLElement>("#aimStick")!;
+        const rect = stick.getBoundingClientRect();
+        const capture = stick.setPointerCapture;
+        stick.setPointerCapture = () => {}; // Synthetic pointers cannot be captured.
+        try {
+          const event = { bubbles: true, pointerType: "touch", pointerId: 2, button: 0,
+            clientX: rect.left + rect.width / 2 + 40, clientY: rect.top + rect.height / 2 };
+          stick.dispatchEvent(new PointerEvent("pointerdown", event));
+          stick.dispatchEvent(new PointerEvent("pointerup", event));
+        } finally {
+          stick.setPointerCapture = capture;
+        }
+      });
+    }
+
+    const result = await page.evaluate(async () => {
+      const api = (window as Window & { __webcrawlTest?: {
+        grantEnergy: (count: number) => void;
+        setPlayerInvulnerable: (enabled: boolean) => void;
+        playerFacing: () => { x: number; y: number };
+        camera: () => { x: number; y: number } | null;
+        dashing: () => boolean;
+      } }).__webcrawlTest!;
+      const game = document.querySelector<HTMLElement>("#gameCanvas")!;
+      const position = () => ({ x: Number(game.dataset.playerX), y: Number(game.dataset.playerY) });
+      const before = position();
+      const facing = api.playerFacing();
+      const cameraBefore = api.camera()!;
+      api.setPlayerInvulnerable(true);
+      api.grantEnergy(5);
+      document.querySelector<HTMLButtonElement>("#captureButton")!.click();
+      const started = api.dashing();
+      const samples: Array<{ player: { x: number; y: number }; camera: { x: number; y: number } }> = [];
+      await new Promise<void>(resolve => {
+        const sample = () => {
+          if (!api.dashing()) return resolve();
+          samples.push({ player: position(), camera: api.camera()! });
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
+      return { before, facing, cameraBefore, started, samples, after: position(), finalFacing: api.playerFacing() };
+    });
+
+    expect(result.started).toBe(true);
+    expect(result.facing.x).toBeCloseTo(aim === "initial facing" ? 0 : 1, 5);
+    expect(result.facing.y).toBeCloseTo(aim === "initial facing" ? -1 : 0, 5);
+    const dx = result.after.x - result.before.x;
+    const dy = result.after.y - result.before.y;
+    expect(dx * result.facing.x + dy * result.facing.y).toBeGreaterThan(10);
+    expect(Math.abs(dx * result.facing.y - dy * result.facing.x)).toBeLessThan(2);
+    expect(result.finalFacing.x).toBeCloseTo(result.facing.x, 5);
+    expect(result.finalFacing.y).toBeCloseTo(result.facing.y, 5);
+    expect(result.samples.some(sample =>
+      (sample.camera.x - result.cameraBefore.x) * result.facing.x +
+      (sample.camera.y - result.cameraBefore.y) * result.facing.y > 5
+    )).toBe(true);
+
+    // No movement or further aim input is needed to finish centering.
+    await expect.poll(() => page.evaluate(() => {
+      const camera = (window as Window & { __webcrawlTest?: {
+        camera: () => { x: number; y: number } | null;
+      } }).__webcrawlTest!.camera()!;
+      const game = document.querySelector<HTMLElement>("#gameCanvas")!;
+      return Math.hypot(camera.x - Number(game.dataset.playerX), camera.y - Number(game.dataset.playerY));
+    })).toBeLessThan(2);
+  });
+}
+
 test("auto-scrolls the prompt body to follow the typing", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#welcomeScreen")).toBeVisible({ timeout: 15_000 });

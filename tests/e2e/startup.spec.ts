@@ -733,8 +733,8 @@ test("charges energy and launches an invulnerable energy dash with right click",
   }).toBe("false");
   await expect.poll(async () => {
     const position = await playerPosition(page);
-    return position.x !== before.x || position.y !== before.y;
-  }, { timeout: 5_000, intervals: [50] }).toBe(true);
+    return position.x - before.x;
+  }, { timeout: 5_000, intervals: [50] }).toBeGreaterThan(10);
   await expect(page.locator("#energyLootCount")).toHaveText("0");
   await expect(game).toHaveAttribute("data-energy", "0");
 });

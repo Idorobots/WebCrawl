@@ -637,7 +637,7 @@ function updateCurrentRoom(): void {
 }
 
 function updateCameraForPlayer(immediate = false): void {
-  if (immediate) renderer.setCameraTarget(player, true);
+  if (immediate || mobileLayoutQuery.matches) renderer.setCameraTarget(player, immediate);
   renderer.setCameraRoom(roomContainingPoint(player.x, player.y), immediate);
 }
 
@@ -3194,9 +3194,26 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
 }
 
 function startEnergyDash(clientX: number, clientY: number): void {
-  const target = renderer.worldPointAt(clientX, clientY);
+  const target = mobileLayoutQuery.matches
+    ? playerFacingTarget()
+    : renderer.worldPointAt(clientX, clientY);
   if (!target) return;
   startEnergyDashTowards(target);
+}
+
+function playerFacingTarget(): Point {
+  const center = playerCollisionCenter();
+  return {
+    x: center.x + playerFacing.x * 120,
+    y: center.y + playerFacing.y * 120,
+  };
+}
+
+function energyDashAimTarget(): Point | null {
+  if (mobileLayoutQuery.matches) return playerFacingTarget();
+  return pointerInViewport && pointerClientPosition
+    ? renderer.worldPointAt(pointerClientPosition.x, pointerClientPosition.y)
+    : null;
 }
 
 function startEnergyDashTowards(target: Point): void {
@@ -3263,10 +3280,7 @@ function updateEnergyDash(dt: number): void {
   const dash = energyDash;
   if (!dash) return;
 
-  const target = touchAimActive ? touchAimCursor
-    : pointerInViewport && pointerClientPosition
-      ? renderer.worldPointAt(pointerClientPosition.x, pointerClientPosition.y)
-      : null;
+  const target = energyDashAimTarget();
   if (target) {
     const direction = steerDashDirection(
       { x: dash.dirX, y: dash.dirY },
@@ -3305,6 +3319,7 @@ function updateEnergyDash(dt: number): void {
 
   applyEnergyDashDamage();
 
+  playerAimDirty = true;
   updatePlayerVisual();
   revealRoomsFromCorridor(player.x, player.y);
   updateCurrentRoom();
@@ -3490,7 +3505,7 @@ window.addEventListener("keyup", event => {
 function applyAimTarget(target: Point): void {
   renderer.setFlashlightTarget(target);
   const center = actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset);
-  renderer.setCameraTarget({
+  renderer.setCameraTarget(mobileLayoutQuery.matches ? player : {
     x: player.x + (target.x - player.x) / 3,
     y: player.y + (target.y - player.y) / 3,
   });
@@ -3647,10 +3662,20 @@ gameViewport.addEventListener("pointerleave", () => {
 
 window.addEventListener("pointerup", event => {
   if (event.button === 0) primaryPointerDown = false;
+  if (mobileLayoutQuery.matches && event.pointerType !== "mouse") {
+    pointerInViewport = false;
+    pointerClientPosition = null;
+    playerAimDirty = true;
+    lastAimCamera = null;
+  }
 });
 
 window.addEventListener("pointercancel", () => {
   primaryPointerDown = false;
+  pointerInViewport = false;
+  pointerClientPosition = null;
+  playerAimDirty = true;
+  lastAimCamera = null;
 });
 
 const MOVE_STICK_DEADZONE = 0.08;
@@ -3758,10 +3783,7 @@ bailoutButton.addEventListener("click", () => {
 
 captureButton.addEventListener("click", () => {
   if (gameUi.hidden || teleportPauseActive || !currentLayout || !playerAlive) return;
-  const target = touchAimCursor ?? {
-    x: player.x + playerFacing.x * 120,
-    y: player.y + playerFacing.y * 120,
-  };
+  const target = energyDashAimTarget() ?? playerFacingTarget();
   startEnergyDashTowards(target);
 });
 
