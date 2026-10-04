@@ -1559,7 +1559,7 @@ export class PhaserRenderer {
     }
     for (const light of this.lootAuras.values()) light.setVisible(true);
     for (const light of this.portalAuras.values()) light.setVisible(true);
-    for (const light of this.monsterAuras.values()) light.setVisible(true);
+    for (const [id, light] of this.monsterAuras) light.setVisible(this.monsters.get(id)?.visible ?? false);
     this.setHostData("localLightRooms", [...localRooms].join(","));
     this.setHostData("pickupAuras", String([
       ...this.lootAuras.values(),
@@ -1927,8 +1927,10 @@ export class PhaserRenderer {
   ): void {
     const profile = state.clip.light;
     const active = Boolean(profile) && state.elapsed < state.clip.frames.length * state.clip.frameDurationMs;
+    const radius = Math.max(52, item.size * (profile?.radiusScale ?? 0));
     let light = this.decorationEffectLights.get(item.id);
-    if (!this.effectLightsEnabled || !this.scene || !active || !profile) {
+    if (!this.effectLightsEnabled || !this.scene || !active || !profile ||
+      !this.pointNearView(item.x, item.y + worldPoint(item, "hitboxOffset").y, radius)) {
       if (light) this.scene?.lights.removeLight(light);
       this.decorationEffectLights.delete(item.id);
       this.updateEffectLightDataset();
@@ -1938,7 +1940,7 @@ export class PhaserRenderer {
       light = this.scene.lights.addLight(
         item.x,
         item.y + worldPoint(item, "hitboxOffset").y,
-        Math.max(52, item.size * profile.radiusScale),
+        radius,
         profile.color,
         profile.intensity,
       );
@@ -2183,6 +2185,10 @@ export class PhaserRenderer {
         this.monsterAuras.delete(item.id);
         container = undefined;
       }
+      const onScreen = this.monsterOnScreen(item);
+      // Newly summoned actors stay in game state without allocating render
+      // objects, animation callbacks or lights until they approach the view.
+      if (!container && !onScreen) continue;
       if (!container) {
         const frame = this.monsterFrame(item, performance.now());
         const asset = frame.clip.frames[0]!;
@@ -2197,6 +2203,7 @@ export class PhaserRenderer {
         container = scene.add.container(item.x, item.y, children)
           .setDepth(this.monsterDepth(item));
         container.setData("hpWidth", barWidth);
+        container.setData("monsterId", item.id);
         container.setData("dead", item.dead);
         this.monsters.set(item.id, container);
         if (!item.dead && !item.bossKind) {
@@ -2222,6 +2229,8 @@ export class PhaserRenderer {
           if (aura) this.monsterAuras.set(item.id, aura);
         }
       }
+      this.setMonsterVisible(item, container, onScreen);
+      if (!onScreen) continue;
       container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
       const barContainer = this.monsterHealthBars.get(item.id);
       barContainer?.setPosition(item.x + hitboxOffset.x, item.y);
@@ -2241,11 +2250,15 @@ export class PhaserRenderer {
     }
     this.updateMonsterAssetDataset();
     this.refreshLocalLightVisibility(true);
-    this.setHostData("monsterShadows", String(this.shadowsEnabled ? this.monsters.size : 0));
     this.renderDebugGeometry();
   }
 
   updateMonsterPositions(items: readonly Monster[]): void {
+    if (items.some(item => item.active &&
+      (!item.dead || item.deathAnimating || Boolean(item.visual.destroyed?.length)) &&
+      !this.monsters.has(item.id) && this.monsterOnScreen(item))) {
+      this.renderMonsters(items);
+    }
     if (this.monsters.size === 0) return;
     let assetChanged = false;
     const now = performance.now();
@@ -2253,6 +2266,9 @@ export class PhaserRenderer {
     for (const item of items) {
       const container = this.monsters.get(item.id);
       if (!container) continue;
+      const onScreen = this.monsterOnScreen(item);
+      assetChanged = this.setMonsterVisible(item, container, onScreen) || assetChanged;
+      if (!onScreen) continue;
       container.setPosition(item.x, item.y).setDepth(this.monsterDepth(item));
       const hitboxOffset = worldPoint(item, "hitboxOffset");
       this.monsterHealthBars.get(item.id)?.setPosition(item.x + hitboxOffset.x, item.y);
@@ -2281,9 +2297,35 @@ export class PhaserRenderer {
     this.renderDebugGeometry();
   }
 
+  private pointNearView(x: number, y: number, padding: number): boolean {
+    const view = this.scene?.cameras.main.worldView;
+    if (!view) return true;
+    return x + padding >= view.x && x - padding <= view.x + view.width &&
+      y + padding >= view.y && y - padding <= view.y + view.height;
+  }
+
+  private monsterOnScreen(item: Monster): boolean {
+    // Include tall sprites, debris, shadows and health bars near screen edges.
+    return this.pointNearView(item.x, item.y, Math.max(item.size, item.spriteSize) + 96);
+  }
+
+  private setMonsterVisible(item: Monster, container: Phaser.GameObjects.Container, visible: boolean): boolean {
+    const changed = container.visible !== visible;
+    container.setVisible(visible);
+    this.monsterHealthBars.get(item.id)?.setVisible(visible);
+    this.monsterAuras.get(item.id)?.setVisible(visible);
+    const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
+    if (!visible) sprite.anims.pause();
+    else if (sprite.anims.isPaused) sprite.anims.resume();
+    return changed;
+  }
+
   private updateMonsterAssetDataset(): void {
-    this.setHostData("renderedMonsters", String(this.monsters.size));
-    this.setHostData("monsterAssets", [...this.monsters.values()].flatMap(container => {
+    const visible = [...this.monsters.values()].filter(container => container.visible);
+    this.setHostData("renderedMonsters", String(visible.length));
+    this.setHostData("monsterShadows", String(this.shadowsEnabled ? visible.length : 0));
+    this.setHostData("enemyAuras", String([...this.monsterAuras.values()].filter(light => light.visible).length));
+    this.setHostData("monsterAssets", visible.flatMap(container => {
       const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite | null;
       return sprite ? [sprite.texture.key.replace(/^asset:/, "")] : [];
     }).join(","));
@@ -2709,6 +2751,9 @@ export class PhaserRenderer {
     const lightRadius = Math.max(options.size === undefined ? 52 : 0, baseSize * profile.radiusScale);
     const lightColor = options.lightColor ?? profile.color;
     const followPlayer = options.followPlayer ?? false;
+    // An unseen stationary burst cannot affect the image. Include its light's
+    // radius so effects just outside the view can still illuminate the edge.
+    if (!followPlayer && !this.pointNearView(x, y, Math.max(lightRadius, baseSize * clip.sizeScale))) return;
     const key = options.key;
     const existing = key ? this.keyedEffects.get(key) : undefined;
     if (key && existing) {

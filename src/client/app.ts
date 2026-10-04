@@ -3360,6 +3360,7 @@ function teleportPlayerTo(x: number, y: number): void {
     playerFacing: () => Point;
     damagePlayer: (amount: number) => void;
     spawnHealingEffect: () => void;
+    primeSpawnerSpawn: () => Pick<Monster, "id" | "x" | "y"> | null;
     primeMonsterAttackAnimation: () => number;
     gameTickAt: () => number | null;
     stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y" | "url" | "enabled">>;
@@ -3414,6 +3415,17 @@ function teleportPlayerTo(x: number, y: number): void {
   damagePlayer: applyPlayerDamage,
   spawnHealingEffect(): void {
     renderer.spawnEffect(PLAYER_SPEC.visual.effects?.healing, player.x, player.y, PLAYER_SPEC.spriteSize, { followPlayer: true });
+  },
+  primeSpawnerSpawn(): Pick<Monster, "id" | "x" | "y"> | null {
+    const spawner = currentSpawners.find(item => !item.destroyed && visitedRooms.has(item.roomId));
+    if (!spawner) return null;
+    const id = `${spawner.id}::reinforcement-${spawner.spawnedCount ?? 0}`;
+    const now = performance.now();
+    spawner.spawnAnimationStartedAt = now;
+    spawner.pendingSpawnAt = now;
+    updateMonsterSpawners(now);
+    const monster = currentMonsters.find(item => item.id === id);
+    return monster ? { id: monster.id, x: monster.x, y: monster.y } : null;
   },
   primeMonsterAttackAnimation(): number {
     const now = performance.now();
