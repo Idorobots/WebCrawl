@@ -1267,6 +1267,7 @@ The goal is to be able to generate a room with all its enemies that already incl
 * Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
+- In complex corridors, some doors should open at the same time - releasing monsters into the corridor for the player to fend off as an ambush.
 
 * Minimap overhaul
 - Minimap should be circular
@@ -1312,11 +1313,13 @@ Add a line to the prompt following the loot breakdown, explaining that certain p
 - Map update - shows the whole level layout on the minimap
 - Minimap radar - show a rotating bar that marks monsters on the minimap for a brief moment
 - Better minimap radar - shows monsters on the minimap all the time
-- Minimap locator - shows the player's location & portals on the minimap
+- Minimap locator - shows the portals, vending machines and loot on the minimap
 - Temporary Invisibility triggered with a button
 - Slowing bullets - slow enemies that are hit
 - Stun chance or regular shots
 - Better aim - bullets curve towards the closes enemy slightly
+- Berserk - the lower the HP the more damage is dealt
+- Damage reduction - reduces taken damage by some amount
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:
@@ -1350,7 +1353,14 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Minibosses often get stuck on corners and scenery. If that is the case they should destroy the scenery.
 - Minibosses fail pathing and freeze in place when the player enters a place they can't path to.
 * Bugs
+- Monsters get deadlocked sometimes - all blocking one another, especially when shared paths are used.
+
+* Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+- Vending machine should explode on the next use, when the capacity is 0, not immediately when the capacity reaches 0.
+
+- It appears that sometimes invisible blocked objects appear in-game in corridor L-junctions.
+
 * DONE Enemy rebalance
 :LOGBOOK:
 - State "DONE"       from              [2026-10-04 Sun 14:05]
@@ -1414,13 +1424,6 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Spider-bot
 - Humanoid robot
 
-* CANCELLED Visual bugs
-:LOGBOOK:
-- State "CANCELLED"  from              [2026-10-04 Sun 11:08] \\
-  Could not reproduce.
-:END:
-- Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
-
 * DONE Visual bugs
 :LOGBOOK:
 - State "DONE"       from              [2026-10-04 Sun 13:51]
@@ -1442,3 +1445,5 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
+- Prompt on the welcome screen should mention "Regulatory Capture" as the name of the dash move.
+- Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.

@@ -278,6 +278,7 @@ export interface Monster extends Point, RelativeObjectGeometry {
   moving?: boolean;
   moveDir?: "up" | "down" | "left" | "right" | null;
   path?: Point[];
+  pathPartial?: boolean;
   pathIndex?: number;
   pathTargetRoomId?: number | null;
   pathPursuitRoomId?: number | null;
@@ -286,7 +287,8 @@ export interface Monster extends Point, RelativeObjectGeometry {
   nextPathRefreshAt?: number;
   lastPathSearchAt?: number;
   blockedMoveCount?: number;
-  /** Keep the blocked route direction while a miniboss clears its obstacle. */
+  nextCrowdAvoidanceAt?: number;
+  /** Keep the blocked route direction while a monster clears its obstacle. */
   blockedWaypoint?: Point;
   escapeDirection?: Point;
   escapeUntil?: number;

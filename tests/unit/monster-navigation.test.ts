@@ -3,6 +3,7 @@ import { applyObstacleDamage, meleeBlockingScenery } from "../../src/client/doma
 import { chooseReachablePath, FailedPathCache, walkableSegment } from "../../src/client/domain/pathfinding";
 import { DECORATION_DEFINITIONS, MINIBOSS_SIZE_MULTIPLIER, REGULAR_MONSTER_DEFINITIONS } from "../../src/client/domain/specs";
 import { worldPoint } from "../../src/client/domain/object-geometry";
+import { vendingWreck } from "../../src/client/domain/vending";
 import type { Decoration, Monster, Point, RegularMonsterKind } from "../../src/client/types";
 
 describe("unreachable monster paths", () => {
@@ -40,6 +41,18 @@ describe("unreachable monster paths", () => {
     cache.remember(actor, [scenery]);
     scenery.hp -= 1;
     expect(cache.unchanged(actor)).toBe(true);
+  });
+
+  it("wakes after scenery destruction that replaces a vending machine in place", () => {
+    const cache = new FailedPathCache();
+    const actor = { x: 0, y: 0 };
+    const scenery: Decoration = { ...crate("vending", { x: 40, y: 0 }),
+      vendingKind: "ammo", vendingRemaining: 2, vendingCapacity: 2 };
+    cache.remember(actor, [scenery]);
+    applyObstacleDamage(scenery, scenery.hp);
+    Object.assign(scenery, vendingWreck(scenery));
+    expect(scenery.destroyed).toBe(false);
+    expect(cache.unchanged(actor)).toBe(false);
   });
 
   it("only wakes monsters watching the destroyed scenery", () => {
@@ -83,7 +96,7 @@ describe("unreachable monster paths", () => {
     expect(cache.unchanged(actor)).toBe(false);
   });
 
-  it("wakes a miniboss when the player moves out of an unreachable area", () => {
+  it("wakes a monster when the player moves out of an unreachable area", () => {
     const cache = new FailedPathCache();
     const actor = { x: 0, y: 0 };
     const player = { x: 200, y: 0, roomId: 1 };
@@ -108,7 +121,7 @@ describe("unreachable monster paths", () => {
     expect(search).toHaveBeenCalledTimes(2);
   });
 
-  it("wakes a miniboss on room changes without needing scenery destruction", () => {
+  it("wakes a monster on room changes without needing scenery destruction", () => {
     const cache = new FailedPathCache();
     const actor = { x: 0, y: 0 };
     const target = { x: 100, y: 0, roomId: 1 };
@@ -118,7 +131,7 @@ describe("unreachable monster paths", () => {
     expect(cache.unchanged(actor, target)).toBe(false);
   });
 
-  it("throttles miniboss retries when the target remains unreachable", () => {
+  it("throttles monster retries when the target remains unreachable", () => {
     const cache = new FailedPathCache();
     const actor = { x: 0, y: 0 };
     const target = { x: 100, y: 0, roomId: 1 };
@@ -132,7 +145,7 @@ describe("unreachable monster paths", () => {
   });
 });
 
-describe("partial miniboss routes", () => {
+describe("partial monster routes", () => {
   const bounds = { minX: 0, maxX: 220, minY: -40, maxY: 40 };
   const start = { x: 0, y: 0 };
   const goal = { x: 200, y: 0 };

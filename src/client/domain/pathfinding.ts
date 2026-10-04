@@ -1,4 +1,4 @@
-import type { Decoration, DungeonLayout, Point } from "../types";
+import type { Decoration, DungeonLayout, Monster, Point } from "../types";
 import { connectedRoomAdjacency } from "./corridor-junctions";
 import { WORLD_GEOMETRY } from "./specs";
 
@@ -13,10 +13,13 @@ interface PathTarget extends Point {
   roomId: number | null;
 }
 
-/** Static failures sleep until scenery changes; moving targets can opt into recovery. */
+type PathScenery = Pick<Decoration, "destroyed"> & Partial<Pick<Decoration, "destructible" | "obstacle">>;
+
+/** Failed searches sleep until their target or local blockers change, or a retry is due. */
 export class FailedPathCache {
   private readonly failures = new WeakMap<Point, {
-    scenery: readonly Pick<Decoration, "destroyed">[];
+    scenery: readonly { item: PathScenery; destructible?: boolean; obstacle?: boolean }[];
+    monsters: ReadonlyMap<Monster, Point>;
     target?: PathTarget;
     retryAt: number;
   }>();
@@ -25,22 +28,46 @@ export class FailedPathCache {
     return this.failures.has(actor);
   }
 
-  remember(actor: Point, scenery: Iterable<Pick<Decoration, "destroyed">>, target?: PathTarget, retryAt = Infinity): void {
+  remember(actor: Point, scenery: Iterable<PathScenery>, target?: PathTarget, retryAt = Infinity,
+    monsters: Iterable<Monster> = []): void {
     this.failures.set(actor, {
-      scenery: [...scenery].filter(item => !item.destroyed),
+      scenery: [...scenery].filter(item => !item.destroyed).map(item => ({
+        item, destructible: item.destructible, obstacle: item.obstacle,
+      })),
+      monsters: new Map([...monsters].filter(other => other !== actor && !other.dead && other.obstacle)
+        .map(other => [other, { x: other.x, y: other.y }])),
       target: target ? { ...target } : undefined,
       retryAt,
     });
   }
 
-  unchanged(actor: Point, target?: PathTarget, timestamp = performance.now()): boolean {
+  unchanged(actor: Point, target?: PathTarget, timestamp = performance.now(), monsters?: Iterable<Monster>): boolean {
     const failure = this.failures.get(actor);
     if (!failure) return false;
     const targetChanged = target && failure.target && (
       target.roomId !== failure.target.roomId ||
       Math.hypot(target.x - failure.target.x, target.y - failure.target.y) >= WORLD_GEOMETRY.pathGridStep * 4
     );
-    if (failure.scenery.some(item => item.destroyed) || targetChanged || timestamp >= failure.retryAt) {
+    let monstersChanged = false;
+    for (const [other, position] of failure.monsters) {
+      if (other.dead || !other.obstacle || other.x !== position.x || other.y !== position.y) {
+        monstersChanged = true;
+        break;
+      }
+    }
+    let neighborhoodChanged = false;
+    if (monsters && !monstersChanged) {
+      let count = 0;
+      for (const other of monsters) {
+        if (other === actor || other.dead || !other.obstacle) continue;
+        count += 1;
+        if (!failure.monsters.has(other)) { neighborhoodChanged = true; break; }
+      }
+      neighborhoodChanged ||= count !== failure.monsters.size;
+    }
+    if (failure.scenery.some(({ item, destructible, obstacle }) =>
+      item.destroyed || item.destructible !== destructible || item.obstacle !== obstacle) ||
+      monstersChanged || neighborhoodChanged || targetChanged || timestamp >= failure.retryAt) {
       this.forget(actor);
       return false;
     }
@@ -49,6 +76,99 @@ export class FailedPathCache {
 
   forget(actor: Point): void {
     this.failures.delete(actor);
+  }
+}
+
+export interface ReachablePath {
+  path: Point[];
+  targetIndex: number;
+  partial?: boolean;
+}
+
+/** Bound aggregate route searches, rather than giving every queued actor its own budget. */
+export class PathSearchBudget {
+  private nextSearchAt = -Infinity;
+
+  constructor(private readonly intervalMs = 100) {}
+
+  take(timestamp: number): boolean {
+    if (timestamp < this.nextSearchAt) return false;
+    this.nextSearchAt = timestamp + this.intervalMs;
+    return true;
+  }
+
+  clear(): void {
+    this.nextSearchAt = -Infinity;
+  }
+}
+
+/** Share static route tails; actors still perform their own movement/crowd collision checks. */
+export class SharedPathCache {
+  private routes: {
+    key: string;
+    targets: Point[];
+    route: ReachablePath;
+    expiresAt: number;
+  }[] = [];
+
+  clear(): void {
+    this.routes = [];
+  }
+
+  remember(key: string, start: Point, targets: readonly Point[], route: ReachablePath, timestamp: number): void {
+    if (!route.path.length) return;
+    const path = route.path.map(point => ({ x: point.x, y: point.y }));
+    if (path[0]!.x !== start.x || path[0]!.y !== start.y) path.unshift({ ...start });
+    this.routes.unshift({
+      key, targets: targets.map(point => ({ x: point.x, y: point.y })),
+      route: { ...route, path }, expiresAt: timestamp + (route.partial ? 1_500 : 3_000),
+    });
+    this.routes.length = Math.min(this.routes.length, 32);
+  }
+
+  find(key: string, start: Point, targets: readonly Point[], isWalkable: (point: Point) => boolean,
+    timestamp: number, segmentIsClear = (from: Point, to: Point) => walkableSegment(from, to, isWalkable)): ReachablePath | null {
+    this.routes = this.routes.filter(entry => timestamp < entry.expiresAt);
+    // A complete route is preferable to approaching the same inaccessible doorway again.
+    for (const partial of [false, true]) for (const entry of this.routes) {
+      if (entry.key !== key || Boolean(entry.route.partial) !== partial || entry.targets.length !== targets.length ||
+        entry.targets.some((target, index) => Math.hypot(target.x - targets[index]!.x, target.y - targets[index]!.y) > 48)) continue;
+      let targetIndex = entry.route.targetIndex;
+      const end = entry.route.path.at(-1)!;
+      // A room waypoint may have brought its donor close enough to pursue the
+      // player directly. Do not keep followers parked at that fallback forever.
+      if (targetIndex !== 0 && Math.hypot(end.x - targets[0]!.x, end.y - targets[0]!.y) <= WORLD_GEOMETRY.spatialCellSize &&
+        segmentIsClear(end, targets[0]!)) targetIndex = 0;
+      const destination = targets[targetIndex]!;
+      const endChanged = end.x !== destination.x || end.y !== destination.y;
+      const reachesTarget = (!partial && !endChanged) || segmentIsClear(end, destination);
+      if (!partial && !reachesTarget) continue;
+      // Try only three nearby join points, not a new search from every waypoint.
+      const joins: { index: number; distance: number }[] = [];
+      for (let index = 0; index < entry.route.path.length; index++) {
+        const point = entry.route.path[index]!;
+        const distance = (point.x - start.x) ** 2 + (point.y - start.y) ** 2;
+        if (distance > WORLD_GEOMETRY.spatialCellSize ** 2) continue;
+        if (joins.length === 3 && distance >= joins[2]!.distance) continue;
+        joins.push({ index, distance });
+        joins.sort((a, b) => a.distance - b.distance || b.index - a.index);
+        if (joins.length > 3) joins.pop();
+      }
+      // Prefer forward progress among the nearby connectors, rather than
+      // making every follower converge on the donor's original start point.
+      for (const join of joins.sort((a, b) => b.index - a.index)) {
+        if (!segmentIsClear(start, entry.route.path[join.index]!)) continue;
+        const path = [{ ...start }, ...entry.route.path.slice(join.index).map(point => ({ ...point }))];
+        if (reachesTarget && endChanged) {
+          // Do not require a follower to touch the donor's occupied goal before
+          // reaching its own goal when the preceding waypoint has a clear link.
+          if (path.length > 1 && segmentIsClear(path[path.length - 2]!, destination)) path.pop();
+          path.push({ x: destination.x, y: destination.y });
+        }
+        return { path, targetIndex, partial: partial && !reachesTarget || undefined };
+      }
+    }
+    return null;
   }
 }
 
@@ -154,7 +274,7 @@ export function chooseReachablePath(
   maxIterations: number,
   boundsFor: (target: Point) => Bounds,
   allowPartial = false,
-): { path: Point[]; targetIndex: number; partial?: boolean } | null {
+): ReachablePath | null {
   let partialRoute: { path: Point[]; targetIndex: number; partial: true } | null = null;
   for (let index = 0; index < targets.length; index += 1) {
     const target = targets[index]!;
