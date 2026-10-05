@@ -1,4 +1,4 @@
-import type { Decoration, EllipseRadii, Monster, MonsterAttackPattern, Point } from "../types";
+import type { Bullet, Decoration, EllipseRadii, Monster, MonsterAttackPattern, Point } from "../types";
 import { ellipseRadii, ellipsesOverlap, sweptEllipsesOverlap } from "./geometry";
 import { worldPoint } from "./object-geometry";
 import {
@@ -127,6 +127,28 @@ export function steerDashDirection(direction: Point, from: Point, target: Point,
   const delta = Math.atan2(Math.sin(targetAngle - currentAngle), Math.cos(targetAngle - currentAngle));
   const angle = currentAngle + Math.max(-maxTurn, Math.min(maxTurn, delta));
   return { x: Math.cos(angle), y: Math.sin(angle) };
+}
+
+/** Gentle, frame-rate-independent homing without changing the projectile's speed. */
+export function steerPlayerBullet(bullet: Bullet, targets: readonly (Point | Monster)[], aimAid: number, dt: number): void {
+  if (bullet.owner !== "player" || aimAid <= 0 || dt <= 0) return;
+  const speed = Math.hypot(bullet.vx, bullet.vy);
+  if (!speed) return;
+  let nearest: Point | null = null;
+  let distanceSquared = Infinity;
+  for (const target of targets) {
+    if ("active" in target && (!target.active || target.dead)) continue;
+    const center = "hitboxOffset" in target
+      ? actorCollisionCenter(target, worldPoint(target, "hitboxOffset")) : target;
+    const distance = (center.x - bullet.x) ** 2 + (center.y - bullet.y) ** 2;
+    if (distance < distanceSquared) { nearest = center; distanceSquared = distance; }
+  }
+  if (!nearest) return;
+  const direction = steerDashDirection(
+    { x: bullet.vx / speed, y: bullet.vy / speed }, bullet, nearest, aimAid * Math.PI * dt,
+  );
+  bullet.vx = direction.x * speed;
+  bullet.vy = direction.y * speed;
 }
 
 /** Damageable props and solid, indestructible scenery both stop projectiles. */

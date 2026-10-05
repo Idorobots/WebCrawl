@@ -43,21 +43,37 @@ import {
   type WeightedDecorationDefinition,
 } from "./world-specs";
 import { worldPoint } from "./object-geometry";
-import { weaponForRoom, type WeaponSource } from "./weapons";
+import { monsterDropsWeapon, REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K, weaponForRoom, type WeaponSource } from "./weapons";
 import { authoredDecorations, authoredLoot, type AuthoredRooms } from "./authored-rooms";
 import { vendingDropForSeed, vendingKindForRoom, vendingStateForSeed, vendingWreck } from "./vending";
+import { monsterDropsPowerup, powerupForSeed } from "./powerups";
+
+export const REGULAR_MONSTER_CRYSTAL_DROP_CHANCE_PER_10K = REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K;
 
 export function lootKindForSeed(seed: number): LootKind {
   return lootKindForRoll((seed >>> 3) % 100);
 }
 
-export function monsterLootKindForSeed(seed: number): LootKind {
+export function monsterLootKindForSeed(seed: number, miniboss = false): LootKind {
   // Adjacent monster IDs produce correlated hashes. Mix a loot-specific seed
   // before rolling so nearby monsters do not inherit the same loot streak.
   let mixed = stableHash(`${seed}|monster-loot`);
   mixed = Math.imul(mixed ^ (mixed >>> 16), 0x85ebca6b);
   mixed = Math.imul(mixed ^ (mixed >>> 13), 0xc2b2ae35);
-  return lootKindForRoll(((mixed ^ (mixed >>> 16)) >>> 0) % 100);
+  const roll = ((mixed ^ (mixed >>> 16)) >>> 0) % 10_000;
+  if (roll < 3_000) return "credit";
+  if (roll < 6_000) return "energy";
+  if (roll < 8_000) return "core";
+  const crystalChance = miniboss ? 500 : REGULAR_MONSTER_CRYSTAL_DROP_CHANCE_PER_10K;
+  return roll < 10_000 - crystalChance ? "medkit" : "crystal";
+}
+
+/** Rare regular drops roll per kill, independently of the common-loot eligibility flag. */
+export function monsterLootDropKindForSeed(seed: number, miniboss: boolean, dropsLoot: boolean): LootKind | null {
+  if (monsterDropsPowerup(seed, miniboss)) return "powerup";
+  if (monsterDropsWeapon(seed, miniboss)) return "weapon";
+  const kind = monsterLootKindForSeed(seed, miniboss);
+  return dropsLoot || (!miniboss && kind === "crystal") ? kind : null;
 }
 
 function lootKindForRoll(roll: number): LootKind {
@@ -75,7 +91,7 @@ export function bossLootDrops(
   sourceRoom?: Pick<GraphNode, "tag" | "title" | "lootSeed">,
 ): LootItem[] {
   if (!monster.bossKind) return [];
-  const count = 8 + Math.min(8, Math.floor(floor / 2));
+  const count = 9 + Math.min(8, Math.floor(floor / 2));
   const x = monster.dropX ?? monster.x;
   const y = monster.dropY ?? monster.y;
   const weaponRoom = sourceRoom ?? {
@@ -83,17 +99,22 @@ export function bossLootDrops(
     title: `<script> ${monster.bossKind}`,
     lootSeed: monster.seed,
   };
+  const specialKind = stableHash(`${monster.seed}|boss-reward`) % 2 === 0 ? "weapon" : "powerup";
   return Array.from({ length: count }, (_, index) => {
     const angle = index / count * Math.PI * 2;
     const radius = 46 + (index % 2) * 28;
+    const kind = index === 0 ? "medkit" : index === 1 ? specialKind : index === 2 ? "powerup"
+      : index % 3 === 0 ? "core" : lootKindForSeed(monster.seed + index * 7_919);
     return {
       id: `${floorIdentity}::${monster.id}::boss-drop-${index}`,
       roomId: monster.roomId,
       x: x + Math.cos(angle) * radius,
       y: y + Math.sin(angle) * radius,
-      kind: index === 0 ? "medkit" : index === 1 ? "weapon" : index % 3 === 0 ? "core" : lootKindForSeed(monster.seed + index * 7_919),
-      weapon: index === 1 ? weaponForRoom(weaponRoom, "boss") : undefined,
-      weaponPlacement: index === 1 ? "floor" : undefined,
+      kind,
+      weapon: kind === "weapon" ? weaponForRoom(weaponRoom, "boss") : undefined,
+      weaponPlacement: kind === "weapon" ? "floor" : undefined,
+      powerup: kind === "powerup" ? powerupForSeed(index === 1 ? monster.seed : stableHash(`${monster.seed}|boss-powerup-${index}`)) : undefined,
+      powerupPlacement: kind === "powerup" ? "floor" : undefined,
     };
   });
 }
@@ -111,7 +132,7 @@ function roomPositionOffWalls(position: Point, room: GraphNode, footprint: Ellip
   return null;
 }
 
-export function weaponLootForRoom(
+export function roomRewardLoot(
   room: GraphNode, pageUrl: string,
   walls = new WallRectIndex(buildWallFootprints({ nodes: [room], links: [], hiddenCount: 0 })),
 ): LootItem | null {
@@ -128,28 +149,44 @@ export function weaponLootForRoom(
     room, worldPoint(DECORATION_DEFINITIONS.pedestal, "footprintRadii"), walls,
   );
   if (!position) return null;
+  const kind = stableHash(`${room.lootSeed}|room-reward-kind`) % 2 === 0 ? "weapon" : "powerup";
   return {
-    id: `${pageUrl}::${room.id}::weapon`,
+    id: `${pageUrl}::${room.id}::${kind}`,
     roomId: room.id,
     ...position,
-    kind: "weapon",
-    weapon: weaponForRoom(room, source),
-    weaponPlacement: "pedestal",
+    kind,
+    weapon: kind === "weapon" ? weaponForRoom(room, source) : undefined,
+    weaponPlacement: kind === "weapon" ? "pedestal" : undefined,
+    powerup: kind === "powerup" ? powerupForSeed(room.lootSeed) : undefined,
+    powerupPlacement: kind === "powerup" ? "pedestal" : undefined,
   };
+}
+
+export function weaponLootForRoom(room: GraphNode, pageUrl: string, walls?: WallRectIndex): LootItem | null {
+  const reward = roomRewardLoot(room, pageUrl, walls);
+  return reward?.kind === "weapon" ? reward : null;
 }
 
 export function weaponPedestalForRoom(
   room: GraphNode, pageUrl: string,
   walls?: WallRectIndex,
 ): Decoration | null {
-  const weapon = weaponLootForRoom(room, pageUrl, walls);
-  if (!weapon) return null;
+  const pedestal = rewardPedestalForRoom(room, pageUrl, walls);
+  return pedestal?.kind === "weapon-pedestal" ? pedestal : null;
+}
+
+export function rewardPedestalForRoom(
+  room: GraphNode, pageUrl: string, walls?: WallRectIndex,
+): Decoration | null {
+  const reward = roomRewardLoot(room, pageUrl, walls);
+  if (!reward) return null;
   return {
     ...DECORATION_DEFINITIONS.pedestal,
-    id: `${weapon.id}::pedestal`,
+    id: `${reward.id}::pedestal`,
+    kind: reward.kind === "powerup" ? "powerup-pedestal" : "weapon-pedestal",
     roomId: room.id,
-    x: weapon.x,
-    y: weapon.y,
+    x: reward.x,
+    y: reward.y,
     visualVariant: room.lootSeed,
     maxHp: DECORATION_DEFINITIONS.pedestal.hp,
     destroyed: false,
@@ -1216,8 +1253,8 @@ export function buildInteractiveObjects(
         kind: lootKindForSeed(stableHash(`${room.lootSeed}|loot|${index}`)),
       });
     }
-    const weaponLoot = weaponLootForRoom(room, pageUrl, walls);
-    if (weaponLoot && !collectedLoot.has(weaponLoot.id)) loot.push(weaponLoot);
+    const reward = roomRewardLoot(room, pageUrl, walls);
+    if (reward && !collectedLoot.has(reward.id)) loot.push(reward);
   }
   return { stairs, loot };
 }

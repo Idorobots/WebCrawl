@@ -58,6 +58,7 @@ import {
   projectileHitsDecoration,
   sceneryBlocksProjectiles,
   steerDashDirection,
+  steerPlayerBullet,
   visiblePlayerHitPoint,
 } from "./domain/combat";
 import { beginCrowdDetour, continueCrowdDetour } from "./domain/crowd-navigation";
@@ -79,23 +80,28 @@ import {
   buildMonsters as createMonsters,
   buildSceneryDrops as createSceneryDrops,
   bossLootDrops,
-  monsterLootKindForSeed,
+  monsterLootDropKindForSeed,
   monsterSpecForBossSummon,
   monsterSpecForSpawner,
-  weaponPedestalForRoom,
+  rewardPedestalForRoom,
 } from "./domain/generation";
 import { contentPagesForRoom, domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { chooseReachablePath, FailedPathCache, monsterEscapeStep, PathSearchBudget, SharedPathCache, walkableApproachPoint, walkableSegment } from "./domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, hasBlockingPortalMonsters, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
+import {
+  bailoutDurationMs, collectPowerup, createPlayerState, criticalBulletDamage,
+  playerAttackDamage, powerupForSeed, POWERUP_DEFINITIONS,
+  ramPerPickup, regeneratePlayer,
+  type PlayerState,
+} from "./domain/powerups";
 import { forSpatialCells, indexMonsterHitboxes, monsterBlockingRadii, monsterCollisionCandidates, MonsterFootprintIndex, spatialCellKey } from "./domain/spatial";
 import { buildWallFootprints, wallBlocksSegment, wallHitboxes, wallOverlapsEllipse, WallRectIndex } from "./domain/wall-collision";
 import {
   BARREL_EXPLOSION_DAMAGE,
   BOSS_DEFINITIONS,
   CRYSTAL_INVULNERABILITY_BLINK_START_MS,
-  CRYSTAL_INVULNERABILITY_DURATION_MS,
   DEFAULT_BULLET_SPEC,
   ENERGY_DASH_SPEED,
   ENERGY_DASH_TURN_RATE,
@@ -103,14 +109,12 @@ import {
   LOOT_DEFINITIONS,
   MAX_ACTOR_FOOTPRINT,
   PLAYER_DAMAGE_INVULNERABILITY_MS,
-  PLAYER_ENERGY_MAX,
   PLAYER_SPEC,
   WEAPON_PICKUP_DEFINITIONS,
   WORLD_GEOMETRY,
 } from "./domain/world-specs";
 import {
   DEFAULT_WEAPON,
-  monsterDropsWeapon,
   projectilesForWeapon,
   replenishWeaponAmmo,
   weaponForMonster,
@@ -135,6 +139,7 @@ import type {
   MonsterState,
   ObstacleState,
   PlayerDirection,
+  PowerupKind,
   Point,
   RunStats,
   SpriteDirection,
@@ -142,7 +147,8 @@ import type {
   WeaponSpec,
 } from "./types";
 import { requireElement } from "./ui/elements";
-import { requestMobileFullscreen } from "./ui/fullscreen";
+import { renderPowerupInventory } from "./ui/powerup-inventory";
+import { isMobileDevice, requestMobileFullscreen } from "./ui/fullscreen";
 import { createThoughtPicker } from "./ui/loading-texts";
 import { setupWelcomePrompt, type WelcomePromptHandle } from "./ui/welcome-prompt";
 
@@ -273,7 +279,7 @@ const monsterStatesByPage = new Map<string, Map<string, MonsterState>>();
 let currentRoomId: number | null = null;
 let player: Point = { x: 0, y: 0 };
 let playerFacing: Point = { x: 0, y: -1 };
-let playerHp: number = PLAYER_MAX_HP;
+let playerState = createPlayerState(isMobileDevice(), PLAYER_MAX_HP);
 let playerAlive = true;
 let playerInvulnerable = false;
 let crystalInvulnerableUntil = 0;
@@ -363,9 +369,7 @@ const killsCountEl = document.querySelector<HTMLElement>("#killsCount");
 const hudHealthFillEl = requireElement<HTMLElement>("#hudHealthFill");
 const creditCountEl = requireElement<HTMLElement>("#creditCount");
 const crystalCountEl = requireElement<HTMLElement>("#crystalCount");
-const coreCountEl = requireElement<HTMLElement>("#coreCount");
-const energyLootCountEl = requireElement<HTMLElement>("#energyLootCount");
-const medkitCountEl = requireElement<HTMLElement>("#medkitCount");
+const powerupInventoryEl = requireElement<HTMLElement>("#powerupInventory");
 const hudEnergyFillEl = requireElement<HTMLElement>("#hudEnergyFill");
 const weaponNameEl = requireElement<HTMLElement>("#weaponName");
 const hudAmmoFillEl = requireElement<HTMLElement>("#hudAmmoFill");
@@ -375,9 +379,7 @@ const hudEnergyFillMiniEl = requireElement<HTMLElement>("#hudEnergyFillMini");
 const hudAmmoFillMiniEl = requireElement<HTMLElement>("#hudAmmoFillMini");
 const creditCountMiniEl = requireElement<HTMLElement>("#creditCountMini");
 const crystalCountMiniEl = requireElement<HTMLElement>("#crystalCountMini");
-const coreCountMiniEl = requireElement<HTMLElement>("#coreCountMini");
-const energyLootCountMiniEl = requireElement<HTMLElement>("#energyLootCountMini");
-const medkitCountMiniEl = requireElement<HTMLElement>("#medkitCountMini");
+const powerupInventoryMiniEl = requireElement<HTMLElement>("#powerupInventoryMini");
 const rightHud = requireElement<HTMLElement>("#rightHud");
 
 const deathModal = requireElement<HTMLDivElement>("#deathModal");
@@ -391,9 +393,7 @@ const deathBossKillsEl = requireElement<HTMLElement>("#deathBossKills");
 const deathShotsEl = requireElement<HTMLElement>("#deathShots");
 const deathLootCreditsEl = requireElement<HTMLElement>("#deathLootCredits");
 const deathLootCrystalsEl = requireElement<HTMLElement>("#deathLootCrystals");
-const deathLootCoresEl = requireElement<HTMLElement>("#deathLootCores");
-const deathLootEnergyEl = requireElement<HTMLElement>("#deathLootEnergy");
-const deathLootMedkitsEl = requireElement<HTMLElement>("#deathLootMedkits");
+const deathPowerupInventoryEl = requireElement<HTMLElement>("#deathPowerupInventory");
 const highScoreRowsEl = requireElement<HTMLTableSectionElement>("#highScoreRows");
 const restartButton = requireElement<HTMLButtonElement>("#restartButton");
 
@@ -854,13 +854,14 @@ function updateHudBarFill(fill: HTMLElement, miniFill: HTMLElement, ratio: numbe
 }
 
 function updateHealthUi(): void {
-  const ratio = Math.max(0, Math.min(1, playerHp / PLAYER_MAX_HP));
+  const ratio = Math.max(0, Math.min(1, playerState.hp / playerState.maxHp));
   updateHudBarFill(hudHealthFillEl, hudHealthFillMiniEl, ratio);
   hudHealthFillEl.parentElement?.classList.toggle("is-critical", ratio < 0.2);
   hudHealthFillMiniEl.parentElement?.classList.toggle("is-critical", ratio < 0.2);
-  gameCanvasHost.dataset.playerHp = String(playerHp);
+  gameCanvasHost.dataset.playerHp = String(playerState.hp);
+  gameCanvasHost.dataset.playerMaxHp = String(playerState.maxHp);
 
-  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
+  renderer.setPlayer(player, playerState.hp, playerState.maxHp, currentPlayerSpriteAsset);
 }
 
 function updateWeaponUi(): void {
@@ -877,27 +878,25 @@ function updateWeaponUi(): void {
 function updateLootUi(): void {
   creditCountEl.textContent = String(lootInventory.credits);
   crystalCountEl.textContent = String(lootInventory.crystals);
-  coreCountEl.textContent = String(lootInventory.cores);
-  energyLootCountEl.textContent = String(lootInventory.energy);
-  medkitCountEl.textContent = String(lootInventory.medkits);
   creditCountMiniEl.textContent = String(lootInventory.credits);
   crystalCountMiniEl.textContent = String(lootInventory.crystals);
-  coreCountMiniEl.textContent = String(lootInventory.cores);
-  energyLootCountMiniEl.textContent = String(lootInventory.energy);
-  medkitCountMiniEl.textContent = String(lootInventory.medkits);
+  renderPowerupInventory(powerupInventoryEl, playerState.powerups);
+  renderPowerupInventory(powerupInventoryMiniEl, playerState.powerups);
   gameCanvasHost.dataset.credits = String(lootInventory.credits);
   gameCanvasHost.dataset.crystals = String(lootInventory.crystals);
   gameCanvasHost.dataset.cores = String(lootInventory.cores);
-  gameCanvasHost.dataset.energy = String(lootInventory.energy);
+  gameCanvasHost.dataset.energyLoot = String(lootInventory.energy);
   gameCanvasHost.dataset.medkits = String(lootInventory.medkits);
   updateEnergyUi();
   updateHudPanels();
 }
 
 function updateEnergyUi(): void {
-  const fill = Math.min(PLAYER_ENERGY_MAX, lootInventory.energy);
-  updateHudBarFill(hudEnergyFillEl, hudEnergyFillMiniEl, fill / PLAYER_ENERGY_MAX);
-  const full = lootInventory.energy >= PLAYER_ENERGY_MAX;
+  const fill = Math.min(playerState.maxEnergy, playerState.energy);
+  updateHudBarFill(hudEnergyFillEl, hudEnergyFillMiniEl, fill / playerState.maxEnergy);
+  gameCanvasHost.dataset.playerMaxEnergy = String(playerState.maxEnergy);
+  gameCanvasHost.dataset.energy = String(playerState.energy);
+  const full = playerState.energy >= playerState.maxEnergy;
   hudEnergyFillEl.parentElement?.classList.toggle("is-full", full);
   hudEnergyFillMiniEl.parentElement?.classList.toggle("is-full", full);
 }
@@ -924,12 +923,13 @@ function updatePlayerProtectionVisual(now = performance.now()): void {
 function activateCrystalInvulnerability(now = performance.now()): boolean {
   if (!playerAlive || lootInventory.crystals <= 0) return false;
   lootInventory.crystals -= 1;
-  crystalInvulnerableUntil = now + CRYSTAL_INVULNERABILITY_DURATION_MS;
+  const durationMs = bailoutDurationMs(playerState);
+  crystalInvulnerableUntil = now + durationMs;
   crystalShieldSoundActive = true;
   renderer?.playInvulnerabilitySound(true);
   updateLootUi();
   updatePlayerProtectionVisual(now);
-  setStatus("Crystal shield active for 10 seconds.");
+  setStatus(`Crystal shield active for ${durationMs / 1_000} seconds.`);
   return true;
 }
 
@@ -939,6 +939,8 @@ function equipWeapon(weapon: WeaponSpec): void {
 
 function equipWeaponWithAmmo(weapon: WeaponSpec, ammo: number | null): void {
   currentWeapon = { ...weapon };
+  playerState.ammoRegenRemainder = 0;
+  playerState.regenElapsedMs.ammo_regen = 0;
   currentWeaponAmmo = weapon.maxAmmo === null || ammo === null
     ? weapon.maxAmmo
     : Math.max(0, Math.min(weapon.maxAmmo, ammo));
@@ -1025,9 +1027,7 @@ function showDeathModal(): void {
   deathShotsEl.textContent = String(runStats.shotsFired);
   deathLootCreditsEl.textContent = String(lootInventory.credits);
   deathLootCrystalsEl.textContent = String(lootInventory.crystals);
-  deathLootCoresEl.textContent = String(lootInventory.cores);
-  deathLootEnergyEl.textContent = String(lootInventory.energy);
-  deathLootMedkitsEl.textContent = String(lootInventory.medkits);
+  renderPowerupInventory(deathPowerupInventoryEl, playerState.powerups);
 
   newHighScoreEl.textContent =
     rank === 1
@@ -1097,7 +1097,7 @@ function resetRunState(): void {
   currentStateId = null;
   navigationHistory.length = 0;
   navigationReturnRooms.length = 0;
-  playerHp = PLAYER_MAX_HP;
+  playerState = createPlayerState(isMobileDevice(), PLAYER_MAX_HP);
   playerAlive = true;
   playerInvulnerable = false;
   visitedRooms = new Set();
@@ -1326,7 +1326,7 @@ function buildDecorations(layout: DungeonLayout, pageUrl: string): Decoration[] 
       currentAuthoredRooms ?? undefined),
     ...layout.nodes.flatMap((room) => {
       if (currentAuthoredRooms?.has(room.id)) return [];
-      const pedestal = weaponPedestalForRoom(room, pageIdentity, wallFootprints);
+      const pedestal = rewardPedestalForRoom(room, pageIdentity, wallFootprints);
       return pedestal ? [pedestal] : [];
     }),
   ];
@@ -1539,6 +1539,8 @@ function lootDropsForMonster(monster: Monster): LootItem[] {
         ? weaponForMonster(monster.kind, monster.seed)
         : undefined,
       weaponPlacement: monster.dropKind === "weapon" ? "floor" : undefined,
+      powerup: monster.dropKind === "powerup" ? powerupForSeed(monster.seed) : undefined,
+      powerupPlacement: monster.dropKind === "powerup" ? "floor" : undefined,
     }];
   }
   return bossLootDrops(
@@ -1777,12 +1779,12 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
   );
   renderer.playPlayerHurtSound();
 
-  playerHp = Math.max(0, playerHp - amount);
+  playerState.hp = Math.max(0, playerState.hp - amount);
   playerDamageInvulnerableUntil = now + PLAYER_DAMAGE_INVULNERABILITY_MS;
 
   updateHealthUi();
 
-  if (playerHp <= 0) {
+  if (playerState.hp <= 0) {
     playerAlive = false;
     cancelPortalIntro();
     renderer.setPortalStartupPreview(false);
@@ -1801,15 +1803,15 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
 function monsterDrop(monster: Monster): void {
   if (!currentPageUrl || monster.droppedLoot) return;
 
-  const dropsWeapon = !isBoss(monster) && monsterDropsWeapon(monster.seed, monster.miniboss);
-  if (!monster.dropsLoot && !dropsWeapon) return;
+  const dropKind = isBoss(monster) ? null : monsterLootDropKindForSeed(monster.seed, monster.miniboss, monster.dropsLoot);
+  if (!isBoss(monster) && !dropKind) return;
 
   monster.droppedLoot = true;
   monster.dropX = monster.x;
   monster.dropY = monster.y;
   if (!isBoss(monster)) {
     monster.dropId = `${floorIdentity(currentPageUrl)}::${monster.id}::monster-drop`;
-    monster.dropKind = dropsWeapon ? "weapon" : monsterLootKindForSeed(monster.seed);
+    monster.dropKind = dropKind;
   }
   currentLoot.push(...lootDropsForMonster(monster).filter(item => !collectedLoot.has(item.id)));
 }
@@ -2637,7 +2639,7 @@ function shootBullet(): boolean {
   if (!playerAlive || teleportPauseActive) return false;
 
   const now = performance.now();
-  if (now - lastPlayerShotAt < currentWeapon.fireCooldownMs) return false;
+  if (now - lastPlayerShotAt < currentWeapon.fireCooldownMs / playerState.shotRateMultiplier) return false;
   lastPlayerShotAt = now;
   lastPlayerActivityAt = now;
   runStats.shotsFired += 1;
@@ -2658,7 +2660,7 @@ function shootBullet(): boolean {
     bullets.push({
       id: `${now}-${weaponShotSequence}-${index}`,
       owner: "player",
-      damage: projectile.damage,
+      damage: playerAttackDamage(playerState, projectile.damage),
       ...origin,
       vx: projectile.direction.x * projectile.speed,
       vy: projectile.direction.y * projectile.speed,
@@ -2692,6 +2694,9 @@ function updateBullets(dt: number): void {
   const survivors = [];
 
   for (const bullet of bullets) {
+    if (bullet.owner === "player" && playerState.aimAid > 0) {
+      steerPlayerBullet(bullet, currentMonsters, playerState.aimAid, dt);
+    }
     const stepX = bullet.vx * dt;
     const stepY = bullet.vy * dt;
     const stepDistance = Math.hypot(stepX, stepY);
@@ -2729,7 +2734,7 @@ function updateBullets(dt: number): void {
             bullet,
             bulletRadius,
           )) {
-            damageMonster(monster, bullet.damage, bullet);
+            damageMonster(monster, criticalBulletDamage(playerState, bullet.damage), bullet);
             alive = false;
             break;
           }
@@ -2750,7 +2755,8 @@ function updateBullets(dt: number): void {
         if (!sceneryBlocksProjectiles(item)) continue;
 
         if (projectileHitsDecoration(item, bullet, bulletRadius)) {
-          if (item.destructible) damageObstacle(item, bullet.damage, bullet);
+          if (item.destructible) damageObstacle(item,
+            bullet.owner === "player" ? criticalBulletDamage(playerState, bullet.damage) : bullet.damage, bullet);
           else renderBulletImpact(bullet);
           alive = false;
           break;
@@ -2812,8 +2818,18 @@ function runGameTick(timestamp: number): void {
     return;
   }
 
-  const dt = Math.min(0.05, Math.max(0, (timestamp - lastGameTick) / 1000));
+  const elapsedMs = Math.max(0, timestamp - lastGameTick);
+  const dt = Math.min(0.05, elapsedMs / 1_000);
   lastGameTick = timestamp;
+  const previousHp = playerState.hp;
+  const previousEnergy = playerState.energy;
+  const regenerated = regeneratePlayer(playerState, currentWeapon, currentWeaponAmmo, elapsedMs);
+  if (playerState.hp !== previousHp) updateHealthUi();
+  if (playerState.energy !== previousEnergy) updateEnergyUi();
+  if (regenerated.ammo !== currentWeaponAmmo) {
+    currentWeaponAmmo = regenerated.ammo;
+    updateWeaponUi();
+  }
   // Monster movement happens after dash and bullet collisions; refresh their hitboxes each tick.
   monsterCells = indexMonsterHitboxes(currentMonsters);
 
@@ -3155,14 +3171,14 @@ function buildInteractiveObjects(layout: DungeonLayout, pageUrl: string): {
 
 function renderInteractiveObjects(): void {
   renderer.renderObjects(currentStairs, currentLoot, visitedRooms, LOOT_ASSETS);
-  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
+  renderer.setPlayer(player, playerState.hp, playerState.maxHp, currentPlayerSpriteAsset);
   updatePlayerVisual();
   updatePlayerAnimationClasses();
   updateHealthUi();
 }
 
 function updatePlayerVisual(): void {
-  renderer.setPlayer(player, playerHp, PLAYER_MAX_HP, currentPlayerSpriteAsset);
+  renderer.setPlayer(player, playerState.hp, playerState.maxHp, currentPlayerSpriteAsset);
   updatePlayerProtectionVisual();
 }
 
@@ -3194,14 +3210,23 @@ function checkLoot(): void {
       collectedLoot.add(item.id);
       renderer.playPickupSound(
         item.kind === "weapon" ? "weapon"
+        : item.kind === "powerup" ? "powerup"
         : item.kind === "credit" ? "ram"
         : "generic",
       );
 
-      if (item.kind === "credit") lootInventory.credits += 1;
+      if (item.kind === "powerup" && item.powerup) {
+        collectPowerup(playerState, item.powerup);
+        updateHealthUi();
+        setStatus(`Picked up ${POWERUP_DEFINITIONS[item.powerup].name}`);
+      }
+      if (item.kind === "credit") lootInventory.credits += ramPerPickup(playerState);
       if (item.kind === "crystal") lootInventory.crystals += 1;
       if (item.kind === "core") lootInventory.cores += 1;
-      if (item.kind === "energy") lootInventory.energy = Math.min(PLAYER_ENERGY_MAX, lootInventory.energy + 1);
+      if (item.kind === "energy") {
+        lootInventory.energy += 1;
+        playerState.energy = Math.min(playerState.maxEnergy, playerState.energy + 1);
+      }
       if (item.kind === "medkit") lootInventory.medkits += 1;
       updateLootUi();
 
@@ -3220,21 +3245,20 @@ function checkLoot(): void {
       }
 
       if (item.kind === "medkit" && playerAlive) {
-        const restored = playerHp < PLAYER_MAX_HP ? 1 : 0;
-
-      if (restored > 0) {
-        playerHp += restored;
-        renderer.spawnEffect(
-          PLAYER_SPEC.visual.effects?.healing,
-          player.x,
-          player.y,
-          PLAYER_SPEC.spriteSize,
-          { followPlayer: true },
-        );
-        renderer.playHealSound();
-        updateHealthUi();
-        setStatus(`Health pack restored 1 HP · ${currentPageUrl}`);
-      }
+        const restored = Math.min(1, playerState.maxHp - playerState.hp);
+        if (restored > 0) {
+          playerState.hp += restored;
+          renderer.spawnEffect(
+            PLAYER_SPEC.visual.effects?.healing,
+            player.x,
+            player.y,
+            PLAYER_SPEC.spriteSize,
+            { followPlayer: true },
+          );
+          renderer.playHealSound();
+          updateHealthUi();
+          setStatus(`Health pack restored ${Number(restored.toFixed(2))} HP · ${currentPageUrl}`);
+        }
       }
 
       changed = true;
@@ -3388,7 +3412,7 @@ function updatePlayerMovement(dt: number, timestamp: number): void {
   const speedScale = touchMoveVector
     ? Math.max(MOVE_STICK_MIN_SPEED, Math.min(1, magnitude))
     : Math.min(1, magnitude);
-  const distance = PLAYER_SPEC.speed * dt * speedScale;
+  const distance = PLAYER_SPEC.speed * playerState.walkSpeedMultiplier * dt * speedScale;
   const dx = inputX / magnitude * distance;
   const dy = inputY / magnitude * distance;
   const next = {
@@ -3470,23 +3494,23 @@ function energyDashAimTarget(): Point | null {
 }
 
 function startEnergyDashTowards(target: Point): void {
-  if (!playerAlive || !currentLayout || energyDash || lootInventory.energy <= 0) return;
+  if (!playerAlive || !currentLayout || energyDash || playerState.energy <= 0) return;
   const center = actorCollisionCenter(player, PLAYER_SPEC.hitboxOffset);
   const dx = target.x - center.x;
   const dy = target.y - center.y;
   const magnitude = Math.hypot(dx, dy);
   if (magnitude < 1) return;
-  const power = energyDashPower(lootInventory.energy);
+  const power = energyDashPower(playerState.energy);
   energyDash = {
     dirX: dx / magnitude,
     dirY: dy / magnitude,
     traveled: 0,
     maxDistance: power.maxDistance,
-    damage: power.damage,
+    damage: playerAttackDamage(playerState, power.damage),
     hitTargets: new Set(),
     playerInvulnerableBefore: playerInvulnerable,
   };
-  lootInventory.energy = 0;
+  playerState.energy = 0;
   updateLootUi();
   playerInvulnerable = true;
   renderer.setPlayerDashTint(true);
@@ -3618,6 +3642,8 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     useCrystal: () => boolean;
     expireCrystalShield: () => void;
     playerHp: () => number;
+    playerState: () => PlayerState;
+    spawnPowerup: (kind: PowerupKind) => LootItem | null;
     playerFacing: () => Point;
     damagePlayer: (amount: number) => void;
     spawnHealingEffect: () => void;
@@ -3640,7 +3666,7 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
       texture: string | null;
     }>;
     portalContacts: () => string[];
-    loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null }>;
+    loot: () => Array<{ id: string; kind: string; x: number; y: number; ammo: number | null; name: string | null; placement: string | null; powerup: PowerupKind | null }>;
     lastDroppedWeapon: () => { id: string; x: number; y: number; ammo: number | null; maxAmmo: number | null; name: string | null; placement: string | null } | null;
     camera: () => { x: number; y: number; zoom: number; bossRoomId: number | null } | null;
     navigate: (url: string) => Promise<void>;
@@ -3663,8 +3689,8 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     updateLootUi();
   },
   grantEnergy(count: number): void {
-    lootInventory.energy = Math.min(PLAYER_ENERGY_MAX, Math.max(0, lootInventory.energy + count));
-    updateLootUi();
+    playerState.energy = Math.min(playerState.maxEnergy, Math.max(0, playerState.energy + count));
+    updateEnergyUi();
   },
   grantRam(count: number): void {
     lootInventory.credits = Math.max(0, lootInventory.credits + count);
@@ -3676,14 +3702,28 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     kind: item.kind, obstacle: item.obstacle, destructible: item.destructible,
     destroyed: item.destroyed, dropKind: item.dropKind, price: vendingPrice(item.vendingKind!, floorNumber()),
   })),
-  energy: () => lootInventory.energy,
+  energy: () => playerState.energy,
   dashing: () => energyDash !== null,
   useCrystal: () => activateCrystalInvulnerability(),
   expireCrystalShield(): void {
     crystalInvulnerableUntil = 0;
     updatePlayerProtectionVisual();
   },
-  playerHp: () => playerHp,
+  playerHp: () => playerState.hp,
+  playerState: () => structuredClone(playerState),
+  spawnPowerup(kind: PowerupKind): LootItem | null {
+    if (currentRoomId === null) return null;
+    const id = nextExtraLootId("test-powerup");
+    if (!id) return null;
+    const item: LootItem = {
+      id, roomId: currentRoomId, x: player.x + 80, y: player.y,
+      kind: "powerup", powerup: kind, powerupPlacement: "floor",
+    };
+    extraLootForCurrentPage().push(item);
+    currentLoot.push(item);
+    renderInteractiveObjects();
+    return item;
+  },
   playerFacing: () => ({ ...playerFacing }),
   damagePlayer: applyPlayerDamage,
   spawnHealingEffect(): void {
@@ -3780,7 +3820,8 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     y: item.y,
     ammo: item.weaponAmmo ?? item.weapon?.maxAmmo ?? null,
     name: item.weapon?.name ?? null,
-    placement: item.weaponPlacement ?? null,
+    placement: item.weaponPlacement ?? item.powerupPlacement ?? null,
+    powerup: item.powerup ?? null,
   })),
   lastDroppedWeapon: () => lastDroppedWeapon
     ? {
@@ -4379,7 +4420,7 @@ async function startArtDebug(): Promise<void> {
   gameUi.hidden = false;
   resetRunState();
   lootInventory.credits = 200;
-  lootInventory.energy = PLAYER_ENERGY_MAX;
+  playerState.energy = playerState.maxEnergy;
   equipDefaultWeapon();
   updateHudPanels();
   try {

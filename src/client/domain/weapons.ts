@@ -21,8 +21,8 @@ interface WeaponBase {
 
 export type WeaponSource = "room" | "hidden" | "boss";
 
-export const REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K = 100;
-export const MINIBOSS_WEAPON_DROP_CHANCE_PER_10K = 5_000;
+export const REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K = 50;
+export const MINIBOSS_WEAPON_DROP_CHANCE_PER_10K = 2_500;
 
 export function monsterDropsWeapon(seed: number, miniboss: boolean): boolean {
   const chance = miniboss

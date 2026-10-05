@@ -19,6 +19,7 @@ import {
   MONSTER_FRAMES,
   PLAYER_DEFAULT_ASSETS,
   PLAYER_FRAMES,
+  POWERUP_ASSETS,
   PORTAL_FRAMES,
   SCENERY_ASSETS,
   WEAPON_ASSETS,
@@ -44,6 +45,7 @@ import {
 } from "../domain/world-specs";
 import { buildWallFootprints, wallHitboxes, type WallRect } from "../domain/wall-collision";
 import { WEAPON_COLORS } from "../domain/weapons";
+import { POWERUP_DEFINITIONS } from "../domain/powerups";
 import type {
   Bullet,
   Decoration,
@@ -166,6 +168,7 @@ const ONE_SHOT_SOUNDS: Readonly<Record<string, string>> = {
   "sfx-pickup-generic": "sounds/pickup/generic.mp3",
   "sfx-pickup-ram": "sounds/pickup/ram.mp3",
   "sfx-pickup-weapon": "sounds/pickup/weapon.mp3",
+  "sfx-pickup-powerup": "sounds/pickup/powerup.mp3",
   "sfx-portal-up": "sounds/scenery/portal/teleport_up.mp3",
   "sfx-portal-down": "sounds/scenery/portal/teleport_down.mp3",
   "sfx-portal-activation": "sounds/alerts/access_granted.mp3",
@@ -490,6 +493,7 @@ export class PhaserRenderer {
           MONSTER_FRAMES,
           PLAYER_DEFAULT_ASSETS,
           PLAYER_FRAMES,
+          POWERUP_ASSETS,
           PORTAL_FRAMES,
           SCENERY_ASSETS,
           WEAPON_ASSETS,
@@ -760,7 +764,7 @@ export class PhaserRenderer {
     });
   }
 
-  playPickupSound(kind: "generic" | "ram" | "weapon"): void {
+  playPickupSound(kind: "generic" | "ram" | "weapon" | "powerup"): void {
     this.playOneShot(`sfx-pickup-${kind}`);
   }
 
@@ -2026,11 +2030,12 @@ export class PhaserRenderer {
     if (!scene) return;
     for (const item of loot) {
       if (!visited.has(item.roomId)) continue;
+      const powerup = item.kind === "powerup" && item.powerup ? POWERUP_DEFINITIONS[item.powerup] : undefined;
       const auraRadius = item.kind === "weapon" ? 112 : 86;
       const lootAura = this.createAuraLight(
         item.x,
         item.y,
-        PICKUP_AURA_COLOR,
+        powerup?.color ?? PICKUP_AURA_COLOR,
         auraRadius,
         item.kind === "weapon" ? 0.72 : 0.58,
       );
@@ -2048,7 +2053,7 @@ export class PhaserRenderer {
         continue;
       }
       const definition = item.kind === "weapon" ? undefined : LOOT_DEFINITIONS[item.kind];
-      const asset = definition?.asset ?? lootAssets[item.kind];
+      const asset = powerup?.asset ?? definition?.asset ?? lootAssets[item.kind];
       if (!asset || !definition) continue;
       const clip = this.lootClip(item, definition);
       if (clip) {
@@ -2059,7 +2064,8 @@ export class PhaserRenderer {
         this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(PICKUP_DEPTH));
         continue;
       }
-      const sprite = this.illuminate(scene.add.image(0, 0, textureKey(asset)).setDisplaySize(definition.size, definition.size));
+      const yOffset = item.kind === "powerup" && item.powerupPlacement === "pedestal" ? -48 : 0;
+      const sprite = this.illuminate(scene.add.image(0, yOffset, textureKey(asset)).setDisplaySize(definition.size, definition.size));
       this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(PICKUP_DEPTH));
     }
     this.refreshLocalLightVisibility(true);

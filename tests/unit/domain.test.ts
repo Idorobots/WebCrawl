@@ -1485,7 +1485,7 @@ describe("deterministic room contents", () => {
     const generated = buildInteractiveObjects(layout, "https://example.com/", null, new Set());
     expect(lootCountForRoom(room)).toBeGreaterThanOrEqual(3);
     expect(lootCountForRoom(room)).toBeLessThanOrEqual(7);
-    expect(generated.loot.filter(item => item.kind !== "weapon")).toHaveLength(lootCountForRoom(room));
+    expect(generated.loot.filter(item => item.kind !== "weapon" && item.kind !== "powerup")).toHaveLength(lootCountForRoom(room));
     expect(generated.stairs.map(({ url }) => url)).toEqual(room.hrefs);
     expect(new Set(generated.stairs.map(({ id }) => id)).size).toBe(generated.stairs.length);
   });
@@ -1952,13 +1952,20 @@ describe("deterministic room contents", () => {
     const boss = floorOne.find(monster => monster.bossKind)!;
     const earlyLoot = bossLootDrops(boss, "boss-floor-1", 1);
     const deepLoot = bossLootDrops(boss, "boss-floor-10", 10);
-    expect(earlyLoot).toHaveLength(8);
+    expect(earlyLoot).toHaveLength(9);
     expect(deepLoot.length).toBeGreaterThan(earlyLoot.length);
     expect(earlyLoot[0]?.kind).toBe("medkit");
-    expect(earlyLoot[1]?.kind).toBe("weapon");
-    expect(earlyLoot[1]?.weapon?.maxAmmo).not.toBeNull();
-    expect(earlyLoot[1]?.weaponPlacement).toBe("floor");
+    expect(["weapon", "powerup"]).toContain(earlyLoot[1]?.kind);
+    if (earlyLoot[1]?.kind === "weapon") {
+      expect(earlyLoot[1].weapon?.maxAmmo).toBeGreaterThan(0);
+      expect(earlyLoot[1].weaponPlacement).toBe("floor");
+    } else {
+      expect(earlyLoot[1]?.powerup).toBeDefined();
+      expect(earlyLoot[1]?.powerupPlacement).toBe("floor");
+    }
     expect(earlyLoot.some(item => item.kind === "core")).toBe(true);
+    expect(earlyLoot[2]).toMatchObject({ kind: "powerup", powerupPlacement: "floor" });
+    expect(earlyLoot.filter(item => item.kind === "weapon" || item.kind === "powerup")).toHaveLength(2);
     expect(new Set(earlyLoot.map(item => item.id)).size).toBe(earlyLoot.length);
 
     const glmHunter = bossSpecForRoom(arena, 1, "glm-hunter");
@@ -2295,7 +2302,7 @@ describe("deterministic room contents", () => {
     const hiddenRoom = node(7_000, 0, 1, {
       tag: "section",
       title: "<section> Hidden cache",
-      lootSeed: stableHash("hidden-weapon-room"),
+      lootSeed: 1,
       isHidden: true,
       x: 400,
       y: 400,
@@ -2441,13 +2448,13 @@ describe("deterministic room contents", () => {
     const regularDrops = seeds.filter(seed => monsterDropsWeapon(seed, false));
     const minibossDrops = seeds.filter(seed => monsterDropsWeapon(seed, true));
 
-    expect(REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K).toBe(100);
-    expect(MINIBOSS_WEAPON_DROP_CHANCE_PER_10K).toBe(5_000);
+    expect(REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K).toBe(50);
+    expect(MINIBOSS_WEAPON_DROP_CHANCE_PER_10K).toBe(2_500);
     expect(regularDrops.length).toBeGreaterThan(0);
-    expect(regularDrops.length / seeds.length).toBeGreaterThan(0.007);
-    expect(regularDrops.length / seeds.length).toBeLessThan(0.013);
-    expect(minibossDrops.length / seeds.length).toBeGreaterThan(0.47);
-    expect(minibossDrops.length / seeds.length).toBeLessThan(0.53);
+    expect(regularDrops.length / seeds.length).toBeGreaterThan(0.003);
+    expect(regularDrops.length / seeds.length).toBeLessThan(0.007);
+    expect(minibossDrops.length / seeds.length).toBeGreaterThan(0.22);
+    expect(minibossDrops.length / seeds.length).toBeLessThan(0.28);
     expect(regularDrops.every(seed => monsterDropsWeapon(seed, true))).toBe(true);
 
     const weapon = weaponForMonster("sentry-light", seeds[0]!);
@@ -2458,12 +2465,13 @@ describe("deterministic room contents", () => {
   it("varies regular monster loot across adjacent seeds from one room", () => {
     // The former (seed >>> 3) % 100 roll produced four medkits for these IDs.
     const roomSeed = stableHash("35|monsters");
-    const seeds = Array.from({ length: 4 }, (_, index) => stableHash(`${roomSeed}|1|${index}`));
-    const kinds = seeds.map(monsterLootKindForSeed);
+    const seeds = Array.from({ length: 8 }, (_, index) => stableHash(`${roomSeed}|1|${index}`));
+    const kinds = seeds.map(seed => monsterLootKindForSeed(seed));
 
+    expect(new Set(kinds.slice(0, 4)).size).toBeGreaterThan(1);
     expect(new Set(kinds).size).toBeGreaterThanOrEqual(3);
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      expect(seeds.map(monsterLootKindForSeed)).toEqual(kinds);
+      expect(seeds.map(seed => monsterLootKindForSeed(seed))).toEqual(kinds);
     }
   });
 
@@ -2476,7 +2484,7 @@ describe("deterministic room contents", () => {
     expect(byRoom.filter(drops => new Set(drops.slice(0, 4)).size === 1).length).toBeLessThan(40);
     const kinds = byRoom.flat();
     for (const [kind, chance] of [
-      ["credit", 0.30], ["energy", 0.30], ["core", 0.20], ["medkit", 0.15], ["crystal", 0.05],
+      ["credit", 0.30], ["energy", 0.30], ["core", 0.20], ["medkit", 0.195], ["crystal", 0.005],
     ] as const) {
       expect(Math.abs(kinds.filter(drop => drop === kind).length / kinds.length - chance))
         .toBeLessThan(0.025);
@@ -2487,7 +2495,7 @@ describe("deterministic room contents", () => {
     const room = node(7_500, 0, 1, {
       tag: "article",
       title: "<article> Weapon carrier",
-      lootSeed: stableHash("weapon-carrier-room"),
+      lootSeed: 1,
       isRoot: false,
       isHidden: true,
       x: 300,

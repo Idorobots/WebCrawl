@@ -1,7 +1,7 @@
 import { ENVIRONMENT_SEGMENT_SIZE } from "../config";
 import type {
   BossKind, Decoration, DungeonGraph, DungeonLayout, GraphNode, LayoutLink,
-  LootItem, LootKind, MonsterKind, Point, WeaponKind,
+  LootItem, LootKind, MonsterKind, Point, PowerupKind, WeaponKind,
 } from "../types";
 import { stableHash } from "./hash";
 import { doorPositionForSlot } from "./layout";
@@ -11,13 +11,14 @@ import {
 } from "./world-specs";
 import { weaponForKind, weaponKinds } from "./weapons";
 import { vendingStateForSeed } from "./vending";
+import { POWERUP_KINDS } from "./powerups";
 
 /** Positions are relative to the center of the room, so a template can be reused anywhere. */
 export interface AuthoredRoomTemplate {
   width: number;
   height: number;
   decorations?: readonly (Point & { definition: keyof typeof DECORATION_DEFINITIONS })[];
-  loot?: readonly (Point & { kind: LootKind; weaponKind?: WeaponKind })[];
+  loot?: readonly (Point & { kind: LootKind; weaponKind?: WeaponKind; powerup?: PowerupKind })[];
   monsters?: readonly (Point & { kind: MonsterKind; miniboss?: boolean })[];
 }
 
@@ -45,13 +46,14 @@ export function authoredDecorations(room: GraphNode, template: AuthoredRoomTempl
 }
 
 export function authoredLoot(room: GraphNode, template: AuthoredRoomTemplate, namespace: string): LootItem[] {
-  return (template.loot ?? []).map(({ kind, weaponKind, x, y }, index) => ({
+  return (template.loot ?? []).map(({ kind, weaponKind, powerup, x, y }, index) => ({
     id: `${namespace}::${room.id}::authored-loot-${index}`,
     roomId: room.id,
     x: room.x + x,
     y: room.y + y,
     kind,
     ...(weaponKind ? { weapon: weaponForKind(weaponKind), weaponPlacement: "floor" as const } : {}),
+    ...(powerup ? { powerup, powerupPlacement: "floor" as const } : {}),
   }));
 }
 
@@ -59,7 +61,8 @@ const GALLERY_COLUMNS = 14;
 const GALLERY_WIDTH = ENVIRONMENT_SEGMENT_SIZE * 24;
 const GALLERY_HEIGHT = ENVIRONMENT_SEGMENT_SIZE * 24;
 const decorationKeys = Object.keys(DECORATION_DEFINITIONS) as Array<keyof typeof DECORATION_DEFINITIONS>;
-const pickupKinds = Object.keys(LOOT_DEFINITIONS) as Array<keyof typeof LOOT_DEFINITIONS>;
+const pickupKinds = (Object.keys(LOOT_DEFINITIONS) as Array<keyof typeof LOOT_DEFINITIONS>)
+  .filter(kind => kind !== "powerup");
 
 const gallery: AuthoredRoomTemplate = {
   width: GALLERY_WIDTH,
@@ -71,7 +74,7 @@ const gallery: AuthoredRoomTemplate = {
   })),
   loot: [...pickupKinds.map(kind => ({ kind })), ...weaponKinds().map(weaponKind => ({
     kind: "weapon" as const, weaponKind,
-  }))].map((pickup, index) => ({
+  })), ...POWERUP_KINDS.map(powerup => ({ kind: "powerup" as const, powerup }))].map((pickup, index) => ({
     ...pickup,
     x: (index % 9 - 4) * 205,
     y: 420 + Math.floor(index / 9) * 205,

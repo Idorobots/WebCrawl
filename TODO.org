@@ -1252,6 +1252,8 @@ The goal is to be able to generate a room with all its enemies that already incl
 - Sprites that have a light on them need lighting.
 
 * Player mechanics
+We'll need the following additions to the player state:
+
 - Player's damage multiplier - initially set to 1.0, will be used in the future.
 - Player's shot rate multiplier - initially set to 1.0, will be used in the future.
 - Player's walk speed multiplier - initially set to 1.0, will be used in the future for permanent & temporary effects.
@@ -1282,45 +1284,54 @@ The goal is to be able to generate a room with all its enemies that already incl
 * Easter egg
 Whenever AI is mentioned in the content, render a special Samario content browser.
 
-* Power-ups
+* DONE Power-ups
+:LOGBOOK:
+- State "DONE"       from              [2026-10-05 Mon 18:59]
+:END:
 Add a concept of power-ups to the game.
 Power-ups are pickup items that alter the player's state such as HP, damage multiplier, fire rate, etc.
 Power ups should not be available as monster loot, except for a very tiny chance for mini-bosses and guaranteed chance for bosses (bosses should drop either a power-up or a weapon).
 Power ups should have a chance to appear in rooms on a pedestal (same as weapons). A power-up and a weapon should not appear in the same room.
-When a player picks up a powerup, it is added to the player's state and taken into account whever player's state is consulted - for instance for weapon cooldowns, damage computation etc. The power-ups icon icon should be shown on the player state panel indicating that it's in effect. Show the name of the power up on hover.
+When a player picks up a powerup, it is added to the player's state and taken into account whever player's state is consulted - for instance for weapon cooldowns, damage computation etc.
 
 Add the following power-ups to the game:
 
-- Higher Valuation - adds 2 hitpoints to the max HP
-- The End is nigh - adds 2 point to the max energy
-- Context utilization - adds 10% to the player's damage multiplier
-- Lower Latency - Faster walking speed by 10%
-- Tok/s - faster shot speed by 10%
-- Vesting - regenerates 0.1 HP every 10 seconds
-- Model training - regenerates 0.1 energy every 10 seconds
-- Quota Reset - regenerates 1% of the max ammo for the weapon every 10 seconds
-- DDR - wheneven the player picks up a RAM stick they get an additional RAM stick.
-- Campaign Contribution - Government bailout crystalss last 2 seconds longer
-- Trust me bro benchmark - adds 1% to critical shot damage chance
+- Higher Valuation - adds 2 hitpoints to the max HP (icon: pickps/powerups/health)
+- The End is nigh - adds 2 point to the max energy (icon: pickups/powerups/energy)
+- Context utilization - adds 10% to the player's damage multiplier (icon: pickups/powerups/damage)
+- Lower Latency - Faster walking speed by 10% (icon: pickups/powerups/movement_speed)
+- Tok/s - faster shot speed by 10% (icon: pickups/powerups/shot_speed)
+- Vesting - regenerates 0.1 HP every 10 seconds (icon: pickups/powerups/health_regen)
+- Model training - regenerates 0.1 energy every 10 seconds (icon: pickups/powerups/energy_regen)
+- Quota Reset - regenerates 1% of the max ammo for the weapon every 10 seconds (icon: pickups/powerups/ammo_regen)
+- DDR - wheneven the player picks up a RAM stick they get an additional RAM stick. (icon: pickups/powerups/extra_ram)
+- Campaign Contribution - Government bailout crystalss last 2 seconds longer (icon: pickups/powerups/extra_crystal)
+- Trust me bro benchmark - adds 1% to critical shot damage chance (icon: pickups/powerups/critical_damage)
 
 When the same power-up is picked up multiple times, their effects should stack (i.e. two times critical damage increases the change from 1 to 2%, two times max health increases the HP by 4 points, etc).
 
-Add a line to the prompt following the loot breakdown, explaining that certain power-ups exist (but without revealing what they do). Show random power-up icons in the prompt - 5 on desktop and 3 on mobile.
+Add a line to the prompt following the loot breakdown, explaining that certain power-ups exist (but without revealing what they do). Show random pow er-up icons in the prompt - 5 on desktop and 3 on mobile.
 
 * Extra Power-ups & enhancements
-- Better loot chance
-- AGI - "Familiar" robot helping the player
-- Map update - shows the whole level layout on the minimap
-- Minimap radar - show a rotating bar that marks monsters on the minimap for a brief moment
-- Better minimap radar - shows monsters on the minimap all the time
-- Minimap locator - shows the portals, vending machines and loot on the minimap
-- Temporary Invisibility triggered with a button
 - Slowing bullets - slow enemies that are hit
-- Stun chance or regular shots
+- Stun bullets - stun chance for shots
+- Additional bullets in the weapon's bullet pattern
 - Better aim - bullets curve towards the closes enemy slightly
+
 - Berserk - the lower the HP the more damage is dealt
 - Damage reduction - reduces taken damage by some amount
+- Better loot chance
 - Weapons using energy before they run out of ammo
+
+- Map update - show adjacent rooms and their corridors on the minimap (shows farther rooms when stacked)
+- Minimap radar - show monsters, minibosses and bosses on the minimap
+- Minimap locator - shows the portals, vending machines and loot on the minimap
+
+- AGI - "Familiar" robot helping the player
+- Temporary Invisibility triggered with a button
+- Extra bullet range
+
+The power-ups icon icon should be shown on the player state panel indicating that it's in effect. Show the name of the power up on hover.
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:
@@ -1365,7 +1376,7 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Indestructible blocking scenery sholud block bullets.
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
-
+- Boss arenas sometimes are not the farthest room and have additional corridors attached to them (screenshot).
 * DONE Enemy rebalance
 :LOGBOOK:
 - State "DONE"       from              [2026-10-04 Sun 14:05]
@@ -1455,3 +1466,7 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
+- Vending mashines need to have an aura.
+* Audio bugs
+- Picking up ammo should play the same sound as equiping a weapon.
+- When the game runs in background all sounds generated are queued and play all on once when the game is foregrounded.

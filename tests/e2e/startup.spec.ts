@@ -673,10 +673,11 @@ test("uses crystals for temporary invulnerability without counting supplies as s
   const game = page.locator("#gameCanvas");
   await expect(page.locator("#creditCount")).toHaveText("0");
   await expect(page.locator("#crystalCount")).toHaveText("0");
-  await expect(page.locator("#coreCount")).toHaveText("0");
+  await expect(game).toHaveAttribute("data-cores", "0");
   await expect(game).toHaveAttribute("data-energy", "0");
-  await expect(page.locator("#energyLootCount")).toHaveText("0");
-  await expect(page.locator("#medkitCount")).toHaveText("0");
+  await expect(game).toHaveAttribute("data-energy-loot", "0");
+  await expect(game).toHaveAttribute("data-medkits", "0");
+  await expect(page.locator(".loot-status-card > .loot-slot")).toHaveCount(2);
 
   await grantCrystals(page, 2);
   await expect(page.locator("#crystalCount")).toHaveText("2");
@@ -726,7 +727,8 @@ test("charges energy and launches an invulnerable energy dash with right click",
   const game = page.locator("#gameCanvas");
   await grantEnergy(page, 5);
   await expect(game).toHaveAttribute("data-energy", "5");
-  await expect(page.locator("#energyLootCount")).toHaveText("5");
+  await expect(page.locator("#hudEnergyFill")).toHaveAttribute("style", /width: 50%/);
+  await expect(game).toHaveAttribute("data-energy-loot", "0");
 
   const before = await playerPosition(page);
   const aim = await screenPositionFor(page, { x: before.x + 120, y: before.y });
@@ -746,7 +748,7 @@ test("charges energy and launches an invulnerable energy dash with right click",
     const position = await playerPosition(page);
     return position.x - before.x;
   }, { timeout: 5_000, intervals: [50] }).toBeGreaterThan(10);
-  await expect(page.locator("#energyLootCount")).toHaveText("0");
+  await expect(page.locator("#hudEnergyFill")).toHaveAttribute("style", /width: 0%/);
   await expect(game).toHaveAttribute("data-energy", "0");
 });
 
@@ -755,7 +757,7 @@ test("a full energy meter shines and a single charge can launch a dash", async (
   const game = page.locator("#gameCanvas");
   await grantEnergy(page, 15);
   await expect(game).toHaveAttribute("data-energy", "10");
-  await expect(page.locator("#energyLootCount")).toHaveText("10");
+  await expect(page.locator("#hudEnergyFill")).toHaveAttribute("style", /width: 100%/);
   await expect(page.locator(".energy-track.is-full")).toHaveCount(2);
   expect(await page.locator("#hudEnergyFill").evaluate(element =>
     getComputedStyle(element, "::after").animationName

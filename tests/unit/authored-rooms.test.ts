@@ -12,6 +12,7 @@ import {
   PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS,
 } from "../../src/client/domain/world-specs";
 import { weaponKinds } from "../../src/client/domain/weapons";
+import { POWERUP_KINDS } from "../../src/client/domain/powerups";
 
 describe("authored art floor", () => {
   it("has fixed, connected rooms with one room for every enemy, miniboss, and boss kind", () => {
@@ -63,8 +64,9 @@ describe("authored art floor", () => {
 
     expect(decorations.map(item => item.definitionId).sort())
       .toEqual(Object.values(DECORATION_DEFINITIONS).map(item => item.definitionId).sort());
-    expect(loot.filter(item => item.kind !== "weapon").map(item => item.kind).sort())
+    expect([...new Set(loot.filter(item => item.kind !== "weapon").map(item => item.kind))].sort())
       .toEqual(Object.keys(LOOT_DEFINITIONS).sort());
+    expect(loot.filter(item => item.kind === "powerup").map(item => item.powerup)).toEqual(POWERUP_KINDS);
     expect(loot.filter(item => item.kind === "weapon").map(item => item.weapon?.kind))
       .toEqual(weaponKinds());
 

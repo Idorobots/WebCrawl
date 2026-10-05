@@ -145,12 +145,10 @@
           <span class="stat-label">Ammo:</span>
           <div class="ammo-track"><span id="hudAmmoFillMini"></span></div>
         </div>
-        <div class="loot-mini">
+        <div class="loot-mini" aria-label="Loot inventory">
           <span class="loot-mini-slot" title="RAM"><img src="assets/pickups/ram0.png" alt="" /><strong id="creditCountMini">0</strong></span>
           <span class="loot-mini-slot" title="Endgame crystals"><img src="assets/pickups/crystal.png" alt="" /><strong id="crystalCountMini">0</strong></span>
-          <span class="loot-mini-slot" title="Doom Post Ammo"><img src="assets/pickups/ammo_ballistic.png" alt="" /><strong id="coreCountMini">0</strong></span>
-          <span class="loot-mini-slot" title="AI Doomer Energy"><img src="assets/pickups/ammo_energy.png" alt="" /><strong id="energyLootCountMini">0</strong></span>
-          <span class="loot-mini-slot" title="Series X Kits"><img src="assets/pickups/medkit.png" alt="" /><strong id="medkitCountMini">0</strong></span>
+          <div id="powerupInventoryMini" class="powerup-inventory" aria-label="Collected power-ups" hidden></div>
         </div>
       </div>
     </header>
@@ -209,9 +207,7 @@ Between frames: -- ms</div>
       <section class="loot-status-card" aria-label="Loot inventory">
         <span class="loot-slot" title="RAM"><img src="assets/pickups/ram0.png" alt="" /><strong id="creditCount">0</strong></span>
         <span class="loot-slot" title="Invulnerability crystals"><img src="assets/pickups/crystal.png" alt="" /><strong id="crystalCount">0</strong></span>
-        <span class="loot-slot" title="Ammo cores"><img src="assets/pickups/ammo_ballistic.png" alt="" /><strong id="coreCount">0</strong></span>
-        <span class="loot-slot" title="Energy cells"><img src="assets/pickups/ammo_energy.png" alt="" /><strong id="energyLootCount">0</strong></span>
-        <span class="loot-slot" title="Medkits"><img src="assets/pickups/medkit.png" alt="" /><strong id="medkitCount">0</strong></span>
+        <div id="powerupInventory" class="powerup-inventory" aria-label="Collected power-ups" hidden></div>
       </section>
 
       <section class="weapon-status-card">
@@ -249,9 +245,7 @@ Between frames: -- ms</div>
         <div class="death-loot" aria-label="Loot haul">
           <div class="death-loot-row"><img src="assets/pickups/ram0.png" alt="" /><span>Precious Content</span><strong id="deathLootCredits">0</strong></div>
           <div class="death-loot-row"><img src="assets/pickups/crystal.png" alt="" /><span>Endgame Crystals</span><strong id="deathLootCrystals">0</strong></div>
-          <div class="death-loot-row"><img src="assets/pickups/ammo_ballistic.png" alt="" /><span>Doom Post Ammo</span><strong id="deathLootCores">0</strong></div>
-          <div class="death-loot-row"><img src="assets/pickups/ammo_energy.png" alt="" /><span>AI Doomer Energy</span><strong id="deathLootEnergy">0</strong></div>
-          <div class="death-loot-row"><img src="assets/pickups/medkit.png" alt="" /><span>Series X Kit</span><strong id="deathLootMedkits">0</strong></div>
+          <div id="deathPowerupInventory" class="powerup-inventory" aria-label="Collected power-ups" hidden></div>
         </div>
         <h3>High scores — score</h3>
         <table id="highScoreTable">

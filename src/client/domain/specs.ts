@@ -8,6 +8,7 @@ import {
   LOOT_RAM_FRAMES,
   MONSTER_FRAMES,
   PLAYER_FRAMES,
+  POWERUP_ASSETS,
   PORTAL_FRAMES,
   SCENERY_ASSETS,
   WEAPON_ASSETS,
@@ -2543,6 +2544,7 @@ export const LOOT_DEFINITIONS: Record<Exclude<LootKind, "weapon">, LootDefinitio
   core: { asset: ASSETS.lootCore, size: 63, footprintRadii: circle(0.31746031746031744) },
   energy: { asset: ASSETS.lootEnergy, size: 63, footprintRadii: circle(0.31746031746031744) },
   medkit: { asset: ASSETS.lootMedkit, size: 63, footprintRadii: circle(0.31746031746031744) },
+  powerup: { asset: POWERUP_ASSETS.health, size: 63, footprintRadii: circle(0.31746031746031744) },
 };
 
 export const WEAPON_PICKUP_DEFINITIONS: Record<WeaponPlacement, { size: number; yOffset: number; footprintRadii: RelativeObjectGeometry["footprintRadii"] }> = {

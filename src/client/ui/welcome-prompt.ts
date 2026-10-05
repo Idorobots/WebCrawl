@@ -1,4 +1,4 @@
-import { WEAPON_ASSETS } from "../config";
+import { POWERUP_ASSETS, WEAPON_ASSETS } from "../config";
 import { isMobileDevice } from "./fullscreen";
 
 interface Segment {
@@ -14,14 +14,17 @@ type Block =
 
 const MOBILE_CONTROLS = isMobileDevice();
 
-const WEAPON_ICON_ASSETS: readonly string[] = (() => {
-  const files = [...new Set(Object.values(WEAPON_ASSETS))];
+function randomIconAssets(assets: readonly string[]): readonly string[] {
+  const files = [...new Set(assets)];
   for (let index = files.length - 1; index > 0; index -= 1) {
     const swap = Math.floor(Math.random() * (index + 1));
     [files[index], files[swap]] = [files[swap]!, files[index]!];
   }
   return files.slice(0, MOBILE_CONTROLS ? 3 : 5);
-})();
+}
+
+const WEAPON_ICON_ASSETS = randomIconAssets(Object.values(WEAPON_ASSETS));
+const POWERUP_ICON_ASSETS = randomIconAssets(Object.values(POWERUP_ASSETS));
 
 const MOVE_CONTROLS_TEXT = MOBILE_CONTROLS
   ? "Move with the left stick. Shoot with the right stick. "
@@ -108,6 +111,11 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
       { text: CAPTURE_CONTROLS_TEXT },
     ],
   },
+  {
+    kind: "paragraph",
+    segments: [{ text: "Certain power-ups are scattered across the web. Collect them. We'll let you discover the details." }],
+  },
+  { kind: "icons", assets: POWERUP_ICON_ASSETS },
   {
     kind: "paragraph",
     segments: [

@@ -3,6 +3,7 @@ import type {
   LootKind,
   PlayerAnimation,
   PlayerDirection,
+  PowerupKind,
   SpriteDirection,
   WeaponKind,
 } from "./types";
@@ -436,6 +437,20 @@ export const LOOT_ASSETS: Partial<Record<LootKind, string>> = {
   core: ASSETS.lootCore,
   energy: ASSETS.lootEnergy,
   medkit: ASSETS.lootMedkit,
+};
+
+export const POWERUP_ASSETS: Readonly<Record<PowerupKind, string>> = {
+  health: asset("pickups/powerups/health.png"),
+  energy: asset("pickups/powerups/energy.png"),
+  damage: asset("pickups/powerups/damage.png"),
+  movement_speed: asset("pickups/powerups/movement_speed.png"),
+  shot_speed: asset("pickups/powerups/shot_speed.png"),
+  health_regen: asset("pickups/powerups/health_regen.png"),
+  energy_regen: asset("pickups/powerups/energy_regen.png"),
+  ammo_regen: asset("pickups/powerups/ammo_regen.png"),
+  extra_ram: asset("pickups/powerups/extra_ram.png"),
+  extra_crystal: asset("pickups/powerups/extra_crystal.png"),
+  critical_damage: asset("pickups/powerups/critical_damage.png"),
 };
 
 export const LOOT_RAM_FRAMES = [

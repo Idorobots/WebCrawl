@@ -9,7 +9,11 @@ export type PlayerDirection =
   | "left"
   | "upLeft";
 export type PlayerAnimation = "normal" | "walk";
-export type LootKind = "credit" | "crystal" | "core" | "medkit" | "energy" | "weapon";
+export type LootKind = "credit" | "crystal" | "core" | "medkit" | "energy" | "weapon" | "powerup";
+export type PowerupKind =
+  | "health" | "energy" | "damage" | "movement_speed" | "shot_speed"
+  | "health_regen" | "energy_regen" | "ammo_regen" | "extra_ram"
+  | "extra_crystal" | "critical_damage";
 export type VendingKind = "medical" | "ammo" | "energy" | "crystal";
 export type BossKind = "deepseek-summoner" | "qwen-teleporter" | "glm-hunter" | "kimi-spiral" | "hy4-wave";
 export type RegularMonsterKind =
@@ -182,6 +186,8 @@ export interface LootItem extends Point {
   weapon?: WeaponSpec;
   weaponAmmo?: number | null;
   weaponPlacement?: WeaponPlacement;
+  powerup?: PowerupKind;
+  powerupPlacement?: WeaponPlacement;
 }
 
 export interface WeaponSpec {
