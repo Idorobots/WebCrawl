@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Decoration, GraphNode, VendingKind } from "../../src/client/types";
-import { applyObstacleDamage, bossCrushedScenery, projectileHitsDecoration } from "../../src/client/domain/combat";
+import { applyObstacleDamage, bossCrushedScenery, projectileHitsDecoration, sceneryBlocksProjectiles } from "../../src/client/domain/combat";
 import { buildDecorations, buildSceneryDrops, decorationSpecsForRoom, roomSceneryThemeForRoom, sceneryDropKindForSeed } from "../../src/client/domain/generation";
 import { footprintsOverlap } from "../../src/client/domain/geometry";
 import { stableHash } from "../../src/client/domain/hash";
@@ -70,6 +70,9 @@ describe("vending machines", () => {
     expect(wreck.footprintRadii).toEqual(item.footprintRadii);
     expect(wreck.size).toBe(item.size);
     expect(wreck.visual.normal).toEqual(item.visual.destroyed![0]);
+    expect(sceneryBlocksProjectiles(wreck)).toBe(true);
+    const hitboxOffset = resolveGeometry(wreck).hitboxOffset;
+    expect(projectileHitsDecoration(wreck, { x: wreck.x + hitboxOffset.x, y: wreck.y + hitboxOffset.y }, 6)).toBe(true);
     const footprint = resolveGeometry(wreck).footprintRadii;
     expect(footprintsOverlap({ x: 0, y: 50 }, { x: 20, y: 20 }, wreck, footprint)).toBe(true);
     expect(applyObstacleDamage(wreck, 10_000)).toBe(false);

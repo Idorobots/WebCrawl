@@ -129,6 +129,11 @@ export function steerDashDirection(direction: Point, from: Point, target: Point,
   return { x: Math.cos(angle), y: Math.sin(angle) };
 }
 
+/** Damageable props and solid, indestructible scenery both stop projectiles. */
+export function sceneryBlocksProjectiles(item: Pick<Decoration, "destructible" | "obstacle" | "destroyed">): boolean {
+  return !item.destroyed && (item.destructible || item.obstacle);
+}
+
 export function projectileHitsDecoration(
   item: Decoration,
   projectile: Point,

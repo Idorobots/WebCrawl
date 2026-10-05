@@ -56,6 +56,7 @@ import {
   monsterMeleeRange,
   projectileHitsCircle,
   projectileHitsDecoration,
+  sceneryBlocksProjectiles,
   steerDashDirection,
   visiblePlayerHitPoint,
 } from "./domain/combat";
@@ -258,7 +259,7 @@ let floorGeometry: FloorGeometry | null = null;
 let wallFootprints = new WallRectIndex([]);
 let wallProjectileHitboxes = new WallRectIndex([]);
 let obstacleCells = new Map<string, Set<Decoration>>();
-let damageableCells = new Map<string, Set<Decoration>>();
+let sceneryHitboxCells = new Map<string, Set<Decoration>>();
 let monsterCells = new Map<string, Set<Monster>>();
 const monsterFootprintIndex = new MonsterFootprintIndex();
 const failedMonsterPaths = new FailedPathCache();
@@ -1392,6 +1393,17 @@ function bulletDamageEffectSize(bullet?: Bullet): number | undefined {
   return bullet ? (bullet.radius ?? DEFAULT_BULLET_SPEC.radius) * 12 : undefined;
 }
 
+function renderBulletImpact(bullet: Bullet): void {
+  renderer.spawnEffect(
+    PLAYER_SPEC.visual.effects?.damage,
+    bullet.x,
+    bullet.y,
+    PLAYER_SPEC.spriteSize,
+    { lightColor: renderer.bulletColor(bullet), size: bulletDamageEffectSize(bullet) },
+  );
+  renderer.playDamageSound();
+}
+
 function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void {
   if (!applyObstacleDamage(item, amount)) return;
 
@@ -1469,7 +1481,7 @@ function crushSceneryAlongFootprint(from: Point, to: Point, radius: EllipseRadii
     Math.min(from.y, to.y) - radius.y,
     Math.max(from.y, to.y) + radius.y,
     key => {
-      for (const item of damageableCells.get(key) ?? []) nearby.add(item);
+      for (const item of sceneryHitboxCells.get(key) ?? []) nearby.add(item);
     },
   );
   for (const item of bossCrushedScenery(from, to, radius, [...nearby])) {
@@ -2702,14 +2714,7 @@ function updateBullets(dt: number): void {
       }
       if (wallBlocksSegment({ x: bullet.x - dx, y: bullet.y - dy }, bullet,
         { x: bulletRadius, y: bulletRadius }, wallProjectileHitboxes)) {
-        renderer.spawnEffect(
-          PLAYER_SPEC.visual.effects?.damage,
-          bullet.x,
-          bullet.y,
-          PLAYER_SPEC.spriteSize,
-          { lightColor: renderer.bulletColor(bullet), size: bulletDamageEffectSize(bullet) },
-        );
-        renderer.playDamageSound();
+        renderBulletImpact(bullet);
         alive = false;
         break;
       }
@@ -2741,11 +2746,12 @@ function updateBullets(dt: number): void {
         }
       }
 
-      for (const item of damageableCells.get(spatialCellKey(bullet.x, bullet.y)) ?? []) {
-        if (!item.destructible || item.destroyed) continue;
+      for (const item of sceneryHitboxCells.get(spatialCellKey(bullet.x, bullet.y)) ?? []) {
+        if (!sceneryBlocksProjectiles(item)) continue;
 
         if (projectileHitsDecoration(item, bullet, bulletRadius)) {
-          damageObstacle(item, bullet.damage, bullet);
+          if (item.destructible) damageObstacle(item, bullet.damage, bullet);
+          else renderBulletImpact(bullet);
           alive = false;
           break;
         }
@@ -3018,7 +3024,7 @@ function resumeGameLoop(): void {
 
 function rebuildSpatialIndexes(): void {
   obstacleCells = new Map();
-  damageableCells = new Map();
+  sceneryHitboxCells = new Map();
   if (!currentLayout) return;
   const margin = Math.max(48, MAX_ACTOR_FOOTPRINT);
 
@@ -3033,7 +3039,7 @@ function rebuildSpatialIndexes(): void {
         obstacleCells.set(key, cell);
       });
     }
-    if (item.destructible) {
+    if (sceneryBlocksProjectiles(item)) {
       const hitbox = worldPoint(item, "hitboxRadii");
       const offset = worldPoint(item, "hitboxOffset");
       const footprint = worldPoint(item, "footprintRadii");
@@ -3042,9 +3048,9 @@ function rebuildSpatialIndexes(): void {
       const extentY = Math.max(hitbox.y + Math.abs(offset.y), footprint.y) +
         Math.max(24, PLAYER_SPEC.hitboxRadii.y);
       forSpatialCells(item.x - extentX, item.x + extentX, item.y - extentY, item.y + extentY, key => {
-        const cell = damageableCells.get(key) ?? new Set();
+        const cell = sceneryHitboxCells.get(key) ?? new Set();
         cell.add(item);
-        damageableCells.set(key, cell);
+        sceneryHitboxCells.set(key, cell);
       });
     }
   }
@@ -3514,7 +3520,7 @@ function applyEnergyDashDamage(): void {
       damageMonster(monster, dash.damage);
     }
   }
-  for (const item of damageableCells.get(spatialCellKey(player.x, player.y)) ?? []) {
+  for (const item of sceneryHitboxCells.get(spatialCellKey(player.x, player.y)) ?? []) {
     if (!item.destructible || item.destroyed || dash.hitTargets.has(item.id)) continue;
     if (projectileHitsDecoration(item, center, PLAYER_SPEC.hitboxRadii)) {
       dash.hitTargets.add(item.id);

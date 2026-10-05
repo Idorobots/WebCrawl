@@ -83,6 +83,27 @@ async function bump(page: Page, remaining: number): Promise<void> {
   await page.keyboard.up("a");
 }
 
+async function sampleBulletPositions(page: Page): Promise<number[]> {
+  return page.evaluate(async () => {
+    const scene = (window as unknown as TestWindow).__webcrawlScene;
+    const positions: number[] = [];
+    const sample = (): void => {
+      for (const object of scene.children.list) {
+        if (object.type !== "Image") continue;
+        const image = object as import("phaser").GameObjects.Image;
+        if (image.texture.key === "asset:assets/bullet.png") positions.push(image.x);
+      }
+    };
+    scene.game.events.on("postrender", sample);
+    try {
+      await new Promise(resolve => window.setTimeout(resolve, 650));
+    } finally {
+      scene.game.events.off("postrender", sample);
+    }
+    return positions;
+  });
+}
+
 test("unfunded bumps recoil and return; purchases require pulling away and survive floor revisits", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -205,9 +226,11 @@ test("shooting replaces a stocked machine with a permanent blocking wreck and dr
   );
   await page.mouse.down();
   await expect.poll(async () => (await machine(page)).destructible, { timeout: 20_000 }).toBe(false);
-  // Additional shots must leave the replacement intact and cannot repeat its drop.
-  await page.waitForTimeout(500);
+  // The existing hitbox index must recognize the replacement immediately.
+  const bulletPositions = await sampleBulletPositions(page);
   await page.mouse.up();
+  expect(bulletPositions.length).toBeGreaterThan(0);
+  expect(Math.min(...bulletPositions)).toBeGreaterThan(item.x);
   expect(await machine(page)).toMatchObject({ kind: "debris", destroyed: false, obstacle: true, destructible: false, vendingRemaining: 0 });
   expect(await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.playerHp())).toBe(hp);
   const textures = await page.evaluate(id => {
@@ -228,6 +251,18 @@ test("shooting replaces a stocked machine with a permanent blocking wreck and dr
   await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.navigate("https://example.com/other-floor"));
   await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.goBack());
   expect(await machine(page)).toMatchObject({ kind: "debris", obstacle: true, destructible: false });
+  // Rebuilding the floor's hitbox index must also include the saved wreck.
+  await positionPlayer(page, item, 140);
+  const restoredCamera = await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.camera());
+  await page.mouse.move(
+    bounds.x + bounds.width / 2 + (item.x - restoredCamera.x) * restoredCamera.zoom,
+    bounds.y + bounds.height / 2 + (item.y - 30 - restoredCamera.y) * restoredCamera.zoom,
+  );
+  await page.mouse.down();
+  const restoredBulletPositions = await sampleBulletPositions(page);
+  await page.mouse.up();
+  expect(restoredBulletPositions.length).toBeGreaterThan(0);
+  expect(Math.min(...restoredBulletPositions)).toBeGreaterThan(item.x);
   await positionPlayer(page, item, 80);
   await page.keyboard.down("a");
   await page.waitForTimeout(650);
