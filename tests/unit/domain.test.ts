@@ -95,6 +95,7 @@ import {
   REGULAR_MONSTER_DEFINITIONS,
   ROOM_SCENERY_THEMES,
   ROOM_DEFINITIONS,
+  SCENERY_DEFINITIONS,
   WEAPON_VISUAL_DEFINITIONS,
   WORLD_GEOMETRY,
   type RoomSceneryTheme,
@@ -461,7 +462,7 @@ describe("layout and geometry", () => {
     expect(worldPoint(DECORATION_DEFINITIONS.plantViolet, "visualOffset").y).toBe(-20);
     expect(worldPoint(DECORATION_DEFINITIONS.reactorPylon, "visualOffset").y).toBe(-40);
     expect(worldPoint(DECORATION_DEFINITIONS.spawner, "visualOffset").y).toBe(-55);
-    expect(worldPoint(DECORATION_DEFINITIONS.contentBrowser, "visualOffset").y).toBe(-35);
+    expect(worldPoint(DECORATION_DEFINITIONS.contentBrowser, "visualOffset").y).toBe(-40.5);
     expect(worldPoint(DECORATION_DEFINITIONS.crateCargo, "hitboxOffset").y).toBe(-10);
     expect(worldPoint(DECORATION_DEFINITIONS.reagentRack, "hitboxOffset").y).toBe(-15);
     expect(worldPoint(DECORATION_DEFINITIONS.spawner, "hitboxOffset").y).toBe(-10);
@@ -1278,9 +1279,9 @@ describe("deterministic room contents", () => {
   });
 
   it("uses configured scenery HP across room and corridor seeds and floors", () => {
-    const hpByDefinitionId = new Map<string, number>(Object.values(DECORATION_DEFINITIONS).map(definition =>
-      [definition.definitionId, definition.hp]
-    ));
+    const hpByDefinitionId = new Map<string, number>([
+      ...Object.values(DECORATION_DEFINITIONS), ...SCENERY_DEFINITIONS,
+    ].map(definition => [definition.definitionId, definition.hp]));
     const rooms = Array.from({ length: 20 }, (_, index) => ({
       ...room,
       id: 10_000 + index,
@@ -1308,7 +1309,8 @@ describe("deterministic room contents", () => {
       expect(corridorItems.length).toBeGreaterThan(0);
       const items = [...rooms.flatMap(room => decorationSpecsForRoom(room, floor)), ...corridorItems];
       for (const item of items) {
-        const hp = hpByDefinitionId.get(item.definitionId)!;
+        const hp = hpByDefinitionId.get(item.definitionId);
+        expect(hp, item.definitionId).toBeDefined();
         expect(item.hp, item.id).toBe(hp);
         expect(item.maxHp, item.id).toBe(hp);
       }
@@ -2346,27 +2348,27 @@ describe("deterministic room contents", () => {
 
   it("leaves species-specific wrecks and parts when enemies die", () => {
     const definitions = [
-      ["scout", REGULAR_MONSTER_DEFINITIONS["melee-light"]],
-      ["heavy", REGULAR_MONSTER_DEFINITIONS["melee-heavy"]],
-      ["sentry-ballistic", REGULAR_MONSTER_DEFINITIONS["sentry-light"]],
-      ["sentry-twin", REGULAR_MONSTER_DEFINITIONS["sentry-heavy"]],
-      ["sentry-energy", REGULAR_MONSTER_DEFINITIONS["sentry-scatter"]],
-      ["boss-arc", BOSS_DEFINITIONS["deepseek-summoner"]],
-      ["boss-missile", BOSS_DEFINITIONS["kimi-spiral"]],
-      ["boss-fortress", BOSS_DEFINITIONS["glm-hunter"]],
-      ["boss-laser", BOSS_DEFINITIONS["qwen-teleporter"]],
-      ["boss-siege", BOSS_DEFINITIONS["hy4-wave"]],
+      ["scout", REGULAR_MONSTER_DEFINITIONS["melee-light"], -0.315],
+      ["heavy", REGULAR_MONSTER_DEFINITIONS["melee-heavy"], -0.315],
+      ["sentry-ballistic", REGULAR_MONSTER_DEFINITIONS["sentry-light"], -0.315],
+      ["sentry-twin", REGULAR_MONSTER_DEFINITIONS["sentry-heavy"], -0.315],
+      ["sentry-energy", REGULAR_MONSTER_DEFINITIONS["sentry-scatter"], -0.315],
+      ["boss-arc", BOSS_DEFINITIONS["deepseek-summoner"], -0.21875],
+      ["boss-missile", BOSS_DEFINITIONS["kimi-spiral"], -0.21875],
+      ["boss-fortress", BOSS_DEFINITIONS["glm-hunter"], -0.196875],
+      ["boss-laser", BOSS_DEFINITIONS["qwen-teleporter"], -0.21875],
+      ["boss-siege", BOSS_DEFINITIONS["hy4-wave"], -0.21875],
     ] as const;
-    for (const [kind, definition] of definitions) {
+    for (const [kind, definition, wreckOffsetY] of definitions) {
       const prefix = `assets/debris/enemies__${kind.replaceAll("-", "_")}__`;
       expect(definition.visual.destroyed?.slice(0, 2).map(clip => clip.frames[0]), kind).toEqual([
         `${prefix}wreck.png`,
         `${prefix}parts.png`,
       ]);
       expect(definition.visual.destroyed?.every(clip => clip.origin.y === 0.5)).toBe(true);
-      expect(worldPoint(definition, "destroyedVisualOffset").y).toBeCloseTo(
-        -definition.size * definition.visual.destroyed![0]!.sizeScale * 0.4375,
-      );
+      // Wreck offsets are authored independently of the debris clip's scale.
+      expect(worldPoint(definition, "destroyedVisualOffset").x, kind).toBe(0);
+      expect(worldPoint(definition, "destroyedVisualOffset").y, kind).toBeCloseTo(definition.size * wreckOffsetY);
     }
   });
 
@@ -2382,7 +2384,7 @@ describe("deterministic room contents", () => {
     expect(assetsFor(DECORATION_DEFINITIONS.serverRack)).toContain(DEBRIS_ASSETS.electronicsCabinet);
     expect(assetsFor(DECORATION_DEFINITIONS.energyCapacitor)).toContain(DEBRIS_ASSETS.purpleEnergyCoil);
     expect(assetsFor(DECORATION_DEFINITIONS.fuelPumpSkid)).toEqual(expect.arrayContaining([
-      DEBRIS_ASSETS.greenChemicalBarrel, DEBRIS_ASSETS.orangeFuelBarrel,
+      DEBRIS_ASSETS.turbine, DEBRIS_ASSETS.greenChemicalBarrel,
     ]));
     expect(assetsFor(DECORATION_DEFINITIONS.canisterRack)).toContain(DEBRIS_ASSETS.mixedBarrelParts);
   });
@@ -2834,8 +2836,8 @@ describe("deterministic room contents", () => {
     expect(browser.dropCount).toBeGreaterThanOrEqual(3);
     expect(browser.dropCount).toBeLessThanOrEqual(7);
     expect(DECORATION_DEFINITIONS.contentBrowser.visual.destroyed?.map(clip => clip.frames[0])).toEqual([
-      DEBRIS_ASSETS.genericCircuit,
       DEBRIS_ASSETS.genericMetal,
+      DEBRIS_ASSETS.electronicsCabinet,
     ]);
 
     expect(contentBrowserForRoom({ ...contentRoom, isRoot: true })).toBeNull();

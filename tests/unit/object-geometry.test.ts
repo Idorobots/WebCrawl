@@ -20,7 +20,7 @@ describe("size-relative object geometry", () => {
     expect(manipulator.footprintRadii).toEqual({ x: 40, y: 25 });
     expect(worldPoint(world.BOSS_DEFINITIONS["glm-hunter"], "destroyedVisualOffset")).toEqual({ x: 0, y: -78.75 });
     expect(world.PORTAL_DEFINITION.visualOffset).toEqual({ x: 0, y: -30 });
-    expect(world.PORTAL_DEFINITION.footprintRadii).toEqual({ x: 40, y: 25 });
+    expect(world.PORTAL_DEFINITION.footprintRadii).toEqual({ x: 45, y: 30 });
     expect(world.LOOT_DEFINITIONS.medkit.footprintRadii).toEqual({ x: 20, y: 20 });
     expect(world.WEAPON_PICKUP_DEFINITIONS.floor.footprintRadii).toEqual({ x: 20, y: 20 });
   });

@@ -3592,7 +3592,7 @@ function updateEnergyDash(dt: number): void {
   if (dash.traveled >= dash.maxDistance) endEnergyDash();
 }
 
-function teleportPlayerTo(x: number, y: number): void {
+function teleportPlayerTo(x: number, y: number, immediate = true): void {
   if (!currentLayout || !isPlayerWalkable(x, y, false)) return;
   player = { x, y };
   touchAimCursor = null;
@@ -3600,13 +3600,13 @@ function teleportPlayerTo(x: number, y: number): void {
   updatePlayerAimFromPointer();
   revealRoomsFromCorridor(player.x, player.y);
   updateCurrentRoom();
-  updateCameraForPlayer(true);
+  updateCameraForPlayer(immediate);
   checkLoot();
 }
 
 (window as Window & {
   __webcrawlTest?: {
-    teleportPlayerTo: (x: number, y: number) => void;
+    teleportPlayerTo: (x: number, y: number, immediate?: boolean) => void;
     setWeaponAmmo: (ammo: number) => void;
     setPlayerInvulnerable: (enabled: boolean) => void;
     grantCrystals: (count: number) => void;

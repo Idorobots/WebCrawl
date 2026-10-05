@@ -1320,6 +1320,7 @@ Add a line to the prompt following the loot breakdown, explaining that certain p
 - Better aim - bullets curve towards the closes enemy slightly
 - Berserk - the lower the HP the more damage is dealt
 - Damage reduction - reduces taken damage by some amount
+- Weapons using energy before they run out of ammo
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:

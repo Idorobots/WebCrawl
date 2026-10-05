@@ -972,6 +972,7 @@ test("keeps generated world coordinates independent of viewport size", async ({ 
 
 test("animates the camera both ways and keeps an active boss sized consistently when leaving its arena", async ({ page }) => {
   test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1280, height: 720 });
   const bossFixture = "<!doctype html><html><body><main>Boss deck</main></body></html>";
   await stubRemoteFetchFallbacks(page, bossFixture);
   await page.route("**/api/fetch?**", route => route.fulfill({
@@ -990,6 +991,24 @@ test("animates the camera both ways and keeps an active boss sized consistently 
   await expect(game).toHaveAttribute("data-active-bosses", "0");
   const bossHud = page.locator("#bossHud");
   await expect(bossHud).toBeHidden();
+  const entrancePosition = await playerPosition(page);
+  const entrancePositions = [entrancePosition, ...[-1, 0, 1].flatMap(x =>
+    [-1, 0, 1].map(y => ({ x: x * WORLD_GEOMETRY.segmentSize, y: y * WORLD_GEOMETRY.segmentSize }))
+  )];
+  const relocatePlayer = async (positions: Array<{ x: number; y: number }>, immediate = true): Promise<void> => {
+    const relocated = await page.evaluate(({ positions, immediate }) => {
+      const api = (window as Window & {
+        __webcrawlTest?: { teleportPlayerTo: (x: number, y: number, immediate?: boolean) => void };
+      }).__webcrawlTest!;
+      const host = document.querySelector<HTMLElement>("#gameCanvas")!;
+      for (const point of positions) {
+        api.teleportPlayerTo(point.x, point.y, immediate);
+        if (Math.hypot(Number(host.dataset.playerX) - point.x, Number(host.dataset.playerY) - point.y) < 2) return true;
+      }
+      return false;
+    }, { positions, immediate });
+    expect(relocated, "Expected an unoccupied floor position for the camera transition").toBe(true);
+  };
 
   const direction = await game.getAttribute("data-first-exit");
   const door = {
@@ -1042,19 +1061,30 @@ test("animates the camera both ways and keeps an active boss sized consistently 
   };
   expect(initialBossSize.width).toBeGreaterThan(0);
   expect(initialBossSize.height).toBe(initialBossSize.width);
-  await page.keyboard.down(exitKey);
+  const arena = {
+    left: Number(await game.getAttribute("data-active-boss-arena-left")),
+    right: Number(await game.getAttribute("data-active-boss-arena-right")),
+    top: Number(await game.getAttribute("data-active-boss-arena-top")),
+    bottom: Number(await game.getAttribute("data-active-boss-arena-bottom")),
+  };
+  const arenaPositions = [0.25, 0.5, 0.75].flatMap(x => [0.25, 0.5, 0.75].map(y => ({
+    x: arena.left + (arena.right - arena.left) * x,
+    y: arena.top + (arena.bottom - arena.top) * y,
+  })));
+  // Exercise camera transitions without making the camera test depend on
+  // navigating past moving monsters or props at the doorway.
+  await relocatePlayer(entrancePositions);
+  await page.evaluate(() => {
+    (window as Window & { __bossZoomSamples?: number[] }).__bossZoomSamples = [];
+  });
+  await relocatePlayer(arenaPositions, false);
   await expect(game).toHaveAttribute("data-current-room-tag", "main", { timeout: 10_000 });
   await expect(game).toHaveAttribute("data-boss-room-lights", "1");
   await expect(game).toHaveAttribute("data-boss-room-light-color", "ff3d42");
   expect(Number(await game.getAttribute("data-boss-room-light-intensity"))).toBeGreaterThanOrEqual(1.3);
-  await page.keyboard.up(exitKey);
-  await expect.poll(async () => {
-    const camera = await cameraState(page);
-    return camera && {
-      zoomedOut: Math.abs(camera.zoom - BOSS_CAMERA_SCALE) < 0.01,
-      bossRoom: camera.bossRoomId !== null,
-    };
-  }).toEqual({ zoomedOut: true, bossRoom: true });
+  await expect.poll(async () => (await cameraState(page))?.zoom, { timeout: 15_000 })
+    .toBeCloseTo(BOSS_CAMERA_SCALE, 2);
+  expect(await cameraState(page)).toMatchObject({ bossRoomId: expect.any(Number) });
   expect((await zoomSamples()).some(zoom =>
     zoom > BOSS_CAMERA_SCALE + 0.01 && zoom < CAMERA_SCALE - 0.01
   )).toBe(true);
@@ -1062,25 +1092,16 @@ test("animates the camera both ways and keeps an active boss sized consistently 
   await page.evaluate(() => {
     (window as Window & { __bossZoomSamples?: number[] }).__bossZoomSamples = [];
   });
-  const returnKey = { ArrowUp: "ArrowDown", ArrowRight: "ArrowLeft", ArrowDown: "ArrowUp", ArrowLeft: "ArrowRight" }[exitKey]!;
-  await page.keyboard.down(returnKey);
-  try {
-    await expect.poll(() => cameraState(page), { timeout: 10_000 }).toMatchObject({ bossRoomId: null });
-  } finally {
-    await page.keyboard.up(returnKey);
-  }
+  await relocatePlayer(entrancePositions, false);
+  await expect.poll(() => cameraState(page), { timeout: 10_000 }).toMatchObject({ bossRoomId: null });
   await expect.poll(() => cameraState(page), { timeout: 15_000 }).toMatchObject({ zoom: CAMERA_SCALE, bossRoomId: null });
   expect((await zoomSamples()).some(zoom =>
     zoom > BOSS_CAMERA_SCALE + 0.01 && zoom < CAMERA_SCALE - 0.01
   )).toBe(true);
 
   // Re-enter before checking mobile arena framing and persistent boss sizing.
-  await page.keyboard.down(exitKey);
-  try {
-    await expect(game).toHaveAttribute("data-current-room-tag", "main", { timeout: 10_000 });
-  } finally {
-    await page.keyboard.up(exitKey);
-  }
+  await relocatePlayer(arenaPositions, false);
+  await expect(game).toHaveAttribute("data-current-room-tag", "main", { timeout: 10_000 });
   await expect.poll(() => cameraState(page), { timeout: 15_000 }).toMatchObject({ zoom: BOSS_CAMERA_SCALE });
   await page.setViewportSize({ width: 390, height: 720 });
   await expect(bossHud).toBeVisible();
@@ -1088,19 +1109,9 @@ test("animates the camera both ways and keeps an active boss sized consistently 
   const mobileAbilities = await page.locator(".mobile-abilities").boundingBox();
   if (!mobileHud || !mobileAbilities) throw new Error("Mobile boss HUD or controls unavailable");
   expect(mobileHud.y + mobileHud.height).toBeLessThan(mobileAbilities.y);
-  await expect.poll(async () => {
-    const camera = await cameraState(page);
-    return camera && {
-      zoomedOut: Math.abs(camera.zoom - BOSS_CAMERA_SCALE * MOBILE_CAMERA_SCALE) < 0.01,
-    };
-  }).toEqual({ zoomedOut: true });
-  const entranceSide = {
-    N: { x: door.x, y: door.y + 90 },
-    E: { x: door.x - 90, y: door.y },
-    S: { x: door.x, y: door.y - 90 },
-    W: { x: door.x + 90, y: door.y },
-  }[direction ?? "N"] ?? { x: door.x, y: door.y + 90 };
-  await teleportPlayer(page, entranceSide);
+  await expect.poll(async () => (await cameraState(page))?.zoom, { timeout: 15_000 })
+    .toBeCloseTo(BOSS_CAMERA_SCALE * MOBILE_CAMERA_SCALE, 2);
+  await relocatePlayer(entrancePositions);
   await expect(bossHud).toBeVisible();
   await expect(game).toHaveAttribute("data-current-room-tag", "body");
   await expect.poll(async () => await cameraState(page)).toMatchObject({ zoom: CAMERA_SCALE * MOBILE_CAMERA_SCALE, bossRoomId: null });
