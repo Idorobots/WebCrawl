@@ -4,7 +4,12 @@ import { layoutOrthogonal } from "../../src/client/domain/layout";
 import { WORLD_GEOMETRY } from "../../src/client/domain/specs";
 import { connectedRoomAdjacency, corridorJunctions, junctionRoomsAtPoint } from "../../src/client/domain/corridor-junctions";
 import { pointInCorridor } from "../../src/client/domain/geometry";
-import { aStarPath, revealedRoomPath } from "../../src/client/domain/pathfinding";
+import { FloorGeometry } from "../../src/client/domain/floor-geometry";
+import { monsterPositionIsClear } from "../../src/client/domain/generation";
+import { worldPoint } from "../../src/client/domain/object-geometry";
+import { aStarPath, revealedRoomPath, walkableSegment } from "../../src/client/domain/pathfinding";
+import { buildWallFootprints, wallBlocksSegment, wallOverlapsEllipse, WallRectIndex } from "../../src/client/domain/wall-collision";
+import { PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS } from "../../src/client/domain/world-specs";
 import {
   buildCorridorRenderPlan,
   buildRoomWalls,
@@ -159,6 +164,49 @@ describe("corridor render planning", () => {
     ]);
     expect(plan.walls).toHaveLength(expectedWalls);
   });
+
+  for (const route of ["separate links", "single bent link"] as const) {
+    it.each([
+      [["N", "W"], "bottom-right"],
+      [["N", "E"], "bottom-left"],
+      [["S", "W"], "top-right"],
+      [["S", "E"], "top-left"],
+    ] as const)(`lets players and monsters traverse the outer %s bend floor with ${route}`, (directions, kind) => {
+      // Isolate the corridor: the render-plan fixtures otherwise have rooms
+      // over the junction, which would mask missing corridor floor ownership.
+      const layout = { ...layoutForArms(directions), nodes: [] };
+      if (route === "single bent link") {
+        const [first, second] = layout.links;
+        layout.links = [{ ...first!, points: [first!.points[1]!, { x: 0, y: 0 }, second!.points[1]!] }];
+      }
+      const floors = new FloorGeometry(layout);
+      const walls = new WallRectIndex(buildWallFootprints(layout));
+      const outerCell = cell(kind);
+      const outerPoint = { x: outerCell.x / 2, y: outerCell.y / 2 };
+      const from = { x: -Math.sign(outerPoint.x) * SEGMENT_SIZE, y: outerPoint.y };
+      const to = { x: outerPoint.x, y: -Math.sign(outerPoint.y) * SEGMENT_SIZE };
+      expect(layout.links.some(link => pointInCorridor(outerPoint.x, outerPoint.y, link))).toBe(false);
+      expect(floors.contains(outerPoint)).toBe(true);
+
+      const footprints = [PLAYER_SPEC.footprintRadii, worldPoint(REGULAR_MONSTER_DEFINITIONS["melee-heavy"], "footprintRadii")];
+      for (const footprint of footprints) {
+        const walkable = (point: Point) => floors.contains(point) && !wallOverlapsEllipse(point, footprint, walls);
+        for (const [start, end] of [[from, outerPoint], [outerPoint, to], [to, outerPoint], [outerPoint, from]]) {
+          expect(walkableSegment(start!, end!, walkable)).toBe(true);
+          expect(wallBlocksSegment(start!, end!, footprint, walls)).toBe(false);
+        }
+        expect(monsterPositionIsClear(outerPoint, footprint, layout, [], [], walls, floors)).toBe(true);
+
+        const boundary = { x: Math.sign(outerPoint.x) * SEGMENT_SIZE, y: outerPoint.y };
+        expect(floors.contains(boundary)).toBe(true);
+        expect(walkable(boundary)).toBe(false);
+        expect(wallBlocksSegment(outerPoint, boundary, footprint, walls)).toBe(true);
+        const beyond = { x: boundary.x + Math.sign(outerPoint.x), y: boundary.y };
+        expect(floors.contains(beyond)).toBe(false);
+        expect(monsterPositionIsClear(beyond, footprint, layout, [], [], walls, floors)).toBe(false);
+      }
+    });
+  }
 
   it.each([
     [["N", "W", "E"], ["bottom-left", "bottom-right"], 5],

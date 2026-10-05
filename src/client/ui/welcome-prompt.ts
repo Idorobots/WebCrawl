@@ -33,7 +33,7 @@ const BAILOUT_CONTROLS_TEXT = MOBILE_CONTROLS
 
 const CAPTURE_CONTROLS_TEXT = MOBILE_CONTROLS
   ? " — press Capture with any energy to dash toward your aim. More energy means a longer, stronger dash."
-  : " — right-click with any energy to dash toward the cursor. More energy means a longer, stronger dash.";
+  : " — right-click for a Regulatory Capture dash. More energy means a longer, stronger dash.";
 
 const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   {
@@ -114,10 +114,13 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
       {
         text:
           "Be careful! Evil, open-weight models are lurking in the dark " +
-          "distilling the Frontier... If you find one, kill it before it kills ",
+          "distilling the Frontier...",
       },
       {
-        text: "our profits",
+        text: "If you find one, kill it before it kills ",
+      },
+      {
+        text: "my profits",
         strike: true,
       },
       {

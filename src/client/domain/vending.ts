@@ -82,9 +82,10 @@ export function purchaseVendingItem(item: Decoration, credits: number, floor: nu
   return { purchased: true, credits: credits - price, price, depleted: item.vendingRemaining === 0 };
 }
 
-/** Only an attempted move toward the machine can trigger a purchase. */
+/** Only an attempted move toward a usable machine can trigger a vend or empty-stock explosion. */
 export function bumpsVendingMachine(from: Point, to: Point, item: Decoration): boolean {
-  if (!item.vendingKind || item.destroyed || !item.vendingRemaining) return false;
+  if (!item.vendingKind || item.destroyed || !item.destructible ||
+      item.vendingRemaining === undefined || item.vendingExhaustedAt !== undefined) return false;
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   if (dx * (item.x - from.x) + dy * (item.y - from.y) <= 0) return false;

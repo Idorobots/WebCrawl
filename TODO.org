@@ -1354,12 +1354,12 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Minibosses fail pathing and freeze in place when the player enters a place they can't path to.
 * Bugs
 - Monsters get deadlocked sometimes - all blocking one another, especially when shared paths are used.
+- It appears that sometimes invisible blocked objects appear in-game in corridor L-junctions.
+- Prompt on the welcome screen should mention "Regulatory Capture" as the name of the dash move.
+- Vending machine should explode on the next use, when the capacity is 0, not immediately when the capacity reaches 0.
 
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
-- Vending machine should explode on the next use, when the capacity is 0, not immediately when the capacity reaches 0.
-
-- It appears that sometimes invisible blocked objects appear in-game in corridor L-junctions.
 
 * DONE Enemy rebalance
 :LOGBOOK:
@@ -1445,5 +1445,4 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
-- Prompt on the welcome screen should mention "Regulatory Capture" as the name of the dash move.
 - Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.

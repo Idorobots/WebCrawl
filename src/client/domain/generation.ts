@@ -16,7 +16,8 @@ import type {
   Stair,
 } from "../types";
 import { stableHash } from "./hash";
-import { footprintsOverlap, pointInCorridor, pointInRoomFloor } from "./geometry";
+import { footprintsOverlap, pointInRoomFloor } from "./geometry";
+import { FloorGeometry } from "./floor-geometry";
 import { buildWallFootprints, WallRectIndex, wallOverlapsEllipse } from "./wall-collision";
 import { hasReadableRoomContent } from "./graph";
 import {
@@ -898,6 +899,7 @@ export function buildMonsters(
   walls = new WallRectIndex(buildWallFootprints(layout)),
   authoredRooms: AuthoredRooms = new Map(),
 ): Monster[] {
+  const floors = new FloorGeometry(layout);
   const roomSpecs = layout.nodes.flatMap(room => {
     const template = authoredRooms.get(room.id);
     if (!template) return monsterSpecsForRoom(room, floor);
@@ -931,7 +933,7 @@ export function buildMonsters(
   for (const spec of specs) {
     const saved = savedStates.get(spec.id);
     const desired = { x: saved?.x ?? spec.x, y: saved?.y ?? spec.y };
-    const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters, playerSpawn, walls);
+    const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters, playerSpawn, walls, floors);
     if (!position) continue;
     if (!(saved?.dead ?? false) && spec.obstacle) placedMonsters.push({ x: position.x, y: position.y, footprintRadii: worldPoint(spec, "footprintRadii") });
     const relocated = position.x !== desired.x || position.y !== desired.y;
@@ -974,7 +976,7 @@ export function buildMonsters(
         const promoted = promoteToMiniboss(selected);
         const otherMonsters = monsters.filter(monster => monster !== selected && !monster.dead && monster.obstacle)
           .map(monster => ({ x: monster.x, y: monster.y, footprintRadii: worldPoint(monster, "footprintRadii") }));
-        const position = safeMonsterPosition(promoted, selected, layout, decorations, otherMonsters, playerSpawn, walls);
+        const position = safeMonsterPosition(promoted, selected, layout, decorations, otherMonsters, playerSpawn, walls, floors);
         if (!position) continue;
         Object.assign(selected, promoted, position, { hp: savedStates.get(selected.id)?.hp ?? promoted.maxHp });
         break;
@@ -990,7 +992,7 @@ export function buildMonsters(
         ));
         const saved = savedStates.get(spec.id);
         const desired = { x: saved?.x ?? spec.x, y: saved?.y ?? spec.y };
-        const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters, undefined, walls);
+        const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters, undefined, walls, floors);
         if (position) monsters.push({
           ...spec,
           ...position,
@@ -1017,10 +1019,9 @@ export function monsterPositionIsClear(
   decorations: readonly Decoration[],
   placedMonsters: ReadonlyArray<Point & { footprintRadii: EllipseRadii }> = [],
   walls = new WallRectIndex(buildWallFootprints(layout)),
+  floors = new FloorGeometry(layout),
 ): boolean {
-  const onFloor = layout.nodes.some(room => pointInRoomFloor(position.x, position.y, room)) ||
-    layout.links.some(link => pointInCorridor(position.x, position.y, link));
-  if (!onFloor) return false;
+  if (!floors.contains(position)) return false;
   if (wallOverlapsEllipse(position, typeof footprint === "number" ? { x: footprint, y: footprint } : footprint, walls)) return false;
   return decorations.every(item =>
     !item.obstacle ||
@@ -1039,6 +1040,7 @@ function safeMonsterPosition(
   placedMonsters: ReadonlyArray<Point & { footprintRadii: EllipseRadii }> = [],
   playerSpawn?: Point,
   walls = new WallRectIndex(buildWallFootprints(layout)),
+  floors = new FloorGeometry(layout),
 ): Point | null {
   const room = layout.nodes.find(candidate => candidate.id === monster.spawnRoomId);
   const centers = [desired, ...(room ? [{ x: room.x, y: room.y }] : [])];
@@ -1076,7 +1078,7 @@ function safeMonsterPosition(
   }
   return candidates.find(position =>
     (!playerSpawn || !footprintsOverlap(position, footprint, playerSpawn, PLAYER_SPEC.footprintRadii)) &&
-    monsterPositionIsClear(position, footprint, layout, decorations, placedMonsters, walls)
+    monsterPositionIsClear(position, footprint, layout, decorations, placedMonsters, walls, floors)
   ) ?? null;
 }
 

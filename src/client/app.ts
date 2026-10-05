@@ -61,13 +61,13 @@ import {
 } from "./domain/combat";
 import { beginCrowdDetour, continueCrowdDetour } from "./domain/crowd-navigation";
 import { connectedRoomAdjacency, corridorJunctions, junctionRoomsAtPoint, type CorridorJunction } from "./domain/corridor-junctions";
+import { FloorGeometry } from "./domain/floor-geometry";
 import {
   distanceSquared,
   footprintMoveIsClear,
   footprintsOverlap,
   pointInCorridor,
   pointNearDirectDoor,
-  pointInRoomFloor,
   roomContainingFloorPoint,
   slideAlongObstacles,
   type EllipseObstacle,
@@ -254,11 +254,7 @@ const destroyedObstaclesByPage = new Map<string, Map<string, ObstacleState>>();
 let visitedRooms = new Set<number>();
 let roomRoutingDirty = true;
 let nextRoomTowardPlayer = new Map<number, number>();
-interface GeometryCell {
-  rooms: Set<GraphNode>;
-  links: Set<LayoutLink>;
-}
-let geometryCells = new Map<string, GeometryCell>();
+let floorGeometry: FloorGeometry | null = null;
 let wallFootprints = new WallRectIndex([]);
 let wallProjectileHitboxes = new WallRectIndex([]);
 let obstacleCells = new Map<string, Set<Decoration>>();
@@ -1354,6 +1350,12 @@ function bumpVendingMachine(item: Decoration, timestamp: number): void {
   if (!item.vendingKind || !currentPageUrl) return;
   vendingContacts.set(item.id, Math.hypot(player.x - item.x, player.y - item.y));
   renderer.pushVendingMachine(item, player, timestamp);
+  if (item.vendingRemaining === 0) {
+    item.vendingExhaustedAt = timestamp + VENDING_DEPLETION_DELAY_MS;
+    renderer.playVendingSound("error");
+    setStatus("Vending machine is empty");
+    return;
+  }
   const product = VENDING_PRODUCTS[item.vendingKind];
   const price = vendingPrice(item.vendingKind, floorNumber());
   if (lootInventory.credits < price) {
@@ -1378,7 +1380,6 @@ function bumpVendingMachine(item: Decoration, timestamp: number): void {
   extraLootForCurrentPage().push(drop);
   currentLoot.push(drop);
   renderer.playVendingSound("coin");
-  if (result.depleted) item.vendingExhaustedAt = timestamp + VENDING_DEPLETION_DELAY_MS;
   saveObstacleState(item);
   updateLootUi();
   renderVendingPreview();
@@ -2943,7 +2944,7 @@ function runGameTick(timestamp: number): void {
 function updatePlayerInputFrame(): void {
   const now = performance.now();
   renderer.updateVendingPushes(now);
-  // Finish the last vend even if player death has stopped the gameplay tick.
+  // Finish an empty-machine explosion even if player death has stopped the gameplay tick.
   for (const item of currentVendingMachines) {
     if (item.vendingExhaustedAt !== undefined && now >= item.vendingExhaustedAt) damageObstacle(item, item.hp);
   }
@@ -3016,43 +3017,11 @@ function resumeGameLoop(): void {
 }
 
 function rebuildSpatialIndexes(): void {
-  geometryCells = new Map();
   obstacleCells = new Map();
   damageableCells = new Map();
   if (!currentLayout) return;
   const margin = Math.max(48, MAX_ACTOR_FOOTPRINT);
 
-  for (const room of currentLayout.nodes) {
-    forSpatialCells(
-      room.x - room.width / 2 - margin,
-      room.x + room.width / 2 + margin,
-      room.y - room.height / 2 - margin,
-      room.y + room.height / 2 + margin,
-      key => {
-        const cell = geometryCells.get(key) ?? { rooms: new Set(), links: new Set() };
-        cell.rooms.add(room);
-        geometryCells.set(key, cell);
-      },
-    );
-  }
-  for (const link of currentLayout.links) {
-    const corridorMargin = link.width / 2 + margin;
-    for (let index = 1; index < link.points.length; index += 1) {
-      const start = link.points[index - 1]!;
-      const end = link.points[index]!;
-      forSpatialCells(
-        Math.min(start.x, end.x) - corridorMargin,
-        Math.max(start.x, end.x) + corridorMargin,
-        Math.min(start.y, end.y) - corridorMargin,
-        Math.max(start.y, end.y) + corridorMargin,
-        key => {
-          const cell = geometryCells.get(key) ?? { rooms: new Set(), links: new Set() };
-          cell.links.add(link);
-          geometryCells.set(key, cell);
-        },
-      );
-    }
-  }
   for (const item of currentDecorations) {
     if (item.obstacle) {
       const footprint = worldPoint(item, "footprintRadii");
@@ -3109,17 +3078,7 @@ function slideObstaclesNear(x: number, y: number): EllipseObstacle[] {
 }
 
 function isFloorPoint(x: number, y: number): boolean {
-  if (!currentLayout) return false;
-  const cell = geometryCells.get(spatialCellKey(x, y));
-  if (!cell) return false;
-  for (const room of cell.rooms) {
-    if (pointInRoomFloor(x, y, room)) return true;
-  }
-  for (const link of cell.links) {
-    if (pointInCorridor(x, y, link)) return true;
-  }
-
-  return false;
+  return floorGeometry?.contains({ x, y }) ?? false;
 }
 
 function isGeometryWalkable(x: number, y: number, radius: number | EllipseRadii = PLAYER_SPEC.footprintRadii): boolean {
@@ -4186,6 +4145,7 @@ function renderGraph(
   currentAuthoredRooms = authoredRooms;
   currentGraph = graph;
   currentLayout = layout;
+  floorGeometry = new FloorGeometry(layout);
   currentCorridorJunctions = corridorJunctions(layout.links);
   currentRoomsById = new Map(layout.nodes.map(room => [room.id, room]));
   roomRoutingDirty = true;

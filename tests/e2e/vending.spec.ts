@@ -67,8 +67,8 @@ async function positionPlayer(page: Page, item: Machine, distance: number): Prom
 }
 
 async function bump(page: Page, remaining: number): Promise<void> {
-  // Release within the vend's frame so a slow test runner cannot keep walking
-  // through the machine after depletion and accidentally collect its drop.
+  // Release within the vend's frame so a slow test runner cannot keep moving
+  // around the machine and accidentally collect its drop.
   await page.evaluate(targetStock => {
     const target = window as unknown as TestWindow;
     const stopWhenVended = (): void => {
@@ -155,10 +155,32 @@ test("unfunded bumps recoil and return; purchases require pulling away and survi
   await positionPlayer(page, item, 120);
   await positionPlayer(page, item, 80);
   await bump(page, 0);
-  await expect.poll(async () => (await machine(page)).destructible, { timeout: 20_000 }).toBe(false);
+  // Holding against the machine after the final purchase is still the same
+  // use. Neither that contact nor a floor revisit should destroy empty stock.
+  await page.keyboard.down("a");
+  await page.waitForTimeout(650);
+  await page.keyboard.up("a");
+  expect(await machine(page)).toMatchObject({ destructible: true, destroyed: false, vendingRemaining: 0 });
+  expect(await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.playerHp())).toBe(hp);
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-credits", "60");
+  await expect(page.locator("#vendingPreview")).toBeHidden();
+  expect(await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.loot().filter(loot => loot.id.includes("::scenery-drop")))).toEqual([]);
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.navigate("https://example.com/other-floor"));
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.goBack());
+  expect(await machine(page)).toMatchObject({ destructible: true, destroyed: false, vendingRemaining: 0 });
+
+  const hpBeforeEmptyUse = await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.playerHp());
+  await positionPlayer(page, item, 120);
+  await positionPlayer(page, item, 80);
+  await page.keyboard.down("a");
+  try {
+    await expect.poll(async () => (await machine(page)).destructible, { timeout: 20_000 }).toBe(false);
+  } finally {
+    await page.keyboard.up("a");
+  }
   expect(await machine(page)).toMatchObject({ kind: "debris", obstacle: true, destroyed: false });
   await expect(page.locator("#vendingPreview")).toBeHidden();
-  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.playerHp())).toBe(hp - 1);
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.playerHp())).toBe(hpBeforeEmptyUse - 1);
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-credits", "60");
   const drops = await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.loot().filter(loot => loot.id.includes("::scenery-drop")));
   expect(drops).toHaveLength(1);

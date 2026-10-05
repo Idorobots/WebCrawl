@@ -221,7 +221,7 @@ export interface Decoration extends Point, RelativeObjectGeometry {
   vendingKind?: VendingKind;
   vendingCapacity?: number;
   vendingRemaining?: number;
-  /** Runtime-only deadline for the final bump's destruction. */
+  /** Runtime-only explosion deadline after attempting to use an already-empty machine. */
   vendingExhaustedAt?: number;
   contentPoint?: boolean;
   contentUnlocked?: boolean;

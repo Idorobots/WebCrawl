@@ -88,6 +88,8 @@ describe("vending machines", () => {
     expect(purchaseVendingItem(item, 22, 2)).toEqual({ purchased: true, credits: 0, price: 22, depleted: false });
     expect(item.vendingRemaining).toBe(1);
     expect(purchaseVendingItem(item, 50, 2)).toEqual({ purchased: true, credits: 28, price: 22, depleted: true });
+    expect(item.destroyed).toBe(false);
+    expect(item.vendingExhaustedAt).toBeUndefined();
     expect(purchaseVendingItem(item, 50, 2)).toEqual({ purchased: false, credits: 50, price: 22, depleted: false });
     expect(item.vendingRemaining).toBe(0);
   });
@@ -101,6 +103,19 @@ describe("vending machines", () => {
     expect(bumpsVendingMachine({ x: 0, y: 55 }, { x: 0, y: 55 }, item)).toBe(false);
     expect(touchingVendingMachine({ x: 0, y: 60 }, item)).toBe(true);
     expect(touchingVendingMachine({ x: 0, y: 80 }, item)).toBe(false);
+  });
+
+  it.each(Object.keys(VENDING_PRODUCTS) as VendingKind[])("allows another bump of an empty %s machine but not its exploding or wrecked state", kind => {
+    const item = { ...machine(kind), vendingRemaining: 0 };
+    const from = { x: 0, y: 70 };
+    const to = { x: 0, y: 50 };
+    expect(bumpsVendingMachine(from, to, item)).toBe(true);
+    expect(purchaseVendingItem(item, 0, 1)).toMatchObject({ purchased: false, credits: 0 });
+    expect(item.vendingRemaining).toBe(0);
+    expect(bumpsVendingMachine(to, from, item)).toBe(false);
+    item.vendingExhaustedAt = 140;
+    expect(bumpsVendingMachine(from, to, item)).toBe(false);
+    expect(bumpsVendingMachine(from, to, vendingWreck(item))).toBe(false);
   });
 
   it("pushes away, rebounds, and returns exactly to its anchor", () => {
@@ -177,6 +192,11 @@ describe("vending machines", () => {
     expect(restored.hp).toBe(5);
     expect(restored.vendingRemaining).toBe(1);
     expect(restored.vendingCapacity).toBe(original.vendingCapacity);
+    saved.set(original.id, { hp: 5, destroyed: false, vendingRemaining: 0 });
+    const empty = buildDecorations(layout, saved, 3, undefined, authored)[0]!;
+    expect(empty).toMatchObject({ hp: 5, destroyed: false, destructible: true, vendingRemaining: 0 });
+    expect(empty.kind).not.toBe("debris");
+    expect(empty.vendingExhaustedAt).toBeUndefined();
     saved.set(original.id, { hp: 0, destroyed: true, vendingRemaining: 0 });
     const wreck = buildDecorations(layout, saved, 3, undefined, authored)[0]!;
     expect(wreck).toMatchObject({ kind: "debris", destroyed: false, obstacle: true, destructible: false, vendingRemaining: 0 });
