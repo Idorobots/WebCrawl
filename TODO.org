@@ -1251,7 +1251,10 @@ The goal is to be able to generate a room with all its enemies that already incl
 - Rooms need random wall lights in yellow, blue and red variants.
 - Sprites that have a light on them need lighting.
 
-* Player mechanics
+* DONE Player mechanics
+:LOGBOOK:
+- State "DONE"       from              [2026-10-05 Mon 19:50]
+:END:
 We'll need the following additions to the player state:
 
 - Player's damage multiplier - initially set to 1.0, will be used in the future.
@@ -1270,6 +1273,7 @@ We'll need the following additions to the player state:
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
 - In complex corridors, some doors should open at the same time - releasing monsters into the corridor for the player to fend off as an ambush.
+- Energy dash needs a 200 ms invulnerability "grace period" after the dash ends.
 
 * Minimap overhaul
 - Minimap should be circular
@@ -1330,6 +1334,7 @@ Add a line to the prompt following the loot breakdown, explaining that certain p
 - AGI - "Familiar" robot helping the player
 - Temporary Invisibility triggered with a button
 - Extra bullet range
+- Piercing bullets - a chance a bullet deals damage to an enemy and then continues flying potentially dealing more damage to another enemy
 
 The power-ups icon icon should be shown on the player state panel indicating that it's in effect. Show the name of the power up on hover.
 
@@ -1466,6 +1471,7 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
+- Direct-room boss arenas need a red light near the door to indicate that the next room is an arena.
 - Vending mashines need to have an aura.
 * Audio bugs
 - Picking up ammo should play the same sound as equiping a weapon.

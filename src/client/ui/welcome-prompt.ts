@@ -113,7 +113,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   },
   {
     kind: "paragraph",
-    segments: [{ text: "Certain power-ups are scattered across the web. Collect them. We'll let you discover the details." }],
+    segments: [{ text: "Certain SKILLS are scattered across the web. Collect them. They will help you in your mission.." }],
   },
   { kind: "icons", assets: POWERUP_ICON_ASSETS },
   {
@@ -128,7 +128,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
         text: "If you find one, kill it before it kills ",
       },
       {
-        text: "my profits",
+        text: "our profits",
         strike: true,
       },
       {
