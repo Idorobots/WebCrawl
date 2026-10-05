@@ -73,6 +73,7 @@ import {
   EllipticalLightPipeline,
 } from "./elliptical-light-pipeline";
 import { supportedMaxLights } from "./light-capacity";
+import { selectLightsForView } from "./light-culling";
 import type { LightDetail } from "./light-detail";
 
 const textureKey = (asset: string): string => `asset:${asset}`;
@@ -595,6 +596,15 @@ export class PhaserRenderer {
         new EllipticalLightPipeline(scene.game),
       ) as EllipticalLightPipeline;
       scene.lights.enable().setAmbientColor(AMBIENT_LIGHT_COLOR);
+      // Both Phaser's base light pipeline and our custom uniforms must use
+      // the same radius-aware selection. Phaser's default ranks centers only.
+      scene.lights.getLights = camera => {
+        const selected = selectLightsForView(scene.lights.lights, camera.worldView,
+          scene.lights.maxLights, light => light.willRender(camera));
+        Object.assign(scene.lights, { visibleLights: selected.length });
+        // Phaser's types declare Light[], but getLights actually returns wrappers.
+        return selected as unknown as Phaser.GameObjects.Light[];
+      };
       if (this.aurasEnabled) {
         this.playerStateLight = scene.lights.addLight(0, 0, 110, 0xb7e2ff, 0.48).setVisible(false);
       }
@@ -1523,43 +1533,20 @@ export class PhaserRenderer {
     this.setHostData("bossRoomLightColor", "ff3d42");
   }
 
-  private roomAt(position: Point): GraphNode | null {
-    const rooms = this.layout?.nodes;
-    if (!rooms?.length) return null;
-    const containing = rooms.find(room =>
-      position.x >= room.x - room.width / 2 &&
-      position.x <= room.x + room.width / 2 &&
-      position.y >= room.y - room.height / 2 &&
-      position.y <= room.y + room.height / 2
-    );
-    if (containing) return containing;
-    return rooms.reduce((nearest, room) => {
-      const nearestDistance = (nearest.x - position.x) ** 2 + (nearest.y - position.y) ** 2;
-      const roomDistance = (room.x - position.x) ** 2 + (room.y - position.y) ** 2;
-      return roomDistance < nearestDistance ? room : nearest;
-    });
-  }
-
   private refreshLocalLightVisibility(force = false): void {
     const layout = this.layout;
     if (!layout || !this.lightingEnabled) return;
-    const currentRoom = this.roomAt(this.currentPlayer);
-    if (!currentRoom) return;
     const cullKey = [
-      currentRoom.id,
       Math.floor(this.currentPlayer.x / CORRIDOR_LIGHT_CULL_CELL),
       Math.floor(this.currentPlayer.y / CORRIDOR_LIGHT_CULL_CELL),
       this.visited.size,
     ].join(":");
     if (!force && this.currentLightCullKey === cullKey) return;
     this.currentLightCullKey = cullKey;
-    const localRooms = new Set<number>([currentRoom.id]);
-    for (const link of layout.links) {
-      if (link.source.id === currentRoom.id) localRooms.add(link.target.id);
-      if (link.target.id === currentRoom.id) localRooms.add(link.source.id);
-    }
     for (const [roomId, profile] of this.roomLights) {
-      profile.enabled = this.visited.has(roomId) && localRooms.has(roomId);
+      // Large rooms can remain in view several graph hops away from the
+      // player. Discovery controls eligibility; light reach controls culling.
+      profile.enabled = this.visited.has(roomId);
       profile.light.setVisible(profile.enabled && this.lightOnScreen(profile));
     }
     for (const link of layout.links) {
@@ -1572,7 +1559,6 @@ export class PhaserRenderer {
     for (const light of this.lootAuras.values()) light.setVisible(true);
     for (const light of this.portalAuras.values()) light.setVisible(true);
     for (const [id, light] of this.monsterAuras) light.setVisible(this.monsters.get(id)?.visible ?? false);
-    this.setHostData("localLightRooms", [...localRooms].join(","));
     this.setHostData("pickupAuras", String([
       ...this.lootAuras.values(),
       ...this.portalAuras.values(),
@@ -1587,6 +1573,8 @@ export class PhaserRenderer {
       const visible = profile.enabled && this.lightOnScreen(profile);
       if (visible !== profile.light.visible) profile.light.setVisible(visible);
     }
+    this.setHostData("localLightRooms", [...this.roomLights]
+      .filter(([, profile]) => profile.light.visible).map(([roomId]) => roomId).join(","));
   }
 
   private lightOnScreen(profile: WorldLight): boolean {

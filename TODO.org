@@ -1352,7 +1352,10 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 :END:
 - Minibosses often get stuck on corners and scenery. If that is the case they should destroy the scenery.
 - Minibosses fail pathing and freeze in place when the player enters a place they can't path to.
-* Bugs
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-10-05 Mon 12:28]
+:END:
 - Monsters get deadlocked sometimes - all blocking one another, especially when shared paths are used.
 - It appears that sometimes invisible blocked objects appear in-game in corridor L-junctions.
 - Prompt on the welcome screen should mention "Regulatory Capture" as the name of the dash move.
@@ -1360,6 +1363,7 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+- Indestructible blocking scenery sholud block bullets.7
 
 * DONE Enemy rebalance
 :LOGBOOK:
@@ -1442,7 +1446,8 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 :END:
 - Pickups are rendered on top of enemies. Pickups should be rendered on a lower layer, always appearing under monsters and the player.
 * Visual bugs
+- Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
+* Visual bugs
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
-- Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
