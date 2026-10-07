@@ -301,6 +301,73 @@ test("starts a crawl and renders a playable floor", async ({ page }) => {
   await expect(minimap).toBeVisible();
 });
 
+test("shows a circular full-floor minimap with a separate centered floor panel on desktop and mobile", async ({ page }) => {
+  await startGame(page);
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 720 }]) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator("#rightHud")).not.toHaveClass(/minimap-hidden/);
+    const canvas = page.locator("#sideMinimapCanvas");
+    const panel = page.locator(".minimap-panel");
+    const label = page.locator(".minimap-floor-panel");
+    await expect(label).toBeVisible();
+    await expect(label).toHaveText("FLOOR 1");
+    await expect(canvas).toHaveCSS("border-radius", "50%");
+    await expect(panel).toHaveCSS("border-radius", "50%");
+    await expect(panel).toHaveCSS("overflow", "hidden");
+    await expect(panel).toHaveCSS("opacity", "0.5");
+    const panelBounds = (await panel.boundingBox())!;
+    expect(Math.abs(panelBounds.width - panelBounds.height)).toBeLessThan(1);
+    const mapBounds = (await canvas.boundingBox())!;
+    const labelBounds = (await label.boundingBox())!;
+    expect(Math.abs(mapBounds.width - mapBounds.height)).toBeLessThan(1);
+    expect(labelBounds.y + labelBounds.height).toBeLessThan(mapBounds.y);
+    expect(Math.abs(labelBounds.x + labelBounds.width / 2 - mapBounds.x - mapBounds.width / 2)).toBeLessThan(1);
+    await expect.poll(() => canvas.evaluate(element => {
+      const map = element as HTMLCanvasElement;
+      return map.width / map.clientWidth;
+    })).toBeCloseTo(Math.min(2, await page.evaluate(() => devicePixelRatio)), 1);
+    const pixels = await canvas.evaluate(element => {
+      const map = element as HTMLCanvasElement;
+      const context = map.getContext("2d")!;
+      return {
+        cornerAlpha: context.getImageData(0, 0, 1, 1).data[3],
+        backgroundAlpha: context.getImageData(Math.floor(map.width / 2), 3, 1, 1).data[3],
+        centerAlpha: context.getImageData(Math.floor(map.width / 2), Math.floor(map.height / 2), 1, 1).data[3],
+      };
+    });
+    expect(pixels.cornerAlpha).toBe(0);
+    // Compose solid map elements first; CSS applies translucency to the whole panel.
+    expect(pixels.backgroundAlpha).toBe(255);
+    expect(pixels.centerAlpha).toBe(255);
+  }
+});
+
+test("updates the precise minimap player marker while moving inside an already revealed room", async ({ page }) => {
+  await startGame(page);
+  const markerPosition = () => page.locator("#sideMinimapCanvas").evaluate(element => {
+    const map = element as HTMLCanvasElement;
+    const pixels = map.getContext("2d")!.getImageData(0, 0, map.width, map.height).data;
+    let x = 0, y = 0, count = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index]! < 245 || pixels[index + 1]! < 245 || pixels[index + 2]! < 245 || pixels[index + 3]! < 200) continue;
+      const pixel = index / 4;
+      x += pixel % map.width;
+      y += Math.floor(pixel / map.width);
+      count++;
+    }
+    return count ? { x: x / count, y: y / count } : null;
+  });
+  await expect.poll(markerPosition).not.toBeNull();
+  const before = (await markerPosition())!;
+  const playerBefore = await playerPosition(page);
+  await teleportPlayer(page, { x: playerBefore.x + 64, y: playerBefore.y });
+  await expect.poll(async () => (await playerPosition(page)).x).toBeCloseTo(playerBefore.x + 64, 0);
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-visited-rooms", "1");
+  await expect.poll(async () => (await markerPosition())?.x ?? before.x).toBeGreaterThan(before.x + 1);
+  const after = (await markerPosition())!;
+  expect(Math.abs(after.y - before.y)).toBeLessThan(1);
+});
+
 test("briefly lights the starting up portal without enabling travel", async ({ page }) => {
   await page.addInitScript(() => {
     const snapshots: Array<{ state: string; texture: string | null; enabled: boolean; time: number }> = [];

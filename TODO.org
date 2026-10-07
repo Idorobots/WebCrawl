@@ -1232,6 +1232,7 @@ The goal is to be able to generate a room with all its enemies that already incl
 * Performance optimization, again
 - Phaser 4 update?
 - WebWorkers for pathing/collision detection, etc?
+- Pre-computed paths - have a pre-computed path graph for the monsters to use for pathfinding.
 
 * DONE UX improvements, again
 :LOGBOOK:
@@ -1274,16 +1275,26 @@ We'll need the following additions to the player state:
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
 - In complex corridors, some doors should open at the same time - releasing monsters into the corridor for the player to fend off as an ambush.
 - Energy dash needs a 200 ms invulnerability "grace period" after the dash ends.
+- Powerup vending machine?
+- Higher level monsters should have slowing bullets, critical damage chanse and stunning bullets.
+- Crystals should last 5 seconds
+- Regen should regenerate 0.1 thing every 6 seconds.
 
-* Minimap overhaul
+* DONE Minimap overhaul
+:LOGBOOK:
+- State "DONE"       from              [2026-10-07 Wed 22:17]
+:END:
 - Minimap should be circular
 - Render corridors as wider connectors on the minimap.
 - Show precise location of the player on the minimap, including in corridors.
+
 - Mark rooms with a down-portal with a magenta triangle in them (one if any portals exist).
 - Mark rooms with an up-portal with a blue triangle in them (one if any portal exits).
 - Mark the position of any pickups that haven't been picked up (small teal dots).
 - Mark the boss arenas by tinting the minimap room red.
 - Mark the positions of any alive monsters on the minimap (small red dots).
+
+(The above should only apply to revealed rooms. We will also add powerups that modify what the player can see on the map.)
 
 * Easter egg
 Whenever AI is mentioned in the content, render a special Samario content browser.
@@ -1316,27 +1327,34 @@ When the same power-up is picked up multiple times, their effects should stack (
 
 Add a line to the prompt following the loot breakdown, explaining that certain power-ups exist (but without revealing what they do). Show random pow er-up icons in the prompt - 5 on desktop and 3 on mobile.
 
-* Extra Power-ups & enhancements
-- Slowing bullets - slow enemies that are hit
-- Stun bullets - stun chance for shots
-- Additional bullets in the weapon's bullet pattern
-- Better aim - bullets curve towards the closes enemy slightly
-
-- Berserk - the lower the HP the more damage is dealt
-- Damage reduction - reduces taken damage by some amount
-- Better loot chance
-- Weapons using energy before they run out of ammo
-
-- Map update - show adjacent rooms and their corridors on the minimap (shows farther rooms when stacked)
-- Minimap radar - show monsters, minibosses and bosses on the minimap
-- Minimap locator - shows the portals, vending machines and loot on the minimap
-
-- AGI - "Familiar" robot helping the player
-- Temporary Invisibility triggered with a button
-- Extra bullet range
-- Piercing bullets - a chance a bullet deals damage to an enemy and then continues flying potentially dealing more damage to another enemy
-
 The power-ups icon icon should be shown on the player state panel indicating that it's in effect. Show the name of the power up on hover.
+
+* Extra Power-ups & enhancements
+Add additional power-ups to the game:
+
+- Model lobotomy - 10% chance slow enemies that are hit lasting 1 second (enemy should be tinted blue when slowed) (icon: pickups/powerups/damage_slow)
+- API Timeout - 10% stun chance for shots lasting 1 second (enemy should be grayed out when stunned)  (icon: pickups/powerups/damage_stun)
+- Mixture of Experts - occasional additional bullets in the weapon's bullet pattern (icon: pickups/powerups/shot_pattern)
+- Attention - bullets curve towards the closest enemy slightly (icon: pickups/powerups/shot_aim)
+- Existential Risk - the lower the HP the more damage is dealt by the player ((maxHP - currHP) * 1%) (icon: pickups/powerups/berserk)
+- Guardrails - reduces taken damage by 10% (icon: pickups/powerups/damage_reduction)
+- Benchmark contamination - 10% chance monsters & scenery drop additional loot (icon: pickups/powerups/extra_loot)
+- Compute Credits - weapons using energy before they run out of ammo (icon: pickups/powerups/energy_ammo)
+- Context Window Expansion - show adjacent rooms and their corridors on the minimap (shows farther rooms when stacked) (icon: pickups/powerups/map_expansion)
+- Usage Analytics - show monsters, minibosses and bosses on the minimap (icon: pickups/powerups/map_radar)
+- RAG - shows the portals, vending machines and loot on the minimap (icon: pickups/powerups/map_loot)
+
+The mini-map-related powerups should combine seamlessly - when a radar is active together with map expansion, the player should see how many monsters exist in adjacent unrevealed rooms.
+
+* Even more power-ups & enhancements
+- AGI - "Familiar" robot helping the player
+- Extended Context - Extra bullet range (10% range extension)
+- Chain of Thought - a 10% chance a bullet deals damage to an enemy and then continues flying potentially dealing more damage to another enemy
+- Valuation Pump - Medkits giving additional health
+- Training Pause - Energy packs giving additional energy
+- Token Inflation - Ammo crates giving an additional ammo
+- Scaling Laws - Faster movement speed the more energy the player has (-10% at 0, to +25% each 10 energy).
+- Stealth Mode - Temporary invisibility after the player takes damage (1 second)
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:
@@ -1346,6 +1364,15 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 - Exploding granades - the bullet itself deals no damage, but instead causes a damaging explosion after a short delay. The granades should "drop to the ground" and be blocked by scenery and walls. The explosion should deal damage to everything in its vicinity.
 
 - Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
+
+* Extra enemies
+Themes:
+- Company employees (including machines & weapons)
+- Aliens
+
+Types:
+- Doesn't damage the player, but traps them.
+- Delayed damage (for instance throwing granades)
 
 * DONE Bugs
 :LOGBOOK:
@@ -1473,6 +1500,15 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Some scenery objects should be placed only on walls as decorations
 - Direct-room boss arenas need a red light near the door to indicate that the next room is an arena.
 - Vending mashines need to have an aura.
+- Vending machine "debris" sprites should behave like indestructible scenery - currently these are placed at a lower layer making the player & monsters always apear on top.
+- "Invulnerability crystals" should be called "Government Bailout Crystals" on hover
+- "RAM" should be called "Content Stick" on hover
+- Powerups should appear on the loot panel in the order they were picked up.
+- Dropped weapons appear under the pedenstal
+- Powerups & weapons should appear above regular loot.
+
 * Audio bugs
 - Picking up ammo should play the same sound as equiping a weapon.
 - When the game runs in background all sounds generated are queued and play all on once when the game is foregrounded.
+* Soundscape
+- Add random "scary" sounds that play on occasion.

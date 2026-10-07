@@ -121,6 +121,7 @@ import {
 } from "./domain/weapons";
 import type { PhaserRenderer } from "./render/phaser-renderer";
 import { supportedMaxLights } from "./render/light-capacity";
+import { MinimapRenderer } from "./render/minimap";
 import { loadLightDetail, storeLightDetail, type LightDetail } from "./render/light-detail";
 import { loadHighScores, rankHighScore, storeHighScores } from "./storage/high-scores";
 import type {
@@ -228,6 +229,7 @@ void Promise.race([
 });
 
 const sideMinimapCanvas = requireElement<HTMLCanvasElement>("#sideMinimapCanvas");
+const minimapRenderer = new MinimapRenderer(sideMinimapCanvas);
 const sideFloorLabelEl = requireElement<HTMLElement>("#sideFloorLabel");
 
 let currentRequest = 0;
@@ -685,101 +687,9 @@ function updateCameraForPlayer(immediate = false): void {
   renderer.setCameraRoom(roomContainingPoint(player.x, player.y), immediate);
 }
 
-function minimapVisibleLayout(): Pick<DungeonLayout, "nodes" | "links"> {
-  if (!currentLayout) return { nodes: [], links: [] };
-
-  const visibleIds = new Set(
-    currentLayout.nodes
-      .filter(room => visitedRooms.has(room.id))
-      .map(room => room.id)
-  );
-
-  return {
-    nodes: currentLayout.nodes.filter(room => visibleIds.has(room.id)),
-    links: currentLayout.links.filter(link =>
-      visibleIds.has(link.source.id) || visibleIds.has(link.target.id)
-    )
-  };
-}
-
 function renderSideMinimap(): void {
-  const { nodes, links } = minimapVisibleLayout();
-  const visibleIds = new Set(nodes.map(node => node.id));
-  const boundsRect = sideMinimapCanvas.getBoundingClientRect();
-  const width = Math.max(1, Math.round(boundsRect.width || sideMinimapCanvas.clientWidth || 320));
-  const height = Math.max(1, Math.round(boundsRect.height || sideMinimapCanvas.clientHeight || 220));
-  const ratio = Math.min(2, window.devicePixelRatio || 1);
-  sideMinimapCanvas.width = Math.round(width * ratio);
-  sideMinimapCanvas.height = Math.round(height * ratio);
-  const context = sideMinimapCanvas.getContext("2d");
-  if (!context) return;
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "rgba(7, 16, 24, 0.6)";
-  context.fillRect(0, 0, width, height);
-  if (!nodes.length) return;
-
-  const bounds = nodes.reduce((acc, node) => ({
-    minX: Math.min(acc.minX, node.x - node.width / 2),
-    maxX: Math.max(acc.maxX, node.x + node.width / 2),
-    minY: Math.min(acc.minY, node.y - node.height / 2),
-    maxY: Math.max(acc.maxY, node.y + node.height / 2)
-  }), {
-    minX: Infinity,
-    maxX: -Infinity,
-    minY: Infinity,
-    maxY: -Infinity
-  });
-
-  for (const link of links) {
-    for (const point of link.points) {
-      bounds.minX = Math.min(bounds.minX, point.x);
-      bounds.maxX = Math.max(bounds.maxX, point.x);
-      bounds.minY = Math.min(bounds.minY, point.y);
-      bounds.maxY = Math.max(bounds.maxY, point.y);
-    }
-  }
-  const pad = Math.min(18, Math.round(width * 0.06));
-  const compact = width < 200;
-  const scale = Math.min(
-    (width - pad * 2) / Math.max(1, bounds.maxX - bounds.minX),
-    (height - pad * 2) / Math.max(1, bounds.maxY - bounds.minY),
-  );
-  const mapX = (x: number): number => pad + (x - bounds.minX) * scale;
-  const mapY = (y: number): number => pad + (y - bounds.minY) * scale;
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  context.strokeStyle = "#315267";
-  context.lineWidth = Math.max(compact ? 1.5 : 2, 20 * scale);
-  for (const link of links) {
-    context.beginPath();
-    link.points.forEach((point, index) => index
-      ? context.lineTo(mapX(point.x), mapY(point.y))
-      : context.moveTo(mapX(point.x), mapY(point.y))
-    );
-    context.stroke();
-  }
-  for (const room of nodes) {
-    const x = mapX(room.x - room.width / 2);
-    const y = mapY(room.y - room.height / 2);
-    const roomWidth = Math.max(compact ? 2 : 3, room.width * scale);
-    const roomHeight = Math.max(compact ? 2 : 3, room.height * scale);
-    context.fillStyle = room.id === currentRoomId ? "#57d9c1" : room.isRoot ? "#244d59" : "#1a303e";
-    context.fillRect(x, y, roomWidth, roomHeight);
-    context.strokeStyle = room.id === currentRoomId ? "#bafff1" : "#568198";
-    context.lineWidth = 1;
-    context.strokeRect(x, y, roomWidth, roomHeight);
-  }
-  for (const stair of currentStairs.filter(item => visibleIds.has(item.roomId))) {
-    context.fillStyle = stair.type === "up" ? "#62e6c8" : "#c07cff";
-    context.beginPath();
-    context.arc(mapX(stair.x), mapY(stair.y), compact ? 2 : 3, 0, Math.PI * 2);
-    context.fill();
-  }
-  context.fillStyle = "#ffffff";
-  context.beginPath();
-  context.arc(mapX(player.x), mapY(player.y), compact ? 3 : 4, 0, Math.PI * 2);
-  context.fill();
+  if (!currentLayout || gameUi.hidden || minimapActivityHidden) return;
+  minimapRenderer.render(currentLayout, visitedRooms, currentStairs, currentLoot, currentMonsters, player);
 }
 
 const MINIMAP_SHOW_DELAY_MS = 1600;
@@ -2995,6 +2905,7 @@ function updatePlayerInputFrame(): void {
   }
   if (gameAnimationFrame === null || teleportPauseActive || !playerAlive || !currentLayout) {
     lastPlayerInputFrameAt = null;
+    renderSideMinimap();
     return;
   }
 
@@ -3003,6 +2914,8 @@ function updatePlayerInputFrame(): void {
     : Math.min(0.05, Math.max(0, (now - lastPlayerInputFrameAt) / 1000));
   lastPlayerInputFrameAt = now;
   if (!energyDash) updatePlayerMovement(dt, now);
+  // Use this frame's position, and refresh drops and monsters even while idle.
+  renderSideMinimap();
   if (teleportPauseActive) return; // Movement can enter a portal.
   if (touchAimActive) updateTouchAim(dt);
   else {
