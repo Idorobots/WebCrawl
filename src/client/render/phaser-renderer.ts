@@ -46,6 +46,7 @@ import {
 import { buildWallFootprints, wallHitboxes, type WallRect } from "../domain/wall-collision";
 import { WEAPON_COLORS } from "../domain/weapons";
 import { POWERUP_DEFINITIONS } from "../domain/powerups";
+import { monsterMovementSpeed, monsterStatusTint } from "../domain/monster-status";
 import type {
   Bullet,
   Decoration,
@@ -2350,7 +2351,7 @@ export class PhaserRenderer {
     this.monsterHealthBars.get(item.id)?.setVisible(visible);
     this.monsterAuras.get(item.id)?.setVisible(visible);
     const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
-    if (!visible) sprite.anims.pause();
+    if (!visible || (!item.dead && (item.stunRemainingMs ?? 0) > 0)) sprite.anims.pause();
     else if (sprite.anims.isPaused) sprite.anims.resume();
     return changed;
   }
@@ -2367,22 +2368,65 @@ export class PhaserRenderer {
   }
 
   private applyMonsterFrame(container: Phaser.GameObjects.Container, item: Monster, now: number): void {
-    const frame = this.monsterFrame(item, now);
     const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
     const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
-    const attackStartedAt = frame.animation === "melee" || frame.animation === "ranged" ? item.lastAttackAt : null;
-    const restart = attackStartedAt !== null && sprite.getData("attackStartedAt") !== attackStartedAt;
-    sprite.setData("attackStartedAt", attackStartedAt);
-    this.playClip(sprite, frame.clip, item.dead ? item.size : item.spriteSize, {
-      shadow,
-      visualOffset: worldPoint(item, item.dead ? "destroyedVisualOffset" : "visualOffset"),
-      shadowPosition: () => ({ x: item.x, y: item.y, size: item.size }),
-      elapsedMs: frame.elapsed,
-      timeScale: frame.animation === "walk"
-        ? Math.min(2, Math.max(0.5, item.speed / MONSTER_WALK_REFERENCE_SPEED)) : 1,
-      restart,
-    });
+    const tint = monsterStatusTint(item);
+    if (tint === null) sprite.clearTint();
+    else sprite.setTint(tint);
+    // A neutral tint alone only darkens colored sprites; desaturate after lighting for a true gray stun.
+    const grayscale = sprite.getData("stunGrayscale") as Phaser.FX.ColorMatrix | undefined;
+    const stunned = !item.dead && (item.stunRemainingMs ?? 0) > 0;
+    if (stunned && !grayscale) {
+      const effect = sprite.postFX.addColorMatrix();
+      effect.grayscale(1);
+      sprite.setData("stunGrayscale", effect);
+    } else if (!stunned && grayscale) {
+      sprite.postFX.clear();
+      sprite.setData("stunGrayscale", undefined);
+    }
+    // Preserve the exact frame being displayed when hit, rather than switching to an idle clip.
+    if (!stunned || !this.animatedVisuals.has(sprite)) {
+      const frame = this.monsterFrame(item, now);
+      const attackStartedAt = frame.animation === "melee" || frame.animation === "ranged" ? item.lastAttackAt : null;
+      const restart = attackStartedAt !== null && sprite.getData("attackStartedAt") !== attackStartedAt;
+      sprite.setData("attackStartedAt", attackStartedAt);
+      this.playClip(sprite, frame.clip, item.dead ? item.size : item.spriteSize, {
+        shadow,
+        visualOffset: worldPoint(item, item.dead ? "destroyedVisualOffset" : "visualOffset"),
+        shadowPosition: () => ({ x: item.x, y: item.y, size: item.size }),
+        elapsedMs: frame.elapsed,
+        timeScale: frame.animation === "walk"
+          ? Math.min(2, Math.max(0.5, monsterMovementSpeed(item) / MONSTER_WALK_REFERENCE_SPEED)) : 1,
+        restart,
+      });
+    }
+    if (stunned) sprite.anims.pause();
+    this.updateStunSpinner(container, item, sprite, stunned, now);
     if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
+  }
+
+  private updateStunSpinner(
+    container: Phaser.GameObjects.Container, item: Monster, sprite: Phaser.GameObjects.Sprite, stunned: boolean, now: number,
+  ): void {
+    let spinner = container.getByName("stun-spinner") as Phaser.GameObjects.Graphics | null;
+    if (!stunned) {
+      if (spinner) {
+        container.remove(spinner, true);
+      }
+      return;
+    }
+    const radius = Math.max(5, Math.min(12, item.spriteSize * 0.075));
+    if (!spinner) {
+      spinner = this.scene!.add.graphics().setName("stun-spinner").setAlpha(0.55);
+      spinner.lineStyle(1, 0x888888, 1).strokeCircle(0, 0, radius);
+      spinner.lineStyle(1.5, 0xffffff, 1).beginPath().arc(0, 0, radius, -Math.PI / 2, Math.PI).strokePath();
+      container.add(spinner);
+    }
+    spinner.setPosition(
+      sprite.x + sprite.displayWidth * (0.5 - sprite.originX),
+      sprite.y + sprite.displayHeight * (0.5 - sprite.originY),
+    );
+    spinner.setRotation((now % 700) / 700 * Math.PI * 2);
   }
 
   private monsterDepth(item: Monster): number {
@@ -2396,6 +2440,7 @@ export class PhaserRenderer {
     }
     const direction = item.moveDir ?? "down";
     const visual = item.visual.directions[direction] ?? item.visual.directions.down!;
+    if ((item.stunRemainingMs ?? 0) > 0) return { animation: "normal", clip: visual.normal, elapsed: 0 };
     const attackElapsed = now - item.lastAttackAt;
     const attackAnimation = item.attackKind ?? "melee";
     const attackClip = visual[attackAnimation];
@@ -2403,7 +2448,7 @@ export class PhaserRenderer {
       return { animation: attackAnimation, clip: attackClip, elapsed: attackElapsed };
     }
     if (item.moving && visual.walk) {
-      const elapsed = monsterWalkElapsed(visual.walk, now, item.seed, item.speed);
+      const elapsed = monsterWalkElapsed(visual.walk, now, item.seed, monsterMovementSpeed(item));
       return { animation: "walk", clip: visual.walk, elapsed };
     }
     return { animation: "normal", clip: visual.normal, elapsed: 0 };

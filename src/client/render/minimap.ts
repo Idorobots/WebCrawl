@@ -1,6 +1,6 @@
 import { pointInCorridor, pointInRoomFloor, roomContainingFloorPoint } from "../domain/geometry";
 import { WORLD_GEOMETRY } from "../domain/world-specs";
-import type { DungeonLayout, GraphNode, LayoutLink, LootItem, Monster, Point, Stair } from "../types";
+import type { Decoration, DungeonLayout, GraphNode, LayoutLink, LootItem, Monster, Point, PowerupKind, Stair } from "../types";
 
 /** Map powerups can replace individual visibility rules without changing discovery. */
 export interface MinimapVisibility {
@@ -8,14 +8,63 @@ export interface MinimapVisibility {
   corridor(link: LayoutLink, revealed: ReadonlySet<number>): boolean;
   pickup(item: LootItem, locationRevealed: boolean, revealed: ReadonlySet<number>): boolean;
   monster(monster: Monster, locationRevealed: boolean, revealed: ReadonlySet<number>): boolean;
+  portal(stair: Stair, locationRevealed: boolean, revealed: ReadonlySet<number>): boolean;
+  vending(item: Decoration, locationRevealed: boolean, revealed: ReadonlySet<number>): boolean;
+  bossArena(room: GraphNode): boolean;
+  countMonsters(room: GraphNode): boolean;
 }
 
 export const DISCOVERED_MINIMAP_VISIBILITY: MinimapVisibility = {
   room: (room, revealed) => revealed.has(room.id),
   corridor: (link, revealed) => revealed.has(link.source.id) || revealed.has(link.target.id),
-  pickup: (item, locationRevealed, revealed) => revealed.has(item.roomId) && locationRevealed,
-  monster: (_monster, locationRevealed) => locationRevealed,
+  pickup: () => false,
+  monster: () => false,
+  portal: () => false,
+  vending: () => false,
+  bossArena: () => false,
+  countMonsters: () => false,
 };
+
+/** Mapping is knowledge only: never mutate visited rooms or activate their monsters. */
+export function minimapVisibilityForPlayer(
+  layout: DungeonLayout, revealed: ReadonlySet<number>, powerups: Partial<Record<PowerupKind, number>>,
+): MinimapVisibility {
+  const mapped = new Set(revealed);
+  const adjacency = new Map<number, number[]>();
+  for (const link of layout.links) {
+    for (const [from, to] of [[link.source.id, link.target.id], [link.target.id, link.source.id]]) {
+      const neighbors = adjacency.get(from!) ?? [];
+      neighbors.push(to!);
+      adjacency.set(from!, neighbors);
+    }
+  }
+  let frontier = [...mapped];
+  const depth = powerups.map_expansion ?? 0;
+  for (let hop = 0; hop < depth && frontier.length; hop++) {
+    const next: number[] = [];
+    for (const id of frontier) {
+      for (const neighbor of adjacency.get(id) ?? []) {
+        if (mapped.has(neighbor)) continue;
+        mapped.add(neighbor);
+        next.push(neighbor);
+      }
+    }
+    frontier = next;
+  }
+  const radar = (powerups.map_radar ?? 0) > 0;
+  const rag = (powerups.map_loot ?? 0) > 0;
+  return {
+    room: room => mapped.has(room.id),
+    corridor: link => revealed.has(link.source.id) || revealed.has(link.target.id) ||
+      (mapped.has(link.source.id) && mapped.has(link.target.id)),
+    pickup: (_item, visible) => rag && visible,
+    monster: (_monster, visible) => radar && visible,
+    portal: (_stair, visible) => rag && visible,
+    vending: (_item, visible) => rag && visible,
+    bossArena: () => radar,
+    countMonsters: () => radar,
+  };
+}
 
 export interface MinimapGeometry {
   layout: DungeonLayout;
@@ -79,10 +128,14 @@ export function buildMinimapGeometry(
   };
 }
 
-function locationIsRevealed(geometry: MinimapGeometry, point: Point, roomId: number): boolean {
+function roomForMinimapPoint(geometry: MinimapGeometry, point: Point, roomId: number): GraphNode | null {
   const assignedRoom = geometry.roomsById.get(roomId);
-  const room = assignedRoom && pointInRoomFloor(point.x, point.y, assignedRoom)
+  return assignedRoom && pointInRoomFloor(point.x, point.y, assignedRoom)
     ? assignedRoom : roomContainingFloorPoint(geometry.layout.nodes, point);
+}
+
+function locationIsRevealed(geometry: MinimapGeometry, point: Point, roomId: number): boolean {
+  const room = roomForMinimapPoint(geometry, point, roomId);
   // A corridor touching an unrevealed room must not expose entities inside that room.
   if (room) return geometry.roomIds.has(room.id);
   return geometry.links.some(link => pointInCorridor(point.x, point.y, link));
@@ -95,10 +148,15 @@ export function minimapMarkers(
   loot: readonly LootItem[],
   monsters: readonly Monster[],
   visibility = DISCOVERED_MINIMAP_VISIBILITY,
-): { portals: Array<{ room: GraphNode; up: boolean; down: boolean }>; pickups: LootItem[]; monsters: Monster[] } {
+  vendingMachines: readonly Decoration[] = [],
+): {
+  portals: Array<{ room: GraphNode; up: boolean; down: boolean }>;
+  pickups: LootItem[]; monsters: Monster[]; vending: Decoration[];
+  monsterCounts: Array<{ room: GraphNode; count: number }>;
+} {
   const portals = new Map<number, { room: GraphNode; up: boolean; down: boolean }>();
   for (const stair of stairs) {
-    if (!geometry.roomIds.has(stair.roomId)) continue;
+    if (!geometry.roomIds.has(stair.roomId) || !visibility.portal(stair, true, revealed)) continue;
     let marker = portals.get(stair.roomId);
     if (!marker) {
       marker = { room: geometry.roomsById.get(stair.roomId)!, up: false, down: false };
@@ -106,11 +164,23 @@ export function minimapMarkers(
     }
     marker[stair.type] = true;
   }
+  const visibleMonsters = monsters.filter(monster => !monster.dead &&
+    visibility.monster(monster, locationIsRevealed(geometry, monster, monster.roomId), revealed));
+  const counts = new Map<number, number>();
+  for (const room of geometry.rooms) {
+    if (!revealed.has(room.id) && visibility.countMonsters(room)) counts.set(room.id, 0);
+  }
+  for (const monster of visibleMonsters) {
+    const room = roomForMinimapPoint(geometry, monster, monster.roomId);
+    if (room && !revealed.has(room.id)) counts.set(room.id, (counts.get(room.id) ?? 0) + 1);
+  }
   return {
     portals: [...portals.values()],
     pickups: loot.filter(item => visibility.pickup(item, locationIsRevealed(geometry, item, item.roomId), revealed)),
-    monsters: monsters.filter(monster => !monster.dead &&
-      visibility.monster(monster, locationIsRevealed(geometry, monster, monster.roomId), revealed)),
+    monsters: visibleMonsters,
+    vending: vendingMachines.filter(item => !item.destroyed && item.vendingKind &&
+      visibility.vending(item, locationIsRevealed(geometry, item, item.roomId), revealed)),
+    monsterCounts: [...counts].map(([id, count]) => ({ room: geometry.roomsById.get(id)!, count })),
   };
 }
 
@@ -127,6 +197,10 @@ export const MINIMAP_COLORS = {
   upPortal: "#4d8dff",
   pickup: "#57d9c1",
   monster: "#ff525f",
+  vending: "#ffd166",
+  scannedRoom: "#0e1821",
+  scannedBoss: "#39171f",
+  scannedBorder: "#2c4859",
   player: "#ffffff",
 } as const;
 
@@ -149,6 +223,7 @@ export class MinimapRenderer {
     monsters: readonly Monster[],
     player: Point,
     visibility = DISCOVERED_MINIMAP_VISIBILITY,
+    vendingMachines: readonly Decoration[] = [],
   ): void {
     const width = Math.max(1, this.canvas.clientWidth);
     const height = Math.max(1, this.canvas.clientHeight);
@@ -196,7 +271,13 @@ export class MinimapRenderer {
       context.lineTo(position.x + (door.vertical ? 0 : halfDoor), position.y + (door.vertical ? halfDoor : 0));
       context.stroke();
     }
-    const markers = minimapMarkers(geometry, revealed, stairs, loot, monsters, visibility);
+    const markers = minimapMarkers(geometry, revealed, stairs, loot, monsters, visibility, vendingMachines);
+    this.canvas.dataset.mappedRooms = String(geometry.rooms.length);
+    this.canvas.dataset.monsters = String(markers.monsters.length);
+    this.canvas.dataset.portals = String(markers.portals.reduce((count, marker) => count + Number(marker.up) + Number(marker.down), 0));
+    this.canvas.dataset.pickups = String(markers.pickups.length);
+    this.canvas.dataset.vending = String(markers.vending.length);
+    this.canvas.dataset.monsterCounts = markers.monsterCounts.map(marker => `${marker.room.id}:${marker.count}`).join(",");
     const dot = (point: Point, color: string, radius: number): void => {
       const position = geometry.project(point);
       context.fillStyle = color;
@@ -205,7 +286,15 @@ export class MinimapRenderer {
       context.fill();
     };
     for (const item of markers.pickups) dot(item, MINIMAP_COLORS.pickup, compact ? 1.5 : 2);
-    for (const monster of markers.monsters) dot(monster, MINIMAP_COLORS.monster, compact ? 1.5 : 2);
+    for (const monster of markers.monsters) {
+      dot(monster, MINIMAP_COLORS.monster, (compact ? 1.5 : 2) + (monster.bossKind ? 1.5 : monster.miniboss ? 0.75 : 0));
+    }
+    for (const item of markers.vending) {
+      const position = geometry.project(item);
+      const size = compact ? 3 : 4;
+      context.fillStyle = MINIMAP_COLORS.vending;
+      context.fillRect(position.x - size / 2, position.y - size / 2, size, size);
+    }
     for (const marker of markers.portals) {
       const position = geometry.project(marker.room);
       const size = Math.max(2, Math.min(compact ? 3 : 5, marker.room.width * geometry.scale / 6, marker.room.height * geometry.scale / 3));
@@ -262,9 +351,13 @@ export class MinimapRenderer {
     }
     for (const room of geometry.rooms) {
       const corner = geometry.project({ x: room.x - room.width / 2, y: room.y - room.height / 2 });
-      context.fillStyle = room.isBossArena ? MINIMAP_COLORS.boss : room.isRoot ? MINIMAP_COLORS.root : MINIMAP_COLORS.room;
+      const explored = this.revealed.has(room.id);
+      const boss = room.isBossArena && this.visibility!.bossArena(room);
+      context.fillStyle = explored
+        ? boss ? MINIMAP_COLORS.boss : room.isRoot ? MINIMAP_COLORS.root : MINIMAP_COLORS.room
+        : boss ? MINIMAP_COLORS.scannedBoss : MINIMAP_COLORS.scannedRoom;
       context.fillRect(corner.x, corner.y, room.width * geometry.scale, room.height * geometry.scale);
-      context.strokeStyle = MINIMAP_COLORS.border;
+      context.strokeStyle = explored ? MINIMAP_COLORS.border : MINIMAP_COLORS.scannedBorder;
       context.lineWidth = 1;
       context.strokeRect(corner.x, corner.y, room.width * geometry.scale, room.height * geometry.scale);
     }

@@ -13,7 +13,10 @@ export type LootKind = "credit" | "crystal" | "core" | "medkit" | "energy" | "we
 export type PowerupKind =
   | "health" | "energy" | "damage" | "movement_speed" | "shot_speed"
   | "health_regen" | "energy_regen" | "ammo_regen" | "extra_ram"
-  | "extra_crystal" | "critical_damage";
+  | "extra_crystal" | "critical_damage"
+  | "damage_slow" | "damage_stun" | "shot_pattern" | "shot_aim" | "berserk"
+  | "damage_reduction" | "extra_loot" | "energy_ammo"
+  | "map_expansion" | "map_radar" | "map_loot";
 export type VendingKind = "medical" | "ammo" | "energy" | "crystal";
 export type BossKind = "deepseek-summoner" | "qwen-teleporter" | "glm-hunter" | "kimi-spiral" | "hy4-wave";
 export type RegularMonsterKind =
@@ -281,6 +284,8 @@ export interface Monster extends Point, RelativeObjectGeometry {
   active: boolean;
   dead: boolean;
   deathAnimating?: boolean;
+  slowRemainingMs?: number;
+  stunRemainingMs?: number;
   moving?: boolean;
   moveDir?: "up" | "down" | "left" | "right" | null;
   path?: Point[];
@@ -329,6 +334,8 @@ export interface MonsterState {
   dropKind: LootKind | null;
   attackSequence?: number;
   summonedCount?: number;
+  slowRemainingMs?: number;
+  stunRemainingMs?: number;
 }
 
 export interface Bullet extends Point {

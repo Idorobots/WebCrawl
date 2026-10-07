@@ -451,6 +451,17 @@ export const POWERUP_ASSETS: Readonly<Record<PowerupKind, string>> = {
   extra_ram: asset("pickups/powerups/extra_ram.png"),
   extra_crystal: asset("pickups/powerups/extra_crystal.png"),
   critical_damage: asset("pickups/powerups/critical_damage.png"),
+  damage_slow: asset("pickups/powerups/damage_slow.png"),
+  damage_stun: asset("pickups/powerups/damage_stun.png"),
+  shot_pattern: asset("pickups/powerups/shot_pattern.png"),
+  shot_aim: asset("pickups/powerups/shot_aim.png"),
+  berserk: asset("pickups/powerups/berserk.png"),
+  damage_reduction: asset("pickups/powerups/damage_reduction.png"),
+  extra_loot: asset("pickups/powerups/extra_loot.png"),
+  energy_ammo: asset("pickups/powerups/energy_ammo.png"),
+  map_expansion: asset("pickups/powerups/map_expansion.png"),
+  map_radar: asset("pickups/powerups/map_radar.png"),
+  map_loot: asset("pickups/powerups/map_loot.png"),
 };
 
 export const LOOT_RAM_FRAMES = [

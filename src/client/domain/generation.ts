@@ -43,10 +43,10 @@ import {
   type WeightedDecorationDefinition,
 } from "./world-specs";
 import { worldPoint } from "./object-geometry";
-import { monsterDropsWeapon, REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K, weaponForRoom, type WeaponSource } from "./weapons";
+import { monsterDropsWeapon, REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K, weaponForMonster, weaponForRoom, type WeaponSource } from "./weapons";
 import { authoredDecorations, authoredLoot, type AuthoredRooms } from "./authored-rooms";
-import { vendingDropForSeed, vendingKindForRoom, vendingStateForSeed, vendingWreck } from "./vending";
-import { monsterDropsPowerup, powerupForSeed } from "./powerups";
+import { vendingDropForSeed, vendingKindForRoom, vendingStateForSeed, vendingWreck, VENDING_PRODUCTS } from "./vending";
+import { monsterDropsPowerup, powerupChance, powerupForSeed } from "./powerups";
 
 export const REGULAR_MONSTER_CRYSTAL_DROP_CHANCE_PER_10K = REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K;
 
@@ -240,10 +240,36 @@ export function sceneryDropKindForSeed(seed: number, definitionId?: string): Loo
   if (vending?.vendingKind) return vendingDropForSeed(seed, vending.vendingKind);
   if (stableHash(`${seed}|drop`) % 100 >= 30) return null;
 
+  return sceneryLootKindForSeed(seed, definitionId);
+}
+
+function sceneryLootKindForSeed(seed: number, definitionId?: string): LootKind {
+  const vending = Object.values(VENDING_DEFINITIONS).find(type => type.definitionId === definitionId);
+  if (vending?.vendingKind) return VENDING_PRODUCTS[vending.vendingKind].kind;
   const favoredKind = definitionId ? FAVORED_CRATE_LOOT[definitionId] : undefined;
   // Keep the scenery drop chance unchanged; bias only the contents of a successful crate drop.
   if (favoredKind && stableHash(`${seed}|crate-drop-bias`) % 100 < 60) return favoredKind;
   return lootKindForRoll(stableHash(`${seed}|drop-kind`) % 100);
+}
+
+/** The occurrence roll is separate from the usual loot-type/rarity rolls. Persist the result at destruction. */
+export function bonusLootDrop(source: Monster | Decoration, namespace: string, stacks: number): LootItem | null {
+  const chance = powerupChance(stacks, 0.05);
+  if (!chance || stableHash(`${namespace}|${source.id}|bonus-loot-chance`) % 10_000 >= chance * 10_000) return null;
+  const seed = stableHash(`${namespace}|${source.id}|bonus-loot-kind`);
+  const monster = "seed" in source;
+  const kind = monster ? monsterLootDropKindForSeed(seed, source.miniboss, true)!
+    : monsterDropsPowerup(seed, false) ? "powerup" : monsterDropsWeapon(seed, false) ? "weapon"
+    : sceneryLootKindForSeed(seed, source.definitionId);
+  return {
+    id: `${namespace}::${source.id}::bonus-drop`,
+    roomId: source.roomId, x: source.x, y: source.y, kind,
+    weapon: kind === "weapon" ? monster ? weaponForMonster(source.kind, seed)
+      : weaponForRoom({ tag: source.kind, title: source.definitionId, lootSeed: seed }) : undefined,
+    weaponPlacement: kind === "weapon" ? "floor" : undefined,
+    powerup: kind === "powerup" ? powerupForSeed(seed) : undefined,
+    powerupPlacement: kind === "powerup" ? "floor" : undefined,
+  };
 }
 
 const ROOM_SCENERY_THEME_IDS = Object.keys(ROOM_SCENERY_THEMES) as RoomSceneryTheme[];

@@ -1276,9 +1276,9 @@ We'll need the following additions to the player state:
 - In complex corridors, some doors should open at the same time - releasing monsters into the corridor for the player to fend off as an ambush.
 - Energy dash needs a 200 ms invulnerability "grace period" after the dash ends.
 - Powerup vending machine?
-- Higher level monsters should have slowing bullets, critical damage chanse and stunning bullets.
 - Crystals should last 5 seconds
 - Regen should regenerate 0.1 thing every 6 seconds.
+- Destroying certain types of scenery should have a chance of spawning a certain type of monster.
 
 * DONE Minimap overhaul
 :LOGBOOK:
@@ -1329,7 +1329,10 @@ Add a line to the prompt following the loot breakdown, explaining that certain p
 
 The power-ups icon icon should be shown on the player state panel indicating that it's in effect. Show the name of the power up on hover.
 
-* Extra Power-ups & enhancements
+* DONE Extra Power-ups & enhancements
+:LOGBOOK:
+- State "DONE"       from              [2026-10-08 Thu 00:07]
+:END:
 Add additional power-ups to the game:
 
 - Model lobotomy - 10% chance slow enemies that are hit lasting 1 second (enemy should be tinted blue when slowed) (icon: pickups/powerups/damage_slow)
@@ -1355,6 +1358,7 @@ The mini-map-related powerups should combine seamlessly - when a radar is active
 - Token Inflation - Ammo crates giving an additional ammo
 - Scaling Laws - Faster movement speed the more energy the player has (-10% at 0, to +25% each 10 energy).
 - Stealth Mode - Temporary invisibility after the player takes damage (1 second)
+- Automatic bailout - whenever the player is about to die and has crystals, they are used.
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:
@@ -1409,6 +1413,8 @@ Types:
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Boss arenas sometimes are not the farthest room and have additional corridors attached to them (screenshot).
+- Hovering over HUD panels maks the flashlight cursor return to center. All UI elements should behave just like the minimap.
+- During energy dash, the player should not pick up pickups.
 * DONE Enemy rebalance
 :LOGBOOK:
 - State "DONE"       from              [2026-10-04 Sun 14:05]
@@ -1418,6 +1424,9 @@ Types:
 * Enemy rebalance continued
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
 - Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
+- Higher level monsters should have slowing bullets, critical damage chance and stunning bullets. Also, different bullet patterns.
+- Higher level walkers should have a bash ability.
+- Spawner delay should be reduced to 20 seconds on first floor.
 
 * Boss fights continued
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
@@ -1506,9 +1515,14 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Powerups should appear on the loot panel in the order they were picked up.
 - Dropped weapons appear under the pedenstal
 - Powerups & weapons should appear above regular loot.
+- Healthbar lights up whenever an enemy or scenery is destroyed. It should only light up whenever the player takes non-zero damage.
 
 * Audio bugs
 - Picking up ammo should play the same sound as equiping a weapon.
 - When the game runs in background all sounds generated are queued and play all on once when the game is foregrounded.
 * Soundscape
 - Add random "scary" sounds that play on occasion.
+* Visual effects
+- "Animate" the sprites of teleported characters by graying out and resizing the sprite to look like it's disappearing.
+- Better teleport effect - ideally a graphical effect, not a literal sprite animation.
+- Better healing effect - ideally a graphical effect.

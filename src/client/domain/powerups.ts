@@ -1,5 +1,5 @@
 import { POWERUP_ASSETS } from "../config";
-import type { PowerupKind, WeaponSpec } from "../types";
+import type { PowerupKind, WeaponProjectile, WeaponSpec } from "../types";
 import { stableHash } from "./hash";
 import { REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K } from "./weapons";
 import { CRYSTAL_INVULNERABILITY_DURATION_MS, PLAYER_ENERGY_MAX, PLAYER_SPEC } from "./world-specs";
@@ -16,6 +16,17 @@ export const POWERUP_DEFINITIONS: Readonly<Record<PowerupKind, { name: string; a
   extra_ram: { name: "DDR", asset: POWERUP_ASSETS.extra_ram, color: 0x25d5ff },
   extra_crystal: { name: "Campaign Contribution", asset: POWERUP_ASSETS.extra_crystal, color: 0x28ed97 },
   critical_damage: { name: "Trust me bro benchmark", asset: POWERUP_ASSETS.critical_damage, color: 0xff303f },
+  damage_slow: { name: "Model lobotomy", asset: POWERUP_ASSETS.damage_slow, color: 0x4d8dff },
+  damage_stun: { name: "API Timeout", asset: POWERUP_ASSETS.damage_stun, color: 0xb0b0b0 },
+  shot_pattern: { name: "Mixture of Experts", asset: POWERUP_ASSETS.shot_pattern, color: 0xffb52e },
+  shot_aim: { name: "Attention", asset: POWERUP_ASSETS.shot_aim, color: 0x66d4ff },
+  berserk: { name: "Existential Risk", asset: POWERUP_ASSETS.berserk, color: 0xff315c },
+  damage_reduction: { name: "Guardrails", asset: POWERUP_ASSETS.damage_reduction, color: 0x78ff9b },
+  extra_loot: { name: "Benchmark contamination", asset: POWERUP_ASSETS.extra_loot, color: 0x28ed97 },
+  energy_ammo: { name: "Compute Credits", asset: POWERUP_ASSETS.energy_ammo, color: 0x20caff },
+  map_expansion: { name: "Context Window Expansion", asset: POWERUP_ASSETS.map_expansion, color: 0x66d4ff },
+  map_radar: { name: "Usage Analytics", asset: POWERUP_ASSETS.map_radar, color: 0xff525f },
+  map_loot: { name: "RAG", asset: POWERUP_ASSETS.map_loot, color: 0x57d9c1 },
 };
 
 export const POWERUP_KINDS = Object.keys(POWERUP_DEFINITIONS) as PowerupKind[];
@@ -60,6 +71,7 @@ export function collectPowerup(state: PlayerState, kind: PowerupKind): void {
     case "movement_speed": state.walkSpeedMultiplier = 1 + stacks / 10; break;
     case "shot_speed": state.shotRateMultiplier = 1 + stacks / 10; break;
     case "critical_damage": state.criticalChance = Math.min(1, stacks / 100); break;
+    case "shot_aim": state.aimAid += 0.1; break;
   }
 }
 
@@ -72,7 +84,45 @@ export function bailoutDurationMs(state: PlayerState): number {
 }
 
 export function playerAttackDamage(state: PlayerState, damage: number): number {
-  return damage * state.damageMultiplier;
+  const missingHp = Math.max(0, state.maxHp - state.hp);
+  return damage * state.damageMultiplier * (1 + missingHp * (state.powerups.berserk ?? 0) / 100);
+}
+
+export function receivedPlayerDamage(state: PlayerState, damage: number): number {
+  return damage * 0.9 ** (state.powerups.damage_reduction ?? 0);
+}
+
+export function powerupChance(stacks: number, chancePerStack = 0.1): number {
+  return Math.min(1, Math.max(0, stacks) * chancePerStack);
+}
+
+/** Roll once for each original projectile; bonus bullets never recursively multiply. */
+export function extraProjectiles(
+  projectiles: readonly WeaponProjectile[], stacks: number, random = Math.random,
+): WeaponProjectile[] {
+  const chance = powerupChance(stacks);
+  if (!chance) return [...projectiles];
+  return projectiles.flatMap((projectile, index) => {
+    if (random() >= chance) return [projectile];
+    const angle = index % 2 ? -0.045 : 0.045;
+    const cosine = Math.cos(angle), sine = Math.sin(angle);
+    return [projectile, {
+      ...projectile,
+      direction: {
+        x: projectile.direction.x * cosine - projectile.direction.y * sine,
+        y: projectile.direction.x * sine + projectile.direction.y * cosine,
+      },
+    }];
+  });
+}
+
+/** Keep the last round while emergency energy is available; a volley costs one resource. */
+export function resourcesAfterShot(state: PlayerState, ammo: number | null): { ammo: number | null; energy: number } {
+  if (ammo === null) return { ammo, energy: state.energy };
+  if (ammo <= 1 && (state.powerups.energy_ammo ?? 0) > 0 && state.energy >= 1) {
+    return { ammo, energy: state.energy - 1 };
+  }
+  return { ammo: Math.max(0, ammo - 1), energy: state.energy };
 }
 
 /** Bullet damage is already scaled on firing; only the impact's critical roll remains. */

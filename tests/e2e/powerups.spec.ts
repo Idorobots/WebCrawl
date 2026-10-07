@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { POWERUP_DEFINITIONS, POWERUP_KINDS, type PlayerState } from "../../src/client/domain/powerups";
-import type { LootItem, Point, PowerupKind } from "../../src/client/types";
+import type { Decoration, LootItem, Monster, Point, PowerupKind, WeaponKind } from "../../src/client/types";
 
 test.setTimeout(90_000);
 
@@ -9,7 +9,7 @@ interface TestWindow extends Window {
     playerState(): PlayerState;
     playerHp(): number;
     damagePlayer(amount: number): void;
-    spawnPowerup(kind: PowerupKind): LootItem;
+    spawnPowerup(kind: PowerupKind, position?: Point): LootItem;
     defeatAllMonsters(): void;
     teleportPlayerTo(x: number, y: number): void;
     loot(): Array<{ id: string; kind: string; powerup: PowerupKind | null; x: number; y: number }>;
@@ -20,6 +20,14 @@ interface TestWindow extends Window {
     expireCrystalShield(): void;
     navigate(url: string): Promise<void>;
     goBack(): Promise<void>;
+    setPlayerInvulnerable(enabled: boolean): void;
+    equipWeapon(kind: WeaponKind, ammo: number): void;
+    setWeaponAmmo(ammo: number): void;
+    shoot(): boolean;
+    hitMonster(id: string, damage: number): void;
+    monsters(): Array<Pick<Monster, "id" | "x" | "y" | "roomId" | "active" | "dead" | "hp" | "maxHp" | "speed" | "miniboss" | "bossKind" | "slowRemainingMs" | "stunRemainingMs">>;
+    scenery(): Array<Pick<Decoration, "id" | "x" | "y" | "roomId" | "destructible" | "destroyed">>;
+    destroyScenery(id: string): void;
   };
   __webcrawlScene: import("phaser").Scene;
 }
@@ -49,6 +57,219 @@ async function pickup(page: Page, kind: PowerupKind): Promise<void> {
     api.teleportPlayerTo(item.x - 80, item.y);
   }, kind);
 }
+
+async function stackPowerup(page: Page, kind: PowerupKind, count: number): Promise<void> {
+  await page.evaluate(({ kind, count }) => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    const game = document.querySelector<HTMLElement>("#gameCanvas")!;
+    const position = { x: Number(game.dataset.playerX), y: Number(game.dataset.playerY) };
+    for (let index = 0; index < count; index++) {
+      const item = api.spawnPowerup(kind, position);
+      api.teleportPlayerTo(item.x, item.y);
+    }
+  }, { kind, count });
+}
+
+test("composes map expansion, radar and RAG without visiting rooms or waking enemies", async ({ page }) => {
+  await startGame(page);
+  const game = page.locator("#gameCanvas");
+  const map = page.locator("#sideMinimapCanvas");
+  const explored = await game.getAttribute("data-visited-rooms");
+  const active = await game.getAttribute("data-active-monsters");
+  await expect(map).toHaveAttribute("data-monsters", "0");
+  await expect(map).toHaveAttribute("data-portals", "0");
+  await expect(map).toHaveAttribute("data-pickups", "0");
+  await expect(map).toHaveAttribute("data-vending", "0");
+  await stackPowerup(page, "map_expansion", 1);
+  await expect.poll(async () => Number(await map.getAttribute("data-mapped-rooms"))).toBeGreaterThan(Number(explored));
+  const firstExpansion = Number(await map.getAttribute("data-mapped-rooms"));
+  await expect(map).toHaveAttribute("data-monsters", "0");
+  await expect(map).toHaveAttribute("data-portals", "0");
+  await stackPowerup(page, "map_expansion", 1);
+  await expect.poll(async () => Number(await map.getAttribute("data-mapped-rooms"))).toBeGreaterThanOrEqual(firstExpansion);
+  await pickup(page, "map_radar");
+  await expect.poll(async () => Number(await map.getAttribute("data-monsters"))).toBeGreaterThan(0);
+  await expect(map).toHaveAttribute("data-monster-counts", /-?\d+:[1-9]\d*/);
+  await expect(map).toHaveAttribute("data-portals", "0");
+  await pickup(page, "map_loot");
+  await expect.poll(async () => Number(await map.getAttribute("data-portals"))).toBeGreaterThan(0);
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.spawnPowerup("health"));
+  await expect.poll(async () => Number(await map.getAttribute("data-pickups"))).toBeGreaterThan(0);
+  await expect(game).toHaveAttribute("data-visited-rooms", explored!);
+  await expect(game).toHaveAttribute("data-active-monsters", active!);
+});
+
+test("multiplies each shotgun pellet and spends one emergency energy per shot before the last ammo round", async ({ page }) => {
+  await startGame(page);
+  await pickup(page, "energy_ammo");
+  await stackPowerup(page, "shot_pattern", 10);
+  const shots = await page.evaluate(() => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    api.equipWeapon("scatter-array", 2);
+    api.grantEnergy(3);
+    const game = document.querySelector<HTMLElement>("#gameCanvas")!;
+    const fire = (ammo: number) => {
+      api.setWeaponAmmo(ammo);
+      const fired = api.shoot();
+      return { fired, ammo: game.dataset.weaponAmmo, energy: api.playerState().energy,
+        volley: game.dataset.lastPlayerVolley, kind: game.dataset.weaponKind };
+    };
+    return [fire(2), fire(1), fire(1), fire(1), fire(1)];
+  });
+  expect(shots.map(shot => shot.fired)).toEqual([true, true, true, true, true]);
+  expect(shots.map(shot => shot.volley)).toEqual(["10", "10", "10", "10", "10"]);
+  expect(shots.map(shot => shot.energy)).toEqual([3, 2, 1, 0, 0]);
+  expect(shots.map(shot => shot.ammo)).toEqual(["1", "1", "1", "1", "infinite"]);
+  expect(shots.at(-1)!.kind).toBe("pulse-rifle");
+});
+
+test("applies blue slow and gray stun with a rotating spinner, pauses the sprite, and restores it after expiry", async ({ page }) => {
+  await startGame(page, "<!doctype html><html><body><main>Boss deck</main></body></html>");
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.setPlayerInvulnerable(true));
+  await stackPowerup(page, "damage_slow", 20);
+  expect(await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.playerState().powerups.damage_slow)).toBe(20);
+  const id = await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.monsters().find(item => item.active && !item.dead)!.id);
+  const tint = () => page.evaluate(id => {
+    const scene = (window as unknown as TestWindow).__webcrawlScene;
+    const container = scene.children.list.find(object => object.getData("monsterId") === id) as import("phaser").GameObjects.Container | undefined;
+    return (container?.getByName("sprite") as import("phaser").GameObjects.Sprite | undefined)?.tintTopLeft;
+  }, id);
+  await expect.poll(tint).not.toBeUndefined();
+  await page.evaluate(id => (window as unknown as TestWindow).__webcrawlTest.hitMonster(id, 0.1), id);
+  await expect.poll(tint, { intervals: [20] }).toBe(0x4d8dff);
+  await expect.poll(tint, { intervals: [100], timeout: 3_000 }).toBe(0xffffff);
+  await stackPowerup(page, "damage_stun", 20);
+  expect(await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.playerState().powerups.damage_stun)).toBe(20);
+  const held = await page.evaluate(async id => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    const scene = (window as unknown as TestWindow).__webcrawlScene;
+    const container = scene.children.list.find(object => object.getData("monsterId") === id) as import("phaser").GameObjects.Container;
+    const sprite = container.getByName("sprite") as import("phaser").GameObjects.Sprite;
+    const textureBefore = sprite.texture.key;
+    const frameBefore = sprite.frame.name;
+    const hitAsStun = () => {
+      const random = Math.random;
+      Math.random = () => 0.99; // Both procs succeed at 20 stacks; resolve the simultaneous hit as stun.
+      try { api.hitMonster(id, 0.1); } finally { Math.random = random; }
+    };
+    hitAsStun();
+    const before = api.monsters().find(item => item.id === id)!;
+    const samples: Array<{ x: number; y: number; tint: number; grayscale: boolean; paused: boolean;
+      texture: string; frame: string | number; spinnerRotation: number; spinnerCount: number;
+      slowRemainingMs: number; spinnerCenterError: number }> = [];
+    let refreshed = false;
+    await new Promise<void>(resolve => {
+      const sample = () => {
+        const current = api.monsters().find(item => item.id === id)!;
+        if ((current.stunRemainingMs ?? 0) <= 0) {
+          scene.events.off("postupdate", sample);
+          resolve();
+          return;
+        }
+        // Refresh an active stun once: it must reuse the same spinner and preserve the frozen frame.
+        if (!refreshed && current.stunRemainingMs! < 300) {
+          refreshed = true;
+          api.hitMonster(id, 0.1);
+        }
+        const spinner = container.getByName("stun-spinner") as import("phaser").GameObjects.Graphics;
+        const bounds = sprite.getBounds();
+        const position = container.getWorldTransformMatrix().transformPoint(spinner.x, spinner.y);
+        samples.push({ x: current.x, y: current.y, tint: sprite.tintTopLeft,
+          grayscale: Boolean(sprite.getData("stunGrayscale")), paused: sprite.anims.isPaused,
+          texture: sprite.texture.key, frame: sprite.frame.name, spinnerRotation: spinner.rotation,
+          spinnerCount: container.list.filter(child => child.name === "stun-spinner").length,
+          slowRemainingMs: current.slowRemainingMs ?? 0,
+          spinnerCenterError: Math.hypot(position.x - bounds.centerX, position.y - bounds.centerY) });
+      };
+      scene.events.on("postupdate", sample);
+      sample();
+    });
+    return { before, samples, textureBefore, frameBefore, refreshed,
+      ending: { spinner: Boolean(container.getByName("stun-spinner")), paused: sprite.anims.isPaused,
+        grayscale: Boolean(sprite.getData("stunGrayscale")), tint: sprite.tintTopLeft } };
+  }, id);
+  expect(held.before.stunRemainingMs).toBe(500);
+  expect(held.before.slowRemainingMs).toBe(0);
+  expect(held.samples.length).toBeGreaterThan(0);
+  for (const sample of held.samples) {
+    expect(sample.x).toBe(held.before.x);
+    expect(sample.y).toBe(held.before.y);
+    expect(sample.tint).toBe(0xb0b0b0);
+    expect(sample.grayscale).toBe(true);
+    expect(sample.paused).toBe(true);
+    expect(sample.texture).toBe(held.textureBefore);
+    expect(sample.frame).toBe(held.frameBefore);
+    expect(sample.spinnerCount).toBe(1);
+    expect(sample.slowRemainingMs).toBe(0);
+    expect(sample.spinnerCenterError).toBeLessThan(0.01);
+  }
+  expect(held.refreshed).toBe(true);
+  expect(new Set(held.samples.map(sample => sample.spinnerRotation)).size).toBeGreaterThan(1);
+  expect(held.ending).toEqual({ spinner: false, paused: false, grayscale: false, tint: 0xffffff });
+  const firstSlow = await page.evaluate(id => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    const random = Math.random;
+    try {
+      Math.random = () => 0;
+      api.hitMonster(id, 0.1);
+      Math.random = () => 0.99;
+      api.hitMonster(id, 0.1); // Stun cannot replace an already active slow.
+    } finally { Math.random = random; }
+    const monster = api.monsters().find(item => item.id === id)!;
+    const container = (window as unknown as TestWindow).__webcrawlScene.children.list
+      .find(object => object.getData("monsterId") === id) as import("phaser").GameObjects.Container;
+    return { slow: monster.slowRemainingMs, stun: monster.stunRemainingMs,
+      spinner: Boolean(container.getByName("stun-spinner")) };
+  }, id);
+  expect(firstSlow).toEqual({ slow: 2_000, stun: 0, spinner: false });
+  await expect.poll(tint, { intervals: [100], timeout: 3_000 }).toBe(0xffffff);
+  const deathCleanup = await page.evaluate(id => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    const hp = api.monsters().find(item => item.id === id)!.hp;
+    const random = Math.random;
+    Math.random = () => 0.99;
+    try { api.hitMonster(id, 0.1); } finally { Math.random = random; }
+    api.hitMonster(id, hp + 1);
+    const scene = (window as unknown as TestWindow).__webcrawlScene;
+    const container = scene.children.list.find(object => object.getData("monsterId") === id) as import("phaser").GameObjects.Container;
+    return { dead: api.monsters().find(item => item.id === id)!.dead, spinner: Boolean(container.getByName("stun-spinner")) };
+  }, id);
+  expect(deathCleanup).toEqual({ dead: true, spinner: false });
+});
+
+test("persists bonus monster and scenery drops without rerolls or recollection across floor revisits", async ({ page }) => {
+  await startGame(page);
+  await stackPowerup(page, "extra_loot", 20);
+  await page.evaluate(() => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    const prop = api.scenery().find(item => item.destructible && !item.destroyed);
+    if (!prop) throw new Error("Fixture needs destructible scenery");
+    api.destroyScenery(prop.id);
+    api.defeatAllMonsters();
+  });
+  const bonuses = () => page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.loot().filter(item => item.id.endsWith("::bonus-drop")));
+  const initial = await bonuses();
+  expect(initial.length).toBeGreaterThan(1);
+  expect(new Set(initial.map(item => item.id)).size).toBe(initial.length);
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.navigate("https://example.com/next"));
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.goBack());
+  expect(await bonuses()).toEqual(initial);
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.defeatAllMonsters());
+  expect(await bonuses()).toEqual(initial);
+  const collectedId = await page.evaluate(() => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    const items = api.loot().filter(item => item.id.endsWith("::bonus-drop"));
+    for (const item of items) {
+      api.teleportPlayerTo(item.x, item.y);
+      if (!api.loot().some(candidate => candidate.id === item.id)) return item.id;
+    }
+    return null;
+  });
+  expect(collectedId).not.toBeNull();
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.navigate("https://example.com/next"));
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.goBack());
+  expect((await bonuses()).some(item => item.id === collectedId)).toBe(false);
+});
 
 test("collects and stacks every power-up, preserves progression across floors, and resets on restart", async ({ page }) => {
   await startGame(page);
@@ -263,14 +484,14 @@ for (const mobile of [false, true]) {
       await expect(icons).toHaveCount(mobile ? 3 : 5);
       const sources = await icons.evaluateAll(images => images.map(image => (image as HTMLImageElement).src));
       expect(new Set(sources).size).toBe(sources.length);
-      await expect(page.locator("#welcomePromptBody")).toContainText("Certain power-ups are scattered across the web.");
+      await expect(page.locator("#welcomePromptBody")).toContainText("are scattered across the web.");
       const order = await page.locator("#welcomePromptBody").evaluate(body => {
         const loot = body.querySelectorAll(".welcome-loot");
         const lastLoot = loot[loot.length - 1]!;
         const paragraph = lastLoot.nextElementSibling!;
         return { paragraph: paragraph.textContent, icons: paragraph.nextElementSibling?.querySelectorAll('img[src*="powerups/"]').length };
       });
-      expect(order.paragraph).toContain("Certain power-ups");
+      expect(order.paragraph).toContain("scattered across the web");
       expect(order.icons).toBe(mobile ? 3 : 5);
       await page.locator("#welcomeUrlInput").fill("https://example.com/powerups");
       const fixture = "<html><body><p>A room</p></body></html>";
