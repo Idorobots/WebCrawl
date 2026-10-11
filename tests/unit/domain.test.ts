@@ -1934,6 +1934,34 @@ describe("deterministic room contents", () => {
       .nodes.find(room => room.isBossArena)?.id).toBe(expected);
   });
 
+  it("always places the boss arena as a dead end with no corridors past it", () => {
+    let seed = 987_654_321;
+    const random = () => (seed = (seed * 1_103_515_245 + 12_345) & 0x7fff_ffff) / 0x7fff_ffff;
+    for (let trial = 0; trial < 300; trial += 1) {
+      const count = 3 + Math.floor(random() * 16);
+      const rooms = [node(0, null, 0, { lootSeed: Math.floor(random() * 1e9) })];
+      for (let id = 1; id < count; id += 1) {
+        const parentId = Math.floor(random() * id);
+        rooms.push(node(id, parentId, rooms[parentId]!.depth + 1, { lootSeed: Math.floor(random() * 1e9) }));
+      }
+      const graph = {
+        nodes: rooms,
+        links: rooms.filter(room => room.parentId !== null)
+          .map(room => ({ source: room.parentId!, target: room.id })),
+        originalCount: count,
+        coalescedCount: 0,
+        truncated: false,
+      };
+      const layout = layoutOrthogonal(graph);
+      const boss = layout.nodes.find(room => room.isBossArena);
+      expect(boss, `trial ${trial} placed no boss`).toBeDefined();
+      const parents = new Set(rooms.filter(room => room.parentId !== null).map(room => room.parentId!));
+      expect(parents.has(boss!.id), `trial ${trial} boss ${boss!.id} is not a leaf`).toBe(false);
+      expect(layout.links.some(link => link.source.id === boss!.id),
+        `trial ${trial} corridor leads past boss ${boss!.id}`).toBe(false);
+    }
+  });
+
   it("turns the farthest room into a scaled boss arena regardless of its tag", () => {
     const root = node(0, null, 0);
     const scriptRoom = node(1, 0, 1, {

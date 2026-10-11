@@ -170,26 +170,49 @@ export function layoutOrthogonal(graph: DungeonGraph, authoredRooms: AuthoredRoo
   const ordinary = placeRooms(graph, undefined, authoredRooms);
   if (ordinary.nodes.length < 2) return ordinary;
   const root = ordinary.nodes.find(room => room.isRoot) ?? ordinary.nodes[0]!;
-  const distance = new Map<number, number>([[root.id, 0]]);
-  const visit = (id: number): void => {
-    for (const link of ordinary.links.filter(link => link.source.id === id)) {
-      distance.set(link.target.id, distance.get(id)! + 1);
-      visit(link.target.id);
+
+  // Depth is measured over the whole graph rather than the ordinary placement,
+  // so a deep leaf that only fits once it is the boss is still considered.
+  const childrenByParent = new Map<number, number[]>();
+  for (const link of graph.links) {
+    const siblings = childrenByParent.get(link.source) ?? [];
+    siblings.push(link.target);
+    childrenByParent.set(link.source, siblings);
+  }
+  const depth = new Map<number, number>([[root.id, 0]]);
+  const queue = [root.id];
+  while (queue.length) {
+    const id = queue.shift()!;
+    for (const child of childrenByParent.get(id) ?? []) {
+      if (depth.has(child)) continue;
+      depth.set(child, depth.get(id)! + 1);
+      queue.push(child);
     }
-  };
-  visit(root.id);
-  const candidates = ordinary.nodes.filter(room => room.id !== root.id && distance.has(room.id))
+  }
+
+  // The arena must be a dead end, so only leaves (rooms with no children) are
+  // eligible. Deepest first; the floor seed breaks ties deterministically.
+  const candidates = graph.nodes
+    .filter(node => node.id !== root.id && !childrenByParent.has(node.id) && depth.has(node.id))
     .sort((left, right) =>
-      distance.get(right.id)! - distance.get(left.id)! ||
+      depth.get(right.id)! - depth.get(left.id)! ||
       stableHash(`${root.lootSeed}|boss-arena|${right.lootSeed}|${right.id}`) -
         stableHash(`${root.lootSeed}|boss-arena|${left.lootSeed}|${left.id}`) ||
       left.id - right.id
     );
+  const roomDepth = (room: GraphNode): number => depth.get(room.id) ?? room.depth;
+
+  // Try the deepest leaf first; accept the first one that both places and ends
+  // up as the farthest room. Otherwise keep the deepest leaf that at least
+  // places (still a dead end) as a best-effort fallback.
+  let fallback: DungeonLayout | null = null;
   for (const candidate of candidates) {
     const layout = placeRooms(graph, candidate.id, authoredRooms);
-    if (layout.nodes.some(room => room.id === candidate.id)) return layout;
+    if (!layout.nodes.some(room => room.id === candidate.id)) continue;
+    if (depth.get(candidate.id) === Math.max(...layout.nodes.map(roomDepth))) return layout;
+    fallback ??= layout;
   }
-  return ordinary;
+  return fallback ?? ordinary;
 }
 
 function placeRooms(graph: DungeonGraph, bossRoomId?: number, authoredRooms: AuthoredRooms = new Map()): DungeonLayout {

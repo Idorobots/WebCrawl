@@ -1446,11 +1446,14 @@ Types:
 
 - Indestructible blocking scenery sholud block bullets.
 * Bugs
-- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
-- Boss arenas sometimes are not the farthest room and have additional corridors attached to them (screenshot).
-- Hovering over HUD panels makes the flashlight cursor return to center. All UI elements should behave just like the minimap.
-- During energy dash, the player should not pick up pickups.
 - Energy-for-ammo powerup should decrease the cost when stacked. Potentially, replace with just energy crate returning X ammo.
+- Boss arenas sometimes are not the farthest room and have additional corridors attached to them (screenshot).
+
+- Hovering over HUD panels makes the flashlight cursor return to center. All UI elements should behave just like the minimap.
+
+* Bugs
+- It's possible to shoot through the doors when the player is standing right behind the blocked door area.
+- During energy dash, the player should not pick up pickups.
 - Bullet stun and slowdown offects should stack for longer effect.
 
 * DONE Enemy rebalance
