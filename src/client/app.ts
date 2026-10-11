@@ -732,11 +732,15 @@ function updateCameraForPlayer(immediate = false): void {
 
 function renderSideMinimap(): void {
   if (!currentLayout || gameUi.hidden || minimapActivityHidden) return;
-  const key = `${[...visitedRooms].join(",")}|${playerState.powerups.map_expansion ?? 0}|${Boolean(playerState.powerups.map_radar)}|${Boolean(playerState.powerups.map_loot)}`;
+  const portalsOpen = currentStairs.some(stair => stair.type === "down" && stair.enabled);
+  const key = `${[...visitedRooms].join(",")}|${playerState.powerups.map_expansion ?? 0}|${Boolean(playerState.powerups.map_radar)}|${Boolean(playerState.powerups.map_loot)}|${portalsOpen}`;
   if (minimapVisibilityLayout !== currentLayout || minimapVisibilityKey !== key) {
     minimapVisibilityLayout = currentLayout;
     minimapVisibilityKey = key;
-    minimapVisibility = minimapVisibilityForPlayer(currentLayout, visitedRooms, playerState.powerups);
+    minimapVisibility = minimapVisibilityForPlayer(
+      currentLayout, visitedRooms, playerState.powerups,
+      portalsOpen, new Set(currentStairs.map(stair => stair.roomId)),
+    );
   }
   minimapRenderer.render(currentLayout, visitedRooms, currentStairs, currentLoot, currentMonsters, player, minimapVisibility, currentVendingMachines);
 }

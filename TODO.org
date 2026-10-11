@@ -1440,6 +1440,11 @@ Types:
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.
 - Walkig shooter bullet range should be reduced.
 * Enemy rebalance continued
+- Randomized monster speed/damage within a level (within +/- 10% of the baseline, it should be deterministic).
+- Aggro range on monsters - don't attack until player comes within a radius (let's make it 1 screen width for now). This should also help with pathfinding - when not in aggro range, don't run pathfinding.
+- Spawner delay should be reduced to 20 seconds on first floor (and appropriately shorter on the next floors).
+
+* Enemy rebalance continued
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
 - Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
 - Higher level monsters should have slowing bullets, critical damage chance and stunning bullets. Also, different bullet patterns.
@@ -1448,10 +1453,6 @@ Types:
 - Random monster spawns outside of spawners?
 - Destroying certain types of scenery should have a chance of spawning a certain type of monster.
 - Doors in corridors that close when there are monsters nearby
-
-- Randomized monster speed/damage within a level.
-- Aggro range on monsters - don't attack until player comes within a radius (let's make it 1 screen width for now).
-- Spawner delay should be reduced to 20 seconds on first floor.
 
 * Boss fights continued
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
@@ -1529,18 +1530,22 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 :END:
 - Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
 * Visual bugs
+- Direct-room boss arenas need a red light near the door to indicate that the next room is an arena.
+- "Invulnerability crystals" should be called "Government Bailout Crystals" on hover
+- "RAM" should be called "Content Stick" on hover
+- Vending mashines need to have an aura.
+- Vending machine "debris" sprites should behave like indestructible scenery - currently these are placed at a lower layer making the player & monsters always apear on top.
+- Powerups should appear on the loot panel in the order they were picked up.
+- Powerups should appear on the loot panel in multiple lines when there's more than 8 of them. Put the icons closer together.
+- Dropped weapons appear under the pedenstal
+- Powerups & weapons should appear above regular loot.
+- Powerups & weapons spawn way above the pedestal - the offsets on these should be lowered by a third.
+- Healthbar lights up whenever an enemy or scenery is destroyed. It should only light up whenever the player takes non-zero damage.
+
+* Visual bugs
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
-- Direct-room boss arenas need a red light near the door to indicate that the next room is an arena.
-- Vending mashines need to have an aura.
-- Vending machine "debris" sprites should behave like indestructible scenery - currently these are placed at a lower layer making the player & monsters always apear on top.
-- "Invulnerability crystals" should be called "Government Bailout Crystals" on hover
-- "RAM" should be called "Content Stick" on hover
-- Powerups should appear on the loot panel in the order they were picked up.
-- Dropped weapons appear under the pedenstal
-- Powerups & weapons should appear above regular loot.
-- Healthbar lights up whenever an enemy or scenery is destroyed. It should only light up whenever the player takes non-zero damage.
 - Can you please remove the border from the avatar panel in the welcome screen (the one with the prompt).
 
 * Audio bugs

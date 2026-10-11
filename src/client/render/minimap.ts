@@ -28,6 +28,7 @@ export const DISCOVERED_MINIMAP_VISIBILITY: MinimapVisibility = {
 /** Mapping is knowledge only: never mutate visited rooms or activate their monsters. */
 export function minimapVisibilityForPlayer(
   layout: DungeonLayout, revealed: ReadonlySet<number>, powerups: Partial<Record<PowerupKind, number>>,
+  portalsOpen = false, portalRoomIds: ReadonlySet<number> = new Set(),
 ): MinimapVisibility {
   const mapped = new Set(revealed);
   const adjacency = new Map<number, number[]>();
@@ -54,12 +55,12 @@ export function minimapVisibilityForPlayer(
   const radar = (powerups.map_radar ?? 0) > 0;
   const rag = (powerups.map_loot ?? 0) > 0;
   return {
-    room: room => mapped.has(room.id),
+    room: room => mapped.has(room.id) || (portalsOpen && portalRoomIds.has(room.id)),
     corridor: link => revealed.has(link.source.id) || revealed.has(link.target.id) ||
       (mapped.has(link.source.id) && mapped.has(link.target.id)),
     pickup: (_item, visible) => rag && visible,
     monster: (_monster, visible) => radar && visible,
-    portal: (_stair, visible) => rag && visible,
+    portal: (_stair, visible) => portalsOpen || (rag && visible),
     vending: (_item, visible) => rag && visible,
     bossArena: () => radar,
     countMonsters: () => radar,

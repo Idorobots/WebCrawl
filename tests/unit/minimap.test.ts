@@ -318,6 +318,24 @@ describe("minimap powerup composition", () => {
     expect([...revealed]).toEqual([0]);
   });
 
+  it("reveals every portal room once the floor portals open, even without RAG or discovery", () => {
+    const floor = layout();
+    const revealed = new Set([0]);
+    const stairs = [portal("known", 0, "up"), portal("near", 1, "down"), portal("far", 2, "down")];
+    const portalRoomIds = new Set(stairs.map(stair => stair.roomId));
+
+    const closed = minimapVisibilityForPlayer(floor, revealed, {});
+    const closedGeometry = buildMinimapGeometry(floor, revealed, 300, 300, closed);
+    expect(closedGeometry.rooms.map(room => room.id)).toEqual([0]);
+    expect(minimapMarkers(closedGeometry, revealed, stairs, [], [], closed).portals).toEqual([]);
+
+    const open = minimapVisibilityForPlayer(floor, revealed, {}, true, portalRoomIds);
+    const openGeometry = buildMinimapGeometry(floor, revealed, 300, 300, open);
+    expect(openGeometry.rooms.map(room => room.id)).toEqual([0, 1, 2]);
+    expect(minimapMarkers(openGeometry, revealed, stairs, [], [], open).portals).toHaveLength(3);
+    expect([...revealed]).toEqual([0]);
+  });
+
   it("counts dormant regular monsters, minibosses and bosses in unvisited rooms, updating after death", () => {
     const floor = layout();
     const revealed = new Set([0]);

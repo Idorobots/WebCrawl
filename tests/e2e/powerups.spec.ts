@@ -99,6 +99,14 @@ test("composes map expansion, radar and RAG without visiting rooms or waking ene
   await expect(game).toHaveAttribute("data-active-monsters", active!);
 });
 
+test("reveals every portal on the minimap once the floor is cleared, without map power-ups", async ({ page }) => {
+  await startGame(page);
+  const map = page.locator("#sideMinimapCanvas");
+  await expect(map).toHaveAttribute("data-portals", "0");
+  await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.defeatAllMonsters());
+  await expect.poll(async () => Number(await map.getAttribute("data-portals"))).toBeGreaterThan(0);
+});
+
 test("multiplies each shotgun pellet and spends one emergency energy per shot before the last ammo round", async ({ page }) => {
   await startGame(page);
   await pickup(page, "energy_ammo");
