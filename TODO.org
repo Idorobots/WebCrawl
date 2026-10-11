@@ -1292,13 +1292,14 @@ We'll need the following additions to the player state:
 - Powerup vending machine?
 
 * UI improvements
+- "Invulnerability crystals" should be called "Government Bailout Crystals" on hover
+- "RAM" should be called "Content Stick" on hover
+
 - Retry button on death screen - rerun the same original URL
 - The welcome prompt should explain portals. The icons should be placed in-line.
 - Settings menu should be available on the prompt screen.
 - Powerups should appear on the loot panel in the order they were picked up.
 - Powerups should appear on the loot panel in multiple lines when there's more than 8 of them. Put the icons closer together.
-- "Invulnerability crystals" should be called "Government Bailout Crystals" on hover
-- "RAM" should be called "Content Stick" on hover
 
 * DONE Minimap overhaul
 :LOGBOOK:
@@ -1537,6 +1538,11 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - State "DONE"       from              [2026-10-05 Mon 12:31]
 :END:
 - Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
+* DONE Visual bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 12:00]
+:END:
+- Direct-room boss arenas need a red light near the door to indicate that the next room is an arena.
 * Visual bugs
 - Vending mashines need to have an aura.
 - Vending machine "debris" sprites should behave like indestructible scenery - currently these are placed at a lower layer making the player & monsters always apear on top.
@@ -1544,7 +1550,6 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Powerups & weapons should appear above regular loot.
 - Powerups & weapons spawn way above the pedestal - the offsets on these should be lowered by a third.
 
-- Direct-room boss arenas need a red light near the door to indicate that the next room is an arena.
 - Healthbar lights up whenever an enemy or scenery is destroyed. It should only light up whenever the player takes non-zero damage.
 
 * Visual bugs
@@ -1552,10 +1557,12 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
 - Can you please remove the border from the avatar panel in the welcome screen (the one with the prompt).
+- Arena asset style should be reserved for boss arenas, not used for any other rooms.
 
 * Audio bugs
 - Picking up ammo should play the same sound as equiping a weapon.
 - When the game runs in background all sounds generated are queued and play all on once when the game is foregrounded.
+- Machine beeps ambient loop is not a loop.
 * Soundscape
 - Add random "scary" sounds that play on occasion.
 * Visual effects

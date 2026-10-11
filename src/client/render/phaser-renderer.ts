@@ -48,6 +48,7 @@ import { WEAPON_COLORS } from "../domain/weapons";
 import { POWERUP_DEFINITIONS } from "../domain/powerups";
 import { monsterMovementSpeed, monsterStatusTint } from "../domain/monster-status";
 import { isGroundDebris, lootLayer } from "./render-layers";
+import { directArenaDoorLinks } from "./arena-door-lights";
 import type {
   Bullet,
   Decoration,
@@ -152,6 +153,9 @@ const PORTAL_UP_AURA_COLOR = 0x4da6ff;
 const VENDING_AURA_COLOR = 0xffd166;
 const VENDING_AURA_RADIUS_SCALE = 0.9;
 const VENDING_AURA_INTENSITY = 0.6;
+const ARENA_DOOR_LIGHT_COLOR = 0xff3d42;
+const ARENA_DOOR_LIGHT_RADIUS = WORLD_GEOMETRY.doorOpeningWidth;
+const ARENA_DOOR_LIGHT_INTENSITY = 0.9;
 const POWERUP_PEDESTAL_Y_OFFSET = -32;
 const SHADOW_OFFSET_X = 8;
 const SHADOW_OFFSET_Y = 10;
@@ -422,6 +426,8 @@ export class PhaserRenderer {
   private lightPipeline: EllipticalLightPipeline | null = null;
   private roomLights = new Map<number, WorldLight>();
   private corridorLights = new Map<string, WorldLight[]>();
+  private arenaDoorLights = new Map<string, WorldLight>();
+  private arenaDoorApproach = new Map<string, number>();
   private lightProfiles: WorldLight[] = [];
   private floorMarkingTextures = new Set<string>();
   private floorMarkingTextureSerial = 0;
@@ -733,6 +739,7 @@ export class PhaserRenderer {
     delete this.host.dataset.enemyAuras;
     delete this.host.dataset.pickupAuras;
     delete this.host.dataset.vendingAuras;
+    delete this.host.dataset.arenaDoorLights;
     delete this.host.dataset.bulletGlows;
     delete this.host.dataset.effectLights;
     delete this.host.dataset.followingEffects;
@@ -1033,6 +1040,7 @@ export class PhaserRenderer {
       this.renderRoom(room, visible ? 1 : HIDDEN_WORLD_ALPHA);
       this.addRoomLight(room, visible);
     }
+    this.addArenaDoorLights();
     this.refreshLocalLightVisibility(true);
     this.wallFootprints = SHOW_DEBUG_GEOMETRY ? buildWallFootprints(this.layout) : [];
     this.renderDebugWalls();
@@ -1426,6 +1434,9 @@ export class PhaserRenderer {
       for (const profile of profiles) this.scene?.lights.removeLight(profile.light);
     }
     this.corridorLights.clear();
+    for (const profile of this.arenaDoorLights.values()) this.scene?.lights.removeLight(profile.light);
+    this.arenaDoorLights.clear();
+    this.arenaDoorApproach.clear();
     this.lightProfiles.length = 0;
     this.corridorBounds.clear();
     this.staticVisibility.clear();
@@ -1473,6 +1484,33 @@ export class PhaserRenderer {
     };
     this.roomLights.set(room.id, profile);
     this.lightProfiles.push(profile);
+  }
+
+  private addArenaDoorLights(): void {
+    const scene = this.scene;
+    if (!scene || !this.layout || !this.lightingEnabled) return;
+    for (const { link, approach, door } of directArenaDoorLinks(this.layout)) {
+      const vertical = link.direction === "E" || link.direction === "W";
+      const light = scene.lights.addLight(
+        door.x,
+        door.y + (vertical ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
+        ARENA_DOOR_LIGHT_RADIUS,
+        ARENA_DOOR_LIGHT_COLOR,
+        ARENA_DOOR_LIGHT_INTENSITY,
+      ) as AreaLight;
+      light.areaSoftness = 1;
+      light.setVisible(false);
+      const profile: WorldLight = {
+        light,
+        baseIntensity: ARENA_DOOR_LIGHT_INTENSITY,
+        flickerAmount: 0,
+        flickerSeed: link.source.lootSeed + link.target.lootSeed,
+        enabled: false,
+      };
+      this.arenaDoorLights.set(link.id, profile);
+      this.arenaDoorApproach.set(link.id, approach.id);
+      this.lightProfiles.push(profile);
+    }
   }
 
   private addCorridorLights(
@@ -1573,6 +1611,11 @@ export class PhaserRenderer {
         profile.light.setVisible(revealed && this.lightOnScreen(profile));
       }
     }
+    for (const [linkId, profile] of this.arenaDoorLights) {
+      const approachId = this.arenaDoorApproach.get(linkId);
+      profile.enabled = approachId !== undefined && this.visited.has(approachId);
+      profile.light.setVisible(profile.enabled && this.lightOnScreen(profile));
+    }
     for (const light of this.lootAuras.values()) light.setVisible(true);
     for (const light of this.portalAuras.values()) light.setVisible(true);
     for (const light of this.vendingAuras.values()) light.setVisible(true);
@@ -1594,6 +1637,8 @@ export class PhaserRenderer {
     }
     this.setHostData("localLightRooms", [...this.roomLights]
       .filter(([, profile]) => profile.light.visible).map(([roomId]) => roomId).join(","));
+    this.setHostData("arenaDoorLights", String([...this.arenaDoorLights.values()]
+      .filter(profile => profile.light.visible).length));
   }
 
   private lightOnScreen(profile: WorldLight): boolean {

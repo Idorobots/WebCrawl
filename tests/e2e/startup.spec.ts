@@ -1150,6 +1150,7 @@ test("animates the camera both ways and keeps an active boss sized consistently 
   await expect(game).toHaveAttribute("data-current-room-tag", "main", { timeout: 10_000 });
   await expect(game).toHaveAttribute("data-boss-room-lights", "1");
   await expect(game).toHaveAttribute("data-boss-room-light-color", "ff3d42");
+  await expect(game).toHaveAttribute("data-arena-door-lights", /^\d+$/);
   expect(Number(await game.getAttribute("data-boss-room-light-intensity"))).toBeGreaterThanOrEqual(1.3);
   await expect.poll(async () => (await cameraState(page))?.zoom, { timeout: 15_000 })
     .toBeCloseTo(BOSS_CAMERA_SCALE, 2);
