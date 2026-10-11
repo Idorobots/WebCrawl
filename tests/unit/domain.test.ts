@@ -61,6 +61,7 @@ import {
   monsterPositionIsClear,
   monsterSpecForBossSummon,
   monsterSpecForSpawner,
+  MONSTER_STAT_VARIANCE,
   roomSceneryThemeForRoom,
   staircasePositions,
   weaponLootForRoom,
@@ -1701,6 +1702,67 @@ describe("deterministic room contents", () => {
     expect(heavy).toBeDefined();
     expect(scout!.size).toBeLessThan(heavy!.size);
     expect(worldPoint(scout!, "hitboxRadii").x).toBeLessThan(worldPoint(heavy!, "hitboxRadii").x);
+  });
+
+  it("jitters each monster's speed and damage within +/-10% of its baseline, deterministically", () => {
+    const rooms = Array.from({ length: 400 }, (_, index) => node(index + 40_000, 0, 1, {
+      tag: "article",
+      lootSeed: stableHash(`variance-room-${index}`),
+      isRoot: false,
+    }));
+    const floor = 4;
+    const difficulty = floor - 1;
+    const low = 1 - MONSTER_STAT_VARIANCE;
+    const high = 1 + MONSTER_STAT_VARIANCE;
+    const generated = rooms.flatMap(room => monsterSpecsForRoom(room, floor))
+      .filter(monster => !monster.miniboss && !monster.bossKind);
+    const combatants = generated.filter(monster => monster.speed > 0);
+    expect(combatants.length).toBeGreaterThan(20);
+
+    const speedBaseline = (kind: RegularMonsterKind): number => {
+      const definition = REGULAR_MONSTER_DEFINITIONS[kind];
+      return definition.speed + Math.min(definition.maxSpeedBonus, difficulty * definition.speedPerDifficulty);
+    };
+    const damageBaseline = (kind: RegularMonsterKind): number =>
+      REGULAR_MONSTER_DEFINITIONS[kind].attackDamage + Math.min(2, Math.floor(difficulty / 4));
+
+    for (const monster of combatants) {
+      const kind = monster.kind as RegularMonsterKind;
+      expect(monster.speed).toBeGreaterThanOrEqual(speedBaseline(kind) * low - 1e-9);
+      expect(monster.speed).toBeLessThanOrEqual(speedBaseline(kind) * high + 1e-9);
+      expect(monster.attackDamage).toBeGreaterThanOrEqual(damageBaseline(kind) * low - 1e-9);
+      expect(monster.attackDamage).toBeLessThanOrEqual(damageBaseline(kind) * high + 1e-9);
+    }
+
+    const speedsByKind = new Map<RegularMonsterKind, Set<number>>();
+    for (const monster of combatants) {
+      const kind = monster.kind as RegularMonsterKind;
+      if (!speedsByKind.has(kind)) speedsByKind.set(kind, new Set());
+      speedsByKind.get(kind)!.add(Number(monster.speed.toFixed(4)));
+    }
+    expect([...speedsByKind.values()].some(speeds => speeds.size > 1)).toBe(true);
+
+    const repeated = rooms.flatMap(room => monsterSpecsForRoom(room, floor))
+      .filter(monster => !monster.miniboss && !monster.bossKind);
+    expect(repeated.map(monster => [monster.speed, monster.attackDamage]))
+      .toEqual(generated.map(monster => [monster.speed, monster.attackDamage]));
+
+    const arena = node(99_001, 0, 1, {
+      tag: "script",
+      isBossArena: true,
+      lootSeed: stableHash("variance-boss"),
+      isRoot: false,
+    });
+    const boss = bossSpecForRoom(arena, floor);
+    const bossDefinition = BOSS_DEFINITIONS[boss.bossKind!];
+    const bossSpeedBaseline = bossDefinition.speed +
+      Math.min(bossDefinition.maxSpeedBonus, difficulty * bossDefinition.speedPerDifficulty);
+    const bossDamageBaseline = bossDefinition.attackDamage +
+      Math.floor(difficulty / bossDefinition.attackDamageDifficultyDivisor);
+    expect(boss.speed).toBeGreaterThanOrEqual(bossSpeedBaseline * low - 1e-9);
+    expect(boss.speed).toBeLessThanOrEqual(bossSpeedBaseline * high + 1e-9);
+    expect(boss.attackDamage).toBeGreaterThanOrEqual(bossDamageBaseline * low - 1e-9);
+    expect(boss.attackDamage).toBeLessThanOrEqual(bossDamageBaseline * high + 1e-9);
   });
 
   describe("floor-weighted monster appearances", () => {

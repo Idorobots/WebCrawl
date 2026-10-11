@@ -692,6 +692,15 @@ function floorDifficulty(floor: number): number {
   return Math.max(0, floor - 1);
 }
 
+/** Fraction of the baseline within which each monster's speed and damage are jittered. */
+export const MONSTER_STAT_VARIANCE = 0.1;
+
+/** Deterministic per-monster multiplier in [1 - MONSTER_STAT_VARIANCE, 1 + MONSTER_STAT_VARIANCE). */
+function monsterStatVariance(seed: number, shift: number): number {
+  const roll = ((seed >>> shift) % 1_000) / 1_000;
+  return 1 + (roll * 2 - 1) * MONSTER_STAT_VARIANCE;
+}
+
 function monsterCountForRoom(room: GraphNode, floor: number, densityFactor = 1): number {
   const expected = roomSegmentArea(room) * monsterDensityForFloor(floor) * densityFactor;
   const minimum = Math.max(1, Math.floor(expected));
@@ -748,7 +757,8 @@ export function bossSpecForRoom(
     x: room.x + xOffset,
     y: room.y + yOffset,
     maxHp: definition.baseHp + difficulty * definition.hpPerDifficulty + (seed % definition.hpVariance),
-    speed: definition.speed + Math.min(definition.maxSpeedBonus, difficulty * definition.speedPerDifficulty),
+    speed: (definition.speed + Math.min(definition.maxSpeedBonus, difficulty * definition.speedPerDifficulty))
+      * monsterStatVariance(seed, 12),
     fast: false,
     obstacle: definition.obstacle,
     visualOffset: definition.visualOffset,
@@ -761,7 +771,8 @@ export function bossSpecForRoom(
     miniboss: false,
     attackPattern: "single",
     attackRange: definition.attackRange,
-    attackDamage: definition.attackDamage + Math.floor(difficulty / definition.attackDamageDifficultyDivisor),
+    attackDamage: (definition.attackDamage + Math.floor(difficulty / definition.attackDamageDifficultyDivisor))
+      * monsterStatVariance(seed, 20),
     attackCooldownMs: Math.max(
       definition.minAttackCooldownMs,
       definition.attackCooldownMs - difficulty * definition.cooldownReductionPerDifficulty,
@@ -824,7 +835,7 @@ function regularMonsterSpec(
     ...position,
     maxHp: definition.baseHp + profile.hpBonus + (seed >>> 11) % definition.hpVariance + Math.min(6, Math.floor(difficulty / 2)),
     hp: 1,
-    speed: scaledPercent(speed, profile.speedPercent),
+    speed: scaledPercent(speed, profile.speedPercent) * monsterStatVariance(seed, 12),
     fast: definition.fast,
     obstacle: definition.obstacle,
     visualOffset: definition.visualOffset,
@@ -837,7 +848,8 @@ function regularMonsterSpec(
     miniboss: false,
     attackPattern: definition.attackPattern,
     attackRange: scaledPercent(attackRange, profile.rangePercent),
-    attackDamage: definition.attackDamage + Math.min(2, Math.floor(difficulty / 4)),
+    attackDamage: (definition.attackDamage + Math.min(2, Math.floor(difficulty / 4)))
+      * monsterStatVariance(seed, 20),
     attackCooldownMs: Math.max(
       definition.minAttackCooldownMs,
       scaledPercent(

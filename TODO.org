@@ -1445,16 +1445,18 @@ Types:
 - Vending machine should explode on the next use, when the capacity is 0, not immediately when the capacity reaches 0.
 
 - Indestructible blocking scenery sholud block bullets.
-* Bugs
+* DONE Bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 20:41]
+:END:
 - Energy-for-ammo powerup should decrease the cost when stacked. Potentially, replace with just energy crate returning X ammo.
 - Boss arenas sometimes are not the farthest room and have additional corridors attached to them (screenshot).
-
-- Hovering over HUD panels makes the flashlight cursor return to center. All UI elements should behave just like the minimap.
 
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - During energy dash, the player should not pick up pickups.
 - Bullet stun and slowdown offects should stack for longer effect.
+- Hovering over HUD panels makes the flashlight cursor return to center. All UI elements should behave just like the minimap.
 
 * DONE Enemy rebalance
 :LOGBOOK:
@@ -1463,7 +1465,8 @@ Types:
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.
 - Walkig shooter bullet range should be reduced.
 * Enemy rebalance continued
-- Randomized monster speed/damage within a level (within +/- 10% of the baseline, it should be deterministic).
+- Randomize monster speed/damage within a level (within +/- 10% of the baseline, it should be deterministic).
+
 - Aggro range on monsters - don't attack until player comes within a radius (let's make it 1 screen width for now). This should also help with pathfinding - when not in aggro range, don't run pathfinding.
 - Spawner delay should be reduced to 20 seconds on first floor (and appropriately shorter on the next floors).
 
