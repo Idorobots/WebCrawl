@@ -1577,7 +1577,10 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Powerups & weapons spawn way above the pedestal - the offsets on these should be lowered by a third.
 - Arena scenery theme should be reserved for boss arenas, not used for any other rooms.
 
-* Visual bugs
+* DONE Visual bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 19:04]
+:END:
 - Login screen panels on the left side could be reorganized to look better.
 - Site favicon - use the ClosedNS logo
 * Visual bugs
