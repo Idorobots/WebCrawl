@@ -1300,6 +1300,9 @@ We'll need the following additions to the player state:
 - Settings menu should be available on the prompt screen.
 - Powerups should appear on the loot panel in the order they were picked up.
 - Powerups should appear on the loot panel in multiple lines when there's more than 8 of them. Put the icons closer together.
+- Double dots on the prompt near the powerups.
+- Show names of icons on the prompt when hovered.
+- Can you please remove the border from the avatar panel in the welcome screen (the one with the prompt).
 
 * DONE Minimap overhaul
 :LOGBOOK:
@@ -1543,6 +1546,11 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - State "DONE"       from              [2026-10-11 Sun 12:00]
 :END:
 - Direct-room boss arenas need a red light near the door to indicate that the next room is an arena.
+* DONE Visual bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 13:30]
+:END:
+- Healthbar lights up whenever an enemy or scenery is destroyed. It should only light up whenever the player takes non-zero damage.
 * Visual bugs
 - Vending mashines need to have an aura.
 - Vending machine "debris" sprites should behave like indestructible scenery - currently these are placed at a lower layer making the player & monsters always apear on top.
@@ -1550,14 +1558,12 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Powerups & weapons should appear above regular loot.
 - Powerups & weapons spawn way above the pedestal - the offsets on these should be lowered by a third.
 
-- Healthbar lights up whenever an enemy or scenery is destroyed. It should only light up whenever the player takes non-zero damage.
+- Arena scenery theme should be reserved for boss arenas, not used for any other rooms.
 
 * Visual bugs
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
-- Can you please remove the border from the avatar panel in the welcome screen (the one with the prompt).
-- Arena asset style should be reserved for boss arenas, not used for any other rooms.
 
 * Audio bugs
 - Picking up ammo should play the same sound as equiping a weapon.

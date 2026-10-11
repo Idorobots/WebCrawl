@@ -155,6 +155,7 @@ import type {
   WeaponKind,
 } from "./types";
 import { requireElement } from "./ui/elements";
+import { hudBarRatioChanged } from "./ui/hud-bar";
 import { renderPowerupInventory } from "./ui/powerup-inventory";
 import { isMobileDevice, requestMobileFullscreen } from "./ui/fullscreen";
 import { createThoughtPicker } from "./ui/loading-texts";
@@ -793,10 +794,15 @@ function floorIdentity(pageUrl: string): string {
 }
 
 const hudBarPulseAnimations = new WeakMap<HTMLElement, Animation>();
+// Track the numeric ratio, not the rendered width: the CSSOM normalizes
+// serialized percentages (e.g. "70.00000000000001%" reads back as "70%"), so a
+// string comparison would report a change on every render.
+const hudBarRatios = new WeakMap<HTMLElement, number>();
 
 function updateHudBarFill(fill: HTMLElement, miniFill: HTMLElement, ratio: number): void {
+  const changed = hudBarRatioChanged(hudBarRatios.get(fill), ratio);
+  hudBarRatios.set(fill, ratio);
   const width = `${ratio * 100}%`;
-  const changed = fill.style.width !== "" && fill.style.width !== width;
   const reduceMotion = changed && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   for (const element of [fill, miniFill]) {
