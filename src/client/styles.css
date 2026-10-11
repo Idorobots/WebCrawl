@@ -2641,11 +2641,10 @@ body {
 
 .powerup-inventory {
   --powerup-icon-size: 80px;
-  --powerup-icon-gap: 2px;
-  --powerup-count-gap: 5px;
+  --powerup-overlap-x: 20px;
   display: flex;
   align-items: center;
-  gap: var(--powerup-icon-gap);
+  gap: 0;
   flex: 0 1 auto;
   min-width: 0;
   color: #effcff;
@@ -2655,23 +2654,35 @@ body {
 .powerup-inventory[hidden] { display: none; }
 
 .powerup-inventory-slot {
-  display: contents;
-}
-
-.powerup-inventory-slot img {
+  position: relative;
   display: block;
   flex: 0 1 auto;
   min-width: 0;
   width: var(--powerup-icon-size);
-  height: auto;
   aspect-ratio: 1;
+  margin-right: calc(-1 * var(--powerup-overlap-x));
+}
+
+.powerup-inventory-slot:last-child { margin-right: 0; }
+
+.powerup-inventory-slot img {
+  display: block;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   image-rendering: pixelated;
 }
 
 .powerup-stack-count {
-  flex: none;
-  margin-left: calc(var(--powerup-count-gap) - var(--powerup-icon-gap));
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  padding: 0 2px;
+  border-radius: 2px;
+  background: rgba(3, 10, 16, 0.85);
+  font-size: 9px;
+  line-height: 1.2;
 }
 
 .status-separator { color: #466579; }
@@ -2828,6 +2839,7 @@ body {
 
 .death-loot .powerup-inventory {
   --powerup-icon-size: 36px;
+  --powerup-overlap-x: 8px;
   grid-column: 1 / -1;
   font-size: inherit;
 }
@@ -2952,8 +2964,7 @@ body {
   }
   .loot-mini .powerup-inventory {
     --powerup-icon-size: 40px;
-    --powerup-icon-gap: 1px;
-    --powerup-count-gap: 3px;
+    --powerup-overlap-x: 4px;
     font-size: inherit;
   }
   .loot-mini-slot img {
@@ -3017,4 +3028,32 @@ body {
   .welcome-titlebar-name {
     font-size: 16px;
   }
+}
+
+/* Compact multi-line layout once more than eight power-ups are owned. */
+.powerup-inventory.is-multiline {
+  --powerup-icon-size: clamp(22px, 10%, 40px);
+  --powerup-overlap-x: 8px;
+  --powerup-overlap-y: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-right: var(--powerup-overlap-x);
+  padding-bottom: var(--powerup-overlap-y);
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+}
+
+.powerup-inventory.is-multiline .powerup-inventory-slot {
+  flex: 0 0 auto;
+  margin: 0 calc(-1 * var(--powerup-overlap-x)) calc(-1 * var(--powerup-overlap-y)) 0;
+}
+
+.powerup-inventory.is-multiline .powerup-inventory-slot img {
+  width: 100%;
+  height: 100%;
+}
+
+.powerup-inventory.is-multiline .powerup-stack-count {
+  bottom: calc(var(--powerup-overlap-y) + 1px);
 }

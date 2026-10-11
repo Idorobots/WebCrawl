@@ -850,8 +850,8 @@ function updateLootUi(): void {
   crystalCountEl.textContent = String(lootInventory.crystals);
   creditCountMiniEl.textContent = String(lootInventory.credits);
   crystalCountMiniEl.textContent = String(lootInventory.crystals);
-  renderPowerupInventory(powerupInventoryEl, playerState.powerups);
-  renderPowerupInventory(powerupInventoryMiniEl, playerState.powerups);
+  renderPowerupInventory(powerupInventoryEl, playerState.powerups, playerState.powerupOrder);
+  renderPowerupInventory(powerupInventoryMiniEl, playerState.powerups, playerState.powerupOrder);
   gameCanvasHost.dataset.credits = String(lootInventory.credits);
   gameCanvasHost.dataset.crystals = String(lootInventory.crystals);
   gameCanvasHost.dataset.cores = String(lootInventory.cores);
@@ -998,7 +998,7 @@ function showDeathModal(): void {
   deathShotsEl.textContent = String(runStats.shotsFired);
   deathLootCreditsEl.textContent = String(lootInventory.credits);
   deathLootCrystalsEl.textContent = String(lootInventory.crystals);
-  renderPowerupInventory(deathPowerupInventoryEl, playerState.powerups);
+  renderPowerupInventory(deathPowerupInventoryEl, playerState.powerups, playerState.powerupOrder);
 
   newHighScoreEl.textContent =
     rank === 1

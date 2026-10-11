@@ -1291,7 +1291,10 @@ We'll need the following additions to the player state:
 - In complex corridors, some doors should open at the same time - releasing monsters into the corridor for the player to fend off as an ambush.
 - Powerup vending machine?
 
-* UI improvements
+* DONE UI improvements
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 15:41]
+:END:
 - "Invulnerability crystals" should be called "Government Bailout Crystals" on hover
 - "RAM" should be called "Content Stick" on hover
 - Double dots on the prompt near the powerups should be removed.
@@ -1299,7 +1302,6 @@ We'll need the following additions to the player state:
 - The welcome prompt should explain portals. The icons should be placed in-line.
 - Settings menu should be available on the prompt screen.
 - Retry button on death screen - rerun the same original URL
-
 - Powerups should appear on the loot panel in the order they were picked up.
 - Powerups should appear on the loot panel in multiple lines when there's more than 8 of them. Put the icons closer together.
 

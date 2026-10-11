@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { POWERUP_DEFINITIONS, POWERUP_KINDS, type PlayerState } from "../../src/client/domain/powerups";
 import type { Decoration, LootItem, Monster, Point, PowerupKind, WeaponKind } from "../../src/client/types";
 
@@ -56,6 +56,11 @@ async function pickup(page: Page, kind: PowerupKind): Promise<void> {
     api.teleportPlayerTo(item.x, item.y);
     api.teleportPlayerTo(item.x - 80, item.y);
   }, kind);
+}
+
+async function inventoryRowCount(inventory: Locator): Promise<number> {
+  return inventory.evaluate(el =>
+    new Set([...el.querySelectorAll("img")].map(image => Math.round(image.getBoundingClientRect().top))).size);
 }
 
 async function stackPowerup(page: Page, kind: PowerupKind, count: number): Promise<void> {
@@ -480,13 +485,23 @@ for (const mobile of [false, true]) {
       });
       await pickup(page, "health");
       const initialSize = (await inventory.locator("img").boundingBox())!.width;
+      expect(await inventoryRowCount(inventory)).toBe(1);
       await pickup(page, "health");
       for (const kind of POWERUP_KINDS.filter(kind => kind !== "health")) await pickup(page, kind);
       await expect(inventory.locator("img")).toHaveCount(POWERUP_KINDS.length);
+      await expect(inventory.locator(".powerup-inventory-slot").first()).toHaveAttribute("data-powerup", "health");
       await expect(inventory.locator('[data-powerup="health"]')).toHaveAttribute("title", "Higher Valuation ×2");
       await expect(inventory.locator('[data-powerup="health"] .powerup-stack-count')).toHaveText("2");
       await expect(panel.locator(":scope > span > strong")).toHaveText(["202", "3"]);
       expect((await inventory.locator("img").first().boundingBox())!.width).toBeLessThan(initialSize);
+      expect(await inventoryRowCount(inventory)).toBeGreaterThan(1);
+      const fill = await inventory.evaluate(el => {
+        const icons = [...el.querySelectorAll("img")].map(image => image.getBoundingClientRect());
+        const bounds = el.getBoundingClientRect();
+        const span = Math.max(...icons.map(icon => icon.right)) - Math.min(...icons.map(icon => icon.left));
+        return { span, width: bounds.width };
+      });
+      expect(fill.span).toBeGreaterThan(fill.width * 0.8);
       for (const viewport of mobile
         ? [{ width: 390, height: 720 }, { width: 844, height: 390 }]
         : [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }]) {

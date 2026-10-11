@@ -47,6 +47,7 @@ export interface PlayerState {
   criticalChance: number;
   aimAid: number;
   powerups: Partial<Record<PowerupKind, number>>;
+  powerupOrder: PowerupKind[];
   regenElapsedMs: Record<RegenKind, number>;
   ammoRegenRemainder: number;
 }
@@ -56,7 +57,7 @@ export function createPlayerState(mobile = false, maxHp: number = PLAYER_SPEC.ma
     hp: maxHp, maxHp, energy: 0, maxEnergy: PLAYER_ENERGY_MAX,
     damageMultiplier: 1, shotRateMultiplier: 1, walkSpeedMultiplier: 1,
     criticalChance: 0, aimAid: mobile ? 0.2 : 0,
-    powerups: {}, regenElapsedMs: { health_regen: 0, energy_regen: 0, ammo_regen: 0 },
+    powerups: {}, powerupOrder: [], regenElapsedMs: { health_regen: 0, energy_regen: 0, ammo_regen: 0 },
     ammoRegenRemainder: 0,
   };
 }
@@ -64,6 +65,7 @@ export function createPlayerState(mobile = false, maxHp: number = PLAYER_SPEC.ma
 export function collectPowerup(state: PlayerState, kind: PowerupKind): void {
   const stacks = (state.powerups[kind] ?? 0) + 1;
   state.powerups[kind] = stacks;
+  if (stacks === 1) state.powerupOrder.push(kind);
   switch (kind) {
     case "health": state.maxHp += 2; state.hp = Math.min(state.maxHp, state.hp + 2); break;
     case "energy": state.maxEnergy += 2; state.energy = Math.min(state.maxEnergy, state.energy + 2); break;

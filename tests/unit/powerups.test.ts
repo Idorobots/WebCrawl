@@ -50,6 +50,18 @@ describe("player power-ups", () => {
     expect(state.energy).toBeCloseTo(7.2);
   });
 
+  it("records each kind once, in the order it was first collected", () => {
+    const state = createPlayerState();
+    collectPowerup(state, "damage");
+    collectPowerup(state, "health");
+    collectPowerup(state, "damage");
+    collectPowerup(state, "berserk");
+    collectPowerup(state, "health");
+    expect(state.powerupOrder).toEqual(["damage", "health", "berserk"]);
+    expect(state.powerups.damage).toBe(2);
+    expect(state.powerups.health).toBe(2);
+  });
+
   it("stacks modifiers additively and scales bullets and Regulatory Capture", () => {
     const state = createPlayerState();
     for (const kind of POWERUP_KINDS) {
