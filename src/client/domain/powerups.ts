@@ -116,11 +116,14 @@ export function extraProjectiles(
   });
 }
 
-/** Keep the last round while emergency energy is available; a volley costs one resource. */
+/** Keep the last round while emergency energy is available; each stack buys one more shot per energy. */
 export function resourcesAfterShot(state: PlayerState, ammo: number | null): { ammo: number | null; energy: number } {
   if (ammo === null) return { ammo, energy: state.energy };
-  if (ammo <= 1 && (state.powerups.energy_ammo ?? 0) > 0 && state.energy >= 1) {
-    return { ammo, energy: state.energy - 1 };
+  const stacks = state.powerups.energy_ammo ?? 0;
+  const cost = stacks > 0 ? 1 / stacks : Number.POSITIVE_INFINITY;
+  if (ammo <= 1 && state.energy >= cost) {
+    const energy = state.energy - cost;
+    return { ammo, energy: energy <= 1e-9 ? 0 : energy };
   }
   return { ammo: Math.max(0, ammo - 1), energy: state.energy };
 }

@@ -63,7 +63,7 @@ describe("combat powerup stacking", () => {
     });
   });
 
-  it("uses energy only at the last ammo round, one unit per shot regardless of powerup stacks", () => {
+  it("scales shots per energy with energy_ammo stacks and spends a fractional cost per shot", () => {
     const state = createPlayerState();
     state.energy = 3;
     expect(resourcesAfterShot(state, 1)).toEqual({ ammo: 0, energy: 3 });
@@ -72,10 +72,24 @@ describe("combat powerup stacking", () => {
     expect(resourcesAfterShot(state, 1)).toEqual({ ammo: 1, energy: 2 });
     expect(resourcesAfterShot(state, null)).toEqual({ ammo: null, energy: 3 });
     collectPowerup(state, "energy_ammo");
-    expect(resourcesAfterShot(state, 0)).toEqual({ ammo: 0, energy: 2 });
+    expect(resourcesAfterShot(state, 0)).toEqual({ ammo: 0, energy: 2.5 });
     state.energy = 0.9;
-    expect(resourcesAfterShot(state, 1)).toEqual({ ammo: 0, energy: 0.9 });
+    expect(resourcesAfterShot(state, 1)).toEqual({ ammo: 1, energy: 0.4 });
     expect(state.energy).toBe(0.9);
+
+    collectPowerup(state, "energy_ammo");
+    collectPowerup(state, "energy_ammo");
+    state.energy = 1;
+    const fire = () => {
+      const next = resourcesAfterShot(state, 1);
+      state.energy = next.energy;
+      return next;
+    };
+    expect(fire()).toEqual({ ammo: 1, energy: 0.75 });
+    expect(fire()).toEqual({ ammo: 1, energy: 0.5 });
+    expect(fire()).toEqual({ ammo: 1, energy: 0.25 });
+    expect(fire()).toEqual({ ammo: 1, energy: 0 });
+    expect(fire()).toEqual({ ammo: 0, energy: 0 });
   });
 });
 

@@ -123,6 +123,27 @@ test("multiplies each shotgun pellet and spends one emergency energy per shot be
   expect(shots.at(-1)!.kind).toBe("pulse-rifle");
 });
 
+test("spends a fractional emergency energy per shot so each energy_ammo stack buys another shot", async ({ page }) => {
+  await startGame(page);
+  await pickup(page, "energy_ammo");
+  await pickup(page, "energy_ammo");
+  const shots = await page.evaluate(() => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    api.equipWeapon("packet-lobber", 2);
+    api.grantEnergy(1);
+    const game = document.querySelector<HTMLElement>("#gameCanvas")!;
+    const fire = (ammo: number) => {
+      api.setWeaponAmmo(ammo);
+      const fired = api.shoot();
+      return { fired, ammo: game.dataset.weaponAmmo, energy: Number(game.dataset.energy) };
+    };
+    return [fire(2), fire(1), fire(1), fire(1)];
+  });
+  expect(shots.map(shot => shot.fired)).toEqual([true, true, true, true]);
+  expect(shots.map(shot => shot.energy)).toEqual([1, 0.5, 0, 0]);
+  expect(shots.map(shot => shot.ammo)).toEqual(["1", "1", "1", "infinite"]);
+});
+
 test("applies blue slow and gray stun with a rotating spinner, pauses the sprite, and restores it after expiry", async ({ page }) => {
   await startGame(page, "<!doctype html><html><body><main>Boss deck</main></body></html>");
   await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.setPlayerInvulnerable(true));
