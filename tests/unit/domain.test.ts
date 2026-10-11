@@ -448,7 +448,7 @@ describe("layout and geometry", () => {
     expect(PLAYER_SPEC.hitboxOffset.y).toBeLessThan(0);
     expect(worldPoint(REGULAR_MONSTER_DEFINITIONS["melee-light"], "hitboxOffset").y).toBe(-5);
     expect(worldPoint(DECORATION_DEFINITIONS.crateCargo, "visualOffset")).toEqual({ x: 0, y: -10 });
-    expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBeLessThan(0);
+    expect(WEAPON_VISUAL_DEFINITIONS["pulse-rifle"].pedestalYOffset).toBe(-32.7);
   });
 
   it("positions every scenery clip with a visual offset instead of a sprite origin", () => {

@@ -1276,7 +1276,10 @@ We'll need the following additions to the player state:
 :END:
 - "Up" portals should always be available, even if the boss monster is not defeated.
 - Use separate monster appearance propabilities depending on the floor - mostly melee scouts and heavies on the first floor, progressively more common harder enemies on subsequent floors.
-* Gameplay mechanics
+* DONE Gameplay mechanics
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 13:02]
+:END:
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Regulatory Capture needs a 200 ms invulnerability "grace period" after the dash ends.
 - Crystals should last 5 seconds
@@ -1292,6 +1295,11 @@ We'll need the following additions to the player state:
 - Retry button on death screen - rerun the same original URL
 - The welcome prompt should explain portals. The icons should be placed in-line.
 - Settings menu should be available on the prompt screen.
+- Powerups should appear on the loot panel in the order they were picked up.
+- Powerups should appear on the loot panel in multiple lines when there's more than 8 of them. Put the icons closer together.
+- "Invulnerability crystals" should be called "Government Bailout Crystals" on hover
+- "RAM" should be called "Content Stick" on hover
+
 * DONE Minimap overhaul
 :LOGBOOK:
 - State "DONE"       from              [2026-10-07 Wed 22:17]
@@ -1530,16 +1538,13 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 :END:
 - Lights in nearby rooms are culled too aggresively - when a long room is partially off-screen its light can be culled while still visibile.
 * Visual bugs
-- Direct-room boss arenas need a red light near the door to indicate that the next room is an arena.
-- "Invulnerability crystals" should be called "Government Bailout Crystals" on hover
-- "RAM" should be called "Content Stick" on hover
 - Vending mashines need to have an aura.
 - Vending machine "debris" sprites should behave like indestructible scenery - currently these are placed at a lower layer making the player & monsters always apear on top.
-- Powerups should appear on the loot panel in the order they were picked up.
-- Powerups should appear on the loot panel in multiple lines when there's more than 8 of them. Put the icons closer together.
-- Dropped weapons appear under the pedenstal
+- Dropped weapons appear under the pedenstal, these should appear in front of the pedestal sprite at all times.
 - Powerups & weapons should appear above regular loot.
 - Powerups & weapons spawn way above the pedestal - the offsets on these should be lowered by a third.
+
+- Direct-room boss arenas need a red light near the door to indicate that the next room is an arena.
 - Healthbar lights up whenever an enemy or scenery is destroyed. It should only light up whenever the player takes non-zero damage.
 
 * Visual bugs

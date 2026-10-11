@@ -281,3 +281,20 @@ test("shooting replaces a stocked machine with a permanent blocking wreck and dr
   const dashedPlayerX = Number(await page.locator("#gameCanvas").getAttribute("data-player-x"));
   expect(dashedPlayerX - item.x).toBeGreaterThanOrEqual(55);
 });
+
+test("gives vending machines a warm aura at medium light detail", async ({ page }) => {
+  await page.addInitScript(key => localStorage.setItem(key, "medium"), LIGHT_DETAIL_STORAGE_KEY);
+  const html = "<html><body>Vending aura</body></html>";
+  await page.route("**/api/fetch?**", route => route.fulfill({ status: 200, contentType: "text/html", body: html }));
+  await page.route("https://example.com/**", route => route.fulfill({
+    status: 200, contentType: "text/html", headers: { "access-control-allow-origin": "*" }, body: html,
+  }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await page.locator("#welcomeUrlInput").fill("https://example.com/vending-61");
+  await page.getByRole("button", { name: "Go" }).click();
+  const game = page.locator("#gameCanvas");
+  await expect(game).toHaveAttribute("data-rooms", "1", { timeout: 30_000 });
+  await expect(game).toHaveAttribute("data-aura-mode", "light2d", { timeout: 15_000 });
+  await expect.poll(async () => Number(await game.getAttribute("data-vending-auras"))).toBeGreaterThan(0);
+});

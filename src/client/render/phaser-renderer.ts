@@ -47,6 +47,7 @@ import { buildWallFootprints, wallHitboxes, type WallRect } from "../domain/wall
 import { WEAPON_COLORS } from "../domain/weapons";
 import { POWERUP_DEFINITIONS } from "../domain/powerups";
 import { monsterMovementSpeed, monsterStatusTint } from "../domain/monster-status";
+import { isGroundDebris, lootLayer } from "./render-layers";
 import type {
   Bullet,
   Decoration,
@@ -97,6 +98,10 @@ const CORRIDOR_FLOOR_DEPTH = -4;
 const CORRIDOR_MARKING_DEPTH = -1.75;
 const DEBRIS_DEPTH = -1.5;
 const PICKUP_DEPTH = -1.4;
+/** Floor weapons and power-ups sit just above regular loot but still under actors. */
+const SPECIAL_PICKUP_DEPTH = PICKUP_DEPTH + 0.1;
+/** Keeps a pedestal reward in front of the pedestal sprite it rests on. */
+const PEDESTAL_PICKUP_BIAS = 1;
 const Y_DEPTH_OFFSET = 4_000_000;
 const OVERHEAD_DEPTH = 8_000_000;
 const HEALTH_BAR_DEPTH = 10_000_000;
@@ -144,6 +149,10 @@ const ENEMY_AURA_COLOR = 0xff344f;
 const PICKUP_AURA_COLOR = 0x6fe7ff;
 const PORTAL_DOWN_AURA_COLOR = 0xff4dff;
 const PORTAL_UP_AURA_COLOR = 0x4da6ff;
+const VENDING_AURA_COLOR = 0xffd166;
+const VENDING_AURA_RADIUS_SCALE = 0.9;
+const VENDING_AURA_INTENSITY = 0.6;
+const POWERUP_PEDESTAL_Y_OFFSET = -32;
 const SHADOW_OFFSET_X = 8;
 const SHADOW_OFFSET_Y = 10;
 const SHADOW_DISTANCE_SCALE = 0.09;
@@ -435,6 +444,7 @@ export class PhaserRenderer {
   private monsterAuras = new Map<string, Phaser.GameObjects.Light>();
   private lootAuras = new Map<string, Phaser.GameObjects.Light>();
   private portalAuras = new Map<string, Phaser.GameObjects.Light>();
+  private vendingAuras = new Map<string, Phaser.GameObjects.Light>();
   private activeEffectLights = new Set<Phaser.GameObjects.Light>();
   private decorationEffectLights = new Map<string, Phaser.GameObjects.Light>();
   private activeEffects = new Set<Phaser.GameObjects.Sprite>();
@@ -671,6 +681,7 @@ export class PhaserRenderer {
     this.destroyLights(this.monsterAuras);
     this.destroyLights(this.lootAuras);
     this.destroyLights(this.portalAuras);
+    this.destroyLights(this.vendingAuras);
     for (const light of this.activeEffectLights) this.scene?.lights.removeLight(light);
     this.activeEffectLights.clear();
     for (const light of this.decorationEffectLights.values()) this.scene?.lights.removeLight(light);
@@ -721,6 +732,7 @@ export class PhaserRenderer {
     delete this.host.dataset.bossRoomLightIntensity;
     delete this.host.dataset.enemyAuras;
     delete this.host.dataset.pickupAuras;
+    delete this.host.dataset.vendingAuras;
     delete this.host.dataset.bulletGlows;
     delete this.host.dataset.effectLights;
     delete this.host.dataset.followingEffects;
@@ -1563,11 +1575,13 @@ export class PhaserRenderer {
     }
     for (const light of this.lootAuras.values()) light.setVisible(true);
     for (const light of this.portalAuras.values()) light.setVisible(true);
+    for (const light of this.vendingAuras.values()) light.setVisible(true);
     for (const [id, light] of this.monsterAuras) light.setVisible(this.monsters.get(id)?.visible ?? false);
     this.setHostData("pickupAuras", String([
       ...this.lootAuras.values(),
       ...this.portalAuras.values(),
     ].filter(light => light.visible).length));
+    this.setHostData("vendingAuras", String([...this.vendingAuras.values()].filter(light => light.visible).length));
     this.setHostData("enemyAuras", String([...this.monsterAuras.values()].filter(light => light.visible).length));
     this.updateWorldLightDataset();
     this.syncBulletLights(this.currentBullets);
@@ -1842,6 +1856,8 @@ export class PhaserRenderer {
     this.decorationHealthBars.clear();
     for (const light of this.decorationEffectLights.values()) this.scene?.lights.removeLight(light);
     this.decorationEffectLights.clear();
+    for (const light of this.vendingAuras.values()) this.scene?.lights.removeLight(light);
+    this.vendingAuras.clear();
     const scene = this.scene;
     if (!scene) return;
     for (const item of items) {
@@ -1863,14 +1879,20 @@ export class PhaserRenderer {
         this.applyShadowOffset(shadow, item.x, item.y, item.size);
         this.decorationShadows.set(item.id, shadow);
       }
-      const isDebris = item.destroyed ||
-        item.kind === "debris" ||
-        item.kind === "doorway-debris" ||
-        item.definitionId.startsWith("debris");
       const container = scene.add.container(item.x, item.y, shadow ? [shadow, sprite] : [sprite])
-        .setDepth(isDebris ? DEBRIS_DEPTH : yDepth(item.y));
+        .setDepth(isGroundDebris(item) ? DEBRIS_DEPTH : yDepth(item.y));
       if (item.vendingKind) {
         container.setName(`vending:${item.id}`);
+      }
+      if (item.kind === "vending") {
+        const aura = this.createAuraLight(
+          item.x,
+          item.y + worldPoint(item, "hitboxOffset").y,
+          VENDING_AURA_COLOR,
+          Math.max(60, item.size * VENDING_AURA_RADIUS_SCALE),
+          VENDING_AURA_INTENSITY,
+        );
+        if (aura) this.vendingAuras.set(item.id, aura);
       }
       this.decorationContainers.set(item.id, container);
       this.decorationSprites.set(item.id, sprite);
@@ -2031,6 +2053,9 @@ export class PhaserRenderer {
     if (!scene) return;
     for (const item of loot) {
       if (!visited.has(item.roomId)) continue;
+      const layer = lootLayer(item);
+      const depth = layer === "pedestal" ? yDepth(item.y, PEDESTAL_PICKUP_BIAS)
+        : layer === "special" ? SPECIAL_PICKUP_DEPTH : PICKUP_DEPTH;
       const powerup = item.kind === "powerup" && item.powerup ? POWERUP_DEFINITIONS[item.powerup] : undefined;
       const auraRadius = item.kind === "weapon" ? 112 : 86;
       const lootAura = this.createAuraLight(
@@ -2050,7 +2075,7 @@ export class PhaserRenderer {
         const sprite = this.illuminate(scene.add.image(0, yOffset, textureKey(weaponAsset(item.weapon.kind)))
           .setDisplaySize(definition.size, definition.size)
           .setOrigin(visual.origin.x, visual.origin.y));
-        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(PICKUP_DEPTH));
+        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(depth));
         continue;
       }
       const definition = item.kind === "weapon" ? undefined : LOOT_DEFINITIONS[item.kind];
@@ -2062,12 +2087,12 @@ export class PhaserRenderer {
         this.playClip(sprite, clip, definition.size, {
           elapsedMs: performance.now() % (clip.frames.length * clip.frameDurationMs),
         });
-        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(PICKUP_DEPTH));
+        this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(depth));
         continue;
       }
-      const yOffset = item.kind === "powerup" && item.powerupPlacement === "pedestal" ? -48 : 0;
+      const yOffset = item.kind === "powerup" && item.powerupPlacement === "pedestal" ? POWERUP_PEDESTAL_Y_OFFSET : 0;
       const sprite = this.illuminate(scene.add.image(0, yOffset, textureKey(asset)).setDisplaySize(definition.size, definition.size));
-      this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(PICKUP_DEPTH));
+      this.objects.push(scene.add.container(item.x, item.y, [sprite]).setDepth(depth));
     }
     this.refreshLocalLightVisibility(true);
     this.renderDebugGeometry();

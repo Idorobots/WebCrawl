@@ -2555,17 +2555,17 @@ export const WEAPON_PICKUP_DEFINITIONS: Record<WeaponPlacement, { size: number; 
 };
 
 export const WEAPON_VISUAL_DEFINITIONS: Record<WeaponKind, { asset: string; origin: { x: number; y: number }; pedestalYOffset: number }> = {
-  "pulse-rifle": { asset: WEAPON_ASSETS["pulse-rifle"], origin: { x: 0.5, y: 0.656 }, pedestalYOffset: -49 },
-  "byte-repeater": { asset: WEAPON_ASSETS["byte-repeater"], origin: { x: 0.5, y: 0.744 }, pedestalYOffset: -41 },
-  "scatter-array": { asset: WEAPON_ASSETS["scatter-array"], origin: { x: 0.5, y: 0.801 }, pedestalYOffset: -36 },
-  "fork-driver": { asset: WEAPON_ASSETS["fork-driver"], origin: { x: 0.5, y: 0.77 }, pedestalYOffset: -39 },
-  trident: { asset: WEAPON_ASSETS.trident, origin: { x: 0.5, y: 0.768 }, pedestalYOffset: -39 },
-  "needle-rail": { asset: WEAPON_ASSETS["needle-rail"], origin: { x: 0.5, y: 0.836 }, pedestalYOffset: -32 },
-  "packet-lobber": { asset: WEAPON_ASSETS["packet-lobber"], origin: { x: 0.5, y: 0.777 }, pedestalYOffset: -38 },
-  "cross-compiler": { asset: WEAPON_ASSETS["cross-compiler"], origin: { x: 0.5, y: 0.771 }, pedestalYOffset: -38 },
-  "nova-cache": { asset: WEAPON_ASSETS["nova-cache"], origin: { x: 0.5, y: 0.762 }, pedestalYOffset: -39 },
-  "helix-emitter": { asset: WEAPON_ASSETS["helix-emitter"], origin: { x: 0.5, y: 0.744 }, pedestalYOffset: -41 },
-  "sideband-projector": { asset: WEAPON_ASSETS["sideband-projector"], origin: { x: 0.5, y: 0.77 }, pedestalYOffset: -39 },
+  "pulse-rifle": { asset: WEAPON_ASSETS["pulse-rifle"], origin: { x: 0.5, y: 0.656 }, pedestalYOffset: -32.7 },
+  "byte-repeater": { asset: WEAPON_ASSETS["byte-repeater"], origin: { x: 0.5, y: 0.744 }, pedestalYOffset: -27.3 },
+  "scatter-array": { asset: WEAPON_ASSETS["scatter-array"], origin: { x: 0.5, y: 0.801 }, pedestalYOffset: -24 },
+  "fork-driver": { asset: WEAPON_ASSETS["fork-driver"], origin: { x: 0.5, y: 0.77 }, pedestalYOffset: -26 },
+  trident: { asset: WEAPON_ASSETS.trident, origin: { x: 0.5, y: 0.768 }, pedestalYOffset: -26 },
+  "needle-rail": { asset: WEAPON_ASSETS["needle-rail"], origin: { x: 0.5, y: 0.836 }, pedestalYOffset: -21.3 },
+  "packet-lobber": { asset: WEAPON_ASSETS["packet-lobber"], origin: { x: 0.5, y: 0.777 }, pedestalYOffset: -25.3 },
+  "cross-compiler": { asset: WEAPON_ASSETS["cross-compiler"], origin: { x: 0.5, y: 0.771 }, pedestalYOffset: -25.3 },
+  "nova-cache": { asset: WEAPON_ASSETS["nova-cache"], origin: { x: 0.5, y: 0.762 }, pedestalYOffset: -26 },
+  "helix-emitter": { asset: WEAPON_ASSETS["helix-emitter"], origin: { x: 0.5, y: 0.744 }, pedestalYOffset: -27.3 },
+  "sideband-projector": { asset: WEAPON_ASSETS["sideband-projector"], origin: { x: 0.5, y: 0.77 }, pedestalYOffset: -26 },
 };
 
 export const PORTAL_DEFINITION = {
