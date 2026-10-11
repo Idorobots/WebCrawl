@@ -391,7 +391,7 @@ export function decorationSpecsForRoom(
       destroyed: false,
       dropKind: sceneryDropKindForSeed(itemSeed),
       spawner: true,
-      spawnIntervalMs: Math.max(10_000, 30_000 - difficulty * 1_000),
+      spawnIntervalMs: Math.max(10_000, 20_000 - difficulty * 1_000),
       spawnedCount: 0,
     });
   }

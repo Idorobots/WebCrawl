@@ -40,7 +40,7 @@ export function authoredDecorations(room: GraphNode, template: AuthoredRoomTempl
       destroyed: false,
       dropKind: null,
       ...(vendingKind ? vendingStateForSeed(seed, vendingKind) : {}),
-      ...(definition === "spawner" ? { spawner: true, spawnIntervalMs: 30_000, spawnedCount: 0 } : {}),
+      ...(definition === "spawner" ? { spawner: true, spawnIntervalMs: 20_000, spawnedCount: 0 } : {}),
     };
   });
 }

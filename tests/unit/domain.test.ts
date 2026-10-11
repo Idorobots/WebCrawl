@@ -2730,8 +2730,8 @@ describe("deterministic room contents", () => {
     expect([...earlySpawners, ...deepSpawners].every(item =>
       item.hp === DECORATION_DEFINITIONS.spawner.hp && item.maxHp === DECORATION_DEFINITIONS.spawner.hp
     )).toBe(true);
-    expect(earlySpawners[0]!.spawnIntervalMs).toBe(30_000);
-    expect(deepSpawners[0]!.spawnIntervalMs).toBe(21_000);
+    expect(earlySpawners[0]!.spawnIntervalMs).toBe(20_000);
+    expect(deepSpawners[0]!.spawnIntervalMs).toBe(11_000);
     expect(deepSpawners[0]!.spawnIntervalMs).toBeLessThan(earlySpawners[0]!.spawnIntervalMs ?? Infinity);
 
     const spawner = deepSpawners[0]!;

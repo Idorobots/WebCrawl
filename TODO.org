@@ -1464,10 +1464,15 @@ Types:
 :END:
 - Shooting scouts should have a much lower fire rate, they are basically better sentries right now.
 - Walkig shooter bullet range should be reduced.
-* Enemy rebalance continued
+* DONE Enemy rebalance continued
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 22:13]
+:END:
 - Randomize monster speed/damage within a level (within +/- 10% of the baseline, it should be deterministic).
 - Aggro range on monsters - don't attack until player comes within a radius (let's make it 1 screen width for now). This should also help with pathfinding - when not in aggro range, don't run pathfinding.
 - Spawner delay should be reduced to 20 seconds on first floor (and appropriately shorter on the next floors).
+- Slowdown effect should affect the fire rate as well as cooldowns (in case of the bosess).
+- Stun effect should pause any cooldown timers, effectively extending them by the stun length.
 
 * Enemy rebalance continued
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
