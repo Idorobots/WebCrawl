@@ -1295,14 +1295,21 @@ We'll need the following additions to the player state:
 - "Invulnerability crystals" should be called "Government Bailout Crystals" on hover
 - "RAM" should be called "Content Stick" on hover
 
-- Retry button on death screen - rerun the same original URL
-- The welcome prompt should explain portals. The icons should be placed in-line.
 - Settings menu should be available on the prompt screen.
+- Retry button on death screen - rerun the same original URL
+
 - Powerups should appear on the loot panel in the order they were picked up.
 - Powerups should appear on the loot panel in multiple lines when there's more than 8 of them. Put the icons closer together.
-- Double dots on the prompt near the powerups.
-- Show names of icons on the prompt when hovered.
+
 - Can you please remove the border from the avatar panel in the welcome screen (the one with the prompt).
+
+* DONE UI improvements
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 12:49]
+:END:
+- Double dots on the prompt near the powerups should be removed.
+- Show names of icons on the prompt when hovered.
+- The welcome prompt should explain portals. The icons should be placed in-line.
 
 * DONE Minimap overhaul
 :LOGBOOK:
@@ -1566,7 +1573,7 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Sentry ballistic directional animations are scaled weird.
 - Site favicon
 - Some scenery objects should be placed only on walls as decorations
-
+- Login screen panels on the left side could be reorganized to look better.
 * Audio bugs
 - Picking up ammo should play the same sound as equiping a weapon.
 - When the game runs in background all sounds generated are queued and play all on once when the game is foregrounded.

@@ -1,30 +1,51 @@
 import { POWERUP_ASSETS, WEAPON_ASSETS } from "../config";
+import { POWERUP_DEFINITIONS, POWERUP_KINDS } from "../domain/powerups";
+import { weaponForKind, weaponKinds } from "../domain/weapons";
 import { isMobileDevice } from "./fullscreen";
 
-interface Segment {
+interface TextSegment {
   text: string;
   bold?: boolean;
   strike?: boolean;
 }
 
+interface InlineIconSegment {
+  icon: string;
+  name: string;
+}
+
+type Segment = TextSegment | InlineIconSegment;
+
+interface IconChoice {
+  asset: string;
+  name: string;
+}
+
 type Block =
   | { kind: "paragraph"; segments: Segment[] }
-  | { kind: "icons"; assets: readonly string[] }
-  | { kind: "loot"; asset: string; segments: Segment[] };
+  | { kind: "icons"; icons: readonly IconChoice[] }
+  | { kind: "loot"; asset: string; name: string; segments: Segment[] };
 
 const MOBILE_CONTROLS = isMobileDevice();
 
-function randomIconAssets(assets: readonly string[]): readonly string[] {
-  const files = [...new Set(assets)];
-  for (let index = files.length - 1; index > 0; index -= 1) {
+const PORTAL_UP_ICON = "assets/portals/portal_up_active.png";
+const PORTAL_DOWN_ICON = "assets/portals/portal_down_active.png";
+
+function randomIconChoices(choices: readonly IconChoice[]): readonly IconChoice[] {
+  const unique = [...new Map(choices.map(choice => [choice.asset, choice])).values()];
+  for (let index = unique.length - 1; index > 0; index -= 1) {
     const swap = Math.floor(Math.random() * (index + 1));
-    [files[index], files[swap]] = [files[swap]!, files[index]!];
+    [unique[index], unique[swap]] = [unique[swap]!, unique[index]!];
   }
-  return files.slice(0, MOBILE_CONTROLS ? 3 : 5);
+  return unique.slice(0, MOBILE_CONTROLS ? 3 : 5);
 }
 
-const WEAPON_ICON_ASSETS = randomIconAssets(Object.values(WEAPON_ASSETS));
-const POWERUP_ICON_ASSETS = randomIconAssets(Object.values(POWERUP_ASSETS));
+const WEAPON_ICON_CHOICES = randomIconChoices(
+  weaponKinds().map(kind => ({ asset: WEAPON_ASSETS[kind], name: weaponForKind(kind).name })),
+);
+const POWERUP_ICON_CHOICES = randomIconChoices(
+  POWERUP_KINDS.map(kind => ({ asset: POWERUP_ASSETS[kind], name: POWERUP_DEFINITIONS[kind].name })),
+);
 
 const MOVE_CONTROLS_TEXT = MOBILE_CONTROLS
   ? "Move with the left stick. Shoot with the right stick. "
@@ -56,15 +77,23 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   },
   {
     kind: "paragraph",
+    segments: [{ text: MOVE_CONTROLS_TEXT }],
+  },
+  {
+    kind: "paragraph",
     segments: [
-      {
-        text:
-          MOVE_CONTROLS_TEXT +
-          "Other weapons are scattered across the web — swap when you find one:",
-      },
+      { text: "Portals stitch the Web together. Step into a " },
+      { icon: PORTAL_UP_ICON, name: "Up portal" },
+      { text: " portal to go back to the previous page, or a " },
+      { icon: PORTAL_DOWN_ICON, name: "Down portal" },
+      { text: " portal to crawl into a linked page — you will need to gain access first." },
     ],
   },
-  { kind: "icons", assets: WEAPON_ICON_ASSETS },
+  {
+    kind: "paragraph",
+    segments: [{ text: "Other weapons are scattered across the web — swap when you find one:" }],
+  },
+  { kind: "icons", icons: WEAPON_ICON_CHOICES },
   {
     kind: "paragraph",
     segments: [{ text: "Loot everything. We need it all:" }],
@@ -72,6 +101,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   {
     kind: "loot",
     asset: "assets/pickups/ram0.png",
+    name: "Precious Content",
     segments: [
       { text: "Precious ", bold: true },
       { text: "Copyrighted", bold: true, strike: true },
@@ -82,6 +112,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   {
     kind: "loot",
     asset: "assets/pickups/ammo_ballistic.png",
+    name: "Doom Post Ammo",
     segments: [
       { text: "Doom Post Ammo", bold: true },
       { text: " — ammunition for whatever you're holding." },
@@ -90,6 +121,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   {
     kind: "loot",
     asset: "assets/pickups/medkit.png",
+    name: "Series X Kit",
     segments: [
       { text: "Series X Kit", bold: true },
       { text: " — restores health on pickup." },
@@ -98,6 +130,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   {
     kind: "loot",
     asset: "assets/pickups/crystal.png",
+    name: "Endgame Crystals",
     segments: [
       { text: "Endgame Crystals", bold: true },
       { text: BAILOUT_CONTROLS_TEXT },
@@ -106,6 +139,7 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   {
     kind: "loot",
     asset: "assets/pickups/ammo_energy.png",
+    name: "AI Doomer Energy",
     segments: [
       { text: "AI Doomer Energy", bold: true },
       { text: CAPTURE_CONTROLS_TEXT },
@@ -113,9 +147,9 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   },
   {
     kind: "paragraph",
-    segments: [{ text: "Certain SKILLS are scattered across the web. Collect them. They will help you in your mission.." }],
+    segments: [{ text: "Certain SKILLS are scattered across the web. Collect them. They will help you in your mission." }],
   },
-  { kind: "icons", assets: POWERUP_ICON_ASSETS },
+  { kind: "icons", icons: POWERUP_ICON_CHOICES },
   {
     kind: "paragraph",
     segments: [
@@ -168,7 +202,22 @@ function requireElement<T extends Element>(selector: string, scope: Element): T 
   return element;
 }
 
+function createIconImage(asset: string, name: string, className: string): HTMLImageElement {
+  const img = document.createElement("img");
+  img.src = asset;
+  img.alt = name;
+  img.title = name;
+  img.className = className;
+  return img;
+}
+
 function appendSegment(parent: Node, segment: Segment, steps: Step[]): void {
+  if ("icon" in segment) {
+    const img = createIconImage(segment.icon, segment.name, "welcome-icon-pending welcome-inline-icon");
+    parent.appendChild(img);
+    steps.push({ kind: "icon", el: img });
+    return;
+  }
   let target: HTMLElement | Node = parent;
   if (segment.bold) {
     const strong = document.createElement("strong");
@@ -203,11 +252,8 @@ function buildPromptContent(host: HTMLElement): Step[] {
     } else if (block.kind === "icons") {
       const row = document.createElement("div");
       row.className = "welcome-weapons";
-      for (const asset of block.assets) {
-        const img = document.createElement("img");
-        img.src = asset;
-        img.alt = "";
-        img.className = "welcome-icon-pending";
+      for (const choice of block.icons) {
+        const img = createIconImage(choice.asset, choice.name, "welcome-icon-pending");
         row.appendChild(img);
         steps.push({ kind: "icon", el: img });
       }
@@ -215,10 +261,7 @@ function buildPromptContent(host: HTMLElement): Step[] {
     } else {
       const row = document.createElement("div");
       row.className = "welcome-loot";
-      const img = document.createElement("img");
-      img.src = block.asset;
-      img.alt = "";
-      img.className = "welcome-icon-pending";
+      const img = createIconImage(block.asset, block.name, "welcome-icon-pending");
       row.appendChild(img);
       steps.push({ kind: "icon", el: img });
       const paragraph = document.createElement("p");
@@ -306,21 +349,6 @@ export function setupWelcomePrompt(options: {
     caret.style.visibility = "visible";
   }
 
-  function focusUrlInput(): void {
-    urlInput.focus();
-    const length = urlInput.value.length;
-    urlInput.setSelectionRange(length, length);
-  }
-
-  function focusPrimaryAction(): void {
-    const submitButton = urlInput.form?.querySelector<HTMLButtonElement>('button[type="submit"]');
-    if (submitButton) {
-      submitButton.focus();
-      return;
-    }
-    focusUrlInput();
-  }
-
   function revealAll(): void {
     for (let i = stepIndex; i < steps.length; i += 1) {
       steps[i]!.el.classList.remove("welcome-char-pending");
@@ -340,7 +368,7 @@ export function setupWelcomePrompt(options: {
     const wasTyping = typingStarted;
     finished = true;
     revealAll();
-    focusPrimaryAction();
+    moveUrlCaretToEnd();
     if (wasTyping) onTypingEnd?.();
   }
 
@@ -508,7 +536,7 @@ export function setupWelcomePrompt(options: {
     startTyping();
     rafId = window.requestAnimationFrame(tick);
   }
-  focusPrimaryAction();
+  moveUrlCaretToEnd();
 
   return {
     skip,
