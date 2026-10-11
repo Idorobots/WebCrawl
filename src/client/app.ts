@@ -54,6 +54,7 @@ import {
   MONSTER_ATTACK_WARMUP_MS,
   monsterEngagementRange,
   monsterMeleeRange,
+  monsterWithinAggroRange,
   projectileHitsCircle,
   projectileHitsDecoration,
   sceneryBlocksProjectiles,
@@ -2870,6 +2871,8 @@ function runGameTick(timestamp: number): void {
 
   rebuildRoomRouting();
 
+  const aggroRadius = renderer.monsterAggroRadius();
+  const playerTarget = playerCollisionCenter();
   for (const monster of currentMonsters) {
     if (!monster.active || monster.dead) continue;
     monster.moving = false;
@@ -2889,6 +2892,16 @@ function runGameTick(timestamp: number): void {
       monster.nextPathRefreshAt = 0;
       continue;
     }
+
+    // Monsters do not notice the player outside their aggro radius (one screen),
+    // so skip pursuit and pathfinding until the player closes the distance.
+    if (!isBoss(monster) && !monsterWithinAggroRange(monster, playerTarget, aggroRadius)) {
+      monster.path = [];
+      monster.pathIndex = 0;
+      monster.nextPathRefreshAt = Infinity;
+      continue;
+    }
+    if (monster.nextPathRefreshAt === Infinity) monster.nextPathRefreshAt = 0;
 
     const containingRoom = roomContainingPoint(monster.x, monster.y);
     if (containingRoom && visitedRooms.has(containingRoom.id)) {

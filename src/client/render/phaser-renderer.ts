@@ -3119,6 +3119,12 @@ export class PhaserRenderer {
     );
   }
 
+  /** One screen width in world units; the radius within which monsters notice the player. */
+  monsterAggroRadius(): number {
+    const view = this.scene?.cameras.main.worldView;
+    return view ? view.width : Infinity;
+  }
+
   private destroyAll(objects: Phaser.GameObjects.Container[]): void {
     for (const object of objects) object.destroy(true);
     objects.length = 0;

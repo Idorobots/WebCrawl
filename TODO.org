@@ -1466,7 +1466,6 @@ Types:
 - Walkig shooter bullet range should be reduced.
 * Enemy rebalance continued
 - Randomize monster speed/damage within a level (within +/- 10% of the baseline, it should be deterministic).
-
 - Aggro range on monsters - don't attack until player comes within a radius (let's make it 1 screen width for now). This should also help with pathfinding - when not in aggro range, don't run pathfinding.
 - Spawner delay should be reduced to 20 seconds on first floor (and appropriately shorter on the next floors).
 

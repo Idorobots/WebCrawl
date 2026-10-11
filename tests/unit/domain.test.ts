@@ -27,6 +27,7 @@ import {
   monsterAttackIsReady,
   monsterEngagementRange,
   monsterMeleeRange,
+  monsterWithinAggroRange,
   projectileHitsCircle,
   projectileHitsDecoration,
   steerDashDirection,
@@ -1884,6 +1885,16 @@ describe("deterministic room contents", () => {
     expect(monsterAttackIsReady(lightSentry, 1_750)).toBe(true);
     delete lightSentry.attackWarmupUntil;
     expect(monsterAttackIsReady(lightSentry, 1_700)).toBe(true);
+  });
+
+  it("only notices the player within the aggro radius", () => {
+    const monster = { ...REGULAR_MONSTER_DEFINITIONS["melee-heavy"], x: 0, y: 0 };
+    const offset = worldPoint(monster, "hitboxOffset");
+    const center = { x: monster.x + offset.x, y: monster.y + offset.y };
+    expect(monsterWithinAggroRange(monster, center, 100)).toBe(true);
+    expect(monsterWithinAggroRange(monster, { x: center.x + 99, y: center.y }, 100)).toBe(true);
+    expect(monsterWithinAggroRange(monster, { x: center.x + 101, y: center.y }, 100)).toBe(false);
+    expect(monsterWithinAggroRange(monster, { x: center.x, y: center.y + 101 }, 100)).toBe(false);
   });
 
   it("promotes at most one room enemy to a rare deterministic miniboss", () => {

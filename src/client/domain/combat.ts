@@ -20,6 +20,19 @@ export function monsterEngagementRange(
   return monster.speed === 0 ? monster.projectileRange : monster.attackRange;
 }
 
+/**
+ * Whether the player is close enough for a monster to notice them. Outside this
+ * radius the monster neither attacks nor runs pathfinding.
+ */
+export function monsterWithinAggroRange(
+  monster: Pick<Monster, "x" | "y" | "hitboxOffset" | "size">,
+  player: Point,
+  radius: number,
+): boolean {
+  const center = actorCollisionCenter(monster, worldPoint(monster, "hitboxOffset"));
+  return Math.hypot(player.x - center.x, player.y - center.y) <= radius;
+}
+
 /** Melee must reach an actor standing just beyond the two occupied floor ellipses. */
 export function monsterMeleeRange(monster: Pick<Monster, "size" | "attackRange" | "footprintRadii">): number {
   const footprint = worldPoint(monster, "footprintRadii");
