@@ -1448,7 +1448,7 @@ Types:
 * Bugs
 - It's possible to shoot through the doors when the player is standing right behind the blocked door area.
 - Boss arenas sometimes are not the farthest room and have additional corridors attached to them (screenshot).
-- Hovering over HUD panels maks the flashlight cursor return to center. All UI elements should behave just like the minimap.
+- Hovering over HUD panels makes the flashlight cursor return to center. All UI elements should behave just like the minimap.
 - During energy dash, the player should not pick up pickups.
 - Energy-for-ammo powerup should decrease the cost when stacked. Potentially, replace with just energy crate returning X ammo.
 - Bullet stun and slowdown offects should stack for longer effect.
@@ -1578,10 +1578,11 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Arena scenery theme should be reserved for boss arenas, not used for any other rooms.
 
 * Visual bugs
-- Sentry ballistic directional animations are scaled weird.
-- Site favicon
-- Some scenery objects should be placed only on walls as decorations
 - Login screen panels on the left side could be reorganized to look better.
+- Site favicon - use the ClosedNS logo
+* Visual bugs
+- Sentry ballistic directional animations are scaled weird.
+- Some scenery objects should be placed only on walls as decorations
 * Audio bugs
 - Picking up ammo should play the same sound as equiping a weapon.
 - When the game runs in background all sounds generated are queued and play all on once when the game is foregrounded.

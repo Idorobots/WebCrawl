@@ -449,10 +449,10 @@ export function createWelcomeScene(options: WelcomeSceneOptions): WelcomeSceneHa
     width: number;
     height: number;
   }> = [
-    { file: 0, x: -13.6, y: 3.6, z: -10, rotY: Math.PI / 2, width: 13.5, height: 10.1 },
-    { file: 1, x: -11.4, y: -3.2, z: -12, rotY: Math.PI / 2, width: 11, height: 8.25 },
-    { file: 3, x: -12.8, y: 4.6, z: -13.5, rotY: Math.PI / 2, width: 7.2, height: 9.6 },
-    { file: 2, x: -13.4, y: -3.8, z: -15, rotY: Math.PI / 2, width: 9, height: 6.75 },
+    { file: 0, x: -12.6, y: 4.2, z: -10.5, rotY: Math.PI / 2, width: 13.5, height: 10.1 },
+    { file: 1, x: -13.6, y: -2.6, z: -12.5, rotY: Math.PI / 2, width: 11, height: 8.25 },
+    { file: 3, x: -12.0, y: 4.8, z: -14.0, rotY: Math.PI / 2, width: 7.2, height: 9.6 },
+    { file: 2, x: -13.2, y: -3.6, z: -11.0, rotY: Math.PI / 2, width: 9, height: 6.75 },
     { file: 1, x: 13.6, y: 3.6, z: -10.5, rotY: -Math.PI / 2, width: 13.5, height: 10.1 },
     { file: 0, x: 11.6, y: -3.2, z: -12.5, rotY: -Math.PI / 2, width: 11, height: 8.25 },
     { file: 3, x: 12.8, y: 4.4, z: -14, rotY: -Math.PI / 2, width: 7.2, height: 9.6 },
