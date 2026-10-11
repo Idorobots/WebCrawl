@@ -82,11 +82,11 @@ const WELCOME_PROMPT_BLOCKS: readonly Block[] = [
   {
     kind: "paragraph",
     segments: [
-      { text: "Portals stitch the Web together. Step into a " },
+      { text: "Portals stitch the Web together. Step into an " },
       { icon: PORTAL_UP_ICON, name: "Up portal" },
-      { text: " portal to go back to the previous page, or a " },
+      { text: " to go back to the previous page, or a " },
       { icon: PORTAL_DOWN_ICON, name: "Down portal" },
-      { text: " portal to crawl into a linked page — you will need to gain access first." },
+      { text: " to crawl into a linked page — you will need to gain access first." },
     ],
   },
   {
@@ -282,8 +282,9 @@ export function setupWelcomePrompt(options: {
   surface: HTMLElement;
   onTypingStart?: () => void;
   onTypingEnd?: () => void;
+  isInteractionBlocked?: () => boolean;
 }): WelcomePromptHandle {
-  const { promptHost, urlInput, surface, onTypingStart, onTypingEnd } = options;
+  const { promptHost, urlInput, surface, onTypingStart, onTypingEnd, isInteractionBlocked } = options;
   const urlLineNode = urlInput.parentElement;
   if (!(urlLineNode instanceof HTMLElement)) {
     throw new Error("Welcome URL input must live inside a line element");
@@ -412,7 +413,7 @@ export function setupWelcomePrompt(options: {
   }
 
   function onKeyDown(event: KeyboardEvent): void {
-    if (surface.hidden) return;
+    if (surface.hidden || isInteractionBlocked?.()) return;
     skip();
     const editable =
       event.key.length === 1 ||
@@ -424,7 +425,7 @@ export function setupWelcomePrompt(options: {
   }
 
   function onPointerDown(): void {
-    if (surface.hidden) return;
+    if (surface.hidden || isInteractionBlocked?.()) return;
     skip();
   }
 

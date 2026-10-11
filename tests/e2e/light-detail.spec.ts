@@ -41,7 +41,13 @@ test("lighting settings on the login screen persist and apply to the game", asyn
     body: fixture,
   }));
   await page.getByRole("button", { name: "Sign In" }).click();
-  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeHidden();
+  const promptSettings = page.getByRole("button", { name: "Settings", exact: true });
+  await expect(promptSettings).toBeVisible();
+  await promptSettings.click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  await expect(page.getByLabel("Light detail")).toHaveValue("high");
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
   await page.locator("#welcomeUrlInput").fill("https://example.com/start");
   await page.getByRole("button", { name: "Go" }).click();
   const host = page.locator("#gameCanvas");

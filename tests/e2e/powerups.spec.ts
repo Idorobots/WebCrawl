@@ -356,7 +356,8 @@ test("collects and stacks every power-up, preserves progression across floors, a
   await expect(page.locator("#deathPowerupInventory img")).toHaveCount(POWERUP_KINDS.length);
   await expect(page.locator(".death-loot-row")).toHaveCount(2);
   await page.locator("#restartButton").click();
-  await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
+  await expect(page.locator("#deathModal")).toBeHidden();
+  await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", /[1-9]/, { timeout: 30_000 });
   expect(await state()).toMatchObject({ hp: 10, maxHp: 10, maxEnergy: 10, powerups: {}, aimAid: 0 });
 });
 

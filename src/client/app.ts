@@ -279,6 +279,7 @@ const sideFloorLabelEl = requireElement<HTMLElement>("#sideFloorLabel");
 let currentRequest = 0;
 let currentPageUrl: string | null = null;
 let currentStateId: string | null = null;
+let runStartUrl: string | null = null;
 let gameStarted = false;
 let initialFloorPortalIntroPending = true;
 const portalActivationAnnouncedLevels = new Set<string>();
@@ -984,6 +985,7 @@ function recordHighScore(): { scores: HighScore[]; rank: number | null } {
 
 function showDeathModal(): void {
   hideVendingPreview();
+  restartButton.disabled = false;
   const { scores, rank } = recordHighScore();
   renderer?.stopStationAmbient();
 
@@ -1039,7 +1041,21 @@ restartButton.addEventListener("click", () => {
   restartButton.disabled = true;
   deathModal.classList.remove("open");
   deathModal.classList.add("closing");
-  window.setTimeout(() => location.reload(), SCREEN_FADE_MS);
+  const url = runStartUrl;
+  if (!url) {
+    window.setTimeout(() => location.reload(), SCREEN_FADE_MS);
+    return;
+  }
+  window.setTimeout(() => {
+    deathModal.hidden = true;
+    deathModal.classList.remove("closing");
+    document.querySelector("#hud")?.classList.remove("game-over");
+    resetRunState();
+    equipDefaultWeapon();
+    updateHudPanels();
+    gameUi.classList.add("game-ui-ready");
+    void loadPage(url, {});
+  }, SCREEN_FADE_MS);
 });
 
 function showFetchErrorModal(pageUrl: string, message: string): void {
@@ -1069,9 +1085,24 @@ function resetRunState(): void {
   playerState = createPlayerState(isMobileDevice(), PLAYER_MAX_HP);
   playerAlive = true;
   playerInvulnerable = false;
+  playerDamageInvulnerableUntil = 0;
+  if (crystalShieldSoundActive) renderer?.playInvulnerabilitySound(false);
+  crystalShieldSoundActive = false;
+  crystalInvulnerableUntil = 0;
+  energyDash = null;
+  lastPlayerShotAt = -Infinity;
+  playerFacing = { x: 0, y: -1 };
+  gameLoopSuspended = false;
   visitedRooms = new Set();
   discoveredRoomsByPage.clear();
+  destroyedObstaclesByPage.clear();
+  monsterStatesByPage.clear();
   floorSnapshots.clear();
+  extraLootByPage.clear();
+  extraLootSerialByPage.clear();
+  lastDroppedWeapon = null;
+  queuedLootDrops = [];
+  temporarilyBlockedLoot.clear();
   collectedLoot.clear();
   lootInventory.credits = 0;
   lootInventory.crystals = 0;
@@ -4559,6 +4590,7 @@ async function luckyUrl(): Promise<string> {
 function startWelcomeCrawl(rawUrl: string): void {
   stopAllMusic();
   welcomeTransitioning = true;
+  runStartUrl = rawUrl;
   welcomePrompt?.cancel();
   welcomeScreen.classList.add("closing");
 
@@ -4605,6 +4637,7 @@ function spawnWelcomePrompt(): void {
     surface: welcomeScreen,
     onTypingStart: startInterfaceTextLoop,
     onTypingEnd: stopInterfaceTextLoop,
+    isInteractionBlocked: () => settingsDialog.open,
   });
 }
 
@@ -4612,7 +4645,6 @@ function startWelcomeSession(): void {
   if (welcomeSessionStarted) return;
   welcomeSessionStarted = true;
   if (settingsDialog.open) settingsDialog.close();
-  settingsButton.hidden = true;
   playWelcomeAmbient();
   promptLayout.classList.add("open");
   loginLayout.classList.add("closing");
