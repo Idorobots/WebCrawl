@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { artDebugLevel } from "../../src/client/domain/authored-rooms";
 import { bonusLootDrop, bossSpecForRoom } from "../../src/client/domain/generation";
-import { advanceMonsterStatuses, applyBulletStatuses, monsterMovementSpeed, monsterStatusTint, SLOW_TINT, STUN_TINT, stunMonster } from "../../src/client/domain/monster-status";
+import { advanceMonsterStatuses, applyBulletStatuses, monsterMovementSpeed, monsterStatusTint, SLOW_SPEED_FACTOR, SLOW_TINT, STUN_TINT, stunMonster } from "../../src/client/domain/monster-status";
 import { collectPowerup, createPlayerState, criticalBulletDamage, extraProjectiles, playerAttackDamage,
   powerupChance, receivedPlayerDamage, resourcesAfterShot } from "../../src/client/domain/powerups";
 import { projectilesForWeapon, weaponForKind, weaponKinds } from "../../src/client/domain/weapons";
@@ -205,6 +205,20 @@ describe("on-hit slow and stun", () => {
     expect(target).toMatchObject({ stunRemainingMs: 0, slowRemainingMs: 0, lastAttackAt: 600,
       nextSpecialAt: 1_100, chargeWindupUntil: 800, chargeRecoverUntil: 1_400 });
     expect(target.speed).toBe(speed);
+  });
+
+  it("halves movement and dilates ability clocks while slowed", () => {
+    const target = monster();
+    Object.assign(target, { slowRemainingMs: 1_000, lastAttackAt: 100,
+      nextSpecialAt: 600, nextVolleyAt: 700, chargeUntil: 800, chargeWindupUntil: 300, chargeRecoverUntil: 900 });
+    expect(monsterMovementSpeed(target)).toBe(target.speed * SLOW_SPEED_FACTOR);
+    advanceMonsterStatuses(target, 400);
+    expect(target).toMatchObject({ slowRemainingMs: 600, lastAttackAt: 300,
+      nextSpecialAt: 800, nextVolleyAt: 900, chargeUntil: 1_000, chargeWindupUntil: 500, chargeRecoverUntil: 1_100 });
+    advanceMonsterStatuses(target, 800);
+    expect(target).toMatchObject({ slowRemainingMs: 0, lastAttackAt: 600,
+      nextSpecialAt: 1_100, chargeWindupUntil: 800, chargeRecoverUntil: 1_400 });
+    expect(monsterMovementSpeed(target)).toBe(target.speed);
   });
 
   it("does not roll without upgrades or on corpses and caps proc chance at 100%", () => {

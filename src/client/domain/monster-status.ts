@@ -3,6 +3,8 @@ import { powerupChance, type PlayerState } from "./powerups";
 
 export const SLOW_DURATION_MS = 2_000;
 export const STUN_DURATION_MS = 500;
+/** While slowed, movement and the ability/cooldown clocks run at this fraction of normal speed. */
+export const SLOW_SPEED_FACTOR = 0.5;
 export const SLOW_TINT = 0x4d8dff;
 export const STUN_TINT = 0xb0b0b0;
 
@@ -47,12 +49,16 @@ export function advanceMonsterStatuses(monster: Monster, elapsedMs: number): voi
   }
   const elapsed = Math.max(0, elapsedMs);
   const stunnedMs = Math.min(monster.stunRemainingMs ?? 0, elapsed);
-  if (stunnedMs > 0) {
+  const slowedMs = Math.min(monster.slowRemainingMs ?? 0, elapsed);
+  // Stun freezes the ability clocks; slow runs them at SLOW_SPEED_FACTOR, which
+  // extends every attack, special and charge cooldown without touching its base value.
+  const cooldownShift = stunnedMs + slowedMs * (1 - SLOW_SPEED_FACTOR);
+  if (cooldownShift > 0) {
     for (const field of [
       "lastAttackAt", "attackWarmupUntil", "nextSpecialAt", "nextVolleyAt",
       "chargeWindupUntil", "chargeUntil", "chargeRecoverUntil",
     ] as const) {
-      if (monster[field] !== undefined) monster[field] += stunnedMs;
+      if (monster[field] !== undefined) monster[field] += cooldownShift;
     }
   }
   monster.slowRemainingMs = Math.max(0, (monster.slowRemainingMs ?? 0) - elapsed);
@@ -60,7 +66,7 @@ export function advanceMonsterStatuses(monster: Monster, elapsedMs: number): voi
 }
 
 export function monsterMovementSpeed(monster: Monster): number {
-  return monster.speed * ((monster.slowRemainingMs ?? 0) > 0 ? 0.5 : 1);
+  return monster.speed * ((monster.slowRemainingMs ?? 0) > 0 ? SLOW_SPEED_FACTOR : 1);
 }
 
 export function monsterStatusTint(monster: Monster): number | null {
