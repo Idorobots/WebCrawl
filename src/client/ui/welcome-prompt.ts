@@ -31,8 +31,8 @@ const MOVE_CONTROLS_TEXT = MOBILE_CONTROLS
   : "Move with WSAD or the arrow keys. Shoot with the left mouse button. ";
 
 const BAILOUT_CONTROLS_TEXT = MOBILE_CONTROLS
-  ? " — press the Bailout button for a Government Bailout (10 seconds of invulnerability)."
-  : " — press SPACE for a Government Bailout (10 seconds of invulnerability).";
+  ? " — press the Bailout button for a Government Bailout (5 seconds of invulnerability)."
+  : " — press SPACE for a Government Bailout (5 seconds of invulnerability).";
 
 const CAPTURE_CONTROLS_TEXT = MOBILE_CONTROLS
   ? " — press Capture with any energy to dash toward your aim. More energy means a longer, stronger dash."

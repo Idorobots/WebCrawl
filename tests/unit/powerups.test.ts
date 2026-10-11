@@ -61,7 +61,7 @@ describe("player power-ups", () => {
     expect(state.walkSpeedMultiplier).toBe(1.2);
     expect(state.criticalChance).toBe(0.02);
     expect(ramPerPickup(state)).toBe(3);
-    expect(bailoutDurationMs(state)).toBe(14_000);
+    expect(bailoutDurationMs(state)).toBe(9_000);
     const projectile = projectilesForWeapon(DEFAULT_WEAPON, { x: 1, y: 0 }, 0)[0]!;
     expect(playerAttackDamage(state, projectile.damage)).toBeCloseTo(projectile.damage * 1.2);
     expect(playerAttackDamage(state, energyDashPower(5).damage)).toBeCloseTo(energyDashPower(5).damage * 1.2);

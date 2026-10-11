@@ -329,7 +329,7 @@ test("collects and stacks every power-up, preserves progression across floors, a
   expect(await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.loot().some(item => item.id.includes("test-powerup")))).toBe(false);
 
   const shieldStatus = page.waitForEvent("console", {
-    predicate: message => message.text().includes("Crystal shield active for 14 seconds."),
+    predicate: message => message.text().includes("Crystal shield active for 9 seconds."),
   });
   await page.evaluate(() => {
     const api = (window as unknown as TestWindow).__webcrawlTest;
@@ -338,7 +338,7 @@ test("collects and stacks every power-up, preserves progression across floors, a
     api.useCrystal();
   });
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-energy", "14");
-  expect((await shieldStatus).text()).toContain("14 seconds");
+  expect((await shieldStatus).text()).toContain("9 seconds");
   await page.evaluate(() => {
     const api = (window as unknown as TestWindow).__webcrawlTest;
     api.expireCrystalShield();
