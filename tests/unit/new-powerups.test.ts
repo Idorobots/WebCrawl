@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { artDebugLevel } from "../../src/client/domain/authored-rooms";
 import { bonusLootDrop, bossSpecForRoom } from "../../src/client/domain/generation";
-import { advanceMonsterStatuses, applyBulletStatuses, monsterMovementSpeed, monsterStatusTint, SLOW_TINT, STUN_TINT } from "../../src/client/domain/monster-status";
+import { advanceMonsterStatuses, applyBulletStatuses, monsterMovementSpeed, monsterStatusTint, SLOW_TINT, STUN_TINT, stunMonster } from "../../src/client/domain/monster-status";
 import { collectPowerup, createPlayerState, criticalBulletDamage, extraProjectiles, playerAttackDamage,
   powerupChance, receivedPlayerDamage, resourcesAfterShot } from "../../src/client/domain/powerups";
 import { projectilesForWeapon, weaponForKind, weaponKinds } from "../../src/client/domain/weapons";
@@ -174,6 +174,22 @@ describe("on-hit slow and stun", () => {
       expect(target.slowRemainingMs).toBe(choice < 0.5 ? 2_000 : 0);
       expect(target.stunRemainingMs).toBe(choice < 0.5 ? 0 : 500);
     }
+  });
+
+  it("stuns a surviving target on a direct hit, replacing any slow, and ignores corpses", () => {
+    const target = monster();
+    target.slowRemainingMs = 1_500;
+    stunMonster(target, 500);
+    expect(target.stunRemainingMs).toBe(500);
+    expect(target.slowRemainingMs).toBe(0);
+    expect(monsterStatusTint(target)).toBe(STUN_TINT);
+    advanceMonsterStatuses(target, 500);
+    expect(target.stunRemainingMs).toBe(0);
+    expect(monsterStatusTint(target)).toBeNull();
+    const corpse = monster();
+    corpse.dead = true;
+    stunMonster(corpse, 500);
+    expect(corpse.stunRemainingMs ?? 0).toBe(0);
   });
 
   it("pauses boss attack, special and charge clocks during a stun without changing base speed", () => {

@@ -151,6 +151,8 @@ export const ENERGY_DASH_DISTANCE_PER_ENERGY = WORLD_GEOMETRY.segmentSize * 0.75
 export const ENERGY_DASH_SPEED = 1_300;
 export const ENERGY_DASH_DAMAGE_PER_ENERGY = 23.5 / 5;
 export const ENERGY_DASH_TURN_RATE = Math.PI * 2;
+export const ENERGY_DASH_STUN_DURATION_MS = 500;
+export const ENERGY_DASH_GRACE_MS = 200;
 
 // Appearance weights total 100 at both ends of the depth curve. Every
 // archetype remains possible, even before shooters and sentries become common.

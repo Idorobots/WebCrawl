@@ -88,7 +88,7 @@ import {
 } from "./domain/generation";
 import { contentPagesForRoom, domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
-import { advanceMonsterStatuses, applyBulletStatuses, monsterMovementSpeed } from "./domain/monster-status";
+import { advanceMonsterStatuses, applyBulletStatuses, monsterMovementSpeed, stunMonster } from "./domain/monster-status";
 import { chooseReachablePath, FailedPathCache, monsterEscapeStep, PathSearchBudget, SharedPathCache, walkableApproachPoint, walkableSegment } from "./domain/pathfinding";
 import { closestPortalWithUrl, entryPortalFor, hasBlockingPortalMonsters, initialPlayerPosition, updatePortalAvailability, updatePortalContacts } from "./domain/portals";
 import { scoreForRun, timedShieldState, type LootInventory } from "./domain/scoring";
@@ -105,7 +105,9 @@ import {
   BOSS_DEFINITIONS,
   CRYSTAL_INVULNERABILITY_BLINK_START_MS,
   DEFAULT_BULLET_SPEC,
+  ENERGY_DASH_GRACE_MS,
   ENERGY_DASH_SPEED,
+  ENERGY_DASH_STUN_DURATION_MS,
   ENERGY_DASH_TURN_RATE,
   GLM_HUNTER_ATTACKS,
   LOOT_DEFINITIONS,
@@ -3510,6 +3512,7 @@ function endEnergyDash(): void {
   const dash = energyDash;
   if (!dash) return;
   playerInvulnerable = dash.playerInvulnerableBefore;
+  playerDamageInvulnerableUntil = Math.max(playerDamageInvulnerableUntil, performance.now() + ENERGY_DASH_GRACE_MS);
   energyDash = null;
   renderer.setPlayerDashTint(false);
   updatePlayerProtectionVisual();
@@ -3529,6 +3532,7 @@ function applyEnergyDashDamage(): void {
     )) {
       dash.hitTargets.add(monster.id);
       damageMonster(monster, dash.damage);
+      stunMonster(monster, ENERGY_DASH_STUN_DURATION_MS);
     }
   }
   for (const item of sceneryHitboxCells.get(spatialCellKey(player.x, player.y)) ?? []) {

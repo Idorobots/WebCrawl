@@ -1279,11 +1279,11 @@ We'll need the following additions to the player state:
 * Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
 - Regulatory Capture needs a 200 ms invulnerability "grace period" after the dash ends.
-- After the level boss is defeated, all rooms with portals should be highlighted on the minimap.
-
 - Crystals should last 5 seconds
 - Regen powerups should regenerate 0.1 thing every 6 seconds. Stacking should work as usual.
+- After the level boss is defeated, all rooms on the minimap should be updated with portal icons (colored triangles).
 
+* Gameplay mechanics
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
 - In complex corridors, some doors should open at the same time - releasing monsters into the corridor for the player to fend off as an ambush.
 - Powerup vending machine?

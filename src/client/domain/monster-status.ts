@@ -32,6 +32,13 @@ export function applyBulletStatuses(monster: Monster, state: PlayerState, random
   }
 }
 
+/** Guaranteed stun from a direct hit (e.g. Regulatory Capture); replaces any active slow. */
+export function stunMonster(monster: Monster, durationMs: number): void {
+  if (monster.dead) return;
+  monster.stunRemainingMs = durationMs;
+  monster.slowRemainingMs = 0;
+}
+
 /** Only active gameplay advances status clocks. Freeze pending attacks/charges during a stun. */
 export function advanceMonsterStatuses(monster: Monster, elapsedMs: number): void {
   if (monster.dead) {
