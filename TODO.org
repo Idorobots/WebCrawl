@@ -1165,7 +1165,10 @@ Initially the doors should be closed, but then open when the player or a monster
 Corridors should be revealed when the connected door opens for the first tiem. Initially, corridors should be hidden.
 Similarly, rooms should be revealed only when the doors leading up to them open for the first time.
 
-* Scenery Refactor
+* DONE Scenery Refactor
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 12:22]
+:END:
 All object visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
 
 - Each in-game scenery object should have a spec that includes various animations (idle, destroyed, other optional animations), effect animations (damage, destroy) as well as other properties (hitpoints, position, footprint, hitbox, loot, etc).
@@ -1190,7 +1193,10 @@ It's OK if the specs are not entirely static - it's perfectly fine to have a fun
 
 The goal is to be able to generate a room with all its scenery objects that already include the loot, specific animations etc. The arch goal is to be able to generate the entire graph of rooms and objects within them, deterministically, and then treat that as state that evolves during the game and is renderable via phaser.
 
-* Enemy refactor
+* DONE Enemy refactor
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 12:22]
+:END:
 All enemy visuals should be done with animations. Some animations can have a single frame, but they should adhere to the comon animation interface.
 
 - Each in-game enemy should have a spec that includes various animations (idle, destroyed, walk, different attacks), effect animations (damage, destroy) as well as other properties (hitpoints, speed, projectileSpeed, range, position, footprint, hitbox, loot, etc).
@@ -1272,14 +1278,19 @@ We'll need the following additions to the player state:
 - Use separate monster appearance propabilities depending on the floor - mostly melee scouts and heavies on the first floor, progressively more common harder enemies on subsequent floors.
 * Gameplay mechanics
 - Regulatory Capture should stun enemies that are hit but survive (even if invulnerable). Stun should last for a second (but make it configurable). Stunned opponents should be grayed out for the duration of the stun.
+- Energy dash needs a 200 ms invulnerability "grace period" after the dash ends.
+- After the level boss is defeated, all rooms with portals should be highlighted on the minimap.
+- Crystals should last 5 seconds
+- Regen powerups should regenerate 0.1 thing every 6 seconds.
+
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
 - In complex corridors, some doors should open at the same time - releasing monsters into the corridor for the player to fend off as an ambush.
-- Energy dash needs a 200 ms invulnerability "grace period" after the dash ends.
 - Powerup vending machine?
-- Crystals should last 5 seconds
-- Regen should regenerate 0.1 thing every 6 seconds.
-- Destroying certain types of scenery should have a chance of spawning a certain type of monster.
 
+* UI improvements
+- Retry button on death screen - rerun the same original URL
+- The welcome prompt should explain portals. The icons should be placed in-line.
+- Settings menu should be available on the prompt screen.
 * DONE Minimap overhaul
 :LOGBOOK:
 - State "DONE"       from              [2026-10-07 Wed 22:17]
@@ -1359,6 +1370,9 @@ The mini-map-related powerups should combine seamlessly - when a radar is active
 - Scaling Laws - Faster movement speed the more energy the player has (-10% at 0, to +25% each 10 energy).
 - Stealth Mode - Temporary invisibility after the player takes damage (1 second)
 - Automatic bailout - whenever the player is about to die and has crystals, they are used.
+- Economic crysis -  longers/stronger eneryg dash per energy unit
+- Tarrifs - Bullets circling the player dealing damage to the enemies
+- Time slowdown during dash/govt bailout
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:
@@ -1415,6 +1429,9 @@ Types:
 - Boss arenas sometimes are not the farthest room and have additional corridors attached to them (screenshot).
 - Hovering over HUD panels maks the flashlight cursor return to center. All UI elements should behave just like the minimap.
 - During energy dash, the player should not pick up pickups.
+- Energy-for-ammo powerup should decrease the cost when stacked. Potentially, replace with just energy crate returning X ammo.
+- Bullet stun and slowdown offects should stack for longer effect.
+
 * DONE Enemy rebalance
 :LOGBOOK:
 - State "DONE"       from              [2026-10-04 Sun 14:05]
@@ -1425,7 +1442,14 @@ Types:
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
 - Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
 - Higher level monsters should have slowing bullets, critical damage chance and stunning bullets. Also, different bullet patterns.
-- Higher level walkers should have a bash ability.
+- Higher level walkers should have a dash ability.
+- Monsters in long corridors.
+- Random monster spawns outside of spawners?
+- Destroying certain types of scenery should have a chance of spawning a certain type of monster.
+- Doors in corridors that close when there are monsters nearby
+
+- Randomized monster speed/damage within a level.
+- Aggro range on monsters - don't attack until player comes within a radius (let's make it 1 screen width for now).
 - Spawner delay should be reduced to 20 seconds on first floor.
 
 * Boss fights continued
@@ -1516,6 +1540,7 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Dropped weapons appear under the pedenstal
 - Powerups & weapons should appear above regular loot.
 - Healthbar lights up whenever an enemy or scenery is destroyed. It should only light up whenever the player takes non-zero damage.
+- Can you please remove the border from the avatar panel in the welcome screen (the one with the prompt).
 
 * Audio bugs
 - Picking up ammo should play the same sound as equiping a weapon.
@@ -1526,3 +1551,17 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - "Animate" the sprites of teleported characters by graying out and resizing the sprite to look like it's disappearing.
 - Better teleport effect - ideally a graphical effect, not a literal sprite animation.
 - Better healing effect - ideally a graphical effect.
+- Show the "name" of the level as a banner that disappears after a while on first load.
+* DONE Login page
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 12:14]
+:END:
+I'd like to update the "login" page to look as if the agent were looking at it from the inside of the computer. The mockup in mockups/inside.png can help you understand what I'm aiming for. I'd like you to build a scene like that using the assets in assets/ui.
+
+The login form including the content should be mirrored, but stay fully functional. Add some highlight states for the fields and the button, so that the user knows what they need to do (click the sign-in button). The scene should match closely to the mockup image, with the screen showing a person (guy.png) and the login form in front of them in 3d. The walls should be decoreted with the UI panels. Make the walls and the screen translucent and holographic. The whole internals of the UI should be holographic. You can omit the agent render from within the computer. Add a bloom/hdr shader effect and animate the panels somewhat, so that they move around a bit.
+When the user clicks the sign in button, make the viewport move back into the nothingness very fast and then que the welcome screen as usual.
+
+There are some textures in the assets/ui directory - you can use these to texturise the scene box. Make the textures translucent and bloom-filtered to match the mockup looks.
+
+The choice of technologies is up to you. You can also choose the assets to use or come up with new ones.
+Do not run the e2e tests. I'll do this as a last step.

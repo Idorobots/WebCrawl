@@ -13,6 +13,9 @@
 </head>
 <body>
   <div id="welcomeScreen">
+    <div id="welcomeScene" aria-hidden="true">
+      <canvas id="welcomeSceneCanvas"></canvas>
+    </div>
     <a
       class="welcome-github"
       href="https://github.com/Idorobots/WebCrawl"
@@ -46,7 +49,6 @@
               value="samario"
               spellcheck="false"
               autocomplete="off"
-              autofocus
             />
           </div>
           <div class="login-field">
@@ -59,7 +61,7 @@
             />
           </div>
           <div class="login-actions">
-            <button id="loginSignInButton" type="submit">Sign In</button>
+            <button id="loginSignInButton" type="submit" autofocus>Sign In</button>
           </div>
         </form>
       </section>

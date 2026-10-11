@@ -1282,14 +1282,38 @@ body {
   display: grid;
   place-items: center;
   overflow: hidden;
-  background:
-    repeating-linear-gradient(0deg, rgba(80, 150, 255, 0.045) 0 1px, transparent 1px 3px),
-    radial-gradient(circle at 50% 38%, rgba(50, 105, 200, 0.16), rgba(3, 9, 20, 0.92) 72%);
+  /* Must match the 3D scene background (SCENE_BACKGROUND in welcome-scene.ts)
+     so the colour does not jump when the viewport flies away. */
+  background-color: #081422;
+  background-image: repeating-linear-gradient(0deg, rgba(80, 150, 255, 0.045) 0 1px, transparent 1px 3px);
   color: rgba(143, 215, 255, 0.87);
   font-family: "Share Tech Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 #welcomeScreen[hidden] { display: none; }
+
+/* ===== Inside-the-machine holographic 3D backdrop ===== */
+#welcomeScene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 900ms ease;
+}
+
+#welcomeScreen.welcome-ready #welcomeScene { opacity: 1; }
+
+#welcomeScene[hidden] { display: none; }
+
+#welcomeSceneCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 900ms ease;
+}
 
 #welcomeScreen:not(.welcome-ready) :is(.welcome-panel, .welcome-titlebar, .welcome-visual, .welcome-github, .welcome-settings-button) {
   pointer-events: none;
@@ -1763,6 +1787,8 @@ body {
 #promptLayout[hidden] { display: none; }
 
 #welcomeStage {
+  position: relative;
+  z-index: 2;
   display: grid;
   place-items: center;
   transition: transform 160ms ease;
@@ -1770,15 +1796,17 @@ body {
 
 #welcomeStage > .welcome-layout { grid-area: 1 / 1; }
 
+/* The sign-in form is the screen's content. The 3D scene projects the screen
+   wall's content rectangle to screen space and assigns it to the panel as a
+   matrix3d, so the form is drawn flat on the wall and follows the camera. The
+   whole layout is mirrored but stays real DOM and remains fully interactive.
+   This transform is only the fallback for when WebGL is unavailable. */
 #loginLayout {
-  transition:
-    opacity 320ms ease,
-    transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: opacity 320ms ease;
 }
 
 #loginLayout.closing {
   opacity: 0;
-  transform: translateY(-10px);
   pointer-events: none;
 }
 
@@ -1859,6 +1887,111 @@ body {
   display: flex;
   justify-content: center;
   margin-top: 10px;
+}
+
+/* ===== Sign-in form, drawn directly on the screen wall ===== */
+.login-layout .login-panel {
+  width: min(360px, 34vw);
+  margin: 0 auto;
+  border: 1px solid rgba(120, 215, 255, 0.3);
+  border-radius: 2px;
+  background: none;
+  box-shadow: inset 0 0 26px rgba(60, 160, 255, 0.1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none;
+  transition: opacity 620ms ease;
+  text-shadow:
+    0 0 7px rgba(120, 200, 255, 0.6),
+    0 0 22px rgba(60, 140, 255, 0.32);
+}
+
+/* The visible form is painted into the 3D screen texture; the DOM layer is
+   kept invisible (but interactive) while the scene is active so the plain form
+   never shows through, including on first paint. */
+#welcomeScreen.scene-form .login-layout .login-panel {
+  opacity: 0;
+}
+
+.login-layout .welcome-panel-header {
+  color: rgba(178, 231, 255, 0.85);
+  border-bottom-color: rgba(90, 200, 255, 0.4);
+}
+
+.login-layout .login-form {
+  position: relative;
+}
+
+.login-layout .login-field input {
+  border-color: rgba(90, 200, 255, 0.5);
+  background: rgba(8, 26, 46, 0.55);
+  box-shadow: inset 0 0 12px rgba(40, 140, 240, 0.18);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.login-layout .login-field input:hover {
+  border-color: rgba(140, 225, 255, 0.82);
+  box-shadow:
+    0 0 16px rgba(60, 170, 255, 0.35),
+    inset 0 0 14px rgba(40, 140, 240, 0.28);
+}
+
+.login-layout .login-field input:focus {
+  border-color: rgba(175, 242, 255, 0.9);
+  background: rgba(12, 38, 66, 0.72);
+  box-shadow:
+    0 0 14px rgba(90, 200, 255, 0.4),
+    inset 0 0 14px rgba(90, 200, 255, 0.24);
+}
+
+/* Only the button signals attention, with a slow and gentle pulse. */
+.login-layout .login-actions button {
+  position: relative;
+  border-color: rgba(140, 220, 255, 0.75);
+  background: linear-gradient(180deg, rgba(50, 150, 235, 0.26), rgba(10, 40, 74, 0.44));
+  box-shadow:
+    0 0 16px rgba(60, 170, 255, 0.32),
+    inset 0 0 14px rgba(70, 180, 255, 0.22);
+  animation: buttonGlow 4.5s ease-in-out infinite;
+}
+
+.login-layout .login-actions button:hover,
+.login-layout .login-actions button:focus-visible {
+  border-color: rgba(205, 244, 255, 0.95);
+  background: linear-gradient(180deg, rgba(70, 185, 255, 0.42), rgba(16, 56, 100, 0.58));
+  box-shadow:
+    0 0 26px rgba(110, 210, 255, 0.6),
+    inset 0 0 20px rgba(110, 210, 255, 0.36);
+}
+
+.login-layout .login-actions button:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 0 14px rgba(60, 180, 255, 0.42),
+    inset 0 0 12px rgba(70, 180, 255, 0.24);
+}
+
+.login-layout .login-actions button:focus-visible {
+  outline: 2px solid rgba(205, 245, 255, 0.95);
+  outline-offset: 3px;
+}
+
+@keyframes buttonGlow {
+  0%, 100% {
+    border-color: rgba(140, 220, 255, 0.75);
+    box-shadow:
+      0 0 16px rgba(60, 170, 255, 0.32),
+      inset 0 0 14px rgba(70, 180, 255, 0.22);
+  }
+  50% {
+    border-color: rgba(180, 235, 255, 0.9);
+    box-shadow:
+      0 0 24px rgba(90, 195, 255, 0.48),
+      inset 0 0 18px rgba(90, 195, 255, 0.3);
+  }
 }
 
 #lightDetailSelect {
@@ -1959,10 +2092,23 @@ body {
   .welcome-titlebar,
   .welcome-visual,
   .welcome-github,
-  #loginLayout,
   #promptLayout {
     transition: none;
     transform: none;
+  }
+
+  #loginLayout {
+    transition: none;
+  }
+
+  #welcomeScene {
+    transition: none;
+  }
+
+  #welcomeSceneCanvas { transition: none; }
+
+  .login-layout .login-actions button {
+    animation: none;
   }
 }
 

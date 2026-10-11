@@ -123,6 +123,7 @@ import {
   weaponForMonster,
 } from "./domain/weapons";
 import type { PhaserRenderer } from "./render/phaser-renderer";
+import type { WelcomeSceneHandle } from "./render/welcome-scene";
 import { supportedMaxLights } from "./render/light-capacity";
 import { minimapVisibilityForPlayer, MinimapRenderer, type MinimapVisibility } from "./render/minimap";
 import { loadLightDetail, storeLightDetail, type LightDetail } from "./render/light-detail";
@@ -196,6 +197,8 @@ const bossHudHealth = requireElement<HTMLElement>("#bossHudHealth");
 const bossHudHealthFill = requireElement<HTMLElement>("#bossHudHealthFill");
 
 const loginLayout = requireElement<HTMLDivElement>("#loginLayout");
+const loginPanel = requireElement<HTMLElement>(".login-layout .login-panel");
+const welcomeSceneHost = requireElement<HTMLElement>("#welcomeScene");
 const promptLayout = requireElement<HTMLDivElement>("#promptLayout");
 const loginForm = requireElement<HTMLFormElement>("#loginForm");
 const settingsButton = requireElement<HTMLButtonElement>("#settingsButton");
@@ -212,6 +215,37 @@ const loginFields = [
 
 let welcomePrompt: WelcomePromptHandle | null = null;
 let welcomeSessionStarted = false;
+let welcomeScene: WelcomeSceneHandle | null = null;
+let welcomeSceneInitialized = false;
+let loginTransitioning = false;
+
+// The holographic "inside the machine" room that sits behind the sign-in
+// panel. It is loaded lazily so three.js never lands in the game bundle.
+// Keep the DOM form hidden until the scene takes over (it paints the form
+// into the screen texture), so the plain form cannot flash on first paint.
+welcomeScreen.classList.add("scene-form");
+
+async function initWelcomeScene(): Promise<void> {
+  if (welcomeSceneInitialized) return;
+  welcomeSceneInitialized = true;
+  const canvas = requireElement<HTMLCanvasElement>("#welcomeSceneCanvas");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  try {
+    const { createWelcomeScene } = await import("./render/welcome-scene");
+    welcomeScene = createWelcomeScene({
+      canvas,
+      formElement: loginPanel,
+      lowQuality: isMobileDevice(),
+      reduceMotion,
+    });
+  } catch {
+    welcomeScene = null;
+  }
+  // WebGL unavailable: fall back to the plain, fully visible DOM form.
+  if (!welcomeScene) welcomeScreen.classList.remove("scene-form");
+}
+
+void initWelcomeScene();
 
 // The welcome screen (login panel first) fades in once fonts and images have
 // settled, so early interactions do not hit mid-layout elements.
@@ -4565,7 +4599,6 @@ function startWelcomeSession(): void {
   welcomeSessionStarted = true;
   if (settingsDialog.open) settingsDialog.close();
   settingsButton.hidden = true;
-  playButtonClick();
   playWelcomeAmbient();
   promptLayout.classList.add("open");
   loginLayout.classList.add("closing");
@@ -4578,7 +4611,27 @@ function startWelcomeSession(): void {
 
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  startWelcomeSession();
+  if (loginTransitioning || welcomeSessionStarted) return;
+  loginTransitioning = true;
+  playButtonClick();
+  welcomeScreen.classList.add("signing-in");
+
+  const openWelcome = (): void => {
+    startWelcomeSession();
+    window.setTimeout(() => {
+      welcomeScreen.classList.remove("signing-in");
+      welcomeSceneHost.hidden = true;
+      welcomeScene?.dispose();
+      welcomeScene = null;
+    }, SCREEN_FADE_MS);
+  };
+
+  if (welcomeScene) {
+    const guard = new Promise<void>((resolve) => window.setTimeout(resolve, 1400));
+    void Promise.race([welcomeScene.playSignInTransition(), guard]).then(openWelcome, openWelcome);
+  } else {
+    openWelcome();
+  }
 });
 
 settingsButton.addEventListener("click", () => {
@@ -4599,17 +4652,16 @@ lightDetailSelect.addEventListener("change", () => {
 });
 
 for (const field of loginFields) {
-  field.addEventListener("focus", () => {
+  const moveCaretToEnd = (): void => {
     const length = field.value.length;
     field.setSelectionRange(length, length);
-  });
+  };
+  field.addEventListener("focus", moveCaretToEnd);
+  field.addEventListener("click", moveCaretToEnd);
   field.addEventListener("pointerdown", (event) => {
     if (event.pointerType !== "touch") return;
     window.setTimeout(() => {
-      if (document.activeElement === field) {
-        const length = field.value.length;
-        field.setSelectionRange(length, length);
-      }
+      if (document.activeElement === field) moveCaretToEnd();
     }, 0);
   });
 }
