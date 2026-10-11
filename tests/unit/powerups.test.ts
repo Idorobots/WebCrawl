@@ -82,14 +82,14 @@ describe("player power-ups", () => {
     expect(criticalBulletDamage(state, damage, () => 0.999)).toBeCloseTo(6.6);
   });
 
-  it("regenerates on ten-second active intervals, stacks amounts and clamps at dynamic caps", () => {
+  it("regenerates on six-second active intervals, stacks amounts and clamps at dynamic caps", () => {
     const state = createPlayerState();
     state.hp = 8;
     state.energy = 5;
     regeneratePlayer(state, DEFAULT_WEAPON, null, 30_000);
     collectPowerup(state, "health_regen");
     collectPowerup(state, "energy_regen");
-    let resources = regeneratePlayer(state, DEFAULT_WEAPON, null, 9_999);
+    let resources = regeneratePlayer(state, DEFAULT_WEAPON, null, 5_999);
     expect(state.hp).toBe(8);
     expect(resources.energy).toBe(5);
     resources = regeneratePlayer(state, DEFAULT_WEAPON, null, 1);
@@ -97,14 +97,14 @@ describe("player power-ups", () => {
     expect(resources.energy).toBeCloseTo(5.1);
     collectPowerup(state, "health_regen");
     collectPowerup(state, "energy_regen");
-    resources = regeneratePlayer(state, DEFAULT_WEAPON, null, 10_000);
+    resources = regeneratePlayer(state, DEFAULT_WEAPON, null, 6_000);
     expect(state.hp).toBeCloseTo(8.3);
     expect(resources.energy).toBeCloseTo(5.3);
     collectPowerup(state, "health");
     collectPowerup(state, "energy");
     state.hp = 11.95;
     state.energy = 11.95;
-    resources = regeneratePlayer(state, DEFAULT_WEAPON, null, 10_000);
+    resources = regeneratePlayer(state, DEFAULT_WEAPON, null, 6_000);
     expect(state.hp).toBe(12);
     expect(resources.energy).toBe(12);
   });
@@ -114,16 +114,16 @@ describe("player power-ups", () => {
     collectPowerup(state, "ammo_regen");
     const weapon = weaponForKind("packet-lobber");
     expect(weapon.maxAmmo).toBe(30);
-    let resources = regeneratePlayer(state, weapon, 10, 30_000);
+    let resources = regeneratePlayer(state, weapon, 10, 18_000);
     expect(resources.ammo).toBe(10);
-    resources = regeneratePlayer(state, weapon, resources.ammo, 10_000);
+    resources = regeneratePlayer(state, weapon, resources.ammo, 6_000);
     expect(resources.ammo).toBe(11);
     expect(state.ammoRegenRemainder).toBeCloseTo(0.2);
     collectPowerup(state, "ammo_regen");
-    resources = regeneratePlayer(state, weapon, 29, 20_000);
+    resources = regeneratePlayer(state, weapon, 29, 12_000);
     expect(resources.ammo).toBe(30);
     expect(state.ammoRegenRemainder).toBe(0);
-    expect(regeneratePlayer(state, DEFAULT_WEAPON, null, 50_000).ammo).toBeNull();
+    expect(regeneratePlayer(state, DEFAULT_WEAPON, null, 30_000).ammo).toBeNull();
   });
 });
 

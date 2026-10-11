@@ -30,7 +30,7 @@ export const POWERUP_DEFINITIONS: Readonly<Record<PowerupKind, { name: string; a
 };
 
 export const POWERUP_KINDS = Object.keys(POWERUP_DEFINITIONS) as PowerupKind[];
-export const REGEN_INTERVAL_MS = 10_000;
+export const REGEN_INTERVAL_MS = 6_000;
 export const MINIBOSS_POWERUP_CHANCE_PER_10K = 50;
 export const REGULAR_MONSTER_POWERUP_CHANCE_PER_10K = REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K;
 
