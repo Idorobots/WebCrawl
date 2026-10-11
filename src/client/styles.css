@@ -736,8 +736,13 @@ button:hover {
   color: #7fc7ef;
 }
 
-#restartButton {
-  width: 100%;
+.death-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.death-actions button {
+  flex: 1 1 0;
   padding: 10px 12px;
 }
 
@@ -780,7 +785,7 @@ button:hover {
     font-size: 11px;
   }
 
-  #restartButton {
+  .death-actions button {
     min-height: 44px;
   }
 }

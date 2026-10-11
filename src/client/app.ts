@@ -444,6 +444,7 @@ const deathLootCrystalsEl = requireElement<HTMLElement>("#deathLootCrystals");
 const deathPowerupInventoryEl = requireElement<HTMLElement>("#deathPowerupInventory");
 const highScoreRowsEl = requireElement<HTMLTableSectionElement>("#highScoreRows");
 const restartButton = requireElement<HTMLButtonElement>("#restartButton");
+const deathWelcomeButton = requireElement<HTMLButtonElement>("#deathWelcomeButton");
 
 const urlBar = requireElement<HTMLDivElement>("#urlBar");
 const urlBarText = requireElement<HTMLElement>("#urlBarText");
@@ -987,6 +988,7 @@ function recordHighScore(): { scores: HighScore[]; rank: number | null } {
 function showDeathModal(): void {
   hideVendingPreview();
   restartButton.disabled = false;
+  deathWelcomeButton.disabled = false;
   const { scores, rank } = recordHighScore();
   renderer?.stopStationAmbient();
 
@@ -1037,11 +1039,16 @@ function showDeathModal(): void {
   deathModal.classList.add("open");
 }
 
-restartButton.addEventListener("click", () => {
-  playButtonClick();
+function beginDeathModalClose(): void {
   restartButton.disabled = true;
+  deathWelcomeButton.disabled = true;
   deathModal.classList.remove("open");
   deathModal.classList.add("closing");
+}
+
+restartButton.addEventListener("click", () => {
+  playButtonClick();
+  beginDeathModalClose();
   const url = runStartUrl;
   if (!url) {
     window.setTimeout(() => location.reload(), SCREEN_FADE_MS);
@@ -1056,6 +1063,17 @@ restartButton.addEventListener("click", () => {
     updateHudPanels();
     gameUi.classList.add("game-ui-ready");
     void loadPage(url, {});
+  }, SCREEN_FADE_MS);
+});
+
+deathWelcomeButton.addEventListener("click", () => {
+  playButtonClick();
+  beginDeathModalClose();
+  window.setTimeout(() => {
+    deathModal.hidden = true;
+    deathModal.classList.remove("closing");
+    document.querySelector("#hud")?.classList.remove("game-over");
+    returnToWelcome();
   }, SCREEN_FADE_MS);
 });
 
