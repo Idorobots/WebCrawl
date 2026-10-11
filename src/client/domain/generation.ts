@@ -273,10 +273,12 @@ export function bonusLootDrop(source: Monster | Decoration, namespace: string, s
 }
 
 const ROOM_SCENERY_THEME_IDS = Object.keys(ROOM_SCENERY_THEMES) as RoomSceneryTheme[];
+const NON_ARENA_ROOM_SCENERY_THEME_IDS = ROOM_SCENERY_THEME_IDS.filter(id => id !== "arena");
 
-export function roomSceneryThemeForRoom(room: Pick<GraphNode, "lootSeed">): RoomSceneryTheme {
-  return ROOM_SCENERY_THEME_IDS[
-    stableHash(`${room.lootSeed}|scenery-theme`) % ROOM_SCENERY_THEME_IDS.length
+export function roomSceneryThemeForRoom(room: Pick<GraphNode, "lootSeed" | "isBossArena">): RoomSceneryTheme {
+  if (room.isBossArena === true) return "arena";
+  return NON_ARENA_ROOM_SCENERY_THEME_IDS[
+    stableHash(`${room.lootSeed}|scenery-theme`) % NON_ARENA_ROOM_SCENERY_THEME_IDS.length
   ]!;
 }
 
@@ -394,7 +396,7 @@ export function decorationSpecsForRoom(
     });
   }
   const decorations: Decoration[] = [];
-  const vendingKind = vendingKindForRoom(room, themeId === "medical", ROOM_SCENERY_THEME_IDS.length);
+  const vendingKind = vendingKindForRoom(room, themeId === "medical", NON_ARENA_ROOM_SCENERY_THEME_IDS.length);
   if (vendingKind) {
     const type = VENDING_DEFINITIONS[vendingKind];
     const slotIndex = slots.findIndex(position => decorationFits(position, type, room, spawners, walls));

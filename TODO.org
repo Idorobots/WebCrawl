@@ -1551,13 +1551,15 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - State "DONE"       from              [2026-10-11 Sun 13:30]
 :END:
 - Healthbar lights up whenever an enemy or scenery is destroyed. It should only light up whenever the player takes non-zero damage.
-* Visual bugs
+* DONE Visual bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-10-11 Sun 14:28]
+:END:
 - Vending mashines need to have an aura.
 - Vending machine "debris" sprites should behave like indestructible scenery - currently these are placed at a lower layer making the player & monsters always apear on top.
 - Dropped weapons appear under the pedenstal, these should appear in front of the pedestal sprite at all times.
 - Powerups & weapons should appear above regular loot.
 - Powerups & weapons spawn way above the pedestal - the offsets on these should be lowered by a third.
-
 - Arena scenery theme should be reserved for boss arenas, not used for any other rooms.
 
 * Visual bugs

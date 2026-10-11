@@ -156,7 +156,9 @@ describe("vending machines", () => {
 
   it("keeps machines rare, crystals half as common, and medical vending exclusive to medical themes", () => {
     const counts = { medical: 0, ammo: 0, energy: 0, crystal: 0 };
-    const themeCount = Object.keys(ROOM_SCENERY_THEMES).length;
+    // The arena theme is reserved for boss arenas, so non-boss rooms pick from
+    // the remaining themes and medical compensation uses that eligible count.
+    const themeCount = Object.keys(ROOM_SCENERY_THEMES).length - 1;
     for (let index = 0; index < 20_000; index += 1) {
       const candidate = room(index);
       const medical = roomSceneryThemeForRoom(candidate) === "medical";

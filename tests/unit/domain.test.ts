@@ -1384,6 +1384,19 @@ describe("deterministic room contents", () => {
     expect(ROOM_SCENERY_THEMES.escape.primary.some(entry => entry.definition.definitionId === "evacuation-kiosk")).toBe(true);
   });
 
+  it("reserves the arena scenery theme for boss arenas", () => {
+    const regularRooms = Array.from({ length: 800 }, (_, index) => node(index + 60_000, 0, 1, {
+      tag: "img",
+      lootSeed: stableHash(`arena-theme-${index}`),
+    }));
+    expect(regularRooms.some(room => roomSceneryThemeForRoom(room) === "arena")).toBe(false);
+    const arenas = Array.from({ length: 200 }, (_, index) => node(index + 70_000, 0, 1, {
+      isBossArena: true,
+      lootSeed: stableHash(`boss-theme-${index}`),
+    }));
+    expect(arenas.every(room => roomSceneryThemeForRoom(room) === "arena")).toBe(true);
+  });
+
   it("relocates generated monsters away from obstacle footprints", () => {
     const combatRoom = node(9, 0, 1, {
       x: 500,
@@ -1599,7 +1612,11 @@ describe("deterministic room contents", () => {
     expect(arenaRegular / sectionRegular).toBeLessThanOrEqual(0.4);
     const sceneryFor = (room: GraphNode) => decorationSpecsForRoom(room, 1)
       .map(item => ({ kind: item.kind, obstacle: item.obstacle, destructible: item.destructible, visualOffset: item.visualOffset }));
-    expect(sceneryFor(script)).toEqual(sceneryFor(section));
+    // Boss arenas get the arena theme instead of a rolled theme, but still the
+    // same amount of scenery as a regular room.
+    expect(sceneryFor(script)).toHaveLength(sceneryFor(section).length);
+    expect(roomSceneryThemeForRoom(script)).toBe("arena");
+    expect(roomSceneryThemeForRoom(section)).not.toBe("arena");
     expect(monsterSpecsForRoom({ ...script, isBossArena: false }).some(monster => monster.bossKind)).toBe(false);
   });
 
