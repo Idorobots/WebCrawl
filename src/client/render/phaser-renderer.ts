@@ -751,6 +751,19 @@ export class PhaserRenderer {
     delete this.host.dataset.stationAmbient;
   }
 
+  /** Tear the Phaser game down completely so a fresh renderer can reuse the host. */
+  destroy(): void {
+    this.clear();
+    this.hostResizeObserver?.disconnect();
+    this.hostResizeObserver = null;
+    const game = this.game;
+    this.game = null;
+    this.scene = null;
+    this.lightPipeline = null;
+    game?.destroy(true);
+    (window as unknown as { __webcrawlScene?: Phaser.Scene }).__webcrawlScene = undefined;
+  }
+
   playStationAmbient(): void {
     this.stationAmbientEnabled = true;
     const scene = this.scene;

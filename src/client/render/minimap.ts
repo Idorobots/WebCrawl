@@ -326,6 +326,18 @@ export class MinimapRenderer {
     context.clip();
   }
 
+  /** Drop cached geometry and the drawn image so an unloaded level can be collected. */
+  clear(): void {
+    this.geometry = null;
+    this.revealed = new Set();
+    this.visibility = null;
+    const context = this.canvas.getContext("2d");
+    context?.setTransform(1, 0, 0, 1, 0, 0);
+    context?.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    const backgroundContext = this.background.getContext("2d");
+    backgroundContext?.clearRect(0, 0, this.background.width, this.background.height);
+  }
+
   private renderBackground(): void {
     const context = this.background.getContext("2d");
     const geometry = this.geometry!;

@@ -1058,6 +1058,7 @@ restartButton.addEventListener("click", () => {
     deathModal.hidden = true;
     deathModal.classList.remove("closing");
     document.querySelector("#hud")?.classList.remove("game-over");
+    unloadLevel();
     resetRunState();
     equipDefaultWeapon();
     updateHudPanels();
@@ -1073,6 +1074,7 @@ deathWelcomeButton.addEventListener("click", () => {
     deathModal.hidden = true;
     deathModal.classList.remove("closing");
     document.querySelector("#hud")?.classList.remove("game-over");
+    unloadLevel();
     returnToWelcome();
   }, SCREEN_FADE_MS);
 });
@@ -1135,6 +1137,42 @@ function resetRunState(): void {
   runStats.bossKills = 0;
   runStats.shotsFired = 0;
   if (killsCountEl) killsCountEl.textContent = "0";
+}
+
+/** Drop the current level once a run ends so its objects, sounds and data can be collected. */
+function unloadLevel(): void {
+  renderer?.stopMovementSounds();
+  renderer?.stopStationAmbient();
+  renderer?.clear();
+  bullets = [];
+  currentMonsters = [];
+  currentDecorations = [];
+  currentVendingMachines = [];
+  currentSpawners = [];
+  currentStairs = [];
+  currentLoot = [];
+  monsterCells = new Map();
+  obstacleCells = new Map();
+  sceneryHitboxCells = new Map();
+  monsterFootprintIndex.rebuild([]);
+  sharedMonsterPaths.clear();
+  monsterPathSearchBudget.clear();
+  wallFootprints = new WallRectIndex([]);
+  wallProjectileHitboxes = new WallRectIndex([]);
+  currentLayout = null;
+  currentGraph = null;
+  currentAuthoredRooms = null;
+  currentCorridorJunctions = [];
+  currentRoomsById = new Map();
+  nextRoomTowardPlayer = new Map();
+  floorGeometry = null;
+  currentRoomId = null;
+  minimapVisibilityLayout = null;
+  minimapVisibilityKey = "";
+  minimapRenderer.clear();
+  floorSnapshots.clear();
+  portalContacts.clear();
+  vendingContacts.clear();
 }
 
 function returnToWelcome(): void {
@@ -3019,6 +3057,9 @@ function runGameTick(timestamp: number): void {
   }
 
   updateMonsterPositions();
+
+  // The player died this tick; silence monster walk loops the tick may have restarted.
+  if (!playerAlive) renderer.stopMovementSounds();
 }
 
 function updatePlayerInputFrame(): void {
@@ -3960,6 +4001,7 @@ function applyAimTarget(target: Point): void {
 }
 
 function updatePlayerAimFromPointer(): void {
+  if (!renderer) return;
   if (!pointerInViewport || !pointerClientPosition) {
     renderer.setCameraTarget(player);
     updateIdleFlashlight();
@@ -4098,8 +4140,8 @@ gameViewport.addEventListener("pointerleave", () => {
   pointerInViewport = false;
   pointerClientPosition = null;
   primaryPointerDown = false;
-  renderer.setCameraTarget(player);
-  renderer.setFlashlightTarget(null);
+  renderer?.setCameraTarget(player);
+  renderer?.setFlashlightTarget(null);
 });
 
 window.addEventListener("pointerup", event => {
@@ -4494,6 +4536,9 @@ async function loadPage(
 }
 
 async function loadRenderer(): Promise<void> {
+  // A previous session's Phaser game must be torn down, or its stale canvas
+  // stays stacked over the host and hides the next level.
+  renderer?.destroy();
   const { PhaserRenderer } = await import("./render/phaser-renderer");
   renderer = new PhaserRenderer(gameCanvasHost, lightDetail);
 }
