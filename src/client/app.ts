@@ -3311,7 +3311,7 @@ function checkLoot(): void {
     ) {
       collectedLoot.add(item.id);
       renderer.playPickupSound(
-        item.kind === "weapon" ? "weapon"
+        item.kind === "weapon" || item.kind === "core" ? "weapon"
         : item.kind === "powerup" ? "powerup"
         : item.kind === "credit" ? "ram"
         : "generic",

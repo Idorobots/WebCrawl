@@ -1596,7 +1596,10 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 * Visual bugs
 - Sentry ballistic directional animations are scaled weird.
 - Some scenery objects should be placed only on walls as decorations
-* Audio bugs
+* DONE Audio bugs
+:LOGBOOK:
+- State "DONE"       from              [2026-10-13 Tue 19:34]
+:END:
 - After the player dies, the monster walking loops keep playing. Furthermore, when the level is restarted, they keep playing. When a new level is started, the old level is still "visible" under the loadnig screen. When the player dies, the old level should be unloaded - there's no need to keep these objects in memory.
 - When the game runs in the background all sounds generated are queued and play all on once when the game is foregrounded.
 - Picking up ammo should play the same sound as equiping a weapon.
