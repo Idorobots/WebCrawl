@@ -1457,6 +1457,7 @@ Types:
 - During energy dash, the player should not pick up pickups.
 - Bullet stun and slowdown offects should stack for longer effect.
 - Hovering over HUD panels makes the flashlight cursor return to center. All UI elements should behave just like the minimap.
+- Sometimes vending machines are absent, but the price panel still appears.
 
 * DONE Enemy rebalance
 :LOGBOOK:

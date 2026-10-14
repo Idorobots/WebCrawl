@@ -76,12 +76,10 @@ export interface WallModuleStyle {
   offsetY: number;
 }
 
-/**
- * Vertical door sprites are three segments tall with the passable opening
- * centered this many segments above the sprite's bottom edge; the module is
- * anchored so the opening lines up with the corridor centerline.
- */
-const VERTICAL_DOOR_OPENING_SEGMENTS_FROM_BOTTOM = 1;
+export interface DoorHalfStyle extends WallModuleStyle {
+  /** Floor-level Y anchor, including the wall's boundary tie bias. */
+  orderingOffsetY: number;
+}
 
 function pointKey(point: Point): string {
   return `${point.x}:${point.y}`;
@@ -339,17 +337,20 @@ export function wallModuleStyle(module: WallModulePlan, segmentSize: number): Wa
   }
 }
 
-export function doorModuleStyle(side: DoorModulePlan["side"], segmentSize: number): WallModuleStyle {
+/** Each half sorts independently; transparent sprite padding is not its floor anchor. */
+export function doorModuleStyles(side: DoorModulePlan["side"], segmentSize: number): DoorHalfStyle[] {
   const s = segmentSize;
-  return side === "N" || side === "S"
-    ? { asset: ASSETS.doorHorizontal, width: 2 * s, height: s, offsetX: 0, offsetY: -s / 2 }
-    : {
-        asset: ASSETS.doorVertical,
-        width: s,
-        height: 3 * s,
-        offsetX: -s / 2,
-        offsetY: -(1.5 - VERTICAL_DOOR_OPENING_SEGMENTS_FROM_BOTTOM) * s,
-      };
+  if (side === "N" || side === "S") {
+    const orderingOffsetY = side === "N" ? 0 : 1;
+    return [
+      { asset: ASSETS.doorHorizontalLeft, width: s, height: s, offsetX: -s / 2, offsetY: -s / 2, orderingOffsetY },
+      { asset: ASSETS.doorHorizontalRight, width: s, height: s, offsetX: s / 2, offsetY: -s / 2, orderingOffsetY },
+    ];
+  }
+  return [
+    { asset: ASSETS.doorVerticalTop, width: s, height: 2 * s, offsetX: -s / 2, offsetY: -s, orderingOffsetY: -s / 2 + 1 },
+    { asset: ASSETS.doorVerticalDown, width: s, height: s, offsetX: -s / 2, offsetY: s / 2, orderingOffsetY: s / 2 + 1 },
+  ];
 }
 
 function directionsAt(point: Point, segments: readonly CorridorSegmentPlan[]): Set<Direction> {

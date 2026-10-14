@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_FLOOR_ASSETS, DAMAGED_FLOOR_ASSETS, FLOOR_DAMAGE_CHANCE_PERCENT } from "../../src/client/config";
+import { ASSETS, BASE_FLOOR_ASSETS, DAMAGED_FLOOR_ASSETS, FLOOR_DAMAGE_CHANCE_PERCENT } from "../../src/client/config";
 import { layoutOrthogonal } from "../../src/client/domain/layout";
 import { WORLD_GEOMETRY } from "../../src/client/domain/specs";
 import { connectedRoomAdjacency, corridorJunctions, junctionRoomsAtPoint } from "../../src/client/domain/corridor-junctions";
@@ -13,7 +13,7 @@ import { PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS } from "../../src/client/domai
 import {
   buildCorridorRenderPlan,
   buildRoomWalls,
-  doorModuleStyle,
+  doorModuleStyles,
   wallModuleStyle,
   type CorridorCornerKind,
   type DoorModulePlan,
@@ -669,21 +669,48 @@ describe("wall module styles", () => {
     expect(style("E", "bottom-right")).toMatchObject({ offsetX: 0, offsetY: -SEGMENT_SIZE / 2, height: SEGMENT_SIZE * 2 });
   });
 
-  it("spans horizontal doors over two segments and vertical doors over three", () => {
-    expect(doorModuleStyle("N", SEGMENT_SIZE)).toMatchObject({
-      width: SEGMENT_SIZE * 2,
-      height: SEGMENT_SIZE,
-      offsetX: 0,
-      offsetY: -SEGMENT_SIZE / 2,
-    });
-    expect(doorModuleStyle("S", SEGMENT_SIZE)).toMatchObject({ offsetX: 0, offsetY: -SEGMENT_SIZE / 2 });
-    expect(doorModuleStyle("E", SEGMENT_SIZE)).toMatchObject({
-      width: SEGMENT_SIZE,
-      height: SEGMENT_SIZE * 3,
-      offsetX: -SEGMENT_SIZE / 2,
-      offsetY: -SEGMENT_SIZE / 2,
-    });
-    expect(doorModuleStyle("W", SEGMENT_SIZE)).toMatchObject({ offsetX: -SEGMENT_SIZE / 2, offsetY: -SEGMENT_SIZE / 2 });
+  it.each(["N", "S"] as const)("joins horizontal %s halves at the opening without changing the doorway bounds", side => {
+    const halves = doorModuleStyles(side, SEGMENT_SIZE);
+    expect(halves.map(half => half.asset)).toEqual([ASSETS.doorHorizontalLeft, ASSETS.doorHorizontalRight]);
+    const [left, right] = halves;
+    expect(left!.offsetX - left!.width / 2).toBe(-SEGMENT_SIZE);
+    expect(left!.offsetX + left!.width / 2).toBe(0);
+    expect(right!.offsetX - right!.width / 2).toBe(0);
+    expect(right!.offsetX + right!.width / 2).toBe(SEGMENT_SIZE);
+    for (const half of halves) {
+      expect(half.offsetY - half.height / 2).toBe(-SEGMENT_SIZE);
+      expect(half.offsetY + half.height / 2).toBe(0);
+      expect(half.orderingOffsetY).toBe(side === "N" ? 0 : 1);
+    }
+  });
+
+  it.each(["E", "W"] as const)("joins vertical %s halves with their original proportions and doorway bounds", side => {
+    const halves = doorModuleStyles(side, SEGMENT_SIZE);
+    expect(halves.map(half => half.asset)).toEqual([ASSETS.doorVerticalTop, ASSETS.doorVerticalDown]);
+    const [top, down] = halves;
+    expect(top!.height).toBe(2 * down!.height);
+    expect(top!.offsetY - top!.height / 2).toBe(-2 * SEGMENT_SIZE);
+    expect(top!.offsetY + top!.height / 2).toBe(0);
+    expect(down!.offsetY - down!.height / 2).toBe(0);
+    expect(down!.offsetY + down!.height / 2).toBe(SEGMENT_SIZE);
+    for (const half of halves) {
+      expect(half.offsetX - half.width / 2).toBe(-SEGMENT_SIZE);
+      expect(half.offsetX + half.width / 2).toBe(0);
+    }
+  });
+
+  it.each(["E", "W"] as const)("sorts actors and scenery in a vertical %s opening between the two jambs", side => {
+    const doorY = 500;
+    const [top, down] = doorModuleStyles(side, SEGMENT_SIZE);
+    const topDepth = doorY + top!.orderingOffsetY;
+    const downDepth = doorY + down!.orderingOffsetY;
+    for (const objectY of [doorY + WORLD_GEOMETRY.verticalDoorPassableOffsetY, doorY]) {
+      expect(topDepth).toBeLessThan(objectY);
+      expect(downDepth).toBeGreaterThan(objectY);
+    }
+    expect(topDepth).toBeGreaterThan(doorY - SEGMENT_SIZE);
+    expect(downDepth).toBeLessThan(doorY + SEGMENT_SIZE);
+    expect(downDepth).toBe(doorY + SEGMENT_SIZE / 2 + 1);
   });
 });
 

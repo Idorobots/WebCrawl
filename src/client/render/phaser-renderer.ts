@@ -65,7 +65,7 @@ import type {
 import {
   buildCorridorRenderPlan,
   buildRoomWalls,
-  doorModuleStyle,
+  doorModuleStyles,
   roomDoorsForLayout,
   wallModuleStyle,
   type CorridorRenderPlan,
@@ -129,18 +129,6 @@ function wallDepth(module: WallModulePlan): number {
   return yDepth(module.y + SEGMENT_SIZE / 2, 1);
 }
 
-/**
- * Doors follow their wall's anchor: E/W anchor at the bottom of their lowest
- * cell (Y ordering, so wall segments lower on screen draw in front), N doors
- * anchor at the boundary line, S doors at the boundary line (+1 tie bias).
- */
-function doorDepth(door: DoorModulePlan): number {
-  if (door.side === "E" || door.side === "W") {
-    return yDepth(door.position.y + SEGMENT_SIZE / 2, 1);
-  }
-  if (door.side === "N") return yDepth(door.position.y);
-  return yDepth(door.position.y, 1);
-}
 const PORTAL_FRAME_MS = 125;
 const MAX_LIGHTS = supportedMaxLights();
 const MAX_BULLET_LIGHTS = Math.min(192, MAX_LIGHTS);
@@ -1160,7 +1148,9 @@ export class PhaserRenderer {
       statics.push(this.rememberStatic(this.createEnvironmentModule(module).setAlpha(alpha)));
     }
     for (const door of doors.filter(door => !door.sharedTarget)) {
-      statics.push(this.rememberStatic(this.createDoor(door).setAlpha(alpha).setDepth(doorDepth(door))));
+      for (const half of this.createDoorHalves(door)) {
+        statics.push(this.rememberStatic(half.setAlpha(alpha)));
+      }
     }
     this.roomStatics.set(room.id, statics);
   }
@@ -1421,14 +1411,14 @@ export class PhaserRenderer {
     return this.layout ? roomDoorsForLayout(this.layout, room) : [];
   }
 
-  private createDoor(door: DoorModulePlan): Phaser.GameObjects.Image {
+  private createDoorHalves(door: DoorModulePlan): Phaser.GameObjects.Image[] {
     const scene = this.scene!;
-    const style = doorModuleStyle(door.side, SEGMENT_SIZE);
-    return this.illuminate(scene.add.image(
+    return doorModuleStyles(door.side, SEGMENT_SIZE).map(style => this.illuminate(scene.add.image(
       door.position.x + style.offsetX,
       door.position.y + style.offsetY,
       textureKey(style.asset),
-    ).setDisplaySize(style.width, style.height));
+    ).setDisplaySize(style.width, style.height)
+      .setDepth(yDepth(door.position.y + style.orderingOffsetY))));
   }
 
   private rememberStatic<T extends Phaser.GameObjects.GameObject>(object: T): T {
