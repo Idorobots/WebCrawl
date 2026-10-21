@@ -69,6 +69,40 @@ const unlockedVisibility = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("minimap geometry and visibility", () => {
+  it("marks a known room's corridor entrance without exposing the corridor or remote door", () => {
+    const layout = floor();
+    const revealed = new Set([0]);
+    const visibility = minimapVisibilityForPlayer(layout, revealed, {}, false, new Set(), new Set());
+    const geometry = buildMinimapGeometry(layout, revealed, 300, 300, visibility);
+    expect(geometry.links).toEqual([]);
+    expect(geometry.doors).toEqual([{
+      position: { x: -200, y: WORLD_GEOMETRY.verticalDoorPassableOffsetY }, vertical: true,
+    }]);
+  });
+
+  it("marks both corridor endpoints using their own orientations without revealing the remote room", () => {
+    const layout = floor();
+    layout.links[0]!.targetDirection = "N";
+    const revealed = new Set([0]);
+    const visibility = minimapVisibilityForPlayer(layout, revealed, {}, false, new Set(), new Set(["0-1"]));
+    const geometry = buildMinimapGeometry(layout, revealed, 300, 300, visibility);
+    expect(geometry.roomIds).toEqual(new Set([0]));
+    expect(geometry.doors).toEqual([
+      { position: { x: -200, y: WORLD_GEOMETRY.verticalDoorPassableOffsetY }, vertical: true },
+      { position: { x: 200, y: 0 }, vertical: false },
+    ]);
+  });
+
+  it("deduplicates shared corridor entrances and hides entirely undiscovered doors", () => {
+    const layout = floor();
+    layout.links.push({ ...layout.links[0]!, id: "shared" });
+    const revealed = new Set([0]);
+    const visibility = minimapVisibilityForPlayer(layout, revealed, {}, false, new Set(), new Set());
+    expect(buildMinimapGeometry(layout, revealed, 300, 300, visibility).doors).toHaveLength(1);
+    const hidden = minimapVisibilityForPlayer(layout, new Set(), {}, false, new Set(), new Set());
+    expect(buildMinimapGeometry(layout, new Set(), 300, 300, hidden).doors).toEqual([]);
+  });
+
   it("keeps corridors hidden until discovered even when both endpoint rooms are known", () => {
     const layout = floor();
     const revealed = new Set([0, 1]);
@@ -143,7 +177,7 @@ describe("minimap geometry and visibility", () => {
     }
     expect(buildMinimapGeometry(layout, new Set([0, 1]), 300, 300).doors).toHaveLength(1);
     expect(buildMinimapGeometry(layout, new Set(), 300, 300).doors).toEqual([]);
-    expect(buildMinimapGeometry(floor(), new Set([0, 1]), 300, 300).doors).toEqual([]);
+    expect(buildMinimapGeometry(floor(), new Set([0, 1]), 300, 300).doors).toHaveLength(2);
   });
 
   it("groups portals once per room and direction, including disabled portals, without exposing hidden rooms", () => {
@@ -300,11 +334,11 @@ describe("minimap powerup composition", () => {
   it("stacks expansion by connected-room hops, handles cycles and does not mutate exploration", () => {
     const floor = layout();
     const revealed = new Set([0]);
-    for (const [stacks, expected] of [[0, [0]], [1, [0, 1]], [2, [0, 1, 2, 4]], [3, [0, 1, 2, 3, 4]], [100, [0, 1, 2, 3, 4]]] as const) {
+    for (const [stacks, expected, doorCount] of [[0, [0], 1], [1, [0, 1], 2], [2, [0, 1, 2, 4], 4], [3, [0, 1, 2, 3, 4], 5], [100, [0, 1, 2, 3, 4], 5]] as const) {
       const visibility = minimapVisibilityForPlayer(floor, revealed, { map_expansion: stacks });
       const geometry = buildMinimapGeometry(floor, revealed, 300, 300, visibility);
       expect(geometry.rooms.map(node => node.id)).toEqual(expected);
-      expect(geometry.doors).toHaveLength(1);
+      expect(geometry.doors).toHaveLength(doorCount);
       expect(geometry.links.every(link => revealed.has(link.source.id) || revealed.has(link.target.id) ||
         (geometry.roomIds.has(link.source.id) && geometry.roomIds.has(link.target.id)))).toBe(true);
     }

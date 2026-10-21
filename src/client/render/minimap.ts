@@ -93,15 +93,32 @@ export function buildMinimapGeometry(
   const rooms = layout.nodes.filter(room => visibility.room(room, revealed));
   const links = layout.links.filter(link => visibility.corridor(link, revealed));
   const roomIds = new Set(rooms.map(room => room.id));
-  const doors = links.flatMap(link => {
-    const point = link.points[0];
-    if (!link.direct || !point || (!roomIds.has(link.source.id) && !roomIds.has(link.target.id))) return [];
-    const vertical = link.direction === "E" || link.direction === "W";
-    return [{
-      position: { x: point.x, y: point.y + (vertical ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0) },
-      vertical,
-    }];
-  });
+  const visibleLinkIds = new Set(links.map(link => link.id));
+  const doors: MinimapGeometry["doors"] = [];
+  const doorKeys = new Set<string>();
+  for (const link of layout.links) {
+    const corridorVisible = visibleLinkIds.has(link.id);
+    const endpoints = link.direct
+      ? [{ point: link.points[0], side: link.direction,
+          visible: roomIds.has(link.source.id) || roomIds.has(link.target.id) }]
+      : [
+          { point: link.points[0], side: link.direction, visible: corridorVisible || roomIds.has(link.source.id) },
+          { point: link.points[link.points.length - 1],
+            side: link.targetDirection ?? ({ N: "S", E: "W", S: "N", W: "E" } as const)[link.direction],
+            visible: corridorVisible || roomIds.has(link.target.id) },
+        ];
+    for (const { point, side, visible } of endpoints) {
+      if (!point || !visible) continue;
+      const vertical = side === "E" || side === "W";
+      const key = `${point.x}:${point.y}:${vertical}`;
+      if (doorKeys.has(key)) continue;
+      doorKeys.add(key);
+      doors.push({
+        position: { x: point.x, y: point.y + (vertical ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0) },
+        vertical,
+      });
+    }
+  }
   const center = { x: width / 2, y: height / 2 };
   const radius = Math.max(0, Math.min(width, height) / 2 - 1);
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
