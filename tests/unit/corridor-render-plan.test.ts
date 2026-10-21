@@ -688,10 +688,10 @@ describe("wall module styles", () => {
     const halves = doorModuleStyles(side, SEGMENT_SIZE);
     expect(halves.map(half => half.asset)).toEqual([ASSETS.doorVerticalTop, ASSETS.doorVerticalDown]);
     const [top, down] = halves;
-    expect(top!.height).toBe(2 * down!.height);
+    expect(top!.height).toBe(down!.height);
     expect(top!.offsetY - top!.height / 2).toBe(-2 * SEGMENT_SIZE);
     expect(top!.offsetY + top!.height / 2).toBe(0);
-    expect(down!.offsetY - down!.height / 2).toBe(0);
+    expect(down!.offsetY - down!.height / 2).toBe(-SEGMENT_SIZE);
     expect(down!.offsetY + down!.height / 2).toBe(SEGMENT_SIZE);
     for (const half of halves) {
       expect(half.offsetX - half.width / 2).toBe(-SEGMENT_SIZE);

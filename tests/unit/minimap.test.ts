@@ -69,6 +69,25 @@ const unlockedVisibility = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("minimap geometry and visibility", () => {
+  it("keeps corridors hidden until discovered even when both endpoint rooms are known", () => {
+    const layout = floor();
+    const revealed = new Set([0, 1]);
+    const discovered = new Set<string>();
+    const visibility = minimapVisibilityForPlayer(layout, revealed, {}, false, new Set(), discovered);
+    expect(buildMinimapGeometry(layout, revealed, 300, 300, visibility).links).toEqual([]);
+    discovered.add("0-1");
+    expect(buildMinimapGeometry(layout, revealed, 300, 300, visibility).links).toEqual(layout.links);
+  });
+
+  it("reveals a discovered corridor without revealing its destination room", () => {
+    const layout = floor();
+    const revealed = new Set([0]);
+    const visibility = minimapVisibilityForPlayer(layout, revealed, {}, false, new Set(), new Set(["0-1"]));
+    const geometry = buildMinimapGeometry(layout, revealed, 300, 300, visibility);
+    expect(geometry.links).toEqual(layout.links);
+    expect(geometry.roomIds).toEqual(new Set([0]));
+  });
+
   it("centers the entire discovered floor and fits room corners and corridor edges inside the circle", () => {
     const layout = floor();
     const geometry = buildMinimapGeometry(layout, new Set([0, 1, 2]), 300, 300);

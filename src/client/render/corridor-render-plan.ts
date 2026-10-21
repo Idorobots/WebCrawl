@@ -349,7 +349,7 @@ export function doorModuleStyles(side: DoorModulePlan["side"], segmentSize: numb
   }
   return [
     { asset: ASSETS.doorVerticalTop, width: s, height: 2 * s, offsetX: -s / 2, offsetY: -s, orderingOffsetY: -s / 2 + 1 },
-    { asset: ASSETS.doorVerticalDown, width: s, height: s, offsetX: -s / 2, offsetY: s / 2, orderingOffsetY: s / 2 + 1 },
+    { asset: ASSETS.doorVerticalDown, width: s, height: 2 * s, offsetX: -s / 2, offsetY: 0, orderingOffsetY: s / 2 + 1 },
   ];
 }
 

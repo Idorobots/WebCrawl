@@ -43,7 +43,7 @@ import {
   weaponAsset,
   type LootDefinition,
 } from "../domain/world-specs";
-import { buildWallFootprints, wallHitboxes, type WallRect } from "../domain/wall-collision";
+import { buildWallFootprints, closedDoorFootprint, wallHitboxes, type WallRect } from "../domain/wall-collision";
 import { WEAPON_COLORS } from "../domain/weapons";
 import { POWERUP_DEFINITIONS } from "../domain/powerups";
 import { monsterMovementSpeed, monsterStatusTint } from "../domain/monster-status";
@@ -176,6 +176,8 @@ const ONE_SHOT_SOUNDS: Readonly<Record<string, string>> = {
   "sfx-portal-activation": "sounds/alerts/access_granted.mp3",
   "sfx-portal-shutdown": "sounds/alerts/system_infiltrated.mp3",
   "sfx-spawner-spawn": "sounds/scenery/spawner/spawn.mp3",
+  "sfx-door-open": "sounds/scenery/doors/door_open.mp3",
+  "sfx-door-close": "sounds/scenery/doors/door_close.mp3",
   "sfx-content-toggle": "sounds/scenery/content/toggle.mp3",
   "sfx-vending-coin": "sounds/scenery/vending/coin.mp3",
   "sfx-vending-error": "sounds/scenery/vending/error.mp3",
@@ -368,6 +370,10 @@ export class PhaserRenderer {
   private renderDpr = 1;
   private layout: DungeonLayout | null = null;
   private visited = new Set<number>();
+  private visitedCorridors = new Set<string>();
+  onDoorCollisionChanged: ((footprints: WallRect[]) => void) | null = null;
+  private doors: { door: DoorModulePlan; roomId: number; halves: Phaser.GameObjects.Image[]; open: boolean; passable: boolean }[] = [];
+  private doorTimers: Phaser.Time.TimerEvent[] = [];
   private background: Phaser.GameObjects.TileSprite | null = null;
   private backgroundAsset: string = ASSETS.backgroundTechTile;
   private staticObjects: Phaser.GameObjects.GameObject[] = [];
@@ -986,7 +992,8 @@ export class PhaserRenderer {
     sound.once(Phaser.Sound.Events.COMPLETE, () => sound.destroy());
   }
 
-  setWorld(layout: DungeonLayout, visited: ReadonlySet<number>, pageUrl: string): void {
+  setWorld(layout: DungeonLayout, visited: ReadonlySet<number>, pageUrl: string, corridors: ReadonlySet<string> = new Set()): void {
+    this.visitedCorridors = new Set(corridors);
     this.layout = layout;
     this.backgroundAsset = backgroundAssetForUrl(pageUrl);
     this.signageFont = signageFontForUrl(pageUrl);
@@ -1015,7 +1022,8 @@ export class PhaserRenderer {
     this.drawWorld();
   }
 
-  setFog(visited: ReadonlySet<number>): void {
+  setFog(visited: ReadonlySet<number>, corridors: ReadonlySet<string> = this.visitedCorridors): void {
+    this.visitedCorridors = new Set(corridors);
     this.visited = new Set(visited);
     this.updateWorldVisibility();
   }
@@ -1031,8 +1039,8 @@ export class PhaserRenderer {
     const corridorPlan = buildCorridorRenderPlan(this.layout, SEGMENT_SIZE);
     for (const link of this.layout.links) {
       if (link.direct) continue;
-      const visible = this.visited.has(link.source.id) || this.visited.has(link.target.id);
-      this.renderCorridor(link, corridorPlan, visible ? 1 : HIDDEN_WORLD_ALPHA);
+      const visible = this.visitedCorridors.has(link.id);
+      this.renderCorridor(link, corridorPlan, visible ? 1 : 0);
       this.addCorridorLights(link, corridorPlan, visible);
     }
 
@@ -1042,6 +1050,7 @@ export class PhaserRenderer {
       this.addRoomLight(room, visible);
     }
     this.addArenaDoorLights();
+    this.updateDoors(false);
     this.refreshLocalLightVisibility(true);
     this.wallFootprints = SHOW_DEBUG_GEOMETRY ? buildWallFootprints(this.layout) : [];
     this.renderDebugWalls();
@@ -1055,9 +1064,10 @@ export class PhaserRenderer {
       for (const object of this.roomStatics.get(room.id) ?? []) object.setAlpha(alpha);
     }
     for (const link of layout.links) {
-      const alpha = this.visited.has(link.source.id) || this.visited.has(link.target.id) ? 1 : HIDDEN_WORLD_ALPHA;
+      const alpha = this.visitedCorridors.has(link.id) ? 1 : 0;
       for (const object of this.corridorStatics.get(link.id) ?? []) object.setAlpha(alpha);
     }
+    this.updateDoors(true);
     this.refreshLocalLightVisibility(true);
     this.updateStaticWorldVisibility();
   }
@@ -1148,7 +1158,9 @@ export class PhaserRenderer {
       statics.push(this.rememberStatic(this.createEnvironmentModule(module).setAlpha(alpha)));
     }
     for (const door of doors.filter(door => !door.sharedTarget)) {
-      for (const half of this.createDoorHalves(door)) {
+      const halves = this.createDoorHalves(door);
+      this.doors.push({ door, roomId: room.id, halves, open: false, passable: false });
+      for (const half of halves) {
         statics.push(this.rememberStatic(half.setAlpha(alpha)));
       }
     }
@@ -1421,12 +1433,68 @@ export class PhaserRenderer {
       .setDepth(yDepth(door.position.y + style.orderingOffsetY))));
   }
 
+  private updateDoors(animate: boolean): void {
+    if (!this.layout || !this.scene) return;
+    for (const entry of this.doors) {
+      const link = this.layout.links.find(link => {
+        const endpoint = link.source.id === entry.roomId ? link.points[0] :
+          link.target.id === entry.roomId ? link.points[link.points.length - 1] : undefined;
+        return endpoint?.x === entry.door.position.x && endpoint?.y === entry.door.position.y;
+      });
+      if (!link) continue;
+      const corridorKnown = this.visitedCorridors.has(link.id);
+      const roomKnown = this.visited.has(entry.roomId);
+      const shouldOpen = link.direct
+        ? this.visited.has(link.source.id) && this.visited.has(link.target.id)
+        : roomKnown && corridorKnown;
+      const visible = roomKnown || (link.direct
+        ? this.visited.has(link.source.id) || this.visited.has(link.target.id)
+        : corridorKnown);
+      for (const half of entry.halves) half.setAlpha(visible ? 1 : HIDDEN_WORLD_ALPHA);
+      if (entry.open) continue;
+      const styles = doorModuleStyles(entry.door.side, SEGMENT_SIZE);
+      const frame = (suffix: string): void => {
+        entry.halves.forEach((half, index) => half.setTexture(textureKey(
+          styles[index]!.asset.replace("_open.png", `_${suffix}.png`),
+        )));
+        if (suffix === "open" && !entry.passable) {
+          entry.passable = true;
+          this.notifyDoorCollisions();
+        }
+      };
+      if (!shouldOpen) {
+        frame("closed");
+        continue;
+      }
+      entry.open = true;
+      if (!animate) {
+        frame("open");
+        continue;
+      }
+      frame("closed");
+      this.playOneShot("sfx-door-open");
+      // interim_2 is two-thirds closed; interim_1 is one-third closed.
+      ["interim_2", "interim_1", "open"].forEach((suffix, index) => {
+        this.doorTimers.push(this.scene!.time.delayedCall((index + 1) * 100, () => frame(suffix)));
+      });
+    }
+    this.notifyDoorCollisions();
+  }
+
+  private notifyDoorCollisions(): void {
+    this.onDoorCollisionChanged?.(this.doors.filter(entry => !entry.passable)
+      .map(entry => closedDoorFootprint(entry.door)));
+  }
+
   private rememberStatic<T extends Phaser.GameObjects.GameObject>(object: T): T {
     this.staticObjects.push(object);
     return object;
   }
 
   private destroyStaticObjects(): void {
+    for (const timer of this.doorTimers) timer.remove(false);
+    this.doorTimers = [];
+    this.doors = [];
     for (const object of this.staticObjects) object.destroy();
     this.staticObjects.length = 0;
     for (const key of this.floorMarkingTextures) this.scene?.textures.remove(key);
@@ -1608,7 +1676,7 @@ export class PhaserRenderer {
       profile.light.setVisible(profile.enabled && this.lightOnScreen(profile));
     }
     for (const link of layout.links) {
-      const revealed = this.visited.has(link.source.id) || this.visited.has(link.target.id);
+      const revealed = this.visitedCorridors.has(link.id);
       for (const profile of this.corridorLights.get(link.id) ?? []) {
         profile.enabled = revealed;
         profile.light.setVisible(revealed && this.lightOnScreen(profile));

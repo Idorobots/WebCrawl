@@ -29,6 +29,7 @@ export const DISCOVERED_MINIMAP_VISIBILITY: MinimapVisibility = {
 export function minimapVisibilityForPlayer(
   layout: DungeonLayout, revealed: ReadonlySet<number>, powerups: Partial<Record<PowerupKind, number>>,
   portalsOpen = false, portalRoomIds: ReadonlySet<number> = new Set(),
+  discoveredCorridors?: ReadonlySet<string>,
 ): MinimapVisibility {
   const mapped = new Set(revealed);
   const adjacency = new Map<number, number[]>();
@@ -56,8 +57,10 @@ export function minimapVisibilityForPlayer(
   const rag = (powerups.map_loot ?? 0) > 0;
   return {
     room: room => mapped.has(room.id) || (portalsOpen && portalRoomIds.has(room.id)),
-    corridor: link => revealed.has(link.source.id) || revealed.has(link.target.id) ||
-      (mapped.has(link.source.id) && mapped.has(link.target.id)),
+    corridor: link => (link.direct || !discoveredCorridors
+      ? revealed.has(link.source.id) || revealed.has(link.target.id)
+      : discoveredCorridors.has(link.id)) ||
+      (depth > 0 && mapped.has(link.source.id) && mapped.has(link.target.id)),
     pickup: (_item, visible) => rag && visible,
     monster: (_monster, visible) => radar && visible,
     portal: (_stair, visible) => portalsOpen || (rag && visible),

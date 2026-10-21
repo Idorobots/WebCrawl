@@ -63,14 +63,13 @@ import {
   visiblePlayerHitPoint,
 } from "./domain/combat";
 import { beginCrowdDetour, continueCrowdDetour } from "./domain/crowd-navigation";
-import { connectedRoomAdjacency, corridorJunctions, junctionRoomsAtPoint, type CorridorJunction } from "./domain/corridor-junctions";
+import { connectedRoomAdjacency, corridorJunctions, type CorridorJunction } from "./domain/corridor-junctions";
+import { discoveriesAtPoint } from "./domain/discovery";
 import { FloorGeometry } from "./domain/floor-geometry";
 import {
   distanceSquared,
   footprintMoveIsClear,
   footprintsOverlap,
-  pointInCorridor,
-  pointNearDirectDoor,
   roomContainingFloorPoint,
   slideAlongObstacles,
   type EllipseObstacle,
@@ -100,7 +99,7 @@ import {
   type PlayerState,
 } from "./domain/powerups";
 import { forSpatialCells, indexMonsterHitboxes, monsterBlockingRadii, monsterCollisionCandidates, MonsterFootprintIndex, spatialCellKey } from "./domain/spatial";
-import { buildWallFootprints, wallBlocksSegment, wallHitboxes, wallOverlapsEllipse, WallRectIndex } from "./domain/wall-collision";
+import { buildWallFootprints, wallBlocksSegment, wallHitboxes, wallOverlapsEllipse, WallRectIndex, type WallRect } from "./domain/wall-collision";
 import {
   BARREL_EXPLOSION_DAMAGE,
   BOSS_DEFINITIONS,
@@ -140,7 +139,6 @@ import type {
   DungeonLayout,
   GraphNode,
   HighScore,
-  LayoutLink,
   LoadPageOptions,
   LootItem,
   Monster,
@@ -307,10 +305,13 @@ const vendingContacts = new Map<string, number>();
 let currentSpawners: Decoration[] = [];
 const destroyedObstaclesByPage = new Map<string, Map<string, ObstacleState>>();
 let visitedRooms = new Set<number>();
+let visitedCorridors = new Set<string>();
+const discoveredCorridorsByPage = new Map<string, Set<string>>();
 let roomRoutingDirty = true;
 let nextRoomTowardPlayer = new Map<number, number>();
 let floorGeometry: FloorGeometry | null = null;
 let wallFootprints = new WallRectIndex([]);
+let staticWallFootprints: WallRect[] = [];
 let wallProjectileHitboxes = new WallRectIndex([]);
 let obstacleCells = new Map<string, Set<Decoration>>();
 let sceneryHitboxCells = new Map<string, Set<Decoration>>();
@@ -657,7 +658,7 @@ function roomContainingPoint(x: number, y: number): GraphNode | null {
 }
 
 function updateFogOfWar(): void {
-  renderer.setFog(visitedRooms);
+  renderer.setFog(visitedRooms, visitedCorridors);
 
   if (!gameUi.hidden) {
     updateHudPanels();
@@ -682,36 +683,16 @@ function markVisited(room: GraphNode | null): void {
   renderInteractiveObjects();
 }
 
-function pointInCommittedForkBranch(x: number, y: number, link: LayoutLink): boolean {
-  if (link.forkPointIndex === undefined) return pointInCorridor(x, y, link);
-  const fork = link.points[link.forkPointIndex];
-  const next = link.points[link.forkPointIndex + 1];
-  if (!fork || !next) return false;
-  const length = Math.hypot(next.x - fork.x, next.y - fork.y);
-  if (!length) return false;
-  const branchProgress = (
-    (x - fork.x) * (next.x - fork.x) +
-    (y - fork.y) * (next.y - fork.y)
-  ) / length;
-  if (branchProgress <= link.width / 2) return false;
-  return pointInCorridor(x, y, { ...link, points: link.points.slice(link.forkPointIndex) });
-}
-
 function revealRoomsFromCorridor(x: number, y: number): void {
-  // Reveal attached rooms on approach; spaced corridors still require the
-  // player to enter a committed branch before their destination is known.
-  for (const link of currentLayout?.links ?? []) {
-    const sourceVisited = visitedRooms.has(link.source.id);
-    const targetVisited = visitedRooms.has(link.target.id);
-    if (sourceVisited === targetVisited) continue;
-    const knownRoom = sourceVisited ? link.source : link.target;
-    const nearby = link.direct
-      ? pointNearDirectDoor({ x, y }, knownRoom, link)
-      : pointInCommittedForkBranch(x, y, link);
-    if (nearby) markVisited(sourceVisited ? link.target : link.source);
+  if (!currentLayout) return;
+  const discovery = discoveriesAtPoint(currentLayout, currentCorridorJunctions, { x, y }, visitedRooms, visitedCorridors);
+  for (const id of discovery.corridors) visitedCorridors.add(id);
+  if (discovery.corridors.length) {
+    const key = currentStateId ?? currentPageUrl;
+    if (key) discoveredCorridorsByPage.set(key, new Set(visitedCorridors));
+    updateFogOfWar();
   }
-  // Crossings reveal both corridors without requiring a room doorway.
-  if (currentLayout) for (const room of junctionRoomsAtPoint(currentLayout, currentCorridorJunctions, { x, y })) markVisited(room);
+  for (const room of discovery.rooms) markVisited(room);
 }
 
 function updateCurrentRoom(): void {
@@ -737,13 +718,14 @@ function updateCameraForPlayer(immediate = false): void {
 function renderSideMinimap(): void {
   if (!currentLayout || gameUi.hidden || minimapActivityHidden) return;
   const portalsOpen = currentStairs.some(stair => stair.type === "down" && stair.enabled);
-  const key = `${[...visitedRooms].join(",")}|${playerState.powerups.map_expansion ?? 0}|${Boolean(playerState.powerups.map_radar)}|${Boolean(playerState.powerups.map_loot)}|${portalsOpen}`;
+  const key = `${[...visitedRooms].join(",")}|${[...visitedCorridors].join(",")}|${playerState.powerups.map_expansion ?? 0}|${Boolean(playerState.powerups.map_radar)}|${Boolean(playerState.powerups.map_loot)}|${portalsOpen}`;
   if (minimapVisibilityLayout !== currentLayout || minimapVisibilityKey !== key) {
     minimapVisibilityLayout = currentLayout;
     minimapVisibilityKey = key;
     minimapVisibility = minimapVisibilityForPlayer(
       currentLayout, visitedRooms, playerState.powerups,
       portalsOpen, new Set(currentStairs.map(stair => stair.roomId)),
+      visitedCorridors,
     );
   }
   minimapRenderer.render(currentLayout, visitedRooms, currentStairs, currentLoot, currentMonsters, player, minimapVisibility, currentVendingMachines);
@@ -1116,6 +1098,8 @@ function resetRunState(): void {
   gameLoopSuspended = false;
   visitedRooms = new Set();
   discoveredRoomsByPage.clear();
+  discoveredCorridorsByPage.clear();
+  visitedCorridors.clear();
   destroyedObstaclesByPage.clear();
   monsterStatesByPage.clear();
   floorSnapshots.clear();
@@ -1158,6 +1142,7 @@ function unloadLevel(): void {
   sharedMonsterPaths.clear();
   monsterPathSearchBudget.clear();
   wallFootprints = new WallRectIndex([]);
+  staticWallFootprints = [];
   wallProjectileHitboxes = new WallRectIndex([]);
   currentLayout = null;
   currentGraph = null;
@@ -4326,6 +4311,7 @@ function renderGraph(
   nextRoomTowardPlayer = new Map();
 
   const savedDiscovery = discoveredRoomsByPage.get(currentStateId);
+  visitedCorridors = new Set(discoveredCorridorsByPage.get(currentStateId) ?? []);
   visitedRooms = savedDiscovery
     ? new Set([...savedDiscovery].filter(id => layout.nodes.some(node => node.id === id)))
     : new Set();
@@ -4335,6 +4321,7 @@ function renderGraph(
   monsterPathSearchBudget.clear();
 
   const wallRects = buildWallFootprints(layout);
+  staticWallFootprints = wallRects;
   wallFootprints = new WallRectIndex(wallRects);
   wallProjectileHitboxes = new WallRectIndex(wallHitboxes(wallRects));
 
@@ -4384,7 +4371,7 @@ function renderGraph(
   portalContacts.clear();
   updateFloorPortals();
 
-  renderer.setWorld(layout, visitedRooms, pageUrl);
+  renderer.setWorld(layout, visitedRooms, pageUrl, visitedCorridors);
   updateFogOfWar();
   renderDecorations();
 
@@ -4541,6 +4528,16 @@ async function loadRenderer(): Promise<void> {
   renderer?.destroy();
   const { PhaserRenderer } = await import("./render/phaser-renderer");
   renderer = new PhaserRenderer(gameCanvasHost, lightDetail);
+  renderer.onDoorCollisionChanged = doors => {
+    const footprints = [...staticWallFootprints, ...doors];
+    wallFootprints = new WallRectIndex(footprints);
+    wallProjectileHitboxes = new WallRectIndex(wallHitboxes(footprints));
+    sharedMonsterPaths.clear();
+    for (const monster of currentMonsters) {
+      failedMonsterPaths.forget(monster);
+      monster.nextPathRefreshAt = 0;
+    }
+  };
 }
 
 async function startArtDebug(): Promise<void> {

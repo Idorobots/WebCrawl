@@ -1597,6 +1597,7 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 * Visual bugs
 - Sentry ballistic directional animations are scaled weird.
 - Some scenery objects should be placed only on walls as decorations
+- Doors on undiscovered rooms often have the background underneath them, it looks bad.
 * DONE Audio bugs
 :LOGBOOK:
 - State "DONE"       from              [2026-10-13 Tue 19:34]

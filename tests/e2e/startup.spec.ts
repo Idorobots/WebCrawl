@@ -1417,8 +1417,41 @@ test("reveals a directly connected room half a segment before its doorway", asyn
   }).toBeLessThan(2);
   await expect(game).toHaveAttribute("data-visited-rooms", "1");
 
+  await page.evaluate(() => {
+    type DoorImage = { texture?: { key: string }; setTexture(key: string): unknown };
+    const state = window as unknown as {
+      __webcrawlScene: { children: { list: DoorImage[] } };
+      doorFrames: string[];
+    };
+    state.doorFrames = [];
+    const doors = state.__webcrawlScene.children.list.filter(image => image.texture?.key.includes("/doors/"));
+    if (!doors.length || doors.some(image => !image.texture!.key.endsWith("_closed.png"))) {
+      throw new Error("All doors must start closed");
+    }
+    for (const image of doors) {
+      const original = image.setTexture.bind(image);
+      image.setTexture = key => {
+        state.doorFrames.push(key);
+        return original(key);
+      };
+    }
+  });
   await teleportPlayer(page, approach(range - 2));
   await expect.poll(async () => Number(await game.getAttribute("data-visited-rooms"))).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => page.evaluate(() => {
+    const frames = (window as unknown as { doorFrames: string[] }).doorFrames;
+    const opened = frames.find(key => key.endsWith("_open.png"));
+    if (!opened) return [];
+    const prefix = opened.slice(0, -"open.png".length);
+    return frames.filter(key => key.startsWith(prefix)).map(key => key.slice(prefix.length));
+  })).toEqual(["closed.png", "interim_2.png", "interim_1.png", "open.png"]);
+  await teleportPlayer(page, approach(range + 2));
+  await expect.poll(() => page.evaluate(() => {
+    const frames = (window as unknown as { doorFrames: string[] }).doorFrames;
+    const opened = frames.find(key => key.endsWith("_open.png"));
+    const prefix = opened?.slice(0, -"open.png".length);
+    return frames.filter(key => prefix && key.startsWith(prefix)).at(-1);
+  })).toMatch(/_open\.png$/);
 });
 
 test("spawns multiple enemies once another room is revealed", async ({ page }) => {

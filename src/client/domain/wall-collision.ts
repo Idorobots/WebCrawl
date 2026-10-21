@@ -97,6 +97,18 @@ export function wallHitboxes(footprints: readonly WallRect[]): WallRect[] {
   return footprints.map(rect => ({ ...rect, y: rect.y + WALL_HITBOX_SHIFT_Y }));
 }
 
+/** The solid leaf spans the doorway until its opening animation is complete.
+ * Keep it in the same wall band as the permanent jambs. */
+export function closedDoorFootprint(door: DoorModulePlan): WallRect {
+  const vertical = door.side === "E" || door.side === "W";
+  return {
+    x: door.position.x - (vertical ? t : s),
+    y: door.position.y - (vertical ? s : t),
+    width: vertical ? t : 2 * s,
+    height: vertical ? 2 * s : t,
+  };
+}
+
 export class WallRectIndex {
   readonly rects: readonly WallRect[];
   private readonly cells = new Map<string, Set<WallRect>>();
