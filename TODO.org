@@ -1458,6 +1458,8 @@ Types:
 - Bullet stun and slowdown offects should stack for longer effect.
 - Hovering over HUD panels makes the flashlight cursor return to center. All UI elements should behave just like the minimap.
 - Sometimes vending machines are absent, but the price panel still appears.
+- Loot reveal powerup doesn't stack.
+- Luck powerup is too OP
 
 * DONE Enemy rebalance
 :LOGBOOK:
@@ -1598,6 +1600,7 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Sentry ballistic directional animations are scaled weird.
 - Some scenery objects should be placed only on walls as decorations
 - Doors on undiscovered rooms often have the background underneath them, it looks bad.
+- Summoned monsters show an explosion animation.
 * DONE Audio bugs
 :LOGBOOK:
 - State "DONE"       from              [2026-10-13 Tue 19:34]

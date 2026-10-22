@@ -1,6 +1,7 @@
 import type { Bullet, Decoration, EllipseRadii, Monster, MonsterAttackPattern, Point } from "../types";
 import { ellipseRadii, ellipsesOverlap, sweptEllipsesOverlap } from "./geometry";
 import { worldPoint } from "./object-geometry";
+import { DEFAULT_WEAPON } from "./weapons";
 import {
   BARREL_EXPLOSION_RADIUS,
   ENERGY_DASH_DAMAGE_PER_ENERGY,
@@ -142,7 +143,8 @@ export function steerDashDirection(direction: Point, from: Point, target: Point,
   return { x: Math.cos(angle), y: Math.sin(angle) };
 }
 
-/** Gentle, frame-rate-independent homing without changing the projectile's speed. */
+/** Frame-rate-independent homing: faster bullets resist steering regardless
+ * of size. Normalize speed to the standard Token Slinger shot. */
 export function steerPlayerBullet(bullet: Bullet, targets: readonly (Point | Monster)[], aimAid: number, dt: number): void {
   if (bullet.owner !== "player" || aimAid <= 0 || dt <= 0) return;
   const speed = Math.hypot(bullet.vx, bullet.vy);
@@ -158,7 +160,8 @@ export function steerPlayerBullet(bullet: Bullet, targets: readonly (Point | Mon
   }
   if (!nearest) return;
   const direction = steerDashDirection(
-    { x: bullet.vx / speed, y: bullet.vy / speed }, bullet, nearest, aimAid * Math.PI * dt,
+    { x: bullet.vx / speed, y: bullet.vy / speed }, bullet, nearest,
+    aimAid * Math.PI * (DEFAULT_WEAPON.projectileSpeed / speed) * dt,
   );
   bullet.vx = direction.x * speed;
   bullet.vy = direction.y * speed;

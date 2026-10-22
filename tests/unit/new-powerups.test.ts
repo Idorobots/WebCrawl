@@ -18,7 +18,7 @@ describe("combat powerup stacking", () => {
     expect(state.damageMultiplier).toBe(11);
     expect(state.walkSpeedMultiplier).toBe(11);
     expect(state.shotRateMultiplier).toBe(11);
-    expect(state.aimAid).toBeCloseTo(10.2);
+    expect(state.aimAid).toBeCloseTo(25.2);
     state.hp = 5;
     expect(playerAttackDamage(state, 2)).toBe(132);
     expect(receivedPlayerDamage(state, 10)).toBeCloseTo(10 * 0.9 ** 100);

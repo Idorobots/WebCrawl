@@ -141,7 +141,7 @@ describe("player power-ups", () => {
 
 describe("bullet aim aid", () => {
   const bullet = (): Bullet => ({
-    id: "test", owner: "player", x: 0, y: 0, vx: 500, vy: 0, damage: 1, traveled: 0, depthOffsetY: 0,
+    id: "test", owner: "player", x: 0, y: 0, vx: 500, vy: 0, radius: 5, damage: 1, traveled: 0, depthOffsetY: 0,
   });
 
   it("turns gently toward the closest target to the bullet while retaining speed", () => {
@@ -161,6 +161,23 @@ describe("bullet aim aid", () => {
       steerPlayerBullet(shot, targets, aid, 0.1);
       expect(shot).toEqual({ ...bullet(), owner });
     }
+  });
+
+  it("scales steering inversely with speed regardless of bullet size", () => {
+    const targets = [{ x: 0, y: 1_000 }];
+    const normal = bullet();
+    const larger = { ...bullet(), radius: 10 };
+    const faster = { ...bullet(), vx: 1_000 };
+    const slower = { ...bullet(), radius: 10, vx: 125 };
+    for (const shot of [normal, larger, faster, slower]) {
+      const speed = Math.hypot(shot.vx, shot.vy);
+      steerPlayerBullet(shot, targets, 0.5, 0.1);
+      expect(Math.hypot(shot.vx, shot.vy)).toBeCloseTo(speed);
+    }
+    const angle = (shot: Bullet) => Math.atan2(shot.vy, shot.vx);
+    expect(angle(larger)).toBeCloseTo(angle(normal));
+    expect(angle(faster)).toBeCloseTo(angle(normal) / 2);
+    expect(angle(slower)).toBeCloseTo(angle(normal) * 4);
   });
 
   it("ignores dead and inactive monsters and aims at living monster hitbox centers", () => {

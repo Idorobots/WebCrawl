@@ -73,7 +73,7 @@ export function collectPowerup(state: PlayerState, kind: PowerupKind): void {
     case "movement_speed": state.walkSpeedMultiplier = 1 + stacks / 10; break;
     case "shot_speed": state.shotRateMultiplier = 1 + stacks / 10; break;
     case "critical_damage": state.criticalChance = Math.min(1, stacks / 100); break;
-    case "shot_aim": state.aimAid += 0.1; break;
+    case "shot_aim": state.aimAid += 0.25; break;
   }
 }
 
