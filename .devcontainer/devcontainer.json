@@ -11,5 +11,5 @@
   "mounts": [
     "source=${localEnv:HOME}/.local/share/opencode,target=/home/ubuntu/.local/share/opencode,type=bind,consistency=cached"	
   ],
-  "forwardPorts": [8080]
+  "forwardPorts": []
 }
