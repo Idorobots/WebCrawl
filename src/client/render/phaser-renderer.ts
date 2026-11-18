@@ -46,9 +46,10 @@ import {
 import { buildWallFootprints, closedDoorFootprint, wallHitboxes, type WallRect } from "../domain/wall-collision";
 import { WEAPON_COLORS } from "../domain/weapons";
 import { POWERUP_DEFINITIONS } from "../domain/powerups";
-import { monsterMovementSpeed, monsterStatusTint } from "../domain/monster-status";
+import { monsterMovementSpeed, monsterStatusTint, STUN_TINT } from "../domain/monster-status";
 import { isGroundDebris, lootLayer } from "./render-layers";
 import { directArenaDoorLinks } from "./arena-door-lights";
+import { arenaEntrances } from "../domain/arena-entrances";
 import type {
   Bullet,
   Decoration,
@@ -369,10 +370,12 @@ export class PhaserRenderer {
   private hostResizeObserver: ResizeObserver | null = null;
   private renderDpr = 1;
   private layout: DungeonLayout | null = null;
+  private bossArenaRoomIds = new Set<number>();
   private visited = new Set<number>();
   private visitedCorridors = new Set<string>();
+  private lockedArenaRoomIds = new Set<number>();
   onDoorCollisionChanged: ((footprints: WallRect[]) => void) | null = null;
-  private doors: { door: DoorModulePlan; roomId: number; halves: Phaser.GameObjects.Image[]; open: boolean; passable: boolean }[] = [];
+  private doors: { door: DoorModulePlan; roomId: number; halves: Phaser.GameObjects.Image[]; open: boolean; passable: boolean; locked: boolean }[] = [];
   private doorTimers: Phaser.Time.TimerEvent[] = [];
   private background: Phaser.GameObjects.TileSprite | null = null;
   private backgroundAsset: string = ASSETS.backgroundTechTile;
@@ -652,6 +655,8 @@ export class PhaserRenderer {
     this.portalStartupPreview = false;
     delete this.host.dataset.portalIntro;
     this.layout = null;
+    this.bossArenaRoomIds.clear();
+    this.lockedArenaRoomIds.clear();
     this.cameraRoom = null;
     this.cameraRoomId = null;
     this.currentLightCullKey = null;
@@ -995,6 +1000,8 @@ export class PhaserRenderer {
   setWorld(layout: DungeonLayout, visited: ReadonlySet<number>, pageUrl: string, corridors: ReadonlySet<string> = new Set()): void {
     this.visitedCorridors = new Set(corridors);
     this.layout = layout;
+    this.bossArenaRoomIds = new Set(layout.nodes.filter(room => room.isBossArena).map(room => room.id));
+    this.lockedArenaRoomIds.clear();
     this.backgroundAsset = backgroundAssetForUrl(pageUrl);
     this.signageFont = signageFontForUrl(pageUrl);
     this.host.dataset.signageFont = this.signageFont;
@@ -1159,7 +1166,7 @@ export class PhaserRenderer {
     }
     for (const door of doors.filter(door => !door.sharedTarget)) {
       const halves = this.createDoorHalves(door);
-      this.doors.push({ door, roomId: room.id, halves, open: false, passable: false });
+      this.doors.push({ door, roomId: room.id, halves, open: false, passable: false, locked: false });
       for (const half of halves) {
         statics.push(this.rememberStatic(half.setAlpha(alpha)));
       }
@@ -1462,6 +1469,12 @@ export class PhaserRenderer {
           this.notifyDoorCollisions();
         }
       };
+      if (entry.locked) {
+        // A locked arena door stays shut for the whole boss fight, even once
+        // both sides are revealed and the ordinary rule says it should open.
+        frame("closed");
+        continue;
+      }
       if (!shouldOpen) {
         frame("closed");
         continue;
@@ -1484,6 +1497,47 @@ export class PhaserRenderer {
   private notifyDoorCollisions(): void {
     this.onDoorCollisionChanged?.(this.doors.filter(entry => !entry.passable)
       .map(entry => closedDoorFootprint(entry.door)));
+  }
+
+  /**
+   * Shut or reopen one boss arena's doors. Locking makes the doorway
+   * solid immediately (movement, bullets and monster routing all respect the
+   * closed-door footprints) while the closing animation plays; the ordinary
+   * discovery rules cannot reopen a locked door. Unlocking falls back to the
+   * standard open logic, which animates the doors back open.
+   */
+  setArenaDoorsLocked(roomId: number, locked: boolean): void {
+    if (!this.layout || !this.scene) return;
+    if (locked) this.lockedArenaRoomIds.add(roomId);
+    else this.lockedArenaRoomIds.delete(roomId);
+    const lockedPositions = arenaEntrances(this.layout)
+      .filter(entrance => this.lockedArenaRoomIds.has(entrance.arena.id))
+      .map(entrance => entrance.position);
+    const shouldLock = (entry: (typeof this.doors)[number]): boolean => lockedPositions.some(point =>
+      point.x === entry.door.position.x && point.y === entry.door.position.y);
+    const toToggle = this.doors.filter(entry => entry.locked !== shouldLock(entry));
+    if (!toToggle.length) return;
+    const closing = toToggle.some(entry => !entry.locked);
+    if (closing) this.playOneShot("sfx-door-close");
+    for (const entry of toToggle) {
+      entry.locked = shouldLock(entry);
+      if (!entry.locked) continue;
+      entry.open = false;
+      entry.passable = false;
+      const styles = doorModuleStyles(entry.door.side, SEGMENT_SIZE);
+      const frame = (suffix: string): void => {
+        entry.halves.forEach((half, index) => half.setTexture(textureKey(
+          styles[index]!.asset.replace("_open.png", `_${suffix}.png`),
+        )));
+      };
+      // interim_1 is one-third closed; interim_2 is two-thirds closed.
+      ["interim_1", "interim_2", "closed"].forEach((suffix, index) => {
+        this.doorTimers.push(this.scene!.time.delayedCall((index + 1) * 100, () => frame(suffix)));
+      });
+    }
+    this.setHostData("arenaDoorsLocked", String(this.doors.filter(entry => entry.locked).length));
+    if (closing) this.notifyDoorCollisions();
+    if (toToggle.some(entry => !entry.locked)) this.updateDoors(true);
   }
 
   private rememberStatic<T extends Phaser.GameObjects.GameObject>(object: T): T {
@@ -1690,7 +1744,10 @@ export class PhaserRenderer {
     for (const light of this.lootAuras.values()) light.setVisible(true);
     for (const light of this.portalAuras.values()) light.setVisible(true);
     for (const light of this.vendingAuras.values()) light.setVisible(true);
-    for (const [id, light] of this.monsterAuras) light.setVisible(this.monsters.get(id)?.visible ?? false);
+    const activeMonsterIds = new Set(this.currentMonsters.filter(item => item.active).map(item => item.id));
+    for (const [id, light] of this.monsterAuras) {
+      light.setVisible(activeMonsterIds.has(id) && (this.monsters.get(id)?.visible ?? false));
+    }
     this.setHostData("pickupAuras", String([
       ...this.lootAuras.values(),
       ...this.portalAuras.values(),
@@ -2333,9 +2390,7 @@ export class PhaserRenderer {
     }
     const scene = this.scene;
     if (!scene) return;
-    const visibleIds = new Set(items.filter(item =>
-      item.active && (!item.dead || item.deathAnimating || Boolean(item.visual.destroyed?.length))
-    ).map(item => item.id));
+    const visibleIds = new Set(items.filter(item => this.shouldRenderMonster(item)).map(item => item.id));
     for (const [id, object] of this.monsters) {
       if (!visibleIds.has(id)) {
         object.destroy(true);
@@ -2431,8 +2486,7 @@ export class PhaserRenderer {
   }
 
   updateMonsterPositions(items: readonly Monster[]): void {
-    if (items.some(item => item.active &&
-      (!item.dead || item.deathAnimating || Boolean(item.visual.destroyed?.length)) &&
+    if (items.some(item => this.shouldRenderMonster(item) &&
       !this.monsters.has(item.id) && this.monsterOnScreen(item))) {
       this.renderMonsters(items);
     }
@@ -2486,13 +2540,18 @@ export class PhaserRenderer {
     return this.pointNearView(item.x, item.y, Math.max(item.size, item.spriteSize) + 96);
   }
 
+  private shouldRenderMonster(item: Monster): boolean {
+    if (item.active) return !item.dead || item.deathAnimating || Boolean(item.visual.destroyed?.length);
+    return !item.dead && this.bossArenaRoomIds.has(item.spawnRoomId) && this.visited.has(item.spawnRoomId);
+  }
+
   private setMonsterVisible(item: Monster, container: Phaser.GameObjects.Container, visible: boolean): boolean {
     const changed = container.visible !== visible;
     container.setVisible(visible);
-    this.monsterHealthBars.get(item.id)?.setVisible(visible);
-    this.monsterAuras.get(item.id)?.setVisible(visible);
+    this.monsterHealthBars.get(item.id)?.setVisible(visible && item.active);
+    this.monsterAuras.get(item.id)?.setVisible(visible && item.active);
     const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
-    if (!visible || (!item.dead && (item.stunRemainingMs ?? 0) > 0)) sprite.anims.pause();
+    if (!visible || !item.active || (!item.dead && (item.stunRemainingMs ?? 0) > 0)) sprite.anims.pause();
     else if (sprite.anims.isPaused) sprite.anims.resume();
     return changed;
   }
@@ -2511,17 +2570,18 @@ export class PhaserRenderer {
   private applyMonsterFrame(container: Phaser.GameObjects.Container, item: Monster, now: number): void {
     const sprite = container.getByName("sprite") as Phaser.GameObjects.Sprite;
     const shadow = container.getByName("shadow") as Phaser.GameObjects.Image | null;
-    const tint = monsterStatusTint(item);
+    const tint = item.active ? monsterStatusTint(item) : STUN_TINT;
     if (tint === null) sprite.clearTint();
     else sprite.setTint(tint);
-    // A neutral tint alone only darkens colored sprites; desaturate after lighting for a true gray stun.
+    // A neutral tint only darkens colored sprites; desaturate dormant and stunned actors after lighting.
     const grayscale = sprite.getData("stunGrayscale") as Phaser.FX.ColorMatrix | undefined;
     const stunned = !item.dead && (item.stunRemainingMs ?? 0) > 0;
-    if (stunned && !grayscale) {
+    const grayedOut = !item.active || stunned;
+    if (grayedOut && !grayscale) {
       const effect = sprite.postFX.addColorMatrix();
       effect.grayscale(1);
       sprite.setData("stunGrayscale", effect);
-    } else if (!stunned && grayscale) {
+    } else if (!grayedOut && grayscale) {
       sprite.postFX.clear();
       sprite.setData("stunGrayscale", undefined);
     }
@@ -2541,7 +2601,7 @@ export class PhaserRenderer {
         restart,
       });
     }
-    if (stunned) sprite.anims.pause();
+    if (stunned || !item.active) sprite.anims.pause();
     this.updateStunSpinner(container, item, sprite, stunned, now);
     if (shadow) this.applyShadowOffset(shadow, item.x, item.y, item.size);
   }

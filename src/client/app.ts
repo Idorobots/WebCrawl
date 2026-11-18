@@ -9,6 +9,8 @@ import {
   stopLoadingElevator,
 } from "./audio/sfx";
 import {
+  BOSS_FIGHT_DOOR_ENTRY_DISTANCE,
+  BOSS_FIGHT_ACTIVATION_DELAY_MS,
   LOOT_ASSETS,
   MAX_NODES,
   MOBILE_LAYOUT_QUERY,
@@ -65,6 +67,7 @@ import {
 import { beginCrowdDetour, continueCrowdDetour } from "./domain/crowd-navigation";
 import { connectedRoomAdjacency, corridorJunctions, type CorridorJunction } from "./domain/corridor-junctions";
 import { discoveriesAtPoint } from "./domain/discovery";
+import { arenaEntrances, isNearArenaEntrance, playerBeyondArenaDoors } from "./domain/arena-entrances";
 import { FloorGeometry } from "./domain/floor-geometry";
 import {
   distanceSquared,
@@ -161,7 +164,8 @@ import { createThoughtPicker } from "./ui/loading-texts";
 import { setupWelcomePrompt, type WelcomePromptHandle } from "./ui/welcome-prompt";
 
 const DEBUG_MODE = import.meta.env.VITE_DEBUG === "true";
-const ART_DEBUG = import.meta.env.VITE_ART_DEBUG === "true";
+const ART_DEBUG = import.meta.env.VITE_ART_DEBUG === "true"
+  || new URLSearchParams(window.location.search).has("art-debug");
 const MONSTERS_ENABLED = import.meta.env.VITE_NO_MONSTERS !== "true";
 const PLAYER_MAX_HP = DEBUG_MODE ? 1_000 : PLAYER_SPEC.maxHp;
 
@@ -247,7 +251,10 @@ async function initWelcomeScene(): Promise<void> {
   if (!welcomeScene) welcomeScreen.classList.remove("scene-form");
 }
 
-void initWelcomeScene();
+// The art-debug floor boots straight into the game, so the holographic sign-in
+// room never shows; skipping it keeps its 3D render loop from competing with
+// the game renderer while the art floor's assets load.
+if (!ART_DEBUG) void initWelcomeScene();
 
 // The welcome screen (login panel first) fades in once fonts and images have
 // settled, so early interactions do not hit mid-layout elements.
@@ -301,8 +308,10 @@ let currentLoot: LootItem[] = [];
 let currentMonsters: Monster[] = [];
 let currentDecorations: Decoration[] = [];
 let currentVendingMachines: Decoration[] = [];
-const vendingContacts = new Map<string, number>();
 let currentSpawners: Decoration[] = [];
+let currentArenaEntrances: Point[] = [];
+let currentArenaDoorsByRoom = new Map<number, Point[]>();
+const vendingContacts = new Map<string, number>();
 const destroyedObstaclesByPage = new Map<string, Map<string, ObstacleState>>();
 let visitedRooms = new Set<number>();
 let visitedCorridors = new Set<string>();
@@ -318,6 +327,7 @@ let sceneryHitboxCells = new Map<string, Set<Decoration>>();
 let monsterCells = new Map<string, Set<Monster>>();
 const monsterFootprintIndex = new MonsterFootprintIndex();
 const failedMonsterPaths = new FailedPathCache();
+let monsterAggroRadiusOverride: number | null = null;
 const sharedMonsterPaths = new SharedPathCache();
 const monsterPathSearchBudget = new PathSearchBudget();
 const crowdApproaches = new WeakMap<Monster, { point: Point; player: Point; roomId: number | null; retryAt: number }>();
@@ -1133,6 +1143,8 @@ function unloadLevel(): void {
   currentDecorations = [];
   currentVendingMachines = [];
   currentSpawners = [];
+  currentArenaEntrances = [];
+  currentArenaDoorsByRoom.clear();
   currentStairs = [];
   currentLoot = [];
   monsterCells = new Map();
@@ -1158,6 +1170,7 @@ function unloadLevel(): void {
   floorSnapshots.clear();
   portalContacts.clear();
   vendingContacts.clear();
+  bossFightArmedRoomId = null;
 }
 
 function returnToWelcome(): void {
@@ -1685,6 +1698,9 @@ function schedulePortalActivationSound(): void {
 }
 
 function activateMonstersInRoom(roomId: number): void {
+  // The boss fight activates its own arena; revealing the arena from its
+  // corridor must not wake the enemies inside before the player steps in.
+  if (currentRoomsById.get(roomId)?.isBossArena === true) return;
   let changed = false;
 
   for (const monster of currentMonsters) {
@@ -1698,6 +1714,65 @@ function activateMonstersInRoom(roomId: number): void {
   if (changed) renderMonsters();
 }
 
+function bossForArenaRoom(roomId: number): Monster | undefined {
+  return currentMonsters.find(monster => monster.bossKind && monster.spawnRoomId === roomId);
+}
+
+/** True while the arena's boss is alive but the fight has not begun: its enemies sleep and are invulnerable. */
+function bossFightPendingForRoom(roomId: number): boolean {
+  if (currentRoomsById.get(roomId)?.isBossArena !== true) return false;
+  const boss = bossForArenaRoom(roomId);
+  return Boolean(boss && !boss.dead && !boss.active);
+}
+
+function playerInsideArenaPastDoors(room: GraphNode): boolean {
+  return roomContainingPoint(player.x, player.y)?.id === room.id &&
+    playerBeyondArenaDoors(currentArenaDoorsByRoom.get(room.id) ?? [], player, BOSS_FIGHT_DOOR_ENTRY_DISTANCE);
+}
+
+/** Wake the arena's already-visible enemies when the fight begins. */
+function activateArenaEnemies(room: GraphNode): void {
+  let changed = false;
+  for (const monster of currentMonsters) {
+    if (!monster.dead && monster.spawnRoomId === room.id && !monster.active) {
+      monster.active = true;
+      saveMonsterState(monster);
+      changed = true;
+    }
+  }
+  if (changed) renderMonsters();
+}
+
+/** The arena is armed: the doors seal now, the enemies wake a beat later. */
+let bossFightArmedRoomId: number | null = null;
+let bossFightActivateAt = 0;
+
+/**
+ * Boss-fight lifecycle per arena: seal the doors and wake the enemies
+ * once the player has walked past the doorway into the arena, and re-seal the
+ * doors of a fight restored mid-run. Dead bosses leave the doors open.
+ */
+function updateBossFightForRoom(room: GraphNode, timestamp: number): void {
+  const boss = bossForArenaRoom(room.id);
+  if (!boss || boss.dead) {
+    if (bossFightArmedRoomId === room.id) bossFightArmedRoomId = null;
+    return;
+  }
+  if (boss.active) {
+    // A fight restored from a snapshot must re-seal its doors.
+    renderer.setArenaDoorsLocked(room.id, true);
+    return;
+  }
+  if (!playerInsideArenaPastDoors(room)) return;
+  if (bossFightArmedRoomId !== room.id) {
+    bossFightArmedRoomId = room.id;
+    bossFightActivateAt = timestamp + BOSS_FIGHT_ACTIVATION_DELAY_MS;
+    renderer.setArenaDoorsLocked(room.id, true);
+    return;
+  }
+  if (timestamp >= bossFightActivateAt) activateArenaEnemies(room);
+}
+
 const SPAWNER_CHARGE_UP_MS = 2_000;
 
 function updateMonsterSpawners(timestamp: number): void {
@@ -1709,6 +1784,8 @@ function updateMonsterSpawners(timestamp: number): void {
       spawner.destroyed ||
       !visitedRooms.has(spawner.roomId)
     ) continue;
+    // Arena spawners sleep with the rest of the arena until the fight begins.
+    if (bossFightPendingForRoom(spawner.roomId)) continue;
 
     // Charge-up sequence already running: spawn once the timeout elapses.
     if (spawner.pendingSpawnAt !== undefined) {
@@ -1776,7 +1853,15 @@ function findSpawnerSpawnPosition(monster: Monster, spawner: Decoration): Point 
   ];
   return spawnOffsets
     .map(offset => ({ x: spawner.x + offset.x, y: spawner.y + offset.y }))
-    .find(point => monsterSpawnPositionIsClear(monster, point)) ?? null;
+    .find(point => monsterSpawnPositionIsClear(monster, point) &&
+      spawnerSpawnStaysInArenaRoom(point, spawner.roomId)) ?? null;
+}
+
+/** Arena spawners only ever spawn inside the arena and never in the entrance keep-out zone. */
+function spawnerSpawnStaysInArenaRoom(point: Point, roomId: number): boolean {
+  if (currentRoomsById.get(roomId)?.isBossArena !== true) return true;
+  if (isNearArenaEntrance(currentArenaEntrances, point.x, point.y)) return false;
+  return roomContainingPoint(point.x, point.y)?.id === roomId;
 }
 
 function renderMonsters(): void {
@@ -1874,8 +1959,16 @@ function monsterDrop(monster: Monster): void {
   currentLoot.push(...lootDropsForMonster(monster).filter(item => !collectedLoot.has(item.id)));
 }
 
-function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void {
+function damageMonster(
+  monster: Monster,
+  amount: number,
+  bullet?: Bullet,
+  options: { ignoreArenaGuards?: boolean } = {},
+): void {
   if (monster.dead) return;
+  // Dormant monsters cannot take damage, even when already visible in an arena.
+  // Test hooks may explicitly bypass this guard.
+  if (!options.ignoreArenaGuards && (!monster.active || bossFightPendingForRoom(monster.spawnRoomId))) return;
 
   const previousStage = monster.bossKind ? bossStage(monster.hp, monster.maxHp) : null;
   monster.hp = Math.max(0, monster.hp - amount);
@@ -1906,6 +1999,8 @@ function damageMonster(monster: Monster, amount: number, bullet?: Bullet): void 
 
     if (isBoss(monster)) {
       runStats.bossKills = (runStats.bossKills ?? 0) + 1;
+      // The fight is over: let the player walk back out of the arena.
+      renderer.setArenaDoorsLocked(monster.spawnRoomId, false);
     } else if (monster.speed === 0) {
       runStats.sentryKills = (runStats.sentryKills ?? 0) + 1;
     } else if (monster.fast) {
@@ -2088,6 +2183,8 @@ function summonBossMinions(boss: Monster, timestamp: number): void {
       y: boss.y + Math.sin(angle + slot * Math.PI / 6) * distance * scale,
     }))).find(point =>
       roomContainingPoint(point.x, point.y)?.id === boss.roomId &&
+      // Minions never materialize in the entrance keep-out zone.
+      !isNearArenaEntrance(currentArenaEntrances, point.x, point.y) &&
       isWalkable(point.x, point.y, worldPoint(minion, "footprintRadii")) &&
       !footprintsOverlap(point, worldPoint(minion, "footprintRadii"), player, PLAYER_SPEC.footprintRadii) &&
       monsterFootprintIndex.positionIsClear(minion, point)
@@ -2905,6 +3002,9 @@ function runGameTick(timestamp: number): void {
   updateEnergyDash(dt);
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
+  // Arm (and then start) the arena fight once the player is deep enough in.
+  const bossArena = currentRoomId !== null ? currentRoomsById.get(currentRoomId) : undefined;
+  if (bossArena?.isBossArena === true) updateBossFightForRoom(bossArena, timestamp);
   for (const monster of currentMonsters) monsterFootprintIndex.update(monster);
   updateContentPoints(timestamp);
   renderer.updateDecorationAnimations(currentDecorations, timestamp);
@@ -2912,7 +3012,7 @@ function runGameTick(timestamp: number): void {
 
   rebuildRoomRouting();
 
-  const aggroRadius = renderer.monsterAggroRadius();
+  const aggroRadius = monsterAggroRadiusOverride ?? renderer.monsterAggroRadius();
   const playerTarget = playerCollisionCenter();
   for (const monster of currentMonsters) {
     if (!monster.active || monster.dead) continue;
@@ -3745,6 +3845,7 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     primeSpawnerSpawn: () => Pick<Monster, "id" | "x" | "y"> | null;
     primeMinibossSceneryBlock: () => { monster: Monster; blocker: Decoration } | null;
     primeDoorwayCrowd: () => Monster[];
+    setMonsterAggroRadius: (radius: number | null) => void;
     primeMonsterAttackAnimation: () => number;
     gameTickAt: () => number | null;
     stairs: () => Array<Pick<Stair, "id" | "type" | "x" | "y" | "url" | "enabled">>;
@@ -3776,7 +3877,7 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     if (monster) damageMonster(monster, damage, {
       id: "test-hit", owner: "player", x: monster.x, y: monster.y, vx: 0, vy: 0,
       damage, traveled: 0, depthOffsetY: 0,
-    });
+    }, { ignoreArenaGuards: true });
   },
   monsters: () => currentMonsters.map(({ id, x, y, roomId, active, dead, hp, maxHp, speed, miniboss, bossKind, slowRemainingMs, stunRemainingMs }) =>
     ({ id, x, y, roomId, active, dead, hp, maxHp, speed, miniboss, bossKind, slowRemainingMs, stunRemainingMs })),
@@ -3851,6 +3952,9 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     const monster = currentMonsters.find(item => item.id === id);
     return monster ? { id: monster.id, x: monster.x, y: monster.y } : null;
   },
+  setMonsterAggroRadius(radius: number | null): void {
+    monsterAggroRadiusOverride = radius;
+  },
   primeMinibossSceneryBlock(): { monster: Monster; blocker: Decoration } | null {
     const monster = currentMonsters.find(item => item.miniboss && item.speed > 0 && item.attackPattern !== "melee");
     const blocker = currentDecorations.find(item => item.roomId === currentRoomId &&
@@ -3901,7 +4005,7 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     stairs: () => currentStairs.map(({ id, type, x, y, url, enabled }) => ({ id, type, x, y, url, enabled })),
     defeatAllMonsters(): void {
       for (const monster of currentMonsters) {
-        if (!monster.dead) damageMonster(monster, monster.hp);
+        if (!monster.dead) damageMonster(monster, monster.hp, undefined, { ignoreArenaGuards: true });
       }
     },
     destroyContentPoint(id: string): void {
@@ -4307,6 +4411,14 @@ function renderGraph(
   floorGeometry = new FloorGeometry(layout);
   currentCorridorJunctions = corridorJunctions(layout.links);
   currentRoomsById = new Map(layout.nodes.map(room => [room.id, room]));
+  const entrances = arenaEntrances(layout);
+  currentArenaEntrances = entrances.map(entrance => entrance.position);
+  currentArenaDoorsByRoom = new Map();
+  for (const entrance of entrances) {
+    const doors = currentArenaDoorsByRoom.get(entrance.arena.id) ?? [];
+    doors.push(entrance.position);
+    currentArenaDoorsByRoom.set(entrance.arena.id, doors);
+  }
   roomRoutingDirty = true;
   nextRoomTowardPlayer = new Map();
 
@@ -4381,6 +4493,12 @@ function renderGraph(
 
   renderMonsters();
   renderInteractiveObjects();
+  // Re-seal the doors of a fight restored from a snapshot, and start a fresh
+  // fight when the player spawns inside an arena (returning mid-fight through
+  // the up portal). Walking in is handled by the game loop.
+  for (const room of layout.nodes) {
+    if (room.isBossArena === true) updateBossFightForRoom(room, performance.now());
+  }
   updateContentPoints(performance.now());
   updatePlayerFacingAsset();
   revealRoomsFromCorridor(player.x, player.y);

@@ -43,6 +43,7 @@ import {
   type WeightedDecorationDefinition,
 } from "./world-specs";
 import { worldPoint } from "./object-geometry";
+import { isNearArenaEntrance, arenaEntrances, entrancePositionsForRoom } from "./arena-entrances";
 import { monsterDropsWeapon, REGULAR_MONSTER_WEAPON_DROP_CHANCE_PER_10K, weaponForMonster, weaponForRoom, type WeaponSource } from "./weapons";
 import { authoredDecorations, authoredLoot, type AuthoredRooms } from "./authored-rooms";
 import { vendingDropForSeed, vendingKindForRoom, vendingStateForSeed, vendingWreck, VENDING_PRODUCTS } from "./vending";
@@ -356,6 +357,7 @@ function decorationFits(
 export function decorationSpecsForRoom(
   room: GraphNode, floor = 1,
   walls = new WallRectIndex(buildWallFootprints({ nodes: [room], links: [], hiddenCount: 0 })),
+  entrances: readonly Point[] = [],
 ): Decoration[] {
   const seed = stableHash(`${room.lootSeed}|decor`);
   const difficulty = floorDifficulty(floor);
@@ -378,7 +380,11 @@ export function decorationSpecsForRoom(
   for (let index = 0; index < requestedSpawnerCount; index += 1) {
     const itemSeed = stableHash(`${room.lootSeed}|spawner|${index}|${floor}`);
     const type = DECORATION_DEFINITIONS.spawner;
-    const slotIndex = slots.findIndex(position => decorationFits(position, type, room, spawners, walls));
+    const slotIndex = slots.findIndex(position =>
+      // Arena spawners never sit in the entrance keep-out zone: their spawns
+      // appear beside them and must not materialize on top of the doorway.
+      !isNearArenaEntrance(entrances, position.x, position.y) &&
+      decorationFits(position, type, room, spawners, walls));
     if (slotIndex < 0) break;
     const [position] = slots.splice(slotIndex, 1);
     spawners.push({
@@ -532,7 +538,13 @@ function blocksDoorApproach(item: Decoration, room: GraphNode, door: Point): boo
   return pointToSegmentDistance(item, door, approach) < Math.max(footprint.x, footprint.y) + MAX_REGULAR_MONSTER_FOOTPRINT + 20;
 }
 
-function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly Point[], walls: WallRectIndex): Decoration[] {
+function clearRoomDoorways(
+  items: Decoration[],
+  room: GraphNode,
+  doors: readonly Point[],
+  walls: WallRectIndex,
+  entrances: readonly Point[] = [],
+): Decoration[] {
   if (!doors.length) return items;
   const spawnerCandidates: Point[] = [
     { x: room.x - room.width * 0.27, y: room.y - room.height * 0.27 },
@@ -551,6 +563,7 @@ function clearRoomDoorways(items: Decoration[], room: GraphNode, doors: readonly
     if (item.spawner) {
       const occupied = [...cleared, ...items.slice(index + 1)];
       const position = spawnerCandidates.find(candidate =>
+        !isNearArenaEntrance(entrances, candidate.x, candidate.y) &&
         !doors.some(door => blocksDoorApproach({ ...item, ...candidate }, room, door)) &&
         decorationFits(candidate, DECORATION_DEFINITIONS.spawner, room, occupied, walls)
       );
@@ -590,14 +603,22 @@ export function buildDecorations(
   }
   const roomItems = layout.nodes.flatMap(room => {
     const template = authoredRooms.get(room.id);
-    return template
-      ? authoredDecorations(room, template).map((item, index) => ({
+    if (template && template.proceduralArena !== true) {
+      return authoredDecorations(room, template).map((item, index) => ({
         ...item,
         dropKind: item.destructible
           ? sceneryDropKindForSeed(stableHash(`${room.lootSeed}|authored-decor|${index}`), item.definitionId)
           : null,
-      }))
-      : clearRoomDoorways(decorationSpecsForRoom(room, floor, walls), room, doorsByRoom.get(room.id) ?? [], walls);
+      }));
+    }
+    const entrances = room.isBossArena === true ? doorsByRoom.get(room.id) ?? [] : [];
+    return clearRoomDoorways(
+      decorationSpecsForRoom(room, floor, walls, entrances),
+      room,
+      doorsByRoom.get(room.id) ?? [],
+      walls,
+      entrances,
+    );
   });
   const corridorItems: Decoration[] = [];
   if (!layout.nodes.every(room => authoredRooms.has(room.id))) {
@@ -884,7 +905,12 @@ function promoteToMiniboss(monster: Monster): Monster {
   };
 }
 
-export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossKind): Monster[] {
+export function monsterSpecsForRoom(
+  room: GraphNode,
+  floor = 1,
+  bossKind?: BossKind,
+  entrances: readonly Point[] = [],
+): Monster[] {
   if (room.isRoot || (room.tag === "img" && !room.isBossArena)) return [];
   const roomSeed = stableHash(`${room.lootSeed}|monsters`);
   const count = monsterCountForRoom(
@@ -894,7 +920,7 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossK
   );
   const offsetScaleX = room.width / ROOM_WIDTH;
   const offsetScaleY = room.height / ROOM_HEIGHT;
-  const offsets: Array<[number, number]> = room.isBossArena
+  const rawOffsets: Array<[number, number]> = room.isBossArena
     ? [
       [-250, -20], [250, -20],
       [-220, 150], [220, 150], [0, 190],
@@ -903,6 +929,17 @@ export function monsterSpecsForRoom(room: GraphNode, floor = 1, bossKind?: BossK
       [-90, -55], [90, 55], [80, -65],
       [-80, 70], [0, -92],
     ];
+  let offsets = rawOffsets;
+  if (room.isBossArena && entrances.length) {
+    const clearOfEntrance = rawOffsets.filter(([offsetX, offsetY]) => !isNearArenaEntrance(
+      entrances,
+      room.x + offsetX * offsetScaleX,
+      room.y + offsetY * offsetScaleY,
+    ));
+    // A layout could place the door near every fixed slot; keep the farthest
+    // slots rather than dropping the arena population entirely.
+    if (clearOfEntrance.length) offsets = clearOfEntrance;
+  }
   let regularMonsters = Array.from({ length: count }, (_, index): Monster => {
     const seed = stableHash(`${roomSeed}|${floor}|${index}`);
     const [offsetX, offsetY] = offsets[index % offsets.length]!;
@@ -977,9 +1014,18 @@ export function buildMonsters(
   authoredRooms: AuthoredRooms = new Map(),
 ): Monster[] {
   const floors = new FloorGeometry(layout);
+  const arenaRoomIds = new Set(layout.nodes
+    .filter(room => room.isBossArena === true)
+    .map(room => room.id));
+  const entrances = arenaEntrances(layout);
   const roomSpecs = layout.nodes.flatMap(room => {
     const template = authoredRooms.get(room.id);
-    if (!template) return monsterSpecsForRoom(room, floor);
+    if (!template) return monsterSpecsForRoom(
+      room,
+      floor,
+      undefined,
+      entrancePositionsForRoom(entrances, room.id),
+    );
     return (template.monsters ?? []).map(({ kind, miniboss, x, y }, index) => {
       const position = { x: room.x + x, y: room.y + y };
       const monster = kind in BOSS_DEFINITIONS
@@ -1010,7 +1056,7 @@ export function buildMonsters(
   for (const spec of specs) {
     const saved = savedStates.get(spec.id);
     const desired = { x: saved?.x ?? spec.x, y: saved?.y ?? spec.y };
-    const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters, playerSpawn, walls, floors);
+    const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters, playerSpawn, walls, floors, !saved);
     if (!position) continue;
     if (!(saved?.dead ?? false) && spec.obstacle) placedMonsters.push({ x: position.x, y: position.y, footprintRadii: worldPoint(spec, "footprintRadii") });
     const relocated = position.x !== desired.x || position.y !== desired.y;
@@ -1020,7 +1066,10 @@ export function buildMonsters(
       roomId: relocated ? spec.spawnRoomId : saved?.roomId ?? spec.roomId,
       hp: saved?.hp ?? spec.maxHp,
       dead: saved?.dead ?? false,
-      active: saved?.active ?? visitedRooms.has(spec.spawnRoomId),
+      active: saved?.active ??
+        // Arena enemies sleep until the player actually enters the arena,
+        // even once the room has been revealed from its corridor.
+        (arenaRoomIds.has(spec.spawnRoomId) ? false : visitedRooms.has(spec.spawnRoomId)),
       droppedLoot: saved?.droppedLoot ?? false,
       dropId: saved?.dropId ?? null,
       dropX: saved?.dropX ?? null,
@@ -1118,6 +1167,7 @@ function safeMonsterPosition(
   playerSpawn?: Point,
   walls = new WallRectIndex(buildWallFootprints(layout)),
   floors = new FloorGeometry(layout),
+  restrictToSpawnRoom = false,
 ): Point | null {
   const room = layout.nodes.find(candidate => candidate.id === monster.spawnRoomId);
   const centers = [desired, ...(room ? [{ x: room.x, y: room.y }] : [])];
@@ -1154,6 +1204,9 @@ function safeMonsterPosition(
     }
   }
   return candidates.find(position =>
+    // Fresh arena spawns never land outside their arena, whatever else the
+    // layout offers; restored positions (a boss that moved) are left alone.
+    (!restrictToSpawnRoom || !room?.isBossArena || pointInRoomFloor(position.x, position.y, room)) &&
     (!playerSpawn || !footprintsOverlap(position, footprint, playerSpawn, PLAYER_SPEC.footprintRadii)) &&
     monsterPositionIsClear(position, footprint, layout, decorations, placedMonsters, walls, floors)
   ) ?? null;

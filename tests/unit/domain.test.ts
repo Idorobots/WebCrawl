@@ -70,6 +70,7 @@ import {
   sceneryDropKindForSeed,
 } from "../../src/client/domain/generation";
 import { coalesceLeaves, contentPagesForRoom, domToGraph } from "../../src/client/domain/graph";
+import { ARENA_ENTRANCE_KEEP_OUT_DISTANCE } from "../../src/client/domain/arena-entrances";
 import { stableHash } from "../../src/client/domain/hash";
 import { worldPoint } from "../../src/client/domain/object-geometry";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, doorCapacity, doorPositionForSlot, layoutOrthogonal } from "../../src/client/domain/layout";
@@ -2225,6 +2226,81 @@ describe("deterministic room contents", () => {
     expect(restored.x).toBe(destination.x);
     expect(restored.y).toBe(destination.y);
     expect(pointInRoom(restored.x, restored.y, room, worldPoint(restored, "hitboxRadii"))).toBe(false);
+  });
+
+  it("keeps arena enemies asleep until the player enters the arena, not its corridor", () => {
+    const root = node(7_100, null, 0);
+    const arena = node(7_101, root.id, 1, {
+      isBossArena: true,
+      isRoot: false,
+      tag: "script",
+      width: ROOM_DEFINITIONS.boss.width,
+      height: ROOM_DEFINITIONS.boss.height,
+      lootSeed: stableHash("asleep-arena"),
+    });
+    const layout: DungeonLayout = { nodes: [root, arena], links: [], hiddenCount: 0 };
+    const revealed = new Set([root.id, arena.id]);
+
+    const monsters = buildMonsters(layout, new Map(), revealed, 4);
+    const boss = monsters.find(monster => monster.bossKind)!;
+    expect(boss).toBeDefined();
+    expect(boss.active).toBe(false);
+    expect(monsters.filter(monster => monster.spawnRoomId === arena.id)
+      .every(monster => monster.active === false)).toBe(true);
+
+    // A fight already in progress survives a floor reload as active.
+    const saved = new Map([[boss.id, {
+      x: boss.x, y: boss.y, roomId: arena.id, hp: boss.maxHp, dead: false, active: true,
+      droppedLoot: false, dropId: null, dropX: null, dropY: null, dropKind: null,
+    }]]);
+    const restored = buildMonsters(layout, saved, revealed, 4).find(monster => monster.id === boss.id)!;
+    expect(restored.active).toBe(true);
+  });
+
+  it("never places initial arena monsters inside the entrance keep-out zone", () => {
+    const arena = node(7_200, null, 0, {
+      isBossArena: true,
+      isRoot: false,
+      tag: "script",
+      width: ROOM_DEFINITIONS.boss.width,
+      height: ROOM_DEFINITIONS.boss.height,
+      lootSeed: stableHash("entrance-keep-out"),
+    });
+    const entrance = { x: arena.x, y: arena.y + arena.height / 2 };
+
+    const monsters = monsterSpecsForRoom(arena, 1, undefined, [entrance]);
+    expect(monsters.filter(monster => !monster.bossKind).length).toBeGreaterThan(0);
+    for (const monster of monsters) {
+      expect(Math.hypot(monster.x - entrance.x, monster.y - entrance.y))
+        .toBeGreaterThanOrEqual(ARENA_ENTRANCE_KEEP_OUT_DISTANCE);
+    }
+  });
+
+  it("keeps arena spawners out of the entrance keep-out zone", () => {
+    let arena: GraphNode | null = null;
+    let original: Decoration | null = null;
+    for (let seed = 0; seed < 500 && !original; seed += 1) {
+      const candidate = node(7_300 + seed, null, 0, {
+        isBossArena: true,
+        isRoot: false,
+        tag: "script",
+        width: ROOM_DEFINITIONS.boss.width,
+        height: ROOM_DEFINITIONS.boss.height,
+        lootSeed: stableHash(`spawner-arena-${seed}`),
+      });
+      const spawner = decorationSpecsForRoom(candidate, 1).find(item => item.spawner);
+      if (spawner) {
+        arena = candidate;
+        original = spawner;
+      }
+    }
+    expect(original).not.toBeNull();
+
+    const kept = decorationSpecsForRoom(arena!, 1, undefined, [{ x: original!.x, y: original!.y }]);
+    for (const item of kept.filter(candidate => candidate.spawner)) {
+      expect(Math.hypot(item.x - original!.x, item.y - original!.y))
+        .toBeGreaterThanOrEqual(ARENA_ENTRANCE_KEEP_OUT_DISTANCE);
+    }
   });
 
   it("subtracts the projectile's full damage from obstacle HP", () => {

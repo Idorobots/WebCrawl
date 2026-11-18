@@ -5,7 +5,6 @@ import { artDebugLevel } from "../../src/client/domain/authored-rooms";
 import { REGULAR_MONSTER_DEFINITIONS } from "../../src/client/domain/specs";
 import type { Decoration, Monster } from "../../src/client/types";
 
-test.skip(process.env.VITE_ART_DEBUG !== "true", "Requires VITE_ART_DEBUG=true");
 test.setTimeout(90_000);
 
 type TestWindow = Window & {
@@ -15,6 +14,7 @@ type TestWindow = Window & {
     teleportPlayerTo: (x: number, y: number) => void;
     primeMinibossSceneryBlock: () => { monster: Monster; blocker: Decoration } | null;
     primeDoorwayCrowd: () => Monster[];
+    setMonsterAggroRadius: (radius: number | null) => void;
   };
   __minibossBlock?: { monster: Monster; blocker: Decoration; start: { x: number; y: number } };
   __regularRecovery?: Monster;
@@ -23,11 +23,12 @@ type TestWindow = Window & {
 
 test("a trapped ranged miniboss breaks scenery and resumes pursuit", async ({ page }) => {
   await page.addInitScript(key => localStorage.setItem(key, "none"), LIGHT_DETAIL_STORAGE_KEY);
-  await page.goto("/");
+  await page.goto("/?art-debug");
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-monsters", "0", { timeout: 30_000 });
   await page.evaluate(() => {
     const target = window as unknown as TestWindow;
     target.__webcrawlTest.setPlayerInvulnerable(true);
+    target.__webcrawlTest.setMonsterAggroRadius(Number.POSITIVE_INFINITY);
     const scenario = target.__webcrawlTest.primeMinibossSceneryBlock();
     if (!scenario) throw new Error("Miniboss navigation scenario unavailable");
     target.__minibossBlock = { ...scenario, start: { x: scenario.monster.x, y: scenario.monster.y } };
@@ -44,7 +45,7 @@ test("a trapped ranged miniboss breaks scenery and resumes pursuit", async ({ pa
 
 test("a regular monster caches an unreachable doorway and resumes pursuit when the player returns", async ({ page }) => {
   await page.addInitScript(key => localStorage.setItem(key, "none"), LIGHT_DETAIL_STORAGE_KEY);
-  await page.goto("/");
+  await page.goto("/?art-debug");
   const game = page.locator("#gameCanvas");
   await expect(game).toHaveAttribute("data-active-monsters", "0", { timeout: 30_000 });
   const { layout } = artDebugLevel();
@@ -54,6 +55,7 @@ test("a regular monster caches an unreachable doorway and resumes pursuit when t
     const target = window as unknown as TestWindow;
     const api = target.__webcrawlTest;
     api.setPlayerInvulnerable(true);
+    api.setMonsterAggroRadius(Number.POSITIVE_INFINITY);
     const scenario = api.primeMinibossSceneryBlock();
     if (!scenario) throw new Error("Navigation actor unavailable");
     const monster = scenario.monster;
@@ -92,7 +94,7 @@ test("a regular monster caches an unreachable doorway and resumes pursuit when t
 
 for (const destinationRoom of [1, 2]) test(`a 24-monster shared-path crowd clears the doorway toward room ${destinationRoom}`, async ({ page }) => {
   await page.addInitScript(key => localStorage.setItem(key, "none"), LIGHT_DETAIL_STORAGE_KEY);
-  await page.goto("/");
+  await page.goto("/?art-debug");
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-active-monsters", "0", { timeout: 30_000 });
   const { layout } = artDebugLevel();
   const gallery = layout.nodes[0]!;
@@ -101,6 +103,7 @@ for (const destinationRoom of [1, 2]) test(`a 24-monster shared-path crowd clear
     const target = window as unknown as TestWindow;
     const api = target.__webcrawlTest;
     api.setPlayerInvulnerable(true);
+    api.setMonsterAggroRadius(Number.POSITIVE_INFINITY);
     const monsters = api.primeDoorwayCrowd();
     if (monsters.length !== 24) throw new Error("Expected 24 doorway crowd monsters");
     // The gallery contains explosive props. Keep incidental combat damage from

@@ -17,6 +17,8 @@ import { POWERUP_KINDS } from "./powerups";
 export interface AuthoredRoomTemplate {
   width: number;
   height: number;
+  /** Generate the room's scenery procedurally (arena theme + entrance keep-out) instead of authoring it. */
+  proceduralArena?: boolean;
   decorations?: readonly (Point & { definition: keyof typeof DECORATION_DEFINITIONS })[];
   loot?: readonly (Point & { kind: LootKind; weaponKind?: WeaponKind; powerup?: PowerupKind })[];
   monsters?: readonly (Point & { kind: MonsterKind; miniboss?: boolean })[];
@@ -101,6 +103,9 @@ export function artDebugLevel(): { graph: DungeonGraph; layout: DungeonLayout; r
     ...bossKinds.map(kind => ({
       width: ENVIRONMENT_SEGMENT_SIZE * 8,
       height: ENVIRONMENT_SEGMENT_SIZE * 8,
+      // A real arena's scenery and spawners, so every boss kind can be fought
+      // and inspected under the same conditions as a generated floor.
+      proceduralArena: true,
       monsters: [{ kind, x: 0, y: -140 }],
     })),
   ];

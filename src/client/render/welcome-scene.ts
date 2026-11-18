@@ -289,6 +289,12 @@ export function createWelcomeScene(options: WelcomeSceneOptions): WelcomeSceneHa
   camera.position.set(CAMERA_X, CAMERA_Y, CAMERA_Z);
   camera.lookAt(0, SCREEN_Y, BACK_Z);
 
+  // The interactive DOM form is aligned with this camera, which follows the
+  // pointer but not the decorative idle drift. The drift is sub-pixel on
+  // screen, so the form still lines up with the painted texture while staying
+  // a stable target for automation (which refuses to click a moving element).
+  const formCamera = camera.clone();
+
   const composer = new EffectComposer(renderer);
   composer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowQuality ? 1 : 2));
   composer.setSize(width, height);
@@ -567,8 +573,23 @@ export function createWelcomeScene(options: WelcomeSceneOptions): WelcomeSceneHa
 
     const ch = FORM_CONTENT_HEIGHT;
     const cw = ch * (boxW / boxH);
+    // Align the invisible interactive form with the pointer-following camera,
+    // excluding the decorative idle drift (and following the camera exactly
+    // during the sign-in flight).
+    const projectCamera = transitioning ? camera : formCamera;
+    if (transitioning) {
+      projectCamera.updateMatrixWorld(true);
+    } else {
+      formCamera.position.set(
+        baseCameraX + pointerX * 2.4,
+        baseCameraY - pointerY * 1.6,
+        baseCameraZ,
+      );
+      formCamera.lookAt(0, SCREEN_Y, BACK_Z);
+      formCamera.updateMatrixWorld(true);
+    }
     const project = (x: number, y: number): [number, number] => {
-      formCorner.set(x, SCREEN_Y + y, BACK_Z).project(camera);
+      formCorner.set(x, SCREEN_Y + y, BACK_Z).project(projectCamera);
       return [
         (formCorner.x * 0.5 + 0.5) * cssW,
         (0.5 - formCorner.y * 0.5) * cssH,
@@ -673,6 +694,8 @@ export function createWelcomeScene(options: WelcomeSceneOptions): WelcomeSceneHa
     const nextHeight = Math.max(1, canvas.clientHeight || window.innerHeight);
     camera.aspect = nextWidth / nextHeight;
     camera.updateProjectionMatrix();
+    formCamera.aspect = nextWidth / nextHeight;
+    formCamera.updateProjectionMatrix();
     renderer.setSize(nextWidth, nextHeight, false);
     composer.setSize(nextWidth, nextHeight);
     bloom.setSize(nextWidth, nextHeight);

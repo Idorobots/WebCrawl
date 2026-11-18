@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { artDebugLevel, authoredDecorations, type AuthoredRoomTemplate } from "../../src/client/domain/authored-rooms";
+import { ARENA_ENTRANCE_KEEP_OUT_DISTANCE } from "../../src/client/domain/arena-entrances";
 import { applyObstacleDamage } from "../../src/client/domain/combat";
 import { footprintsOverlap, pointInRoomFloor } from "../../src/client/domain/geometry";
 import { buildDecorations, buildInteractiveObjects, buildMonsters } from "../../src/client/domain/generation";
@@ -9,10 +10,15 @@ import { buildWallFootprints, WallRectIndex, wallOverlapsEllipse } from "../../s
 import {
   BOSS_DEFINITIONS, DECORATION_DEFINITIONS, LOOT_DEFINITIONS,
   MINIBOSS_DAMAGE_MULTIPLIER, MINIBOSS_HP_MULTIPLIER, MINIBOSS_SIZE_MULTIPLIER,
-  PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS,
+  PLAYER_SPEC, REGULAR_MONSTER_DEFINITIONS, ROOM_SCENERY_THEMES,
 } from "../../src/client/domain/world-specs";
 import { weaponKinds } from "../../src/client/domain/weapons";
 import { POWERUP_KINDS } from "../../src/client/domain/powerups";
+
+const ARENA_SCENERY_DEFINITIONS = new Set(
+  [...ROOM_SCENERY_THEMES.arena.primary, ...ROOM_SCENERY_THEMES.arena.accents]
+    .map(entry => entry.definition.definitionId),
+);
 
 describe("authored art floor", () => {
   it("has fixed, connected rooms with one room for every enemy, miniboss, and boss kind", () => {
@@ -59,7 +65,8 @@ describe("authored art floor", () => {
     const { layout, rooms } = artDebugLevel();
     const gallery = layout.nodes[0]!;
     const walls = new WallRectIndex(buildWallFootprints(layout));
-    const decorations = buildDecorations(layout, new Map(), 1, walls, rooms);
+    const decorations = buildDecorations(layout, new Map(), 1, walls, rooms)
+      .filter(item => item.roomId === gallery.id);
     const { loot } = buildInteractiveObjects(layout, "art-debug", null, new Set(), walls, rooms);
 
     expect(decorations.map(item => item.definitionId).sort())
@@ -99,6 +106,38 @@ describe("authored art floor", () => {
         footprintsOverlap({ x, y: gallery.y }, PLAYER_SPEC.footprintRadii,
           item, worldPoint(item, "footprintRadii")))).toBe(false);
     }
+  });
+
+  it("gives every boss room procedural arena scenery, kept clear of the doorways", () => {
+    const { layout, rooms } = artDebugLevel();
+    const walls = new WallRectIndex(buildWallFootprints(layout));
+    const decorations = buildDecorations(layout, new Map(), 1, walls, rooms);
+    const arenas = layout.nodes.filter(room => room.isBossArena);
+    expect(arenas.length).toBeGreaterThan(0);
+
+    for (const arena of arenas) {
+      const items = decorations.filter(item => item.roomId === arena.id);
+      expect(items.length, arena.label).toBeGreaterThan(0);
+      expect(items.every(item => pointInRoomFloor(item.x, item.y, arena))).toBe(true);
+      expect(items.some(item => ARENA_SCENERY_DEFINITIONS.has(item.definitionId))).toBe(true);
+
+      const entrances = layout.links.flatMap(link =>
+        link.source.id === arena.id ? [link.points[0]!]
+          : link.target.id === arena.id ? [link.points[link.points.length - 1]!]
+          : []);
+      for (const spawner of items.filter(item => item.spawner)) {
+        for (const entrance of entrances) {
+          expect(Math.hypot(spawner.x - entrance.x, spawner.y - entrance.y))
+            .toBeGreaterThanOrEqual(ARENA_ENTRANCE_KEEP_OUT_DISTANCE);
+        }
+      }
+    }
+
+    const boss = buildMonsters(layout, new Map(), new Set([0]), 1, decorations, undefined, walls, rooms)
+      .find(monster => monster.bossKind)!;
+    const arena = layout.nodes.find(room => room.id === boss.spawnRoomId)!;
+    expect(pointInRoomFloor(boss.x, boss.y, arena)).toBe(true);
+    expect(wallOverlapsEllipse(boss, worldPoint(boss, "footprintRadii"), walls)).toBe(false);
   });
 
   it("varies debris per object deterministically using the room seed", () => {

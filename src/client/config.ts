@@ -31,6 +31,11 @@ export const ROOM_HEIGHT = ENVIRONMENT_SEGMENT_SIZE * 4;
 export const CAMERA_SCALE = 1.4;
 export const MOBILE_CAMERA_SCALE = 0.6;
 export const BOSS_CAMERA_SCALE = 1.12;
+// A boss fight begins once the player is this far past every arena doorway.
+// This keeps the sealing doors from trapping the player in the entrance.
+export const BOSS_FIGHT_DOOR_ENTRY_DISTANCE = 100;
+// Let the doorway visibly close before its dormant enemies wake up.
+export const BOSS_FIGHT_ACTIVATION_DELAY_MS = 200;
 export const MOBILE_LAYOUT_QUERY = "(max-width: 1230px)";
 export const CAMERA_FOLLOW_LERP = 0.5;
 export const CAMERA_DEADZONE_WIDTH = 180;

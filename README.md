@@ -42,7 +42,7 @@ VITE_DEBUG=true npm run dev
 
 For a debug production build, run `VITE_DEBUG=true npm run build` before `npm start`. Restart Vite or rebuild after changing the flag. Debug builds display FPS and frame timings in the game; collision overlays use the separate `VITE_DEBUG_HITBOXES=true` flag.
 
-To enter the playable art gallery directly, run `VITE_ART_DEBUG=true npm run dev` (or set the flag when building). This skips the welcome screens and remote page fetch. The fixed floor starts with every scenery object, decoration, pickup, and weapon variant in the gallery, followed by one room per enemy kind and one per boss. They use the usual combat and pickup rules. Room templates in `src/client/domain/authored-rooms.ts` use room-local coordinates and can also be supplied to the regular layout/content builders for future handcrafted rooms.
+To enter the playable art gallery directly, run `VITE_ART_DEBUG=true npm run dev` (or set the flag when building), or open any build at `/?art-debug`. This skips the welcome screens and remote page fetch. The fixed floor starts with every scenery object, decoration, pickup, and weapon variant in the gallery, followed by one room per enemy kind and one per boss. They use the usual combat and pickup rules. Room templates in `src/client/domain/authored-rooms.ts` use room-local coordinates and can also be supplied to the regular layout/content builders for future handcrafted rooms.
 
 The cog in the login screen's lower-right corner opens Settings. Light detail is saved in the browser: None removes lighting and shadows; Low keeps room lights and the flashlight; Medium adds shadows and auras; High also adds bullet and effect lights. With no saved preference, the level is selected from the available WebGL light capacity. `VITE_MAX_LIGHTS` still controls the renderer's maximum simultaneous lights.
 
@@ -99,7 +99,7 @@ npm run test:e2e
 
 The browser suite defaults to two workers to limit contention while Phaser loads and decodes its assets. Override this with `npm run test:e2e -- --workers=N` when needed.
 
-Run the dedicated art-floor browser test with `VITE_ART_DEBUG=true npx playwright test tests/e2e/art-debug.spec.ts`.
+The art-floor browser tests (`art-debug`, `light-culling`, `miniboss-navigation`, `spawn-performance`) boot the authored floor through the `?art-debug` URL parameter, so they run as part of `npm run test:e2e` with no extra environment flag.
 
 The devcontainer installs Chromium at `/usr/bin/chromium`. Set `CHROMIUM_PATH` when Chromium is installed elsewhere:
 

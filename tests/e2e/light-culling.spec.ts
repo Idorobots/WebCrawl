@@ -3,7 +3,6 @@ import type Phaser from "phaser";
 import { artDebugLevel } from "../../src/client/domain/authored-rooms";
 import { LIGHT_DETAIL_STORAGE_KEY } from "../../src/client/render/light-detail";
 
-test.skip(process.env.VITE_ART_DEBUG !== "true", "Requires VITE_ART_DEBUG=true");
 test.setTimeout(90_000);
 
 interface TestWindow extends Window {
@@ -19,7 +18,7 @@ const gallery = layout.nodes[0]!;
 
 async function startGame(page: Page): Promise<void> {
   await page.addInitScript(key => localStorage.setItem(key, "high"), LIGHT_DETAIL_STORAGE_KEY);
-  await page.goto("/");
+  await page.goto("/?art-debug");
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-rooms", String(layout.nodes.length), { timeout: 30_000 });
   await expect(page.locator("#gameCanvas")).toHaveAttribute("data-lighting-mode", "webgl");
 }

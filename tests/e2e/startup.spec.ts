@@ -69,10 +69,13 @@ async function alignPlayerToDoor(
   page: Page,
   door: { x: number; y: number },
   direction: string | null,
+  extraGap = 20,
 ): Promise<void> {
   // Start inside the doorway, beyond obstacles in the middle of the room,
-  // then walk through the opening.
-  const inset = Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + WORLD_GEOMETRY.wallThickness + 20;
+  // then walk through the opening. The gap past the player's hitbox and the
+  // wall keeps the player clear of the door; tests that need the adjacent
+  // room already revealed (the discovery radius is half a segment) shrink it.
+  const inset = Math.max(PLAYER_SPEC.hitboxRadii.x, PLAYER_SPEC.hitboxRadii.y) + WORLD_GEOMETRY.wallThickness + extraGap;
   const target = direction === "N" ? { x: door.x, y: door.y + inset }
     : direction === "S" ? { x: door.x, y: door.y - inset }
     : direction === "E" ? { x: door.x - inset, y: door.y + WORLD_GEOMETRY.verticalDoorPassableOffsetY }
@@ -1058,6 +1061,7 @@ test("animates the camera both ways and keeps an active boss sized consistently 
   await expect(game).toHaveAttribute("data-rooms", /^\d+$/, { timeout: 30_000 });
   await setPlayerInvulnerable(page, true);
   await expect(game).toHaveAttribute("data-active-bosses", "0");
+  await expect(game).not.toHaveAttribute("data-arena-doors-locked");
   const bossHud = page.locator("#bossHud");
   await expect(bossHud).toBeHidden();
   const entrancePosition = await playerPosition(page);
@@ -1084,7 +1088,15 @@ test("animates the camera both ways and keeps an active boss sized consistently 
     x: Number(await game.getAttribute("data-first-door-x")),
     y: Number(await game.getAttribute("data-first-door-y")),
   };
-  await alignPlayerToDoor(page, door, direction);
+  await alignPlayerToDoor(page, door, direction, 5);
+  // Standing in the entrance room's doorway, the arena is already revealed,
+  // but the fight must not have started: the player is still outside the room.
+  await expect.poll(async () => Number(await game.getAttribute("data-visited-rooms")), { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(2);
+  await expect(game).toHaveAttribute("data-current-room-tag", "body");
+  await expect(game).toHaveAttribute("data-active-bosses", "0");
+  await expect(game).not.toHaveAttribute("data-arena-doors-locked");
+
   const exitKey = { N: "ArrowUp", E: "ArrowRight", S: "ArrowDown", W: "ArrowLeft" }[direction ?? "N"] ?? "ArrowUp";
   // Capture inside the browser: round-trip polling can miss the entire zoom.
   await page.evaluate(() => {
@@ -1102,14 +1114,14 @@ test("animates the camera both ways and keeps an active boss sized consistently 
   const zoomSamples = () => page.evaluate(() =>
     (window as Window & { __bossZoomSamples?: number[] }).__bossZoomSamples ?? []
   );
+  // Walking through the doorway into the arena wakes the boss and seals the
+  // doors behind the player.
   await page.keyboard.down(exitKey);
-  await expect.poll(async () => {
-    const value = await game.getAttribute("data-visited-rooms");
-    return Number(value ?? "0");
-  }, { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () =>
+    await game.getAttribute("data-active-bosses"), { timeout: 60_000 }).toBe("1");
   await page.keyboard.up(exitKey);
+  await expect(game).toHaveAttribute("data-arena-doors-locked", /^[1-9]\d*$/);
 
-  await expect(game).toHaveAttribute("data-active-bosses", "1");
   await expect(game).toHaveAttribute("data-active-boss-kind", /^(deepseek-summoner|qwen-teleporter|glm-hunter|kimi-spiral|hy4-wave)$/);
   await expect(game).toHaveAttribute("data-active-boss-stage", "1");
   await expect(bossHud).toBeVisible();
@@ -1197,6 +1209,8 @@ test("animates the camera both ways and keeps an active boss sized consistently 
     (window as Window & { __webcrawlTest?: { defeatAllMonsters: () => void } }).__webcrawlTest?.defeatAllMonsters();
   });
   await expect(bossHud).toBeHidden();
+  // The fight is over: the arena doors unlock and reopen.
+  await expect(game).toHaveAttribute("data-arena-doors-locked", "0");
 });
 
 test("moves continuously with WASD and arrow keys", async ({ page }) => {

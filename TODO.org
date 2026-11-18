@@ -1412,6 +1412,7 @@ Themes:
 Types:
 - Doesn't damage the player, but traps them.
 - Delayed damage (for instance throwing granades)
+- Fanout walking shooters
 
 * DONE Bugs
 :LOGBOOK:
@@ -1478,20 +1479,25 @@ Types:
 - Stun effect should pause any cooldown timers, effectively extending them by the stun length.
 
 * Enemy rebalance continued
-- Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
-- Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
-- Higher level monsters should have slowing bullets, critical damage chance and stunning bullets. Also, different bullet patterns.
-- Higher level walkers should have a dash ability.
 - Monsters in long corridors.
 - Random monster spawns outside of spawners?
 - Destroying certain types of scenery should have a chance of spawning a certain type of monster.
 - Doors in corridors that close when there are monsters nearby
 
+* Enemy rebalance continued
+- Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
+- Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
+- Higher level monsters should have slowing bullets, critical damage chance and stunning bullets. Also, different bullet patterns.
+- Higher level walkers should have a dash ability.
+
 * Boss fights continued
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
 - Doors should shut behind the player once the arena is entered.
 - All enemies in the boss arena are invulnerable until the boss fight actually begins (player enters the room).
-- Camera should zoom out to show the entire boss arena at once when the fight begins.
+- All enemies in the boss arena are inactive until the boss fight actually begins (player enters the room).
+- Monsters should not spawn near the arena entrance and nevers spawn outside of the arena.
+
+* Boss fights continued
 - Should play one of the alert sounds while the boss fight is starting and then transition to the boss music.
 - Play boss music until the boss is killed (or player is killed).
 

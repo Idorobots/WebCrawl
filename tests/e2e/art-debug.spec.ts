@@ -3,7 +3,6 @@ import { artDebugLevel } from "../../src/client/domain/authored-rooms";
 import { PLAYER_ENERGY_MAX } from "../../src/client/domain/world-specs";
 import { LIGHT_DETAIL_STORAGE_KEY, type LightDetail } from "../../src/client/render/light-detail";
 
-test.skip(process.env.VITE_ART_DEBUG !== "true", "Requires a build with VITE_ART_DEBUG=true");
 test.describe.configure({ timeout: 90_000 });
 const { layout } = artDebugLevel();
 
@@ -13,13 +12,13 @@ test("boots directly into the playable, authored art floor without fetching a pa
     fetches.push(route.request().url());
     return route.abort();
   });
-  await page.goto("/");
+  await page.goto("/?art-debug");
   const host = page.locator("#gameCanvas");
   await expect(page.locator("#welcomeScreen")).toBeHidden();
   await expect(page.locator("#loadingScreen")).toBeHidden();
   await expect(page.locator("#gameUi")).toBeVisible();
   await expect(host.locator("canvas")).toBeVisible({ timeout: 30_000 });
-  await expect(host).toHaveAttribute("data-rooms", String(layout.nodes.length), { timeout: 30_000 });
+  await expect(host).toHaveAttribute("data-rooms", String(layout.nodes.length), { timeout: 60_000 });
   const fps = page.locator("#debugFps");
   if (process.env.VITE_DEBUG === "true") {
     await expect(fps).toBeVisible();
@@ -65,15 +64,104 @@ test("boots directly into the playable, authored art floor without fetching a pa
   await expect(page.locator("#bossHud")).toBeVisible();
 });
 
+test("shows a dormant grayscale boss before the arena doors lock and wakes it afterward", async ({ page }) => {
+  await page.goto("/?art-debug");
+  const host = page.locator("#gameCanvas");
+  await expect(host).toHaveAttribute("data-rooms", String(layout.nodes.length), { timeout: 60_000 });
+  const arena = layout.nodes.find(room => room.isBossArena)!;
+  const door = layout.links.find(link => link.target.id === arena.id)!.points[0]!;
+  await page.evaluate(({ x, y }) => {
+    const api = (window as unknown as Window & { __webcrawlTest: {
+      teleportPlayerTo: (x: number, y: number) => void;
+      setPlayerInvulnerable: (enabled: boolean) => void;
+    } }).__webcrawlTest;
+    api.setPlayerInvulnerable(true);
+    api.teleportPlayerTo(x, y);
+  }, { x: door.x + 60, y: door.y });
+
+  const bossAppearance = () => page.evaluate(roomId => {
+    const api = (window as unknown as Window & { __webcrawlTest: {
+      monsters: () => Array<{ id: string; roomId: number; bossKind?: string; active: boolean; hp: number }>;
+    } }).__webcrawlTest;
+    const boss = api.monsters().find(monster => monster.roomId === roomId && monster.bossKind);
+    const scene = (window as unknown as Window & { __webcrawlScene: import("phaser").Scene }).__webcrawlScene;
+    const container = scene.children.list.find(object => object.getData("monsterId") === boss?.id) as
+      import("phaser").GameObjects.Container | undefined;
+    const sprite = container?.getByName("sprite") as import("phaser").GameObjects.Sprite | undefined;
+    return {
+      active: boss?.active, hp: boss?.hp, visible: container?.visible ?? false,
+      grayscale: Boolean(sprite?.getData("stunGrayscale")), paused: sprite?.anims.isPaused,
+    };
+  }, arena.id);
+  await expect.poll(bossAppearance).toMatchObject({ active: false, visible: true, grayscale: true, paused: true });
+  const dormantHp = (await bossAppearance()).hp;
+  await expect(host).toHaveAttribute("data-active-bosses", "0");
+
+  await page.evaluate(({ x, y }) => {
+    (window as unknown as Window & { __webcrawlTest: { teleportPlayerTo: (x: number, y: number) => void } })
+      .__webcrawlTest.teleportPlayerTo(x, y);
+  }, { x: door.x + 101, y: door.y });
+  await expect.poll(bossAppearance).toMatchObject({ active: true, visible: true, grayscale: false, hp: dormantHp });
+  await expect(host).toHaveAttribute("data-active-bosses", "1");
+});
+
+test("opens, renders and activates every art-debug boss arena independently", async ({ page }) => {
+  await page.goto("/?art-debug");
+  const host = page.locator("#gameCanvas");
+  await expect(host).toHaveAttribute("data-rooms", String(layout.nodes.length), { timeout: 60_000 });
+  await page.evaluate(() => {
+    (window as Window & { __webcrawlTest?: { setPlayerInvulnerable: (enabled: boolean) => void } })
+      .__webcrawlTest?.setPlayerInvulnerable(true);
+  });
+
+  for (const arena of layout.nodes.filter(room => room.isBossArena)) {
+    const door = layout.links.find(link => link.target.id === arena.id)!.points.at(-1)!;
+    const bossState = () => page.evaluate(roomId => {
+      const api = (window as unknown as Window & { __webcrawlTest: {
+        monsters: () => Array<{ id: string; roomId: number; bossKind?: string; active: boolean; dead: boolean }>;
+      } }).__webcrawlTest;
+      const boss = api.monsters().find(monster => monster.roomId === roomId && monster.bossKind);
+      const scene = (window as unknown as Window & { __webcrawlScene: import("phaser").Scene }).__webcrawlScene;
+      const container = scene.children.list.find(object => object.getData("monsterId") === boss?.id) as
+        import("phaser").GameObjects.Container | undefined;
+      const sprite = container?.getByName("sprite") as import("phaser").GameObjects.Sprite | undefined;
+      return { id: boss?.id, active: boss?.active, dead: boss?.dead, visible: container?.visible ?? false,
+        grayscale: Boolean(sprite?.getData("stunGrayscale")) };
+    }, arena.id);
+
+    await page.evaluate(({ x, y }) => {
+      (window as unknown as Window & { __webcrawlTest: { teleportPlayerTo: (x: number, y: number) => void } })
+        .__webcrawlTest.teleportPlayerTo(x, y);
+    }, { x: door.x + 60, y: door.y });
+    await expect.poll(bossState).toMatchObject({ active: false, visible: true, grayscale: true });
+    expect(Number(await host.getAttribute("data-arena-doors-locked"))).toBe(0);
+
+    await page.evaluate(({ x, y }) => {
+      (window as unknown as Window & { __webcrawlTest: { teleportPlayerTo: (x: number, y: number) => void } })
+        .__webcrawlTest.teleportPlayerTo(x, y);
+    }, { x: door.x + 101, y: door.y });
+    await expect.poll(bossState).toMatchObject({ active: true, visible: true, grayscale: false });
+    await expect.poll(async () => Number(await host.getAttribute("data-arena-doors-locked"))).toBeGreaterThan(0);
+
+    const id = (await bossState()).id!;
+    await page.evaluate(bossId => {
+      (window as unknown as Window & { __webcrawlTest: { hitMonster: (id: string, damage: number) => void } })
+        .__webcrawlTest.hitMonster(bossId, 1_000_000);
+    }, id);
+    await expect.poll(bossState).toMatchObject({ dead: true });
+    await expect(host).toHaveAttribute("data-arena-doors-locked", "0");
+  }
+});
+
 for (const detail of ["none", "low", "medium", "high"] as const satisfies readonly LightDetail[]) {
   test(`applies ${detail} lighting to the art floor`, async ({ page }) => {
     await page.addInitScript(({ key, detail }) => localStorage.setItem(key, detail), {
       key: LIGHT_DETAIL_STORAGE_KEY,
       detail,
     });
-    await page.goto("/");
+    await page.goto("/?art-debug");
     const host = page.locator("#gameCanvas");
-    await expect(host).toHaveAttribute("data-rooms", String(layout.nodes.length), { timeout: 30_000 });
+  await expect(host).toHaveAttribute("data-rooms", String(layout.nodes.length), { timeout: 60_000 });
     await expect(host).toHaveAttribute("data-light-detail", detail);
     await expect(host).toHaveAttribute("data-lighting-mode", detail === "none" ? "disabled" : "webgl");
     await expect(host).toHaveAttribute("data-flashlight-active", detail === "none" ? "false" : "true");

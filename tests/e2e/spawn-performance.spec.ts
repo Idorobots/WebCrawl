@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import type Phaser from "phaser";
 import { LIGHT_DETAIL_STORAGE_KEY } from "../../src/client/render/light-detail";
 
-test.skip(process.env.VITE_ART_DEBUG !== "true", "Requires VITE_ART_DEBUG=true");
 test.setTimeout(120_000);
 
 type TestWindow = Window & {
@@ -15,7 +14,7 @@ type TestWindow = Window & {
 
 test("defers off-screen summon visuals and resumes them when the camera returns", async ({ page }) => {
   await page.addInitScript(key => localStorage.setItem(key, "high"), LIGHT_DETAIL_STORAGE_KEY);
-  await page.goto("/");
+  await page.goto("/?art-debug");
   const game = page.locator("#gameCanvas");
   await expect(game).toHaveAttribute("data-active-spawners", "1", { timeout: 30_000 });
   await expect(game).toHaveAttribute("data-active-monsters", "0");
