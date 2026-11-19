@@ -999,15 +999,42 @@ export function monsterSpecsForCorridor(link: LayoutLink, floor = 1, keepOut = l
 
 const SCENERY_AMBUSH_KINDS = new Map<string, RegularMonsterKind>([
   ["crate-cargo", "melee-light"],
+  ["crate-armored", "melee-light"],
+  ["crate-ammo", "shooter-light"],
+  ["crate-medical", "melee-light"],
   ["steel-crate-stack", "melee-light"],
+  ["cargo-shelf", "melee-light"],
   ["tool-locker", "shooter-light"],
   ["personal-locker", "shooter-light"],
+  ["sealed-escape-capsule", "shooter-light"],
+  ["lifeboat-pod", "melee-light"],
 ]);
 
-export const SCENERY_AMBUSH_CHANCE = 0.05;
+export const SCENERY_AMBUSH_CHANCE = 0.10;
+export const SCENERY_AMBUSH_POWERUP_CHANCE = 0.02;
 
-export function sceneryAmbushRoll(item: Pick<Decoration, "id">, floorIdentity: string): boolean {
-  return stableHash(`${floorIdentity}|${item.id}|scenery-ambush`) / 0x1_0000_0000 < SCENERY_AMBUSH_CHANCE;
+export function sceneryAmbushOutcome(
+  item: Pick<Decoration, "id" | "definitionId" | "destructible">,
+  floorIdentity: string,
+): "monster" | "powerup" | null {
+  if (!item.destructible || !SCENERY_AMBUSH_KINDS.has(item.definitionId)) return null;
+  const roll = stableHash(`${floorIdentity}|${item.id}|scenery-ambush`) / 0x1_0000_0000;
+  if (roll < SCENERY_AMBUSH_CHANCE) return "monster";
+  if (roll < SCENERY_AMBUSH_CHANCE + SCENERY_AMBUSH_POWERUP_CHANCE) return "powerup";
+  return null;
+}
+
+export function sceneryAmbushPowerupDrop(item: Decoration, floorIdentity: string): LootItem {
+  const id = `${floorIdentity}::${item.id}::ambush-powerup`;
+  return {
+    id,
+    roomId: item.roomId,
+    x: item.x,
+    y: item.y,
+    kind: "powerup",
+    powerup: powerupForSeed(stableHash(id)),
+    powerupPlacement: "floor",
+  };
 }
 
 export function monsterSpecForSceneryAmbush(item: Decoration, floor: number): Monster | null {

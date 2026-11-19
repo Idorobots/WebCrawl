@@ -1,11 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import type { SecurityDoor } from "../../src/client/domain/corridor-encounters";
 import { SECURITY_DOOR_MAX_HP, SECURITY_DOOR_RADIUS } from "../../src/client/domain/corridor-encounters";
-import { sceneryAmbushRoll } from "../../src/client/domain/generation";
+import { sceneryAmbushOutcome } from "../../src/client/domain/generation";
 import { WORLD_GEOMETRY } from "../../src/client/domain/world-specs";
 import { doorModuleStyles } from "../../src/client/render/corridor-render-plan";
 import { LIGHT_DETAIL_STORAGE_KEY } from "../../src/client/render/light-detail";
-import type { Decoration, DungeonLayout, Monster, Point, WeaponKind } from "../../src/client/types";
+import type { Decoration, DungeonLayout, Monster, Point, PowerupKind, WeaponKind } from "../../src/client/types";
 
 type TestWindow = Window & {
   __webcrawlScene: import("phaser").Scene;
@@ -15,6 +15,7 @@ type TestWindow = Window & {
     lastMonsterPathSearchAt(id: string): number | undefined;
     monsters(): Pick<Monster, "id" | "kind" | "x" | "y" | "spawnCorridorId" | "active" | "dead">[];
     scenery(): Pick<Decoration, "id" | "definitionId" | "x" | "y" | "roomId" | "corridorId" | "destructible">[];
+    loot(): Array<Point & { id: string; kind: string; placement: string | null; powerup: PowerupKind | null }>;
     teleportPlayerTo(x: number, y: number): void;
     setPlayerInvulnerable(enabled: boolean): void;
     setMonsterAggroRadius(radius: number): void;
@@ -35,8 +36,7 @@ const html = `<body><nav><ul>${Array.from({ length: 12 }, (_, index) =>
   `<article id="entry-${index}"><h1>Article ${index}</h1><p>First paragraph.</p><p>Second paragraph.</p></article>`
 ).join("")}</main></body>`;
 
-test("corridor doors trap encounters, take projectile damage, and stay broken on return", async ({ page }) => {
-  test.setTimeout(90_000);
+async function openFixture(page: Page) {
   await page.addInitScript(key => localStorage.setItem(key, "low"), LIGHT_DETAIL_STORAGE_KEY);
   await page.route("**/api/fetch?**", route => route.fulfill({ contentType: "text/html", body: html }));
   await page.route("https://example.com/**", route => route.fulfill({ contentType: "text/html", body: html }));
@@ -46,11 +46,26 @@ test("corridor doors trap encounters, take projectile damage, and stay broken on
   await page.getByRole("button", { name: "Go" }).click();
   const host = page.locator("#gameCanvas");
   await expect(host).toHaveAttribute("data-rooms", /[1-9]\d*/, { timeout: 60_000 });
+  return host;
+}
+
+const teleport = (page: Page, point: Point) => page.evaluate(({ x, y }) =>
+  (window as unknown as TestWindow).__webcrawlTest.teleportPlayerTo(x, y), point);
+
+const revisitFloor = (page: Page) => page.evaluate(async () => {
+  const api = (window as unknown as TestWindow).__webcrawlTest;
+  await api.navigate("https://example.com/another-floor");
+  await api.goBack();
+});
+
+test("corridor doors trap encounters, take projectile damage, and stay broken on return", async ({ page }) => {
+  test.setTimeout(90_000);
+  const host = await openFixture(page);
   const initial = await page.evaluate(() => {
     const api = (window as unknown as TestWindow).__webcrawlTest;
     api.setPlayerInvulnerable(true);
     api.setMonsterAggroRadius(0);
-    return { doors: api.securityDoors(), monsters: api.monsters(), layout: api.layout(), scenery: api.scenery() };
+    return { doors: api.securityDoors(), monsters: api.monsters(), layout: api.layout() };
   });
   const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
   const door = initial.doors.find(item => initial.monsters.some(monster =>
@@ -65,8 +80,6 @@ test("corridor doors trap encounters, take projectile damage, and stay broken on
   const step = Math.sign(horizontal ? x - nearbyMonster.x : y - nearbyMonster.y) * 110;
   const from = { x: x + (horizontal ? step : 0), y: y + (horizontal ? 0 : step) };
   const target = { x, y: y - 32 };
-  const teleport = (point: Point) => page.evaluate(({ x, y }) =>
-    (window as unknown as TestWindow).__webcrawlTest.teleportPlayerTo(x, y), point);
   const state = () => page.evaluate(({ id, center, radius }) => {
     const { __webcrawlTest: api, __webcrawlScene: scene } = window as unknown as TestWindow;
     const light = scene.lights.lights.find(light => light.x === center.x && light.y === center.y && light.radius === radius);
@@ -87,17 +100,17 @@ test("corridor doors trap encounters, take projectile damage, and stay broken on
       y: start.y + inward.y * 61 + (inward.x ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
     };
     // Visit the source room before revealing the corridor at its exit.
-    await teleport(reveal);
+    await teleport(page, reveal);
     await expect(host).toHaveAttribute("data-player-x", String(Math.round(reveal.x)));
     await expect(host).toHaveAttribute("data-player-y", String(Math.round(reveal.y)));
-    await teleport(reveal);
+    await teleport(page, reveal);
   };
 
   expect(await state()).toMatchObject({ visible: false });
   await revealCorridor(link);
   await expect.poll(() => page.evaluate(id => (window as unknown as TestWindow).__webcrawlTest.monsters()
     .find(monster => monster.id === id)?.active, nearbyMonster.id)).toBe(true);
-  await teleport(from);
+  await teleport(page, from);
   await expect(host).toHaveAttribute("data-player-x", String(Math.round(from.x)));
   await expect(host).toHaveAttribute("data-player-y", String(Math.round(from.y)));
   await expect.poll(state).toEqual({ hp: SECURITY_DOOR_MAX_HP, visible: true, color: [255, 151, 44], barWidth: null });
@@ -108,7 +121,7 @@ test("corridor doors trap encounters, take projectile damage, and stay broken on
   await expect.poll(async () => Math.abs(Number(await host.getAttribute(`data-player-${axis}`)) - from[axis]))
     .toBeGreaterThan(30);
   await page.keyboard.up(key);
-  await teleport(door!.position);
+  await teleport(page, door!.position);
   expect(Number(await host.getAttribute(`data-player-${axis}`))).not.toBe(door!.position[axis]);
 
   const shoot = () => page.evaluate(target => {
@@ -116,7 +129,7 @@ test("corridor doors trap encounters, take projectile damage, and stay broken on
     api.setWeaponAmmo(20);
     return api.shoot(target);
   }, target);
-  await teleport(from);
+  await teleport(page, from);
   await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.equipWeapon("needle-rail", 20));
   expect(await shoot()).toBe(true);
   await expect.poll(async () => (await state()).hp).toBeLessThan(SECURITY_DOOR_MAX_HP);
@@ -146,37 +159,59 @@ test("corridor doors trap encounters, take projectile damage, and stay broken on
     });
   }, { x: x + half.offsetX, y: y + half.offsetY, asset: half.asset })).toBe(true);
   await expect.poll(async () => {
-    await teleport(door!.position);
+    await teleport(page, door!.position);
     return Number(await host.getAttribute(`data-player-${axis}`));
   }).toBe(Math.round(door!.position[axis]));
 
-  const ambush = initial.scenery.find(item => item.destructible && !item.corridorId &&
-    ["crate-cargo", "tool-locker", "personal-locker", "steel-crate-stack"].includes(item.definitionId) &&
-    !initial.layout.nodes.find(room => room.id === item.roomId)?.isBossArena &&
-    sceneryAmbushRoll(item, `${url}::floor-1`));
-  expect(ambush).toBeDefined();
-  const room = initial.layout.nodes.find(room => room.id === ambush!.roomId)!;
-  await teleport({ x: room.x, y: room.y });
-  const ambushId = `${ambush!.id}::ambush`;
-  const ambushMonsters = () => page.evaluate(id => (window as unknown as TestWindow).__webcrawlTest.monsters()
-    .filter(monster => monster.id === id), ambushId);
-  await page.evaluate(id => {
-    const api = (window as unknown as TestWindow).__webcrawlTest;
-    api.destroyScenery(id);
-    api.destroyScenery(id);
-  }, ambush!.id);
-  await expect.poll(ambushMonsters).toEqual([expect.objectContaining({
-    kind: ambush!.definitionId.endsWith("locker") ? "shooter-light" : "melee-light", dead: false,
-  })]);
-  await page.evaluate(id => (window as unknown as TestWindow).__webcrawlTest.hitMonster(id, 1000), ambushId);
-
-  await page.evaluate(async () => {
-    const api = (window as unknown as TestWindow).__webcrawlTest;
-    await api.navigate("https://example.com/another-floor");
-    await api.goBack();
-  });
+  await revisitFloor(page);
   await expect(host).toHaveAttribute("data-floor", "1");
-  await teleport(door!.position);
+  await teleport(page, door!.position);
   await expect.poll(state).toMatchObject({ hp: 0, visible: false, barWidth: null });
-  await expect.poll(ambushMonsters).toEqual([expect.objectContaining({ dead: true })]);
+});
+
+test("destroyed scenery spawns one ambush monster or one collectible powerup, with results saved on return", async ({ page }) => {
+  test.setTimeout(90_000);
+  await openFixture(page);
+  const initial = await page.evaluate(() => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    api.setPlayerInvulnerable(true);
+    api.setMonsterAggroRadius(0);
+    return { scenery: api.scenery(), layout: api.layout() };
+  });
+  const scenery = initial.scenery.filter(item => !item.corridorId &&
+    !initial.layout.nodes.find(room => room.id === item.roomId)?.isBossArena);
+  const floor = `${url}::floor-1`;
+  const ambush = scenery.find(item => sceneryAmbushOutcome(item, floor) === "monster");
+  const reward = scenery.find(item => sceneryAmbushOutcome(item, floor) === "powerup");
+  expect(ambush).toBeDefined();
+  expect(reward).toBeDefined();
+  const room = initial.layout.nodes.find(room => room.id === ambush!.roomId)!;
+  await teleport(page, { x: room.x, y: room.y });
+  const ambushMonsters = (id: string) => page.evaluate(id => (window as unknown as TestWindow).__webcrawlTest.monsters()
+    .filter(monster => monster.id === `${id}::ambush`), id);
+  const ambushPowerups = (id: string) => page.evaluate(id => (window as unknown as TestWindow).__webcrawlTest.loot()
+    .filter(item => item.id === id), `${floor}::${id}::ambush-powerup`);
+  const destroyTwice = (id: string) => page.evaluate(id => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    api.destroyScenery(id);
+    api.destroyScenery(id);
+  }, id);
+  await destroyTwice(ambush!.id);
+  await destroyTwice(reward!.id);
+  await expect.poll(() => ambushMonsters(ambush!.id)).toEqual([expect.objectContaining({
+    kind: expect.stringMatching(/^(melee|shooter)-light$/), dead: false,
+  })]);
+  expect(await ambushPowerups(ambush!.id)).toEqual([]);
+  expect(await ambushMonsters(reward!.id)).toEqual([]);
+  const uncollected = await ambushPowerups(reward!.id);
+  expect(uncollected).toEqual([expect.objectContaining({ kind: "powerup", powerup: expect.any(String), placement: "floor" })]);
+  await page.evaluate(id => (window as unknown as TestWindow).__webcrawlTest.hitMonster(id, 1000), `${ambush!.id}::ambush`);
+
+  await revisitFloor(page);
+  await expect.poll(() => ambushMonsters(ambush!.id)).toEqual([expect.objectContaining({ dead: true })]);
+  expect(await ambushPowerups(reward!.id)).toEqual(uncollected);
+  await teleport(page, uncollected[0]!);
+  expect(await ambushPowerups(reward!.id)).toEqual([]);
+  await revisitFloor(page);
+  expect(await ambushPowerups(reward!.id)).toEqual([]);
 });

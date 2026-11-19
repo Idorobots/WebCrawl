@@ -1487,11 +1487,20 @@ Types:
 - Doors in corridors that close when there are monsters nearby
 
 * Enemy rebalance continued
+- Higher level shooting monsters should have slowing bullets and stunning bullets. Let's go for 5% chance per floor above floor 3. The player slowdown should last 500 ms and stun 100 ms.
+
+- Higher level monsters should have critical damage chance on each attack. Let's go for 1% chance per floor above floor 3.
+
+- Higher level walkers should have a dash ability - when close to a player they should dash towards them and deal damage when the dash connects. The dash distance should be based on the mosters speed and it should have a cooldown (same as regular attacks).
+
+- Additional fanout walking shooter - let's add a shooter scout and heavy with a fanout bullet pattern. These should shoot more
+slowly from further away. Let's start with 3 bullets and increase that by 1 bullet per floor above floor 4.
+
+
+* Enemy rebalance continued
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
 - Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
-- Higher level monsters should have slowing bullets, critical damage chance and stunning bullets. Also, different bullet patterns.
-- Higher level walkers should have a dash ability.
-- Random monster spawns outside of spawners?
+- Random monster spawns outside of spawners in already discovered rooms?
 
 * DONE Boss fights continued
 :LOGBOOK:
@@ -1505,7 +1514,8 @@ Types:
 
 * Boss fights continued
 - Should play one of the alert sounds while the boss fight is starting and then transition to the boss music.
-- Play boss music until the boss is killed (or player is killed).
+- Before activating the boss "animate" it by shaking the sprite around while the alert sound is playing.
+- After the boss is activated, play boss music until the boss is killed (or the player is killed).
 
 * Room layout
 - We currently have different hard-coded shapes of rooms, but it would be nice to be able to build arbitrary shapes out of tiles of floors and walls. The layout engine should first plan the level map and generate room shapes, then connect them with corridors. Each corridor should start and end with a door, either horizontal or vertical. Rooms & corridors should be constructed in such a fashion, that they can all be enclosed with tiled wall pieces.
@@ -1518,7 +1528,9 @@ Types:
 There should be no doors generated leading to these hidden rooms, only walls with a passable section (essentially a "holographic" wall), to maintain the illusion of those rooms being hidden.
 
 * Ambush rooms
-Look empty, but monsters lurk in large scenery crates and burst out of it a few seconds after the player enters the room.
+- Let's introduce empty rooms into the game - some rooms should generat no monsters at all and only contain scenery (based on the selected room theme).
+- Some of those empty rooms (10% chance) should be generated as "ambush rooms" - the rooms should contain multiple "ambush" scenery items that burst open the moment the player comes near the room center. Each scenery item destroyed should spawn a monster according to the normal ambush rules. The 5% powerup chance should still apply, even though the monster chance is now higher for all applicable scenery items in that room.
+
 * DONE Vending machines
 :LOGBOOK:
 - State "DONE"       from              [2026-10-04 Sun 22:50]

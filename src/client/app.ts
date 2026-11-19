@@ -90,7 +90,8 @@ import {
   monsterSpecForSceneryAmbush,
   monsterSpecForSpawner,
   rewardPedestalForRoom,
-  sceneryAmbushRoll,
+  sceneryAmbushOutcome,
+  sceneryAmbushPowerupDrop,
 } from "./domain/generation";
 import { buildSecurityDoors, isSecurityDoor, SECURITY_DOOR_RADIUS, type SecurityDoor } from "./domain/corridor-encounters";
 import { contentPagesForRoom, domToGraph } from "./domain/graph";
@@ -1509,9 +1510,15 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
     if (item.vendingKind) Object.assign(item, vendingWreck(item));
     renderDecorations();
     if (currentPageUrl) {
-      const drops = createSceneryDrops([destroyedItem], floorIdentity(currentPageUrl), collectedLoot);
+      const floor = floorIdentity(currentPageUrl);
+      const ambush = sceneryAmbushOutcome(destroyedItem, floor);
+      const drops = createSceneryDrops([destroyedItem], floor, collectedLoot);
       const bonus = persistBonusDrop(destroyedItem);
       if (bonus) drops.push(bonus);
+      if (ambush === "powerup") {
+        const powerup = persistExtraDrop(sceneryAmbushPowerupDrop(destroyedItem, floor));
+        if (powerup) drops.push(powerup);
+      }
       if (item.vendingKind) {
         const position = nearbyVendingLootPosition(item) ?? item;
         for (const drop of drops) {
@@ -1522,10 +1529,10 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
       }
       currentLoot.push(...drops);
       if (drops.length) renderInteractiveObjects();
+      if (ambush === "monster") spawnSceneryAmbush(destroyedItem);
     }
     renderContentBrowser();
     renderVendingPreview();
-    spawnSceneryAmbush(destroyedItem);
     if (depleted) applyPlayerDamage(1);
     if (item.kind === "barrel") {
       const targets = barrelExplosionTargets(item, currentDecorations, currentMonsters, player);
@@ -1877,9 +1884,9 @@ function findSpawnerSpawnPosition(monster: Monster, spawner: Decoration): Point 
 }
 
 function spawnSceneryAmbush(item: Decoration): void {
-  if (!MONSTERS_ENABLED || !currentPageUrl) return;
+  if (!MONSTERS_ENABLED) return;
   const monster = monsterSpecForSceneryAmbush(item, floorNumber());
-  if (!monster || !sceneryAmbushRoll(item, floorIdentity(currentPageUrl))) return;
+  if (!monster) return;
   const corridor = item.corridorId && currentLayout?.links.find(link => link.id === item.corridorId);
   const footprint = worldPoint(monster, "footprintRadii");
   const position = [0, 48, 88, 128].flatMap(radius => radius === 0 ? [{ x: item.x, y: item.y }] :
@@ -1984,8 +1991,13 @@ function applyPlayerDamage(amount: number, bullet?: Bullet): void {
 function persistBonusDrop(source: Monster | Decoration): LootItem | null {
   if (!currentPageUrl) return null;
   const drop = bonusLootDrop(source, floorIdentity(currentPageUrl), playerState.powerups.extra_loot ?? 0);
-  if (!drop || collectedLoot.has(drop.id) || extraLootForCurrentPage().some(item => item.id === drop.id)) return null;
-  extraLootForCurrentPage().push(drop);
+  return drop && persistExtraDrop(drop);
+}
+
+function persistExtraDrop(drop: LootItem): LootItem | null {
+  const extraLoot = extraLootForCurrentPage();
+  if (collectedLoot.has(drop.id) || extraLoot.some(item => item.id === drop.id)) return null;
+  extraLoot.push(drop);
   return drop;
 }
 
