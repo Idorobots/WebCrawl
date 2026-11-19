@@ -16,7 +16,11 @@ import type {
   Stair,
 } from "../types";
 import { stableHash } from "./hash";
-import { footprintsOverlap, pointInRoomFloor } from "./geometry";
+import { footprintsOverlap, pointInCorridor, pointInRoomFloor } from "./geometry";
+import {
+  CORRIDOR_MONSTER_MIN_LENGTH, corridorEncounterLinks, corridorEncounterPositionIsClear,
+  corridorKeepOutPoints, corridorRuns, type SecurityDoor,
+} from "./corridor-encounters";
 import { FloorGeometry } from "./floor-geometry";
 import { buildWallFootprints, WallRectIndex, wallOverlapsEllipse } from "./wall-collision";
 import { hasReadableRoomContent } from "./graph";
@@ -499,6 +503,7 @@ export function decorationSpecsForCorridor(
       ...definition,
       id: `${link.id}::decor-${index}`,
       roomId: link.ownerRoomId,
+      corridorId: link.id,
       ...position,
       visualVariant: itemSeed,
       kind: "corridor-prop",
@@ -964,10 +969,57 @@ export function monsterSpecsForRoom(
     : regularMonsters;
 }
 
-export function monsterSpecsForCorridor(link: LayoutLink, floor = 1): Monster[] {
-  void link;
-  void floor;
-  return [];
+const CORRIDOR_MONSTER_SPAWN_CHANCE_PERCENT = 60;
+
+export function monsterSpecsForCorridor(link: LayoutLink, floor = 1, keepOut = link.points): Monster[] {
+  const runs = corridorRuns(link);
+  const length = runs.reduce((sum, run) => sum + run.length, 0);
+  if (length < CORRIDOR_MONSTER_MIN_LENGTH) return [];
+  const encounterRoll = stableHash(`${link.source.lootSeed}|${link.target.lootSeed}|${link.id}|${floor}|corridor-encounter`);
+  if (encounterRoll % 100 >= CORRIDOR_MONSTER_SPAWN_CHANCE_PERCENT) return [];
+  const candidates = runs.flatMap(({ start, end, length }) => {
+    const steps = Math.ceil(length / ENVIRONMENT_SEGMENT_SIZE);
+    return Array.from({ length: steps }, (_, index) => ({
+      x: start.x + (end.x - start.x) * (index + 0.5) / steps,
+      y: start.y + (end.y - start.y) * (index + 0.5) / steps,
+    }));
+  }).filter(point => corridorEncounterPositionIsClear(point, keepOut));
+  const count = Math.min(candidates.length, 3, Math.floor(length / CORRIDOR_MONSTER_MIN_LENGTH));
+  return Array.from({ length: count }, (_, index) => {
+    const id = `${link.id}::corridor-monster-${index}`;
+    const seed = stableHash(`${link.source.lootSeed}|${id}|${floor}`);
+    const position = candidates[Math.floor((index + 0.5) * candidates.length / count)]!;
+    return {
+      ...regularMonsterSpec(id, seed, link.ownerRoomId, position, floor, "room",
+        (seed >>> 16) % 3 === 0 ? "shooter-light" : "melee-light"),
+      spawnCorridorId: link.id,
+    };
+  });
+}
+
+const SCENERY_AMBUSH_KINDS = new Map<string, RegularMonsterKind>([
+  ["crate-cargo", "melee-light"],
+  ["steel-crate-stack", "melee-light"],
+  ["tool-locker", "shooter-light"],
+  ["personal-locker", "shooter-light"],
+]);
+
+export const SCENERY_AMBUSH_CHANCE = 0.05;
+
+export function sceneryAmbushRoll(item: Pick<Decoration, "id">, floorIdentity: string): boolean {
+  return stableHash(`${floorIdentity}|${item.id}|scenery-ambush`) / 0x1_0000_0000 < SCENERY_AMBUSH_CHANCE;
+}
+
+export function monsterSpecForSceneryAmbush(item: Decoration, floor: number): Monster | null {
+  const kind = SCENERY_AMBUSH_KINDS.get(item.definitionId);
+  if (!kind || !item.destructible) return null;
+  const id = `${item.id}::ambush`;
+  return {
+    ...regularMonsterSpec(id, stableHash(`${id}|${floor}`), item.roomId, { x: item.x, y: item.y }, floor, "room", kind),
+    spawnSourceId: item.id,
+    spawnCorridorId: item.corridorId,
+    dropsLoot: false,
+  };
 }
 
 export function monsterSpecForSpawner(spawner: Decoration, floor: number, index: number): Monster {
@@ -1012,6 +1064,8 @@ export function buildMonsters(
   playerSpawn?: Point,
   walls = new WallRectIndex(buildWallFootprints(layout)),
   authoredRooms: AuthoredRooms = new Map(),
+  visitedCorridors: ReadonlySet<string> = new Set(),
+  securityDoors: readonly SecurityDoor[] = [],
 ): Monster[] {
   const floors = new FloorGeometry(layout);
   const arenaRoomIds = new Set(layout.nodes
@@ -1041,8 +1095,15 @@ export function buildMonsters(
       { length: savedStates.get(boss.id)?.summonedCount ?? 0 },
       (_, index) => monsterSpecForBossSummon(boss, floor, index),
     ).filter(monster => !savedStates.get(monster.id)?.dead));
+  const corridorLinks = new Map(layout.links.map(link => [link.id, link]));
+  const corridorClearance = corridorKeepOutPoints(layout);
+  for (const door of securityDoors) corridorClearance.get(door.linkId)?.push(door.position);
   const specs = [
     ...roomSpecs,
+    ...(layout.nodes.every(room => authoredRooms.has(room.id)) ? [] : corridorEncounterLinks(layout)
+      .flatMap(link => monsterSpecsForCorridor(link, floor, corridorClearance.get(link.id)))),
+    ...decorations.filter(item => item.destroyed && savedStates.has(`${item.id}::ambush`))
+      .flatMap(item => monsterSpecForSceneryAmbush(item, floor) ?? []),
     ...decorations
       .filter(item => item.spawner)
       .flatMap(item => Array.from(
@@ -1056,7 +1117,12 @@ export function buildMonsters(
   for (const spec of specs) {
     const saved = savedStates.get(spec.id);
     const desired = { x: saved?.x ?? spec.x, y: saved?.y ?? spec.y };
-    const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters, playerSpawn, walls, floors, !saved);
+    const corridor = spec.spawnCorridorId ? corridorLinks.get(spec.spawnCorridorId) : undefined;
+    const keepOut = spec.spawnCorridorId ? corridorClearance.get(spec.spawnCorridorId) ?? [] : [];
+    const restrictPosition = !saved && corridor ? (point: Point): boolean =>
+      pointInCorridor(point.x, point.y, corridor) && corridorEncounterPositionIsClear(point, keepOut) : undefined;
+    const position = safeMonsterPosition(spec, desired, layout, decorations, placedMonsters, playerSpawn, walls, floors,
+      !saved, restrictPosition);
     if (!position) continue;
     if (!(saved?.dead ?? false) && spec.obstacle) placedMonsters.push({ x: position.x, y: position.y, footprintRadii: worldPoint(spec, "footprintRadii") });
     const relocated = position.x !== desired.x || position.y !== desired.y;
@@ -1069,7 +1135,8 @@ export function buildMonsters(
       active: saved?.active ??
         // Arena enemies sleep until the player actually enters the arena,
         // even once the room has been revealed from its corridor.
-        (arenaRoomIds.has(spec.spawnRoomId) ? false : visitedRooms.has(spec.spawnRoomId)),
+        (spec.spawnCorridorId ? visitedCorridors.has(spec.spawnCorridorId) :
+          !arenaRoomIds.has(spec.spawnRoomId) && visitedRooms.has(spec.spawnRoomId)),
       droppedLoot: saved?.droppedLoot ?? false,
       dropId: saved?.dropId ?? null,
       dropX: saved?.dropX ?? null,
@@ -1084,7 +1151,7 @@ export function buildMonsters(
     const arenaId = layout.nodes.find(room => room.isBossArena)?.id;
     const rooms = layout.nodes
       .filter(room => !room.isRoot && room.id !== arenaId && monsters.some(monster =>
-        monster.spawnRoomId === room.id && !monster.bossKind && !monster.spawnSourceId
+        monster.spawnRoomId === room.id && !monster.bossKind && !monster.spawnSourceId && !monster.spawnCorridorId
       ))
       .sort((left, right) => left.id - right.id);
     if (rooms.length) {
@@ -1095,7 +1162,7 @@ export function buildMonsters(
       ].join("|"));
       const room = rooms[floorSeed % rooms.length]!;
       const candidates = monsters.filter(monster => monster.spawnRoomId === room.id &&
-        !monster.bossKind && !monster.spawnSourceId).sort((left, right) => left.id.localeCompare(right.id));
+        !monster.bossKind && !monster.spawnSourceId && !monster.spawnCorridorId).sort((left, right) => left.id.localeCompare(right.id));
       const firstIndex = stableHash(`${floorSeed}|${room.lootSeed}|miniboss-slot`) % candidates.length;
       for (let index = 0; index < candidates.length; index += 1) {
         const selected = candidates[(firstIndex + index) % candidates.length]!;
@@ -1168,9 +1235,10 @@ function safeMonsterPosition(
   walls = new WallRectIndex(buildWallFootprints(layout)),
   floors = new FloorGeometry(layout),
   restrictToSpawnRoom = false,
+  restrictPosition?: (point: Point) => boolean,
 ): Point | null {
   const room = layout.nodes.find(candidate => candidate.id === monster.spawnRoomId);
-  const centers = [desired, ...(room ? [{ x: room.x, y: room.y }] : [])];
+  const centers = [desired, ...(room && !restrictPosition ? [{ x: room.x, y: room.y }] : [])];
   const candidates: Point[] = [];
   const footprint = worldPoint(monster, "footprintRadii");
   const spacing = Math.max(footprint.x, footprint.y) + 24;
@@ -1187,7 +1255,7 @@ function safeMonsterPosition(
       }
     }
   }
-  if (room) {
+  if (room && !restrictPosition) {
     // Dense rooms can exhaust the ring candidates; fall back to a
     // deterministic scan of the room floor so crowded spots still relocate.
     // Perimeter obstacles leave narrow walkable strips along the walls, so
@@ -1206,7 +1274,8 @@ function safeMonsterPosition(
   return candidates.find(position =>
     // Fresh arena spawns never land outside their arena, whatever else the
     // layout offers; restored positions (a boss that moved) are left alone.
-    (!restrictToSpawnRoom || !room?.isBossArena || pointInRoomFloor(position.x, position.y, room)) &&
+    (!restrictPosition || restrictPosition(position)) &&
+    (!restrictToSpawnRoom || monster.spawnCorridorId || !room?.isBossArena || pointInRoomFloor(position.x, position.y, room)) &&
     (!playerSpawn || !footprintsOverlap(position, footprint, playerSpawn, PLAYER_SPEC.footprintRadii)) &&
     monsterPositionIsClear(position, footprint, layout, decorations, placedMonsters, walls, floors)
   ) ?? null;

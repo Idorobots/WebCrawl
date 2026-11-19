@@ -3,7 +3,7 @@ import { buildCorridorRenderPlan, buildRoomWalls, roomDoorsForLayout, type DoorM
 import { forSpatialCells } from "./spatial";
 import { WORLD_GEOMETRY } from "./specs";
 
-export interface WallRect { x: number; y: number; width: number; height: number }
+export interface WallRect { x: number; y: number; width: number; height: number; securityDoorId?: string }
 export type WallPiece = "wall-N" | "wall-E" | "wall-S" | "wall-W" |
   "top-left" | "top-right" | "bottom-left" | "bottom-right" |
   "door-N" | "door-E" | "door-S" | "door-W";
@@ -81,7 +81,7 @@ function footprintsForModules(modules: readonly WallModulePlan[]): WallRect[] {
     .flatMap(module => wallPieceFootprints(wallPiece(module), module));
 }
 
-export function buildWallFootprints(layout: DungeonLayout): WallRect[] {
+export function buildWallFootprints(layout: DungeonLayout, securityDoors: readonly DoorModulePlan[] = []): WallRect[] {
   const plan = buildCorridorRenderPlan(layout, s);
   const rectangles = footprintsForModules([...plan.walls, ...plan.corners]);
   for (const room of layout.nodes) {
@@ -90,6 +90,7 @@ export function buildWallFootprints(layout: DungeonLayout): WallRect[] {
     rectangles.push(...doors.filter(door => !door.sharedTarget)
       .flatMap(door => wallPieceFootprints(doorPiece(door), door.position)));
   }
+  for (const door of securityDoors) rectangles.push(...wallPieceFootprints(doorPiece(door), door.position));
   return rectangles.filter(rect => rect.width > 0 && rect.height > 0);
 }
 
@@ -107,6 +108,19 @@ export function closedDoorFootprint(door: DoorModulePlan): WallRect {
     width: vertical ? t : 2 * s,
     height: vertical ? 2 * s : t,
   };
+}
+
+/** Only the opening between the permanent jambs belongs to a breakable leaf. */
+export function securityDoorLeafFootprint(door: DoorModulePlan): WallRect {
+  const jambs = WALL_FOOTPRINTS[doorPiece(door)];
+  const first = jambs[0]!;
+  const second = jambs[1]!;
+  if (door.side === "E" || door.side === "W") {
+    const y = first.y + first.height;
+    return { x: door.position.x + first.x, y: door.position.y + y, width: first.width, height: second.y - y };
+  }
+  const x = first.x + first.width;
+  return { x: door.position.x + x, y: door.position.y + first.y, width: second.x - x, height: first.height };
 }
 
 export class WallRectIndex {
@@ -141,6 +155,10 @@ function normalizedDistanceSquared(point: Point, radii: EllipseRadii, rect: Wall
   return ((point.x - nearX) / radii.x) ** 2 + ((point.y - nearY) / radii.y) ** 2;
 }
 
+export function ellipseOverlapsWall(point: Point, radii: EllipseRadii, rect: WallRect): boolean {
+  return radii.x > 0 && radii.y > 0 && normalizedDistanceSquared(point, radii, rect) < 1;
+}
+
 export function wallOverlapsEllipse(point: Point, radii: EllipseRadii, index: WallRectIndex): boolean {
   if (radii.x <= 0 || radii.y <= 0) return false;
   for (const rect of index.candidates(point, point, radii)) {
@@ -152,8 +170,13 @@ export function wallOverlapsEllipse(point: Point, radii: EllipseRadii, index: Wa
 /** Convex distance from the moving ellipse center to a rectangle; minimizes
  * across the entire step, including a thin wall between the endpoints. */
 export function wallBlocksSegment(from: Point, to: Point, radii: EllipseRadii, index: WallRectIndex): boolean {
-  if (radii.x <= 0 || radii.y <= 0) return false;
-  if (from.x === to.x && from.y === to.y) return wallOverlapsEllipse(from, radii, index);
+  return wallHitBySegment(from, to, radii, index) !== undefined;
+}
+
+/** Returns a touched wall footprint. At a jamb/leaf seam, the solid frame absorbs the shot. */
+export function wallHitBySegment(from: Point, to: Point, radii: EllipseRadii, index: WallRectIndex): WallRect | undefined {
+  if (radii.x <= 0 || radii.y <= 0) return;
+  let breakableHit: WallRect | undefined;
   for (const rect of index.candidates(from, to, radii)) {
     if (Math.max(from.x, to.x) + radii.x <= rect.x ||
         Math.min(from.x, to.x) - radii.x >= rect.x + rect.width ||
@@ -163,16 +186,20 @@ export function wallBlocksSegment(from: Point, to: Point, radii: EllipseRadii, i
       x: from.x + (to.x - from.x) * fraction,
       y: from.y + (to.y - from.y) * fraction,
     }, radii, rect);
-    if (distanceAt(0) < 1 || distanceAt(1) < 1) return true;
-    let left = 0;
-    let right = 1;
-    for (let iteration = 0; iteration < 36; iteration += 1) {
-      const a = left + (right - left) / 3;
-      const b = right - (right - left) / 3;
-      if (distanceAt(a) < distanceAt(b)) right = b;
-      else left = a;
+    if (distanceAt(0) >= 1 && distanceAt(1) >= 1) {
+      if (from.x === to.x && from.y === to.y) continue;
+      let left = 0;
+      let right = 1;
+      for (let iteration = 0; iteration < 36; iteration += 1) {
+        const a = left + (right - left) / 3;
+        const b = right - (right - left) / 3;
+        if (distanceAt(a) < distanceAt(b)) right = b;
+        else left = a;
+      }
+      if (distanceAt((left + right) / 2) >= 1) continue;
     }
-    if (distanceAt((left + right) / 2) < 1) return true;
+    if (!rect.securityDoorId) return rect;
+    breakableHit ??= rect;
   }
-  return false;
+  return breakableHit;
 }

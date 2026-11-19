@@ -73,6 +73,7 @@ import {
   distanceSquared,
   footprintMoveIsClear,
   footprintsOverlap,
+  pointInCorridor,
   roomContainingFloorPoint,
   slideAlongObstacles,
   type EllipseObstacle,
@@ -86,9 +87,12 @@ import {
   bonusLootDrop,
   monsterLootDropKindForSeed,
   monsterSpecForBossSummon,
+  monsterSpecForSceneryAmbush,
   monsterSpecForSpawner,
   rewardPedestalForRoom,
+  sceneryAmbushRoll,
 } from "./domain/generation";
+import { buildSecurityDoors, isSecurityDoor, SECURITY_DOOR_RADIUS, type SecurityDoor } from "./domain/corridor-encounters";
 import { contentPagesForRoom, domToGraph } from "./domain/graph";
 import { layoutOrthogonal } from "./domain/layout";
 import { advanceMonsterStatuses, applyBulletStatuses, monsterMovementSpeed, stunMonster } from "./domain/monster-status";
@@ -102,7 +106,8 @@ import {
   type PlayerState,
 } from "./domain/powerups";
 import { forSpatialCells, indexMonsterHitboxes, monsterBlockingRadii, monsterCollisionCandidates, MonsterFootprintIndex, spatialCellKey } from "./domain/spatial";
-import { buildWallFootprints, wallBlocksSegment, wallHitboxes, wallOverlapsEllipse, WallRectIndex, type WallRect } from "./domain/wall-collision";
+import { buildWallFootprints, ellipseOverlapsWall, securityDoorLeafFootprint, wallBlocksSegment, wallHitboxes,
+  wallHitBySegment, wallOverlapsEllipse, WallRectIndex, type WallRect } from "./domain/wall-collision";
 import {
   BARREL_EXPLOSION_DAMAGE,
   BOSS_DEFINITIONS,
@@ -309,6 +314,8 @@ let currentMonsters: Monster[] = [];
 let currentDecorations: Decoration[] = [];
 let currentVendingMachines: Decoration[] = [];
 let currentSpawners: Decoration[] = [];
+let currentSecurityDoors = new Map<string, SecurityDoor>();
+let closedSecurityLeaves = new WallRectIndex([]);
 let currentArenaEntrances: Point[] = [];
 let currentArenaDoorsByRoom = new Map<number, Point[]>();
 const vendingContacts = new Map<string, number>();
@@ -701,6 +708,10 @@ function revealRoomsFromCorridor(x: number, y: number): void {
     const key = currentStateId ?? currentPageUrl;
     if (key) discoveredCorridorsByPage.set(key, new Set(visitedCorridors));
     updateFogOfWar();
+    const revealed = new Set(discovery.corridors);
+    activateMonsters(monster => Boolean(monster.spawnCorridorId && revealed.has(monster.spawnCorridorId)));
+    updateSecurityDoors();
+    if (updateFloorPortals()) renderInteractiveObjects();
   }
   for (const room of discovery.rooms) markVisited(room);
 }
@@ -1143,6 +1154,8 @@ function unloadLevel(): void {
   currentDecorations = [];
   currentVendingMachines = [];
   currentSpawners = [];
+  currentSecurityDoors.clear();
+  closedSecurityLeaves = new WallRectIndex([]);
   currentArenaEntrances = [];
   currentArenaDoorsByRoom.clear();
   currentStairs = [];
@@ -1462,6 +1475,13 @@ function renderBulletImpact(bullet: Bullet): void {
 function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void {
   if (!applyObstacleDamage(item, amount)) return;
 
+  if (isSecurityDoor(item)) {
+    saveObstacleState(item);
+    renderer.updateSecurityDoorDamage(item.id);
+    if (item.destroyed) renderer.playExplosionSound();
+    return;
+  }
+
   if (item.hp <= 0) {
     const depleted = item.vendingExhaustedAt !== undefined;
     item.vendingExhaustedAt = undefined;
@@ -1505,6 +1525,7 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
     }
     renderContentBrowser();
     renderVendingPreview();
+    spawnSceneryAmbush(destroyedItem);
     if (depleted) applyPlayerDamage(1);
     if (item.kind === "barrel") {
       const targets = barrelExplosionTargets(item, currentDecorations, currentMonsters, player);
@@ -1630,6 +1651,8 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string, playerSpawn?: Poi
     playerSpawn,
     wallFootprints,
     currentAuthoredRooms ?? undefined,
+    visitedCorridors,
+    [...currentSecurityDoors.values()],
   );
   for (const monster of monsters) {
     const saved = monsterStateMapForPage(pageUrl).get(monster.id);
@@ -1643,7 +1666,7 @@ function buildMonsters(layout: DungeonLayout, pageUrl: string, playerSpawn?: Poi
 }
 
 function updateFloorPortals(): boolean {
-  const changed = updatePortalAvailability(currentStairs, currentMonsters, visitedRooms);
+  const changed = updatePortalAvailability(currentStairs, currentMonsters, visitedRooms, visitedCorridors);
   if (currentStairs.some(stair => stair.type === "down" && stair.enabled)) schedulePortalActivationSound();
   else cancelPortalActivationSound();
   updatePortalContacts(
@@ -1672,7 +1695,7 @@ function schedulePortalIntroEnd(playSound: boolean): void {
     portalIntroSoundTimer = window.setTimeout(() => {
       portalIntroSoundTimer = null;
       if (initialFloorPortalIntroPending && floorNumber() === 1 &&
-          hasBlockingPortalMonsters(currentMonsters, visitedRooms) &&
+          hasBlockingPortalMonsters(currentMonsters, visitedRooms, visitedCorridors) &&
           currentStairs.some(stair => stair.url !== null && !stair.enabled)) {
         initialFloorPortalIntroPending = false;
         renderer.playPortalShutdownSound();
@@ -1701,10 +1724,14 @@ function activateMonstersInRoom(roomId: number): void {
   // The boss fight activates its own arena; revealing the arena from its
   // corridor must not wake the enemies inside before the player steps in.
   if (currentRoomsById.get(roomId)?.isBossArena === true) return;
+  activateMonsters(monster => !monster.spawnCorridorId && monster.spawnRoomId === roomId);
+}
+
+function activateMonsters(matches: (monster: Monster) => boolean): void {
   let changed = false;
 
   for (const monster of currentMonsters) {
-    if (!monster.dead && monster.spawnRoomId === roomId && !monster.active) {
+    if (!monster.dead && !monster.active && matches(monster)) {
       monster.active = true;
       saveMonsterState(monster);
       changed = true;
@@ -1732,15 +1759,7 @@ function playerInsideArenaPastDoors(room: GraphNode): boolean {
 
 /** Wake the arena's already-visible enemies when the fight begins. */
 function activateArenaEnemies(room: GraphNode): void {
-  let changed = false;
-  for (const monster of currentMonsters) {
-    if (!monster.dead && monster.spawnRoomId === room.id && !monster.active) {
-      monster.active = true;
-      saveMonsterState(monster);
-      changed = true;
-    }
-  }
-  if (changed) renderMonsters();
+  activateMonsters(monster => !monster.spawnCorridorId && monster.spawnRoomId === room.id);
 }
 
 /** The arena is armed: the doors seal now, the enemies wake a beat later. */
@@ -1857,6 +1876,34 @@ function findSpawnerSpawnPosition(monster: Monster, spawner: Decoration): Point 
       spawnerSpawnStaysInArenaRoom(point, spawner.roomId)) ?? null;
 }
 
+function spawnSceneryAmbush(item: Decoration): void {
+  if (!MONSTERS_ENABLED || !currentPageUrl) return;
+  const monster = monsterSpecForSceneryAmbush(item, floorNumber());
+  if (!monster || !sceneryAmbushRoll(item, floorIdentity(currentPageUrl))) return;
+  const corridor = item.corridorId && currentLayout?.links.find(link => link.id === item.corridorId);
+  const footprint = worldPoint(monster, "footprintRadii");
+  const position = [0, 48, 88, 128].flatMap(radius => radius === 0 ? [{ x: item.x, y: item.y }] :
+    Array.from({ length: 8 }, (_, index) => ({
+      x: item.x + Math.cos(index * Math.PI / 4) * radius,
+      y: item.y + Math.sin(index * Math.PI / 4) * radius,
+    }))).find(point =>
+    (corridor ? pointInCorridor(point.x, point.y, corridor) : roomContainingPoint(point.x, point.y)?.id === item.roomId) &&
+    !isNearArenaEntrance(currentArenaEntrances, point.x, point.y) &&
+    !wallBlocksSegment(item, point, footprint, wallFootprints) && monsterSpawnPositionIsClear(monster, point));
+  if (!position) return;
+  Object.assign(monster, position, {
+    hp: monster.maxHp,
+    active: item.corridorId ? visitedCorridors.has(item.corridorId) :
+      visitedRooms.has(item.roomId) && !bossFightPendingForRoom(item.roomId),
+    attackWarmupUntil: performance.now() + MONSTER_ATTACK_WARMUP_MS,
+  });
+  currentMonsters.push(monster);
+  monsterFootprintIndex.update(monster);
+  saveMonsterState(monster);
+  renderMonsters();
+  if (updateFloorPortals()) renderInteractiveObjects();
+}
+
 /** Arena spawners only ever spawn inside the arena and never in the entrance keep-out zone. */
 function spawnerSpawnStaysInArenaRoom(point: Point, roomId: number): boolean {
   if (currentRoomsById.get(roomId)?.isBossArena !== true) return true;
@@ -1968,7 +2015,8 @@ function damageMonster(
   if (monster.dead) return;
   // Dormant monsters cannot take damage, even when already visible in an arena.
   // Test hooks may explicitly bypass this guard.
-  if (!options.ignoreArenaGuards && (!monster.active || bossFightPendingForRoom(monster.spawnRoomId))) return;
+  if (!options.ignoreArenaGuards && (!monster.active ||
+      (!monster.spawnCorridorId && bossFightPendingForRoom(monster.spawnRoomId)))) return;
 
   const previousStage = monster.bossKind ? bossStage(monster.hp, monster.maxHp) : null;
   monster.hp = Math.max(0, monster.hp - amount);
@@ -2054,7 +2102,7 @@ function updateContentPoints(timestamp: number): void {
     if (
       !item.contentUnlocked &&
       playerInRoom &&
-      !currentMonsters.some(monster => !monster.dead && monster.spawnRoomId === item.roomId)
+      !currentMonsters.some(monster => !monster.dead && !monster.spawnCorridorId && monster.spawnRoomId === item.roomId)
     ) {
       item.contentUnlocked = true;
       saveObstacleState(item);
@@ -2852,6 +2900,120 @@ function requestPlayerShot(): void {
   queuedPlayerShot = !shootBullet();
 }
 
+function updateSecurityDoors(): void {
+  for (const door of currentSecurityDoors.values()) {
+    if (door.hp <= 0 || !visitedCorridors.has(door.linkId)) continue;
+    const threatened = currentMonsters.some(monster => monster.active && !monster.dead &&
+      distanceSquared(monster, door.position) <= SECURITY_DOOR_RADIUS ** 2);
+    const leaf = securityDoorLeafFootprint(door);
+    // Let actors already crossing clear the doorway before making it solid.
+    const occupied = threatened && (ellipseOverlapsWall(player, PLAYER_SPEC.footprintRadii, leaf) ||
+      currentMonsters.some(monster => monster.active && !monster.dead &&
+        ellipseOverlapsWall(monster, worldPoint(monster, "footprintRadii"), leaf)));
+    renderer.updateSecurityDoor(door.id, threatened, occupied);
+  }
+}
+
+/** Divert pursuit before asking A* for a route through a closed leaf. */
+function handleSecurityDoorPursuit(monster: Monster, dt: number, timestamp: number): boolean {
+  if (!closedSecurityLeaves.rects.length) return false;
+  const footprint = worldPoint(monster, "footprintRadii");
+  const waypoint = monster.path?.[monster.pathIndex ?? 0];
+  const leaves = closedSecurityLeaves.candidates(monster, player, footprint);
+  let blocker: { door: SecurityDoor; leaf: WallRect; distance: number } | undefined;
+  for (const leaf of leaves) {
+    const door = currentSecurityDoors.get(leaf.securityDoorId!);
+    if (!door || door.destroyed || !visitedCorridors.has(door.linkId)) continue;
+    const axis = door.side === "E" ? "x" : "y";
+    const lateral = axis === "x" ? "y" : "x";
+    const midline = axis === "x" ? leaf.x + leaf.width / 2 : leaf.y + leaf.height / 2;
+    const actorSide = monster[axis] - midline;
+    const playerSide = player[axis] - midline;
+    if (actorSide * playerSide >= 0) continue;
+    // Check the full frame when choosing a pursuit target; aim at the leaf below.
+    const span = WORLD_GEOMETRY.corridorHalfWidth * 2;
+    const edge = door[lateral] - span / 2;
+    const crossesLeaf = (target: Point): boolean => {
+      if (actorSide * (target[axis] - midline) >= 0) return false;
+      const progress = -actorSide / (target[axis] - monster[axis]);
+      const crossing = monster[lateral] + (target[lateral] - monster[lateral]) * progress;
+      return crossing >= edge - footprint[lateral] && crossing <= edge + span + footprint[lateral];
+    };
+    // The player's direct line or the monster's current route reaches the leaf.
+    // Also cover a player stepping sideways after passing the leaf while the
+    // monster is still on its straight approach within the corridor.
+    const onApproach = monster[lateral] >= edge && monster[lateral] <= edge + span &&
+      Math.abs(actorSide) <= SECURITY_DOOR_RADIUS && Math.abs(playerSide) <= SECURITY_DOOR_RADIUS &&
+      Math.abs(player[lateral] - door[lateral]) <= WORLD_GEOMETRY.corridorHalfWidth * 2;
+    if (!crossesLeaf(player) && !(waypoint && crossesLeaf(waypoint)) && !onApproach) continue;
+    const distance = Math.abs(actorSide);
+    if (!blocker || distance < blocker.distance) blocker = { door, leaf, distance };
+  }
+  if (!blocker) return false;
+
+  const { door, leaf } = blocker;
+  const vertical = door.side === "E";
+  const axis = vertical ? "x" : "y";
+  const lateral = vertical ? "y" : "x";
+  const span = vertical ? leaf.height : leaf.width;
+  const thickness = vertical ? leaf.width : leaf.height;
+  const nearSide = monster[axis] < leaf[axis] + thickness / 2 ? -1 : 1;
+  const face = leaf[axis] + (nearSide === 1 ? thickness : 0);
+  const attackCenter = actorCollisionCenter(monster, worldPoint(monster, "hitboxOffset"));
+  const shotLeaf = wallHitboxes([leaf])[0]!;
+  const aim = { ...attackCenter, [axis]: face - nearSide * thickness / 2,
+    [lateral]: Math.max(shotLeaf[lateral] + 16, Math.min(attackCenter[lateral], shotLeaf[lateral] + span - 16)) };
+  const reach = Math.abs(monster[axis] - face);
+  monster.moveDir = cardinalDirection(aim.x - attackCenter.x, aim.y - attackCenter.y);
+  const shotRange = Math.min(monsterEngagementRange(monster), monster.projectileRange);
+  const ranged = monster.attackPattern !== "melee" && distanceSquared(attackCenter, aim) <= shotRange ** 2;
+  if (ranged && wallHitBySegment(attackCenter, aim, { x: 1, y: 1 }, wallProjectileHitboxes)?.securityDoorId === door.id) {
+    if (monsterAttackIsReady(monster, timestamp)) {
+      // A monster flush against a leaf would launch its shot through it. Bash
+      // at point-blank range rather than letting the muzzle skip the obstacle.
+      const hitbox = worldPoint(monster, "hitboxRadii");
+      const muzzle = Math.max(hitbox.x + DEFAULT_BULLET_SPEC.radius + 5,
+        hitbox.y + DEFAULT_BULLET_SPEC.radius + 5, monster.size * 0.42);
+      if (Math.abs(attackCenter[axis] - face) <= muzzle) bashSecurityDoor(monster, door, timestamp);
+      else shootEnemyVolley(monster, actorAimDirection(monster, worldPoint(monster, "hitboxOffset"), aim), timestamp);
+    }
+    return true;
+  }
+
+  const edge = { ...monster, [axis]: face + nearSide * 2,
+    [lateral]: Math.max(leaf[lateral] + 16, Math.min(monster[lateral], leaf[lateral] + span - 16)) };
+  if (monster.attackPattern === "melee" && distanceSquared(monster, edge) <= monsterMeleeRange(monster) ** 2 &&
+      !wallBlocksSegment(monster, edge, { x: 1, y: 1 }, wallFootprints)) {
+    if (monsterAttackIsReady(monster, timestamp)) bashSecurityDoor(monster, door, timestamp);
+    return true;
+  }
+  if (monster.speed === 0) return true;
+
+  // Follow the near face using local movement only. Crowded monsters wait,
+  // rather than kicking off more searches or trying to cross the closed leaf.
+  const approach = { ...edge, [axis]: face + nearSide * (footprint[axis] + 4) };
+  const distance = Math.hypot(approach.x - monster.x, approach.y - monster.y);
+  const step = Math.min(distance, monsterMovementSpeed(monster) * dt);
+  if (reach > 0 && step > 0) {
+    const next = { x: monster.x + (approach.x - monster.x) * step / distance,
+      y: monster.y + (approach.y - monster.y) * step / distance };
+    if (monsterMoveIsClear(monster, next)) {
+      moveMonsterTo(monster, next);
+      monster.moving = true;
+    } else {
+      attackBlockingScenery(monster, approach, timestamp);
+    }
+  }
+  return true;
+}
+
+function bashSecurityDoor(monster: Monster, door: SecurityDoor, timestamp: number): void {
+  monster.attackKind = "melee";
+  monster.lastAttackAt = timestamp;
+  renderer.playMeleeSound();
+  damageObstacle(door, monster.attackDamage);
+}
+
 function updateBullets(dt: number): void {
   if (!bullets.length) return;
 
@@ -2881,9 +3043,13 @@ function updateBullets(dt: number): void {
         alive = false;
         break;
       }
-      if (wallBlocksSegment({ x: bullet.x - dx, y: bullet.y - dy }, bullet,
-        { x: bulletRadius, y: bulletRadius }, wallProjectileHitboxes)) {
+      const wall = wallHitBySegment({ x: bullet.x - dx, y: bullet.y - dy }, bullet,
+        { x: bulletRadius, y: bulletRadius }, wallProjectileHitboxes);
+      if (wall) {
         renderBulletImpact(bullet);
+        const door = wall.securityDoorId && currentSecurityDoors.get(wall.securityDoorId);
+        if (door) damageObstacle(door,
+          bullet.owner === "player" ? criticalBulletDamage(playerState, bullet.damage) : bullet.damage);
         alive = false;
         break;
       }
@@ -3061,8 +3227,10 @@ function runGameTick(timestamp: number): void {
       continue;
     }
 
+    if (handleSecurityDoorPursuit(monster, dt, timestamp)) continue;
+
     const nextRoomId = nextRoomTowardPlayer.get(monster.roomId);
-    if (nextRoomId === undefined) continue;
+    if (nextRoomId === undefined && !monster.spawnCorridorId) continue;
 
     if (monster.speed === 0) {
       const target = playerCollisionCenter();
@@ -3088,7 +3256,7 @@ function runGameTick(timestamp: number): void {
 
     const approach = monsterApproachPoint(monster);
     const targetPoint = approach ?? player;
-    const nextRoom = monster.roomId !== currentRoomId
+    const nextRoom = nextRoomId !== undefined && monster.roomId !== currentRoomId
       ? currentRoomsById.get(nextRoomId) : undefined;
 
     const target = playerCollisionCenter();
@@ -3123,7 +3291,8 @@ function runGameTick(timestamp: number): void {
     if (
       monster.attackPattern === "melee" &&
       playerDistance <= monsterMeleeRange(monster) &&
-      monsterAttackIsReady(monster, timestamp)
+      monsterAttackIsReady(monster, timestamp) &&
+      wallLineOfSight(monsterCenter, target)
     ) {
       monster.attackKind = "melee";
       monster.lastAttackAt = timestamp;
@@ -3141,6 +3310,7 @@ function runGameTick(timestamp: number): void {
     }
   }
 
+  updateSecurityDoors();
   updateMonsterPositions();
 
   // The player died this tick; silence monster walk loops the tick may have restarted.
@@ -3232,6 +3402,7 @@ function rebuildSpatialIndexes(): void {
   const margin = Math.max(48, MAX_ACTOR_FOOTPRINT);
 
   for (const item of currentDecorations) {
+    if (isSecurityDoor(item)) continue; // Animated leaves are indexed as walls.
     if (item.obstacle) {
       const footprint = worldPoint(item, "footprintRadii");
       const extentX = footprint.x + margin;
@@ -3822,10 +3993,13 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     teleportPlayerTo: (x: number, y: number, immediate?: boolean) => void;
     setWeaponAmmo: (ammo: number) => void;
     equipWeapon: (kind: WeaponKind, ammo: number) => void;
-    shoot: () => boolean;
+    shoot: (target?: Point) => boolean;
     hitMonster: (id: string, damage: number) => void;
-    monsters: () => Array<Pick<Monster, "id" | "x" | "y" | "roomId" | "active" | "dead" | "hp" | "maxHp" | "speed" | "miniboss" | "bossKind" | "slowRemainingMs" | "stunRemainingMs">>;
-    scenery: () => Array<Pick<Decoration, "id" | "x" | "y" | "roomId" | "destructible" | "destroyed">>;
+    monsters: () => Array<Pick<Monster, "id" | "kind" | "x" | "y" | "roomId" | "spawnCorridorId" | "active" | "dead" | "hp" | "maxHp" | "speed" | "miniboss" | "bossKind" | "slowRemainingMs" | "stunRemainingMs">>;
+    scenery: () => Array<Pick<Decoration, "id" | "definitionId" | "corridorId" | "x" | "y" | "roomId" | "destructible" | "destroyed">>;
+    securityDoors: () => SecurityDoor[];
+    lastMonsterPathSearchAt: (id: string) => number | undefined;
+    layout: () => DungeonLayout | null;
     destroyScenery: (id: string) => void;
     setPlayerInvulnerable: (enabled: boolean) => void;
     grantCrystals: (count: number) => void;
@@ -3871,7 +4045,10 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
 }).__webcrawlTest = {
   teleportPlayerTo,
   equipWeapon: (kind, ammo) => equipWeaponWithAmmo(weaponForKind(kind), ammo),
-  shoot: shootBullet,
+  shoot(target) {
+    if (target) applyAimTarget(target);
+    return shootBullet();
+  },
   hitMonster(id, damage): void {
     const monster = currentMonsters.find(item => item.id === id);
     if (monster) damageMonster(monster, damage, {
@@ -3879,9 +4056,13 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
       damage, traveled: 0, depthOffsetY: 0,
     }, { ignoreArenaGuards: true });
   },
-  monsters: () => currentMonsters.map(({ id, x, y, roomId, active, dead, hp, maxHp, speed, miniboss, bossKind, slowRemainingMs, stunRemainingMs }) =>
-    ({ id, x, y, roomId, active, dead, hp, maxHp, speed, miniboss, bossKind, slowRemainingMs, stunRemainingMs })),
-  scenery: () => currentDecorations.map(({ id, x, y, roomId, destructible, destroyed }) => ({ id, x, y, roomId, destructible, destroyed })),
+  monsters: () => currentMonsters.map(({ id, kind, x, y, roomId, spawnCorridorId, active, dead, hp, maxHp, speed, miniboss, bossKind, slowRemainingMs, stunRemainingMs }) =>
+    ({ id, kind, x, y, roomId, spawnCorridorId, active, dead, hp, maxHp, speed, miniboss, bossKind, slowRemainingMs, stunRemainingMs })),
+  scenery: () => currentDecorations.map(({ id, definitionId, corridorId, x, y, roomId, destructible, destroyed }) =>
+    ({ id, definitionId, corridorId, x, y, roomId, destructible, destroyed })),
+  securityDoors: () => structuredClone([...currentSecurityDoors.values()]),
+  lastMonsterPathSearchAt: id => currentMonsters.find(monster => monster.id === id)?.lastPathSearchAt,
+  layout: () => structuredClone(currentLayout),
   destroyScenery(id): void {
     const item = currentDecorations.find(item => item.id === id);
     if (item?.destructible && !item.destroyed) damageObstacle(item, item.hp);
@@ -4432,7 +4613,10 @@ function renderGraph(
   sharedMonsterPaths.clear();
   monsterPathSearchBudget.clear();
 
-  const wallRects = buildWallFootprints(layout);
+  const securityDoors = layout.nodes.every(room => currentAuthoredRooms?.has(room.id)) ? [] :
+    buildSecurityDoors(layout, obstacleStateMapForPage(pageUrl));
+  currentSecurityDoors = new Map(securityDoors.map(door => [door.id, door]));
+  const wallRects = buildWallFootprints(layout, securityDoors);
   staticWallFootprints = wallRects;
   wallFootprints = new WallRectIndex(wallRects);
   wallProjectileHitboxes = new WallRectIndex(wallHitboxes(wallRects));
@@ -4441,6 +4625,7 @@ function renderGraph(
   currentStairs = objects.stairs;
   currentLoot = objects.loot;
   currentDecorations = buildDecorations(layout, pageUrl);
+  currentDecorations.push(...securityDoors);
   currentVendingMachines = currentDecorations.filter(item => item.vendingKind);
   vendingContacts.clear();
   currentSpawners = currentDecorations.filter(item => item.spawner);
@@ -4483,13 +4668,15 @@ function renderGraph(
   portalContacts.clear();
   updateFloorPortals();
 
-  renderer.setWorld(layout, visitedRooms, pageUrl, visitedCorridors);
+  renderer.setWorld(layout, visitedRooms, pageUrl, visitedCorridors, [...currentSecurityDoors.values()]);
   updateFogOfWar();
   renderDecorations();
 
   for (const roomId of visitedRooms) {
     activateMonstersInRoom(roomId);
   }
+  activateMonsters(monster => Boolean(monster.spawnCorridorId && visitedCorridors.has(monster.spawnCorridorId)));
+  updateSecurityDoors();
 
   renderMonsters();
   renderInteractiveObjects();
@@ -4646,10 +4833,21 @@ async function loadRenderer(): Promise<void> {
   renderer?.destroy();
   const { PhaserRenderer } = await import("./render/phaser-renderer");
   renderer = new PhaserRenderer(gameCanvasHost, lightDetail);
+  let previousStaticWalls: readonly WallRect[] | undefined;
+  let previousDoorLeaves: readonly WallRect[] = [];
   renderer.onDoorCollisionChanged = doors => {
+    if (previousStaticWalls === staticWallFootprints && previousDoorLeaves.length === doors.length &&
+      doors.every((door, index) => {
+        const previous = previousDoorLeaves[index]!;
+        return door.x === previous.x && door.y === previous.y && door.width === previous.width &&
+          door.height === previous.height && door.securityDoorId === previous.securityDoorId;
+      })) return;
+    previousStaticWalls = staticWallFootprints;
+    previousDoorLeaves = doors;
     const footprints = [...staticWallFootprints, ...doors];
     wallFootprints = new WallRectIndex(footprints);
     wallProjectileHitboxes = new WallRectIndex(wallHitboxes(footprints));
+    closedSecurityLeaves = new WallRectIndex(doors.filter(door => door.securityDoorId));
     sharedMonsterPaths.clear();
     for (const monster of currentMonsters) {
       failedMonsterPaths.forget(monster);

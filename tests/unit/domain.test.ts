@@ -71,6 +71,7 @@ import {
 } from "../../src/client/domain/generation";
 import { coalesceLeaves, contentPagesForRoom, domToGraph } from "../../src/client/domain/graph";
 import { ARENA_ENTRANCE_KEEP_OUT_DISTANCE } from "../../src/client/domain/arena-entrances";
+import { buildSecurityDoors, CORRIDOR_ENCOUNTER_CLEARANCE, SECURITY_DOOR_MAX_HP } from "../../src/client/domain/corridor-encounters";
 import { stableHash } from "../../src/client/domain/hash";
 import { worldPoint } from "../../src/client/domain/object-geometry";
 import { corridorEndpoints, corridorIntersectsRoom, corridorLength, doorCapacity, doorPositionForSlot, layoutOrthogonal } from "../../src/client/domain/layout";
@@ -791,7 +792,6 @@ describe("layout and geometry", () => {
     expect(decorations).toEqual(decorationSpecsForCorridor(link));
     expect(decorations.every(item => !item.obstacle)).toBe(true);
     expect(monsters).toEqual(monsterSpecsForCorridor(link, 3));
-    expect(monsters).toEqual([]);
     expect(decorations.every(item => item.roomId === link.source.id)).toBe(true);
     expect(monsters.every(item => item.spawnRoomId === link.source.id)).toBe(true);
   });
@@ -1623,7 +1623,7 @@ describe("deterministic room contents", () => {
     expect(monsterSpecsForRoom({ ...script, isBossArena: false }).some(monster => monster.bossKind)).toBe(false);
   });
 
-  it("never spawns enemies in corridors", () => {
+  it("populates only some long corridors and leaves short corridors empty", () => {
     const source = node(0, null, 0, { isRoot: false });
     const target = node(1, 0, 1);
     const corridor = (length: number, id: string): LayoutLink => ({
@@ -1639,8 +1639,64 @@ describe("deterministic room contents", () => {
     const shortLink = corridor(4, "short");
     const longLink = corridor(12, "long");
     expect(monsterSpecsForCorridor(shortLink, 1)).toEqual([]);
-    expect(monsterSpecsForCorridor(longLink, 1)).toEqual([]);
+    const encounters = Array.from({ length: 20 }, (_, index) => {
+      const floor = index + 1;
+      const monsters = monsterSpecsForCorridor(longLink, floor);
+      expect(monsters).toEqual(monsterSpecsForCorridor(longLink, floor));
+      return monsters;
+    });
+    const populated = encounters.filter(monsters => monsters.length > 0);
+    expect(populated.length).toBeGreaterThan(0);
+    expect(populated.length).toBeLessThan(encounters.length);
+    for (const monsters of populated) {
+      expect(monsters).toHaveLength(2);
+      expect(monsters.every(monster => monster.spawnCorridorId === longLink.id && !monster.active &&
+        ["melee-light", "shooter-light"].includes(monster.kind))).toBe(true);
+    }
     expect(decorationSpecsForCorridor(shortLink, 1).length).toBeLessThan(decorationSpecsForCorridor(longLink, 1).length);
+  });
+
+  it("spaces security doors along a shared fork and restores each door independently", () => {
+    const s = ENVIRONMENT_SEGMENT_SIZE;
+    const root = node(0, null, 0);
+    const targets = [node(1, 0, 1), node(2, 0, 1)];
+    const links: LayoutLink[] = targets.map((target, index) => {
+      const forkY = (12 + index * 3) * s;
+      return { id: `branch-${index}`, source: root, target, forkId: "shared", forkPointIndex: 1,
+        direction: "S", ownerRoomId: root.id, width: s * 2,
+        points: [{ x: 0, y: 0 }, { x: 0, y: forkY }, { x: 3 * s, y: forkY }] };
+    });
+    const layout = { nodes: [root, ...targets], links, hiddenCount: 0 };
+    const doors = buildSecurityDoors(layout, new Map());
+    expect(doors).toHaveLength(2);
+    const [first, second] = [doors[0]!, doors[1]!];
+    expect(first.id).toBe("branch-1::security-door");
+    expect(first.id).not.toBe(second.id);
+    for (const door of doors) {
+      expect(door).toMatchObject({ kind: "security-door", hp: SECURITY_DOOR_MAX_HP, maxHp: SECURITY_DOOR_MAX_HP,
+        destructible: true, destroyed: false, side: "S", linkId: "branch-1" });
+      expect(links.flatMap(link => link.points).every(point =>
+        Math.hypot(point.x - door.position.x, point.y - door.position.y) >= CORRIDOR_ENCOUNTER_CLEARANCE)).toBe(true);
+    }
+    expect(Math.abs(first.y - second.y)).toBeGreaterThanOrEqual(4 * s);
+    expect(buildSecurityDoors(layout, new Map([
+      [first.id, { hp: 0, destroyed: true }], [second.id, { hp: 5, destroyed: false }],
+    ]))).toEqual([{ ...first, hp: 0, destroyed: true }, { ...second, hp: 5 }]);
+  });
+
+  it("adds doors to medium corridors and caps very long corridors at three", () => {
+    const source = node(0, null, 0);
+    const target = node(1, 0, 1);
+    const doorsFor = (length: number) => buildSecurityDoors({
+      nodes: [source, target], hiddenCount: 0,
+      links: [{ id: "hall", source, target, direction: "E", ownerRoomId: source.id,
+        width: WORLD_GEOMETRY.corridorHalfWidth * 2,
+        points: [{ x: 0, y: 0 }, { x: length * ENVIRONMENT_SEGMENT_SIZE, y: 0 }] }],
+    }, new Map());
+    expect(doorsFor(5)).toHaveLength(0);
+    expect(doorsFor(6)).toHaveLength(1);
+    expect(doorsFor(14)).toHaveLength(2);
+    expect(doorsFor(40)).toHaveLength(3);
   });
 
   it("spaces scenery along long and turning corridors without stacking props", () => {

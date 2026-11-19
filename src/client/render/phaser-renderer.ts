@@ -43,7 +43,8 @@ import {
   weaponAsset,
   type LootDefinition,
 } from "../domain/world-specs";
-import { buildWallFootprints, closedDoorFootprint, wallHitboxes, type WallRect } from "../domain/wall-collision";
+import { buildWallFootprints, closedDoorFootprint, securityDoorLeafFootprint, wallHitboxes, type WallRect } from "../domain/wall-collision";
+import { isSecurityDoor, type SecurityDoor } from "../domain/corridor-encounters";
 import { WEAPON_COLORS } from "../domain/weapons";
 import { POWERUP_DEFINITIONS } from "../domain/powerups";
 import { monsterMovementSpeed, monsterStatusTint, STUN_TINT } from "../domain/monster-status";
@@ -95,6 +96,22 @@ type StaticObject =
   | Phaser.GameObjects.Graphics
   | Phaser.GameObjects.Text;
 
+interface DoorEntry {
+  door: DoorModulePlan;
+  roomId?: number;
+  halves: Phaser.GameObjects.Image[];
+  open: boolean;
+  passable: boolean;
+  locked: boolean;
+  timers?: Phaser.Time.TimerEvent[];
+  security?: {
+    model: SecurityDoor;
+    light?: WorldLight;
+    threatened: boolean;
+    healthBar?: Phaser.GameObjects.Container;
+  };
+}
+
 const ROOM_FLOOR_DEPTH = -2;
 const CORRIDOR_FLOOR_DEPTH = -4;
 const CORRIDOR_MARKING_DEPTH = -1.75;
@@ -107,6 +124,8 @@ const PEDESTAL_PICKUP_BIAS = 1;
 const Y_DEPTH_OFFSET = 4_000_000;
 const OVERHEAD_DEPTH = 8_000_000;
 const HEALTH_BAR_DEPTH = 10_000_000;
+const SCENERY_HEALTH_BAR_WIDTH = 44;
+const sceneryHealthWidth = (item: Decoration): number => SCENERY_HEALTH_BAR_WIDTH * Math.max(0, item.hp) / Math.max(1, item.maxHp);
 const DEBUG_DEPTH = 12_000_000;
 const yDepth = (y: number, bias = 0): number => Y_DEPTH_OFFSET + y + bias;
 
@@ -143,8 +162,10 @@ const VENDING_AURA_COLOR = 0xffd166;
 const VENDING_AURA_RADIUS_SCALE = 0.9;
 const VENDING_AURA_INTENSITY = 0.6;
 const ARENA_DOOR_LIGHT_COLOR = 0xff3d42;
-const ARENA_DOOR_LIGHT_RADIUS = WORLD_GEOMETRY.doorOpeningWidth;
-const ARENA_DOOR_LIGHT_INTENSITY = 0.9;
+const SECURITY_DOOR_CLEAR_COLOR = 0x62ffa7;
+const SECURITY_DOOR_THREAT_COLOR = 0xff972c;
+const DOOR_LIGHT_RADIUS = WORLD_GEOMETRY.doorOpeningWidth;
+const DOOR_LIGHT_INTENSITY = 0.9;
 const POWERUP_PEDESTAL_Y_OFFSET = -32;
 const SHADOW_OFFSET_X = 8;
 const SHADOW_OFFSET_Y = 10;
@@ -375,8 +396,9 @@ export class PhaserRenderer {
   private visitedCorridors = new Set<string>();
   private lockedArenaRoomIds = new Set<number>();
   onDoorCollisionChanged: ((footprints: WallRect[]) => void) | null = null;
-  private doors: { door: DoorModulePlan; roomId: number; halves: Phaser.GameObjects.Image[]; open: boolean; passable: boolean; locked: boolean }[] = [];
-  private doorTimers: Phaser.Time.TimerEvent[] = [];
+  private doors: DoorEntry[] = [];
+  private securityDoorModels: readonly SecurityDoor[] = [];
+  private securityDoors = new Map<string, DoorEntry>();
   private background: Phaser.GameObjects.TileSprite | null = null;
   private backgroundAsset: string = ASSETS.backgroundTechTile;
   private staticObjects: Phaser.GameObjects.GameObject[] = [];
@@ -655,6 +677,7 @@ export class PhaserRenderer {
     this.portalStartupPreview = false;
     delete this.host.dataset.portalIntro;
     this.layout = null;
+    this.securityDoorModels = [];
     this.bossArenaRoomIds.clear();
     this.lockedArenaRoomIds.clear();
     this.cameraRoom = null;
@@ -997,7 +1020,8 @@ export class PhaserRenderer {
     sound.once(Phaser.Sound.Events.COMPLETE, () => sound.destroy());
   }
 
-  setWorld(layout: DungeonLayout, visited: ReadonlySet<number>, pageUrl: string, corridors: ReadonlySet<string> = new Set()): void {
+  setWorld(layout: DungeonLayout, visited: ReadonlySet<number>, pageUrl: string, corridors: ReadonlySet<string> = new Set(),
+    securityDoors: readonly SecurityDoor[] = []): void {
     this.visitedCorridors = new Set(corridors);
     this.layout = layout;
     this.bossArenaRoomIds = new Set(layout.nodes.filter(room => room.isBossArena).map(room => room.id));
@@ -1026,6 +1050,7 @@ export class PhaserRenderer {
       this.host.dataset.firstDoorX = String(Math.round(firstExit.points[0]!.x));
       this.host.dataset.firstDoorY = String(Math.round(firstExit.points[0]!.y));
     }
+    this.securityDoorModels = securityDoors;
     this.drawWorld();
   }
 
@@ -1050,6 +1075,7 @@ export class PhaserRenderer {
       this.renderCorridor(link, corridorPlan, visible ? 1 : 0);
       this.addCorridorLights(link, corridorPlan, visible);
     }
+    for (const door of this.securityDoorModels) this.renderSecurityDoor(door);
 
     for (const room of this.layout.nodes) {
       const visible = this.visited.has(room.id);
@@ -1059,7 +1085,7 @@ export class PhaserRenderer {
     this.addArenaDoorLights();
     this.updateDoors(false);
     this.refreshLocalLightVisibility(true);
-    this.wallFootprints = SHOW_DEBUG_GEOMETRY ? buildWallFootprints(this.layout) : [];
+    this.wallFootprints = SHOW_DEBUG_GEOMETRY ? buildWallFootprints(this.layout, this.securityDoorModels) : [];
     this.renderDebugWalls();
   }
 
@@ -1440,9 +1466,86 @@ export class PhaserRenderer {
       .setDepth(yDepth(door.position.y + style.orderingOffsetY))));
   }
 
+  private renderSecurityDoor(door: SecurityDoor): void {
+    const halves = this.createDoorHalves(door);
+    const light = this.addDoorLight(door.position, door.side, SECURITY_DOOR_CLEAR_COLOR);
+    const entry: DoorEntry = { door, halves, open: false, passable: false, locked: false,
+      security: { model: door, light, threatened: false } };
+    this.doors.push(entry);
+    this.securityDoors.set(door.id, entry);
+    const statics = halves.map(half => this.rememberStatic(half));
+    this.corridorStatics.get(door.linkId)?.push(...statics);
+  }
+
+  private updateSecurityLight(security: NonNullable<DoorEntry["security"]>, revealed: boolean): void {
+    if (!security.light) return;
+    const profile = security.light;
+    const enabled = revealed && security.model.hp > 0;
+    if (profile.enabled === enabled) return;
+    profile.enabled = enabled;
+    profile.light.setVisible(enabled && this.lightOnScreen(profile));
+  }
+
+  updateSecurityDoorDamage(id: string): void {
+    const security = this.securityDoors.get(id)?.security;
+    if (!security) return;
+    this.syncSecurityDoorHealthBar(security, this.visitedCorridors.has(security.model.linkId));
+    if (security.model.destroyed) this.updateSecurityDoor(id, false, false);
+  }
+
+  private syncSecurityDoorHealthBar(security: NonNullable<DoorEntry["security"]>, revealed: boolean): void {
+    const door = security.model;
+    if (!revealed || door.destroyed || door.hp >= door.maxHp) {
+      security.healthBar?.destroy(true);
+      security.healthBar = undefined;
+      return;
+    }
+    if (security.healthBar) {
+      const fill = security.healthBar.getByName<Phaser.GameObjects.Rectangle>("hp");
+      fill.setSize(sceneryHealthWidth(door), fill.height);
+      return;
+    }
+    // The door textures have transparent padding above the visible frame.
+    const frameTop = -(door.side === "E" ? 1.4 : 0.56) * SEGMENT_SIZE;
+    security.healthBar = this.createSceneryHealthBar(door, { x: door.x, y: door.y }, frameTop - 8)
+      .setName(`security-door-health:${door.id}`);
+  }
+
+  updateSecurityDoor(id: string, threatened: boolean, occupied: boolean): void {
+    const entry = this.securityDoors.get(id);
+    if (!entry?.security || !this.scene) return;
+    const security = entry.security;
+    const known = this.visitedCorridors.has(security.model.linkId);
+    const nearby = known && security.model.hp > 0 && threatened;
+    if (security.threatened !== nearby) {
+      security.threatened = nearby;
+      security.light?.light.setColor(nearby ? SECURITY_DOOR_THREAT_COLOR : SECURITY_DOOR_CLEAR_COLOR);
+    }
+    if (security.model.hp <= 0) {
+      this.updateSecurityLight(security, known);
+      entry.locked = false;
+      this.transitionDoor(entry, true, known);
+      return;
+    }
+    const locked = security.threatened && (entry.locked || !occupied);
+    if (entry.locked === locked) return;
+    entry.locked = locked;
+    if (locked && entry.open) this.playOneShot("sfx-door-close");
+    this.transitionDoor(entry, known && !locked, true);
+  }
+
   private updateDoors(animate: boolean): void {
     if (!this.layout || !this.scene) return;
     for (const entry of this.doors) {
+      if (entry.security) {
+        const known = this.visitedCorridors.has(entry.security.model.linkId);
+        for (const half of entry.halves) half.setAlpha(known ? 1 : 0);
+        this.updateSecurityLight(entry.security, known);
+        this.syncSecurityDoorHealthBar(entry.security, known);
+        const destroyed = entry.security.model.hp <= 0;
+        this.transitionDoor(entry, destroyed || (known && !entry.locked), animate && known);
+        continue;
+      }
       const link = this.layout.links.find(link => {
         const endpoint = link.source.id === entry.roomId ? link.points[0] :
           link.target.id === entry.roomId ? link.points[link.points.length - 1] : undefined;
@@ -1450,7 +1553,7 @@ export class PhaserRenderer {
       });
       if (!link) continue;
       const corridorKnown = this.visitedCorridors.has(link.id);
-      const roomKnown = this.visited.has(entry.roomId);
+      const roomKnown = entry.roomId !== undefined && this.visited.has(entry.roomId);
       const shouldOpen = link.direct
         ? this.visited.has(link.source.id) && this.visited.has(link.target.id)
         : roomKnown && corridorKnown;
@@ -1458,45 +1561,46 @@ export class PhaserRenderer {
         ? this.visited.has(link.source.id) || this.visited.has(link.target.id)
         : corridorKnown);
       for (const half of entry.halves) half.setAlpha(visible ? 1 : HIDDEN_WORLD_ALPHA);
-      if (entry.open) continue;
-      const styles = doorModuleStyles(entry.door.side, SEGMENT_SIZE);
-      const frame = (suffix: string): void => {
-        entry.halves.forEach((half, index) => half.setTexture(textureKey(
-          styles[index]!.asset.replace("_open.png", `_${suffix}.png`),
-        )));
-        if (suffix === "open" && !entry.passable) {
-          entry.passable = true;
-          this.notifyDoorCollisions();
-        }
-      };
-      if (entry.locked) {
-        // A locked arena door stays shut for the whole boss fight, even once
-        // both sides are revealed and the ordinary rule says it should open.
-        frame("closed");
-        continue;
-      }
-      if (!shouldOpen) {
-        frame("closed");
-        continue;
-      }
-      entry.open = true;
-      if (!animate) {
-        frame("open");
-        continue;
-      }
-      frame("closed");
-      this.playOneShot("sfx-door-open");
-      // interim_2 is two-thirds closed; interim_1 is one-third closed.
-      ["interim_2", "interim_1", "open"].forEach((suffix, index) => {
-        this.doorTimers.push(this.scene!.time.delayedCall((index + 1) * 100, () => frame(suffix)));
-      });
+      this.transitionDoor(entry, shouldOpen && !entry.locked, animate);
     }
     this.notifyDoorCollisions();
   }
 
+  private transitionDoor(entry: DoorEntry, open: boolean, animate: boolean): void {
+    // Visibility updates must not restart an active transition.
+    if (entry.open === open && (animate || entry.passable === open || !open) && entry.timers !== undefined) return;
+    const wasOpen = entry.open;
+    for (const timer of entry.timers ?? []) timer.remove(false);
+    entry.timers = [];
+    entry.open = open;
+    const passable = (value: boolean): void => {
+      if (entry.passable === value) return;
+      entry.passable = value;
+      this.notifyDoorCollisions();
+    };
+    const styles = doorModuleStyles(entry.door.side, SEGMENT_SIZE);
+    const frame = (suffix: string): void => {
+      entry.halves.forEach((half, index) => half.setTexture(textureKey(
+        styles[index]!.asset.replace("_open.png", `_${suffix}.png`),
+      )));
+      if (suffix === "open") passable(true);
+    };
+    if (!open) passable(false);
+    if (!animate || (!open && !wasOpen)) {
+      frame(open ? "open" : "closed");
+      return;
+    }
+    if (open) this.playOneShot("sfx-door-open");
+    const frames = open ? ["interim_2", "interim_1", "open"] : ["interim_1", "interim_2", "closed"];
+    frames.forEach((suffix, index) => {
+      entry.timers!.push(this.scene!.time.delayedCall((index + 1) * 100, () => frame(suffix)));
+    });
+  }
+
   private notifyDoorCollisions(): void {
     this.onDoorCollisionChanged?.(this.doors.filter(entry => !entry.passable)
-      .map(entry => closedDoorFootprint(entry.door)));
+      .map(entry => entry.security ? { ...securityDoorLeafFootprint(entry.door), securityDoorId: entry.security.model.id } :
+        closedDoorFootprint(entry.door)));
   }
 
   /**
@@ -1515,28 +1619,15 @@ export class PhaserRenderer {
       .map(entrance => entrance.position);
     const shouldLock = (entry: (typeof this.doors)[number]): boolean => lockedPositions.some(point =>
       point.x === entry.door.position.x && point.y === entry.door.position.y);
-    const toToggle = this.doors.filter(entry => entry.locked !== shouldLock(entry));
+    const toToggle = this.doors.filter(entry => !entry.security && entry.locked !== shouldLock(entry));
     if (!toToggle.length) return;
     const closing = toToggle.some(entry => !entry.locked);
     if (closing) this.playOneShot("sfx-door-close");
     for (const entry of toToggle) {
       entry.locked = shouldLock(entry);
-      if (!entry.locked) continue;
-      entry.open = false;
-      entry.passable = false;
-      const styles = doorModuleStyles(entry.door.side, SEGMENT_SIZE);
-      const frame = (suffix: string): void => {
-        entry.halves.forEach((half, index) => half.setTexture(textureKey(
-          styles[index]!.asset.replace("_open.png", `_${suffix}.png`),
-        )));
-      };
-      // interim_1 is one-third closed; interim_2 is two-thirds closed.
-      ["interim_1", "interim_2", "closed"].forEach((suffix, index) => {
-        this.doorTimers.push(this.scene!.time.delayedCall((index + 1) * 100, () => frame(suffix)));
-      });
+      if (entry.locked) this.transitionDoor(entry, false, true);
     }
-    this.setHostData("arenaDoorsLocked", String(this.doors.filter(entry => entry.locked).length));
-    if (closing) this.notifyDoorCollisions();
+    this.setHostData("arenaDoorsLocked", String(this.doors.filter(entry => !entry.security && entry.locked).length));
     if (toToggle.some(entry => !entry.locked)) this.updateDoors(true);
   }
 
@@ -1546,9 +1637,13 @@ export class PhaserRenderer {
   }
 
   private destroyStaticObjects(): void {
-    for (const timer of this.doorTimers) timer.remove(false);
-    this.doorTimers = [];
+    for (const entry of this.doors) for (const timer of entry.timers ?? []) timer.remove(false);
     this.doors = [];
+    for (const entry of this.securityDoors.values()) {
+      if (entry.security?.light) this.scene?.lights.removeLight(entry.security.light.light);
+      entry.security?.healthBar?.destroy(true);
+    }
+    this.securityDoors.clear();
     for (const object of this.staticObjects) object.destroy();
     this.staticObjects.length = 0;
     for (const key of this.floorMarkingTextures) this.scene?.textures.remove(key);
@@ -1612,30 +1707,30 @@ export class PhaserRenderer {
   }
 
   private addArenaDoorLights(): void {
-    const scene = this.scene;
-    if (!scene || !this.layout || !this.lightingEnabled) return;
+    if (!this.layout || !this.lightingEnabled) return;
     for (const { link, approach, door } of directArenaDoorLinks(this.layout)) {
-      const vertical = link.direction === "E" || link.direction === "W";
-      const light = scene.lights.addLight(
-        door.x,
-        door.y + (vertical ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
-        ARENA_DOOR_LIGHT_RADIUS,
-        ARENA_DOOR_LIGHT_COLOR,
-        ARENA_DOOR_LIGHT_INTENSITY,
-      ) as AreaLight;
-      light.areaSoftness = 1;
-      light.setVisible(false);
-      const profile: WorldLight = {
-        light,
-        baseIntensity: ARENA_DOOR_LIGHT_INTENSITY,
-        flickerAmount: 0,
-        flickerSeed: link.source.lootSeed + link.target.lootSeed,
-        enabled: false,
-      };
+      const profile = this.addDoorLight(door, link.direction, ARENA_DOOR_LIGHT_COLOR);
+      if (!profile) continue;
       this.arenaDoorLights.set(link.id, profile);
       this.arenaDoorApproach.set(link.id, approach.id);
-      this.lightProfiles.push(profile);
     }
+  }
+
+  private addDoorLight(door: Point, side: DoorModulePlan["side"], color: number): WorldLight | undefined {
+    if (!this.scene || !this.lightingEnabled) return;
+    const vertical = side === "E" || side === "W";
+    const light = this.scene.lights.addLight(
+      door.x,
+      door.y + (vertical ? WORLD_GEOMETRY.verticalDoorPassableOffsetY : 0),
+      DOOR_LIGHT_RADIUS,
+      color,
+      DOOR_LIGHT_INTENSITY,
+    ) as AreaLight;
+    light.areaSoftness = 1;
+    light.setVisible(false);
+    const profile: WorldLight = { light, baseIntensity: DOOR_LIGHT_INTENSITY, flickerAmount: 0, flickerSeed: 0, enabled: false };
+    this.lightProfiles.push(profile);
+    return profile;
   }
 
   private addCorridorLights(
@@ -2034,6 +2129,7 @@ export class PhaserRenderer {
     const scene = this.scene;
     if (!scene) return;
     for (const item of items) {
+      if (isSecurityDoor(item)) continue; // The two animated leaves and their bar belong to the corridor.
       if (!visited.has(item.roomId) || (item.destroyed && !item.visual.destroyed?.length)) continue;
       const state = this.decorationClip(item, performance.now());
       const asset = state.clip.frames[0]!;
@@ -2072,25 +2168,24 @@ export class PhaserRenderer {
       this.syncDecorationEffectLight(item, state);
       this.decorations.push(container);
       if (item.destructible && !item.destroyed && item.hp != item.maxHp) {
-        const barWidth = 44;
         const hitboxOffset = worldPoint(item, "hitboxOffset");
         const barY = hitboxOffset.y - worldPoint(item, "hitboxRadii").y - 30;
-        const bg = scene.add.rectangle(-barWidth / 2, barY, barWidth, 5, 0x071018).setOrigin(0, 0.5);
-        const hp = scene.add.rectangle(
-          -barWidth / 2,
-          barY,
-          barWidth * Math.max(0, item.hp) / Math.max(1, item.maxHp),
-          5,
-          0x62e6c8,
-        ).setOrigin(0, 0.5).setName("hp");
-        const bar = scene.add.container(item.x + hitboxOffset.x, item.y, [bg, hp]).setDepth(HEALTH_BAR_DEPTH);
-        this.decorationHealthBars.set(item.id, bar);
+        this.decorationHealthBars.set(item.id,
+          this.createSceneryHealthBar(item, { x: item.x + hitboxOffset.x, y: item.y }, barY));
       }
     }
     this.setHostData("sceneryShadows", String(this.decorationShadows.size));
     this.updateVendingPushes(performance.now());
     this.refreshLocalLightVisibility(true);
     this.renderDebugGeometry();
+  }
+
+  private createSceneryHealthBar(item: Decoration, position: Point, barY: number): Phaser.GameObjects.Container {
+    const add = this.scene!.add;
+    const left = -SCENERY_HEALTH_BAR_WIDTH / 2;
+    const bg = add.rectangle(left, barY, SCENERY_HEALTH_BAR_WIDTH, 5, 0x071018).setOrigin(0, 0.5);
+    const hp = add.rectangle(left, barY, sceneryHealthWidth(item), 5, 0x62e6c8).setOrigin(0, 0.5).setName("hp");
+    return add.container(position.x, position.y, [bg, hp]).setDepth(HEALTH_BAR_DEPTH);
   }
 
   updateDecorationAnimations(items: readonly Decoration[], now: number): void {
@@ -2542,7 +2637,7 @@ export class PhaserRenderer {
 
   private shouldRenderMonster(item: Monster): boolean {
     if (item.active) return !item.dead || item.deathAnimating || Boolean(item.visual.destroyed?.length);
-    return !item.dead && this.bossArenaRoomIds.has(item.spawnRoomId) && this.visited.has(item.spawnRoomId);
+    return !item.dead && !item.spawnCorridorId && this.bossArenaRoomIds.has(item.spawnRoomId) && this.visited.has(item.spawnRoomId);
   }
 
   private setMonsterVisible(item: Monster, container: Phaser.GameObjects.Container, visible: boolean): boolean {

@@ -218,6 +218,7 @@ export interface Decoration extends Point, RelativeObjectGeometry {
   id: string;
   definitionId: string;
   roomId: number;
+  corridorId?: string;
   kind: string;
   visual: ObjectVisualDefinition;
   visualVariant?: number;
@@ -263,6 +264,7 @@ export interface Monster extends Point, RelativeObjectGeometry {
   destroyedVisualOffset: Point;
   spriteSize: number;
   spawnRoomId: number;
+  spawnCorridorId?: string;
   roomId: number;
   maxHp: number;
   hp: number;

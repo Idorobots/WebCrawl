@@ -38,12 +38,15 @@ export function closestPortalWithUrl(portals: readonly Stair[], position: Point,
   return closest;
 }
 
-type PortalEnemy = Pick<Monster, "dead" | "bossKind" | "roomId" | "spawnRoomId">;
+type PortalEnemy = Pick<Monster, "dead" | "bossKind" | "roomId" | "spawnRoomId" | "spawnCorridorId">;
 
-export function hasBlockingPortalMonsters(monsters: readonly PortalEnemy[], revealedRooms: ReadonlySet<number>): boolean {
+export function hasBlockingPortalMonsters(
+  monsters: readonly PortalEnemy[], revealedRooms: ReadonlySet<number>, revealedCorridors: ReadonlySet<string> = new Set(),
+): boolean {
   return monsters.some(monster => !monster.dead && (
     monster.bossKind !== undefined ||
-    revealedRooms.has(monster.spawnRoomId) || revealedRooms.has(monster.roomId)
+    (monster.spawnCorridorId ? revealedCorridors.has(monster.spawnCorridorId) :
+      revealedRooms.has(monster.spawnRoomId) || revealedRooms.has(monster.roomId))
   ));
 }
 
@@ -51,8 +54,9 @@ export function updatePortalAvailability(
   portals: Stair[],
   monsters: readonly PortalEnemy[],
   revealedRooms: ReadonlySet<number>,
+  revealedCorridors?: ReadonlySet<string>,
 ): boolean {
-  const floorCleared = !hasBlockingPortalMonsters(monsters, revealedRooms);
+  const floorCleared = !hasBlockingPortalMonsters(monsters, revealedRooms, revealedCorridors);
   let changed = false;
   for (const portal of portals) {
     const enabled = portal.url !== null && (portal.type === "up" || floorCleared);

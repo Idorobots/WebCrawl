@@ -1478,9 +1478,11 @@ Types:
 - Slowdown effect should affect the fire rate as well as cooldowns (in case of the bosess).
 - Stun effect should pause any cooldown timers, effectively extending them by the stun length.
 
-* Enemy rebalance continued
-- Monsters in long corridors.
-- Random monster spawns outside of spawners?
+* DONE Enemy rebalance continued
+:LOGBOOK:
+- State "DONE"       from              [2026-11-19 Thu 12:43]
+:END:
+- Spawn Monsters in long corridors.
 - Destroying certain types of scenery should have a chance of spawning a certain type of monster.
 - Doors in corridors that close when there are monsters nearby
 
@@ -1489,8 +1491,12 @@ Types:
 - Paying on mobile is hard, let's make the medkits return twice as much HP and ammo crates reload twice as much ammo on mobile. Let's also lower the number of enemies generated in each room by 30%. Let's also make the player post-hit invulnerability last twice as long on mobile.
 - Higher level monsters should have slowing bullets, critical damage chance and stunning bullets. Also, different bullet patterns.
 - Higher level walkers should have a dash ability.
+- Random monster spawns outside of spawners?
 
-* Boss fights continued
+* DONE Boss fights continued
+:LOGBOOK:
+- State "DONE"       from              [2026-11-19 Thu 10:20]
+:END:
 - Boss fight should begin when the player enters the boss arena (not the boss arena corridor).
 - Doors should shut behind the player once the arena is entered.
 - All enemies in the boss arena are invulnerable until the boss fight actually begins (player enters the room).
@@ -1638,3 +1644,7 @@ There are some textures in the assets/ui directory - you can use these to textur
 
 The choice of technologies is up to you. You can also choose the assets to use or come up with new ones.
 Do not run the e2e tests. I'll do this as a last step.
+* Code refactor
+- app.ts is pretty huge, should be refactored into several smaller modules with dedicated function (doors, targetting, etc)
+- phaser renderer also deals with state updates
+- generation.ts is pretty huge, should be refactored into several smaller modules
