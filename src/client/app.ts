@@ -90,6 +90,7 @@ import {
   monsterSpecForSceneryAmbush,
   monsterSpecForSpawner,
   rewardPedestalForRoom,
+  ROOM_AMBUSH_TRIGGER_RADIUS,
   sceneryAmbushOutcome,
   sceneryAmbushPowerupDrop,
 } from "./domain/generation";
@@ -315,6 +316,7 @@ let currentMonsters: Monster[] = [];
 let currentDecorations: Decoration[] = [];
 let currentVendingMachines: Decoration[] = [];
 let currentSpawners: Decoration[] = [];
+const currentRoomAmbushProps = new Map<number, Decoration[]>();
 let currentSecurityDoors = new Map<string, SecurityDoor>();
 let closedSecurityLeaves = new WallRectIndex([]);
 let currentArenaEntrances: Point[] = [];
@@ -1160,6 +1162,7 @@ function unloadLevel(): void {
   currentDecorations = [];
   currentVendingMachines = [];
   currentSpawners = [];
+  currentRoomAmbushProps.clear();
   currentSecurityDoors.clear();
   closedSecurityLeaves = new WallRectIndex([]);
   currentArenaEntrances = [];
@@ -1478,7 +1481,7 @@ function renderBulletImpact(bullet: Bullet): void {
   renderer.playDamageSound();
 }
 
-function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void {
+function damageObstacle(item: Decoration, amount: number, bullet?: Bullet, pendingAmbushes?: Decoration[]): void {
   if (!applyObstacleDamage(item, amount)) return;
 
   if (isSecurityDoor(item)) {
@@ -1534,7 +1537,10 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
       }
       currentLoot.push(...drops);
       if (drops.length) renderInteractiveObjects();
-      if (ambush === "monster") spawnSceneryAmbush(destroyedItem);
+      if (ambush === "monster") {
+        if (pendingAmbushes) pendingAmbushes.push(destroyedItem);
+        else spawnSceneryAmbush(destroyedItem);
+      }
     }
     renderContentBrowser();
     renderVendingPreview();
@@ -1804,6 +1810,20 @@ function updateBossFightForRoom(room: GraphNode, timestamp: number): void {
   if (timestamp >= bossFightActivateAt) activateArenaEnemies(room);
 }
 
+function updateRoomAmbush(room: GraphNode): void {
+  const props = currentRoomAmbushProps.get(room.id);
+  if (!props || Math.hypot(player.x - room.x, player.y - room.y) > ROOM_AMBUSH_TRIGGER_RADIUS ||
+      roomContainingPoint(player.x, player.y)?.id !== room.id) return;
+
+  currentRoomAmbushProps.delete(room.id);
+  // Clear the whole set before spawning anything: adjacent props may otherwise block a heavy enemy.
+  const pendingAmbushes: Decoration[] = [];
+  for (const item of props) {
+    if (!item.destroyed) damageObstacle(item, item.hp, undefined, pendingAmbushes);
+  }
+  for (const item of pendingAmbushes) spawnSceneryAmbush(item);
+}
+
 const SPAWNER_CHARGE_UP_MS = 2_000;
 
 function updateMonsterSpawners(timestamp: number): void {
@@ -1894,14 +1914,15 @@ function spawnSceneryAmbush(item: Decoration): void {
   if (!monster) return;
   const corridor = item.corridorId && currentLayout?.links.find(link => link.id === item.corridorId);
   const footprint = worldPoint(monster, "footprintRadii");
+  const canSpawnAt = (point: Point) =>
+    (corridor ? pointInCorridor(point.x, point.y, corridor) : roomContainingPoint(point.x, point.y)?.id === item.roomId) &&
+    !isNearArenaEntrance(currentArenaEntrances, point.x, point.y) && monsterSpawnPositionIsClear(monster, point);
   const position = [0, 48, 88, 128].flatMap(radius => radius === 0 ? [{ x: item.x, y: item.y }] :
     Array.from({ length: 8 }, (_, index) => ({
       x: item.x + Math.cos(index * Math.PI / 4) * radius,
       y: item.y + Math.sin(index * Math.PI / 4) * radius,
-    }))).find(point =>
-    (corridor ? pointInCorridor(point.x, point.y, corridor) : roomContainingPoint(point.x, point.y)?.id === item.roomId) &&
-    !isNearArenaEntrance(currentArenaEntrances, point.x, point.y) &&
-    !wallBlocksSegment(item, point, footprint, wallFootprints) && monsterSpawnPositionIsClear(monster, point));
+    }))).find(point => !wallBlocksSegment(item, point, footprint, wallFootprints) && canSpawnAt(point)) ??
+    (item.roomAmbush ? findNearbyRoomAmbushSpace(item, canSpawnAt) : undefined);
   if (!position) return;
   Object.assign(monster, position, {
     hp: monster.maxHp,
@@ -1914,6 +1935,22 @@ function spawnSceneryAmbush(item: Decoration): void {
   saveMonsterState(monster);
   renderMonsters();
   if (updateFloorPortals()) renderInteractiveObjects();
+}
+
+function findNearbyRoomAmbushSpace(item: Decoration, canSpawnAt: (point: Point) => boolean): Point | undefined {
+  const room = currentRoomsById.get(item.roomId);
+  if (!room) return;
+  // A large monster may not fit where the prop did. Find the nearest open spot
+  // in the same room, testing line of sight from the prop and clearance at the destination.
+  const step = 24;
+  const candidates: Point[] = [item];
+  for (let y = room.y - room.height / 2 + step / 2; y < room.y + room.height / 2; y += step) {
+    for (let x = room.x - room.width / 2 + step / 2; x < room.x + room.width / 2; x += step) {
+      candidates.push({ x, y });
+    }
+  }
+  return candidates.sort((a, b) => distanceSquared(item, a) - distanceSquared(item, b)).find(point =>
+    !wallBlocksSegment(item, point, { x: 0, y: 0 }, wallFootprints) && canSpawnAt(point));
 }
 
 /** Arena spawners only ever spawn inside the arena and never in the entrance keep-out zone. */
@@ -3185,9 +3222,9 @@ function runGameTick(timestamp: number): void {
   updateEnergyDash(dt);
   updateBullets(dt);
   updateMonsterSpawners(timestamp);
-  // Arm (and then start) the arena fight once the player is deep enough in.
-  const bossArena = currentRoomId !== null ? currentRoomsById.get(currentRoomId) : undefined;
-  if (bossArena?.isBossArena === true) updateBossFightForRoom(bossArena, timestamp);
+  const room = currentRoomId !== null ? currentRoomsById.get(currentRoomId) : undefined;
+  if (room?.isBossArena === true) updateBossFightForRoom(room, timestamp);
+  else if (room) updateRoomAmbush(room);
   for (const monster of currentMonsters) monsterFootprintIndex.update(monster);
   updateContentPoints(timestamp);
   renderer.updateDecorationAnimations(currentDecorations, timestamp);
@@ -4013,7 +4050,7 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
     shoot: (target?: Point) => boolean;
     hitMonster: (id: string, damage: number) => void;
     monsters: () => Array<Pick<Monster, "id" | "kind" | "x" | "y" | "roomId" | "spawnCorridorId" | "active" | "dead" | "hp" | "maxHp" | "speed" | "miniboss" | "bossKind" | "slowRemainingMs" | "stunRemainingMs">>;
-    scenery: () => Array<Pick<Decoration, "id" | "definitionId" | "corridorId" | "x" | "y" | "roomId" | "destructible" | "destroyed">>;
+    scenery: () => Array<Pick<Decoration, "id" | "definitionId" | "corridorId" | "x" | "y" | "roomId" | "destructible" | "destroyed" | "roomAmbush">>;
     securityDoors: () => SecurityDoor[];
     lastMonsterPathSearchAt: (id: string) => number | undefined;
     layout: () => DungeonLayout | null;
@@ -4075,8 +4112,8 @@ function teleportPlayerTo(x: number, y: number, immediate = true): void {
   },
   monsters: () => currentMonsters.map(({ id, kind, x, y, roomId, spawnCorridorId, active, dead, hp, maxHp, speed, miniboss, bossKind, slowRemainingMs, stunRemainingMs }) =>
     ({ id, kind, x, y, roomId, spawnCorridorId, active, dead, hp, maxHp, speed, miniboss, bossKind, slowRemainingMs, stunRemainingMs })),
-  scenery: () => currentDecorations.map(({ id, definitionId, corridorId, x, y, roomId, destructible, destroyed }) =>
-    ({ id, definitionId, corridorId, x, y, roomId, destructible, destroyed })),
+  scenery: () => currentDecorations.map(({ id, definitionId, corridorId, x, y, roomId, destructible, destroyed, roomAmbush }) =>
+    ({ id, definitionId, corridorId, x, y, roomId, destructible, destroyed, roomAmbush })),
   securityDoors: () => structuredClone([...currentSecurityDoors.values()]),
   lastMonsterPathSearchAt: id => currentMonsters.find(monster => monster.id === id)?.lastPathSearchAt,
   layout: () => structuredClone(currentLayout),
@@ -4646,6 +4683,15 @@ function renderGraph(
   currentVendingMachines = currentDecorations.filter(item => item.vendingKind);
   vendingContacts.clear();
   currentSpawners = currentDecorations.filter(item => item.spawner);
+  currentRoomAmbushProps.clear();
+  if (MONSTERS_ENABLED) {
+    for (const item of currentDecorations) {
+      if (!item.roomAmbush || item.destroyed) continue;
+      const props = currentRoomAmbushProps.get(item.roomId) ?? [];
+      props.push(item);
+      currentRoomAmbushProps.set(item.roomId, props);
+    }
+  }
   rebuildSpatialIndexes();
   currentLoot.push(...createSceneryDrops(currentDecorations.filter(item => !item.vendingKind), floorIdentity(pageUrl), collectedLoot));
 

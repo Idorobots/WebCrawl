@@ -227,6 +227,8 @@ export interface Decoration extends Point, RelativeObjectGeometry {
   maxHp: number;
   hp: number;
   destroyed: boolean;
+  /** Bursts on approach to its room's center and uses the ambush-room outcome odds. */
+  roomAmbush?: boolean;
   dropKind: LootKind | null;
   dropCount?: number;
   vendingKind?: VendingKind;

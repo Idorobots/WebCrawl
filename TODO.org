@@ -1291,6 +1291,7 @@ We'll need the following additions to the player state:
 - In complex corridors, some doors should open at the same time - releasing monsters into the corridor for the player to fend off as an ambush.
 - Powerup vending machine?
 - Security doors on regular rooms.
+- Something with pipes and water - having to repair pipeline sections & cables to power a datacenter.
 
 * DONE UI improvements
 :LOGBOOK:
@@ -1395,6 +1396,7 @@ The mini-map-related powerups should combine seamlessly - when a radar is active
 - Economic crysis -  longers/stronger eneryg dash per energy unit
 - Tarrifs - Bullets circling the player dealing damage to the enemies
 - Time slowdown during dash/govt bailout
+- Powerups rendering information on the gameplay area - arrows pointing towards the boss/portals, etc.
 
 * More varied weapons
 Let's introduce more variation to the weapons. Starting with additional bullet types:
@@ -1528,8 +1530,11 @@ slowly from further away. Let's start with 3 bullets and increase that by 1 bull
 `display: none` rooms are considered "hidden rooms". The renderer should not show corridors leading to those hidden rooms from the other rooms. Only when the player "discovers" the room (enters one of the corridors leading into the hidden room), should it appear together with its corridors on the viewport and on the minimap.
 There should be no doors generated leading to these hidden rooms, only walls with a passable section (essentially a "holographic" wall), to maintain the illusion of those rooms being hidden.
 
-* Ambush rooms
-- Let's introduce unoccupied rooms into the game - some rooms should generate no monsters at all and only contain scenery (based on the selected room theme).
+* DONE Ambush rooms
+:LOGBOOK:
+- State "DONE"       from              [2026-11-19 Thu 21:58]
+:END:
+- Let's introduce unoccupied rooms into the game - some rooms should generate no monsters at all and only contain scenery (based on the selected room theme). About 20% of all level rooms should contain no enemies.
 - Some of those empty rooms (15% chance) should be generated as "ambush rooms" - the rooms should contain multiple "ambush" scenery items that burst open the moment the player comes near the room center. Each scenery item destroyed should spawn a monster according to the normal ambush rules. The 5% powerup chance should still apply, even though the monster chance is now higher for all applicable scenery items in that room.
 
 * DONE Vending machines

@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { SecurityDoor } from "../../src/client/domain/corridor-encounters";
 import { SECURITY_DOOR_MAX_HP, SECURITY_DOOR_RADIUS } from "../../src/client/domain/corridor-encounters";
-import { sceneryAmbushOutcome } from "../../src/client/domain/generation";
-import { pointInCorridor } from "../../src/client/domain/geometry";
+import { ROOM_AMBUSH_TRIGGER_RADIUS, sceneryAmbushOutcome } from "../../src/client/domain/generation";
+import { pointInCorridor, pointInRoomFloor } from "../../src/client/domain/geometry";
 import { DECORATION_DEFINITIONS, SCENERY_DEFINITIONS, WORLD_GEOMETRY } from "../../src/client/domain/world-specs";
 import { doorModuleStyles } from "../../src/client/render/corridor-render-plan";
 import { LIGHT_DETAIL_STORAGE_KEY } from "../../src/client/render/light-detail";
@@ -15,7 +15,7 @@ type TestWindow = Window & {
     securityDoors(): SecurityDoor[];
     lastMonsterPathSearchAt(id: string): number | undefined;
     monsters(): Pick<Monster, "id" | "kind" | "x" | "y" | "spawnCorridorId" | "active" | "dead">[];
-    scenery(): Pick<Decoration, "id" | "definitionId" | "x" | "y" | "roomId" | "corridorId" | "destructible">[];
+    scenery(): Pick<Decoration, "id" | "definitionId" | "x" | "y" | "roomId" | "corridorId" | "destructible" | "destroyed" | "roomAmbush">[];
     loot(): Array<Point & { id: string; kind: string; placement: string | null; powerup: PowerupKind | null }>;
     teleportPlayerTo(x: number, y: number): void;
     setPlayerInvulnerable(enabled: boolean): void;
@@ -25,6 +25,7 @@ type TestWindow = Window & {
     shoot(target: Point): boolean;
     hitMonster(id: string, damage: number): void;
     destroyScenery(id: string): void;
+    gameTickAt(): number | null;
     navigate(url: string): Promise<void>;
     goBack(): Promise<void>;
   };
@@ -37,13 +38,13 @@ const html = `<body><nav><ul>${Array.from({ length: 12 }, (_, index) =>
   `<article id="entry-${index}"><h1>Article ${index}</h1><p>First paragraph.</p><p>Second paragraph.</p></article>`
 ).join("")}</main></body>`;
 
-async function openFixture(page: Page) {
+async function openFixture(page: Page, fixtureUrl = url) {
   await page.addInitScript(key => localStorage.setItem(key, "low"), LIGHT_DETAIL_STORAGE_KEY);
   await page.route("**/api/fetch?**", route => route.fulfill({ contentType: "text/html", body: html }));
   await page.route("https://example.com/**", route => route.fulfill({ contentType: "text/html", body: html }));
   await page.goto("/");
   await page.getByRole("button", { name: "Sign In" }).click();
-  await page.locator("#welcomeUrlInput").fill(url);
+  await page.locator("#welcomeUrlInput").fill(fixtureUrl);
   await page.getByRole("button", { name: "Go" }).click();
   const host = page.locator("#gameCanvas");
   await expect(host).toHaveAttribute("data-rooms", /[1-9]\d*/, { timeout: 60_000 });
@@ -203,7 +204,7 @@ test("destroyed scenery spawns one ambush monster or one collectible powerup, wi
     api.setMonsterAggroRadius(0);
     return { scenery: api.scenery(), layout: api.layout() };
   });
-  const scenery = initial.scenery.filter(item => !item.corridorId &&
+  const scenery = initial.scenery.filter(item => !item.corridorId && !item.roomAmbush &&
     !initial.layout.nodes.find(room => room.id === item.roomId)?.isBossArena);
   const floor = `${url}::floor-1`;
   const ambush = scenery.find(item => sceneryAmbushOutcome(item, floor, 1) === "monster");
@@ -239,4 +240,66 @@ test("destroyed scenery spawns one ambush monster or one collectible powerup, wi
   expect(await ambushPowerups(reward!.id)).toEqual([]);
   await revisitFloor(page);
   expect(await ambushPowerups(reward!.id)).toEqual([]);
+});
+
+test("ambush room props burst near the center once, and their outcomes survive a floor revisit", async ({ page }) => {
+  test.setTimeout(90_000);
+  const fixtureUrl = "https://example.com/ambush-probe-18";
+  await openFixture(page, fixtureUrl);
+  const initial = await page.evaluate(() => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    api.setPlayerInvulnerable(true);
+    api.setMonsterAggroRadius(0);
+    return { scenery: api.scenery(), monsters: api.monsters(), layout: api.layout() };
+  });
+  const floor = `${fixtureUrl}::floor-1`;
+  const pods = initial.scenery.filter(item => item.roomAmbush &&
+    ["sealed-escape-capsule", "lifeboat-pod"].includes(item.definitionId));
+  expect(pods).toHaveLength(3);
+  const podRoom = initial.layout.nodes.find(room => room.id === pods[0]!.roomId)!;
+  await teleport(page, { x: podRoom.x, y: podRoom.y });
+  await expect.poll(async () => {
+    const monsters = await page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.monsters());
+    return monsters.filter(monster => pods.some(pod => monster.id === `${pod.id}::ambush`) &&
+      monster.active && monster.kind.endsWith("-heavy") && pointInRoomFloor(monster.x, monster.y, podRoom));
+  }).toHaveLength(pods.length);
+
+  const room = initial.layout.nodes.find(room => {
+    const outcomes = initial.scenery.filter(item => item.roomId === room.id && item.roomAmbush)
+      .map(item => sceneryAmbushOutcome(item, floor, 1));
+    return outcomes.includes("monster") && outcomes.includes("powerup");
+  });
+  expect(room).toBeDefined();
+  const props = initial.scenery.filter(item => item.roomId === room!.id && item.roomAmbush);
+  expect(initial.monsters.filter(monster => !monster.spawnCorridorId && monster.id.startsWith(`${room!.id}::`))).toEqual([]);
+  const monsterIds = props.filter(item => sceneryAmbushOutcome(item, floor, 1) === "monster").map(item => `${item.id}::ambush`);
+  const powerupIds = props.filter(item => sceneryAmbushOutcome(item, floor, 1) === "powerup")
+    .map(item => `${floor}::${item.id}::ambush-powerup`);
+  const outcomes = () => page.evaluate(({ propIds, monsterIds, powerupIds }) => {
+    const api = (window as unknown as TestWindow).__webcrawlTest;
+    return {
+      destroyed: api.scenery().filter(item => propIds.includes(item.id) && item.destroyed).length,
+      monsters: api.monsters().filter(item => monsterIds.includes(item.id))
+        .map(({ id, active, dead }) => ({ id, active, dead })),
+      powerups: api.loot().filter(item => powerupIds.includes(item.id)).map(({ id }) => id),
+    };
+  }, { propIds: props.map(item => item.id), monsterIds, powerupIds });
+  const edge = { x: room!.x + ROOM_AMBUSH_TRIGGER_RADIUS + 32, y: room!.y };
+  expect(pointInRoomFloor(edge.x, edge.y, room!)).toBe(true);
+  await teleport(page, edge);
+  const tick = () => page.evaluate(() => (window as unknown as TestWindow).__webcrawlTest.gameTickAt() ?? 0);
+  const outsideTick = await tick();
+  await expect.poll(tick).toBeGreaterThan(outsideTick);
+  expect(await outcomes()).toEqual({ destroyed: 0, monsters: [], powerups: [] });
+
+  await teleport(page, { x: room!.x, y: room!.y });
+  const triggered = { destroyed: props.length, monsters: monsterIds.map(id => ({ id, active: true, dead: false })), powerups: powerupIds };
+  await expect.poll(outcomes).toEqual(triggered);
+  await page.evaluate(id => (window as unknown as TestWindow).__webcrawlTest.hitMonster(id, 1000), monsterIds[0]!);
+  await revisitFloor(page);
+  await teleport(page, { x: room!.x, y: room!.y });
+  await expect.poll(outcomes).toEqual({
+    ...triggered,
+    monsters: triggered.monsters.map(({ id }) => ({ id, active: true, dead: id === monsterIds[0] })),
+  });
 });

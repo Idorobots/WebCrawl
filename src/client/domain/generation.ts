@@ -281,6 +281,19 @@ export function bonusLootDrop(source: Monster | Decoration, namespace: string, s
 
 const ROOM_SCENERY_THEME_IDS = Object.keys(ROOM_SCENERY_THEMES) as RoomSceneryTheme[];
 const NON_ARENA_ROOM_SCENERY_THEME_IDS = ROOM_SCENERY_THEME_IDS.filter(id => id !== "arena");
+const UNOCCUPIED_ROOM_PERCENT = 20;
+const AMBUSH_SHARE_OF_UNOCCUPIED = 0.15;
+const AMBUSH_ROOM_TARGET_PROPS = 3;
+export const ROOM_AMBUSH_TRIGGER_RADIUS = 100;
+
+export function roomEncounterForRoom(
+  room: Pick<GraphNode, "lootSeed" | "isRoot" | "tag" | "isBossArena">,
+): "occupied" | "unoccupied" | "ambush" {
+  if (room.isRoot || room.isBossArena || room.tag === "img") return "occupied";
+  const roll = stableHash(`${room.lootSeed}|room-encounter`) % 100;
+  if (roll < UNOCCUPIED_ROOM_PERCENT * AMBUSH_SHARE_OF_UNOCCUPIED) return "ambush";
+  return roll < UNOCCUPIED_ROOM_PERCENT ? "unoccupied" : "occupied";
+}
 
 export function roomSceneryThemeForRoom(room: Pick<GraphNode, "lootSeed" | "isBossArena">): RoomSceneryTheme {
   if (room.isBossArena === true) return "arena";
@@ -364,12 +377,14 @@ export function decorationSpecsForRoom(
   room: GraphNode, floor = 1,
   walls = new WallRectIndex(buildWallFootprints({ nodes: [room], links: [], hiddenCount: 0 })),
   entrances: readonly Point[] = [],
+  doors: readonly Point[] = [],
 ): Decoration[] {
   const seed = stableHash(`${room.lootSeed}|decor`);
   const difficulty = floorDifficulty(floor);
   const count = Math.max(5, Math.floor(roomSegmentArea(room) * sceneryDensityForFloor(floor))) + (seed % 3);
   const themeId = roomSceneryThemeForRoom(room);
   const theme = ROOM_SCENERY_THEMES[themeId];
+  const encounter = roomEncounterForRoom(room);
   const slots = roomDecorationSlots(room, seed);
   const spawnerRate = Math.min(82, 12 + difficulty * 6);
   const spawnerRoomRoll = stableHash(`${room.lootSeed}|spawner-rate`) % 100;
@@ -377,7 +392,7 @@ export function decorationSpecsForRoom(
   const minSpawnerCount = Math.max(0, Math.floor(expectedSpawners));
   const maxSpawnerCount = Math.max(minSpawnerCount, Math.min(4, Math.ceil(expectedSpawners)));
   let requestedSpawnerCount = 0;
-  if (!room.isRoot && room.tag !== "img" && spawnerRoomRoll < spawnerRate) {
+  if (encounter === "occupied" && !room.isRoot && room.tag !== "img" && spawnerRoomRoll < spawnerRate) {
     requestedSpawnerCount = minSpawnerCount === maxSpawnerCount
       ? Math.max(1, minSpawnerCount)
       : minSpawnerCount + (stableHash(`${room.lootSeed}|spawner-count`) % (maxSpawnerCount - minSpawnerCount + 1));
@@ -408,10 +423,33 @@ export function decorationSpecsForRoom(
     });
   }
   const decorations: Decoration[] = [];
+  const themedAmbushProps = encounter === "ambush"
+    ? [...theme.primary, ...theme.accents].filter(({ definition }) => canContainSceneryAmbush(definition))
+    : [];
+  if (encounter === "ambush") {
+    for (let index = 0; index < AMBUSH_ROOM_TARGET_PROPS; index += 1) {
+      const itemSeed = stableHash(`${room.lootSeed}|room-ambush-prop|${index}`);
+      const fittingSlot = (type: DecorationDefinition) => slots.findIndex(position =>
+        !doors.some(door => blocksDoorApproach({ ...type, ...position }, room, door)) &&
+        decorationFits(position, type, room, decorations, walls));
+      const fittingProps = themedAmbushProps.filter(({ definition }) => fittingSlot(definition) >= 0);
+      // Engine rooms have no ambush-capable theme props. A cargo crate also fits
+      // where the room's larger props (such as pods or shelves) cannot.
+      const type = fittingProps.length ? weightedDecoration(fittingProps, itemSeed) : DECORATION_DEFINITIONS.crateCargo;
+      const slotIndex = fittingSlot(type);
+      if (slotIndex < 0) break;
+      const [position] = slots.splice(slotIndex, 1);
+      decorations.push({
+        ...type, ...position!, id: `${room.id}::ambush-prop-${index}`, roomId: room.id,
+        visualVariant: itemSeed, maxHp: type.hp, destroyed: false, roomAmbush: true,
+        dropKind: sceneryDropKindForSeed(itemSeed, type.definitionId),
+      });
+    }
+  }
   const vendingKind = vendingKindForRoom(room, themeId === "medical", NON_ARENA_ROOM_SCENERY_THEME_IDS.length);
   if (vendingKind) {
     const type = VENDING_DEFINITIONS[vendingKind];
-    const slotIndex = slots.findIndex(position => decorationFits(position, type, room, spawners, walls));
+    const slotIndex = slots.findIndex(position => decorationFits(position, type, room, [...spawners, ...decorations], walls));
     if (slotIndex >= 0) {
       const [position] = slots.splice(slotIndex, 1);
       const itemSeed = stableHash(`${room.lootSeed}|vending`);
@@ -450,6 +488,7 @@ export function decorationSpecsForRoom(
       visualVariant: itemSeed,
       maxHp: type.hp,
       destroyed: false,
+      ...(encounter === "ambush" && canContainSceneryAmbush(type) ? { roomAmbush: true } : {}),
       dropKind: type.destructible ? sceneryDropKindForSeed(itemSeed, type.definitionId) : null,
     });
   }
@@ -561,7 +600,7 @@ function pointToSegmentDistance(point: Point, start: Point, end: Point): number 
   return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
 }
 
-function blocksDoorApproach(item: Decoration, room: GraphNode, door: Point): boolean {
+function blocksDoorApproach(item: Point & DecorationDefinition, room: GraphNode, door: Point): boolean {
   if (!item.obstacle) return false;
   const dx = room.x - door.x;
   const dy = room.y - door.y;
@@ -614,6 +653,7 @@ function clearRoomDoorways(
       kind: "doorway-debris",
       maxHp: DECORATION_DEFINITIONS.debrisCircuit.hp,
       dropKind: null,
+      roomAmbush: undefined,
       spawner: false,
       spawnedCount: undefined,
     });
@@ -648,11 +688,12 @@ export function buildDecorations(
           : null,
       }));
     }
-    const entrances = room.isBossArena === true ? doorsByRoom.get(room.id) ?? [] : [];
+    const doors = doorsByRoom.get(room.id) ?? [];
+    const entrances = room.isBossArena === true ? doors : [];
     return clearRoomDoorways(
-      decorationSpecsForRoom(room, floor, walls, entrances),
+      decorationSpecsForRoom(room, floor, walls, entrances, doors),
       room,
-      doorsByRoom.get(room.id) ?? [],
+      doors,
       walls,
       entrances,
     );
@@ -969,7 +1010,7 @@ export function monsterSpecsForRoom(
   bossKind?: BossKind,
   entrances: readonly Point[] = [],
 ): Monster[] {
-  if (room.isRoot || (room.tag === "img" && !room.isBossArena)) return [];
+  if (room.isRoot || (room.tag === "img" && !room.isBossArena) || roomEncounterForRoom(room) !== "occupied") return [];
   const roomSeed = stableHash(`${room.lootSeed}|monsters`);
   const count = monsterCountForRoom(
     room,
@@ -1070,14 +1111,20 @@ const SCENERY_AMBUSH_KINDS = new Map<string, RegularMonsterKind | readonly Regul
 const SCENERY_AMBUSH_BASE_PERCENT = 5;
 const SCENERY_AMBUSH_PER_FLOOR_PERCENT = 2;
 const SCENERY_AMBUSH_POWERUP_THRESHOLD = 0.98;
+const ROOM_AMBUSH_POWERUP_THRESHOLD = 0.95;
+
+function canContainSceneryAmbush(item: Pick<Decoration, "definitionId" | "destructible">): boolean {
+  return item.destructible && SCENERY_AMBUSH_KINDS.has(item.definitionId);
+}
 
 export function sceneryAmbushOutcome(
-  item: Pick<Decoration, "id" | "definitionId" | "destructible">,
+  item: Pick<Decoration, "id" | "definitionId" | "destructible" | "roomAmbush">,
   floorIdentity: string,
   floor: number,
 ): "monster" | "powerup" | null {
-  if (!item.destructible || !SCENERY_AMBUSH_KINDS.has(item.definitionId)) return null;
+  if (!canContainSceneryAmbush(item)) return null;
   const roll = stableHash(`${floorIdentity}|${item.id}|scenery-ambush`) / 0x1_0000_0000;
+  if (item.roomAmbush) return roll >= ROOM_AMBUSH_POWERUP_THRESHOLD ? "powerup" : "monster";
   // Reserve the last 2% of the roll for a powerup, even on the deepest floors.
   if (roll >= SCENERY_AMBUSH_POWERUP_THRESHOLD) return "powerup";
   if (roll < (SCENERY_AMBUSH_BASE_PERCENT + floorDifficulty(floor) * SCENERY_AMBUSH_PER_FLOOR_PERCENT) / 100) return "monster";

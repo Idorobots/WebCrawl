@@ -76,8 +76,9 @@ describe("size-relative object geometry", () => {
     const { layout, rooms } = artDebugLevel();
     const decorations = buildDecorations(layout, new Map(), 1, undefined, rooms);
     const monsters = buildMonsters(layout, new Map(), new Set(), 1, decorations, undefined, undefined, rooms);
+    const sceneryDefinitions = [...Object.values(relative.DECORATION_DEFINITIONS), ...relative.SCENERY_DEFINITIONS];
     for (const item of decorations) {
-      const definition = Object.values(relative.DECORATION_DEFINITIONS).find(definition => definition.definitionId === item.definitionId)!;
+      const definition = sceneryDefinitions.find(definition => definition.definitionId === item.definitionId)!;
       expect(item.hitboxRadii).toEqual(definition.hitboxRadii);
       expect(item.visualOffset).toEqual(definition.visualOffset);
     }

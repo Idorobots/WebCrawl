@@ -3,9 +3,9 @@ import { monsterSpecForSceneryAmbush, sceneryAmbushOutcome } from "../../src/cli
 import { DECORATION_DEFINITIONS } from "../../src/client/domain/world-specs";
 
 const floor = "https://example.com/warehouse::floor-1";
-const outcomesFor = (definitionId: string, count: number, depth = 1, destructible = true) =>
+const outcomesFor = (definitionId: string, count: number, depth = 1, destructible = true, roomAmbush = false) =>
   Array.from({ length: count }, (_, index) => sceneryAmbushOutcome({
-    id: `room-${index}::${definitionId}-0`, definitionId, destructible,
+    id: `room-${index}::${definitionId}-0`, definitionId, destructible, roomAmbush,
   }, floor, depth));
 
 describe("scenery ambush outcomes", () => {
@@ -45,5 +45,13 @@ describe("scenery ambush outcomes", () => {
   it("does not roll for open pods or indestructible props", () => {
     expect(outcomesFor("open-escape-capsule", 500).every(outcome => outcome === null)).toBe(true);
     expect(outcomesFor("cargo-shelf", 500, 1, false).every(outcome => outcome === null)).toBe(true);
+  });
+
+  it("reserves 5% for a powerup in ambush rooms and releases a monster otherwise", () => {
+    const outcomes = outcomesFor("cargo-shelf", 20_000, 1, true, true);
+    expect(new Set(outcomes)).toEqual(new Set(["monster", "powerup"]));
+    expect(outcomes.filter(outcome => outcome === "powerup").length / outcomes.length).toBeCloseTo(0.05, 2);
+    expect(outcomesFor("cargo-shelf", 20_000, 60, true, true)).toEqual(outcomes);
+    expect(outcomesFor("open-escape-capsule", 500, 1, true, true).every(outcome => outcome === null)).toBe(true);
   });
 });

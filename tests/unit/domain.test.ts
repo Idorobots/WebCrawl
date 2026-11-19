@@ -63,6 +63,7 @@ import {
   monsterSpecForBossSummon,
   monsterSpecForSpawner,
   MONSTER_STAT_VARIANCE,
+  roomEncounterForRoom,
   roomSceneryThemeForRoom,
   staircasePositions,
   weaponLootForRoom,
@@ -1331,6 +1332,41 @@ describe("deterministic room contents", () => {
     expect(monsterSpecsForRoom(room)).toEqual([]);
   });
 
+  it("leaves about one in five procedural rooms unoccupied, with ambushes in 15% of those rooms", () => {
+    const rooms = Array.from({ length: 10_000 }, (_, index) => node(index + 20, 0, 1, {
+      tag: "section", lootSeed: stableHash(`room-encounter-sample-${index}`), isRoot: false,
+    }));
+    const empty = rooms.filter(room => roomEncounterForRoom(room) !== "occupied");
+    const ambushes = empty.filter(room => roomEncounterForRoom(room) === "ambush");
+    expect(empty.length / rooms.length).toBeCloseTo(0.20, 2);
+    expect(ambushes.length / empty.length).toBeGreaterThan(0.13);
+    expect(ambushes.length / empty.length).toBeLessThan(0.17);
+
+    const themes = Object.keys(ROOM_SCENERY_THEMES).filter(theme => theme !== "arena");
+    for (const theme of themes) {
+      const ambient = empty.find(room => roomEncounterForRoom(room) === "unoccupied" && roomSceneryThemeForRoom(room) === theme)!;
+      const ambush = ambushes.find(room => roomSceneryThemeForRoom(room) === theme)!;
+      const layout = { nodes: [ambient, ambush], links: [], hiddenCount: 0 };
+      const scenery = buildDecorations(layout, new Map(), 20);
+      expect(buildMonsters(layout, new Map(), new Set(), 20, scenery)).toEqual([]);
+      expect(scenery.some(item => item.spawner)).toBe(false);
+      expect(scenery.some(item => item.roomId === ambient.id && !item.roomAmbush)).toBe(true);
+      expect(scenery.filter(item => item.roomId === ambient.id && item.roomAmbush)).toEqual([]);
+      const trapped = scenery.filter(item => item.roomId === ambush.id && item.roomAmbush);
+      expect(trapped.length).toBeGreaterThanOrEqual(2);
+      expect(trapped.every(item => item.destructible && monsterSpecForSceneryAmbush(item, 20))).toBe(true);
+    }
+
+    const ambushRoom = ambushes[0]!;
+    for (const room of [{ ...ambushRoom, isRoot: true }, { ...ambushRoom, tag: "img" }]) {
+      expect(monsterSpecsForRoom(room)).toEqual([]);
+      expect(decorationSpecsForRoom(room).some(item => item.roomAmbush)).toBe(false);
+    }
+    const arena = { ...ambushRoom, isBossArena: true };
+    expect(monsterSpecsForRoom(arena).some(monster => monster.bossKind)).toBe(true);
+    expect(decorationSpecsForRoom(arena).some(item => item.roomAmbush)).toBe(false);
+  });
+
   it("uses the same pool of decorative debris in rooms and corridors", () => {
     const roomDebris = Array.from({ length: 256 }, (_, index) => decorationSpecsForRoom({
       ...room, lootSeed: stableHash(`room-debris-${index}`),
@@ -1448,7 +1484,7 @@ describe("deterministic room contents", () => {
       y: 400,
       tag: "section",
       isRoot: false,
-      lootSeed: stableHash("arrival-monster-room"),
+      lootSeed: stableHash("arrival-monster-room-1"),
     });
     const layout = { nodes: [combatRoom], links: [], hiddenCount: 0 };
     const first = monsterSpecsForRoom(combatRoom, 1)[0]!;
@@ -1560,8 +1596,9 @@ describe("deterministic room contents", () => {
     const floorFiveCounts = rooms.map(candidate => monsterSpecsForRoom(candidate, 5).length);
     const lootCounts = rooms.map(candidate => lootCountForRoom(candidate));
 
-    expect(floorOneCounts.every(count => count === 2 || count === 3)).toBe(true);
-    expect(floorFiveCounts.every(count => count === 4 || count === 5)).toBe(true);
+    expect(floorOneCounts.filter(Boolean).every(count => count === 2 || count === 3)).toBe(true);
+    expect(floorFiveCounts.filter(Boolean).every(count => count === 4 || count === 5)).toBe(true);
+    expect(floorOneCounts.map(Boolean)).toEqual(floorFiveCounts.map(Boolean));
     expect(floorFiveCounts.reduce((sum, count) => sum + count, 0)).toBeGreaterThan(
       floorOneCounts.reduce((sum, count) => sum + count, 0),
     );
@@ -1603,7 +1640,7 @@ describe("deterministic room contents", () => {
   it("hosts fewer enemies per segment in boss arenas but scenery as usual", () => {
     const section = node(0, null, 0, {
       tag: "section",
-      lootSeed: stableHash("arena-density"),
+      lootSeed: stableHash("arena-density-1"),
       isRoot: false,
       width: ROOM_DEFINITIONS.boss.width,
       height: ROOM_DEFINITIONS.boss.height,
@@ -1611,7 +1648,7 @@ describe("deterministic room contents", () => {
     const script = node(1, null, 0, {
       tag: "script",
       isBossArena: true,
-      lootSeed: stableHash("arena-density"),
+      lootSeed: stableHash("arena-density-1"),
       isRoot: false,
       width: ROOM_DEFINITIONS.boss.width,
       height: ROOM_DEFINITIONS.boss.height,
@@ -3015,7 +3052,7 @@ describe("deterministic room contents", () => {
       tag: "section",
       width: ROOM_WIDTH * 2,
       height: ROOM_HEIGHT * 2,
-      lootSeed: stableHash("crowded-spawner-doorways"),
+      lootSeed: stableHash("crowded-spawner-doorways-1"),
     });
     const original = decorationSpecsForRoom(room, 10).filter(item => item.spawner);
     expect(original.length).toBeGreaterThanOrEqual(3);
