@@ -1290,6 +1290,7 @@ We'll need the following additions to the player state:
 - Make it possible to shoot at the floor - each player bullet spawned should be emitted towards a target point. If it intersects a blocking scenery/enemies then it deals damage to those. Non-blocking scenery doesn't get damaged, unless explicitly targetted.
 - In complex corridors, some doors should open at the same time - releasing monsters into the corridor for the player to fend off as an ambush.
 - Powerup vending machine?
+- Security doors on regular rooms.
 
 * DONE UI improvements
 :LOGBOOK:
@@ -1404,6 +1405,10 @@ Let's introduce more variation to the weapons. Starting with additional bullet t
 
 - Laser pulse - a laser line that extends from the shooter to the target, once shot it should take a while to "charge" and only then fire (start with a very faint flickering line and then burst to full brightness dealing damage only to fade out slowly). While the pulse is charging the shooter should be locked in place and unable to move.
 
+- Stun tazer - a short beam/lightning type weapon that sucks out energy and stuns enemies, but doesn't damage them - the dash ability would be used for that.
+
+- Area of effect weapons.
+
 * Extra enemies
 Themes:
 - Company employees (including machines & weapons)
@@ -1487,15 +1492,11 @@ Types:
 - Doors in corridors that close when there are monsters nearby
 
 * Enemy rebalance continued
-- Higher level shooting monsters should have slowing bullets and stunning bullets. Let's go for 5% chance per floor above floor 3. The player slowdown should last 500 ms and stun 100 ms.
-
-- Higher level monsters should have critical damage chance on each attack. Let's go for 1% chance per floor above floor 3.
-
-- Higher level walkers should have a dash ability - when close to a player they should dash towards them and deal damage when the dash connects. The dash distance should be based on the mosters speed and it should have a cooldown (same as regular attacks).
-
+- Higher level shooting monsters should have slowing bullets and stunning bullets. Let's go for 5% chance per floor above floor 2. The player slowdown should last 500 ms and stun 100 ms.
+- Higher level monsters should have critical damage chance on each attack. Let's go for 1% chance per floor above floor 1.
+- Higher level walkers should have a dash ability - when close to a player they should dash towards them and deal damage when the dash connects. The dash distance should be based on the mosters speed and it should have a cooldown (same as regular attacks). Just some of the walkers should have the ability. These walkers should start at floors above 3.
 - Additional fanout walking shooter - let's add a shooter scout and heavy with a fanout bullet pattern. These should shoot more
-slowly from further away. Let's start with 3 bullets and increase that by 1 bullet per floor above floor 4.
-
+slowly from further away. Let's start with 3 bullets and increase that by 1 bullet per floor above floor 3.
 
 * Enemy rebalance continued
 - Sentries should be placed towards the room corners when generating rooms. Sentries should not be placed in corridors.
@@ -1528,8 +1529,8 @@ slowly from further away. Let's start with 3 bullets and increase that by 1 bull
 There should be no doors generated leading to these hidden rooms, only walls with a passable section (essentially a "holographic" wall), to maintain the illusion of those rooms being hidden.
 
 * Ambush rooms
-- Let's introduce empty rooms into the game - some rooms should generat no monsters at all and only contain scenery (based on the selected room theme).
-- Some of those empty rooms (10% chance) should be generated as "ambush rooms" - the rooms should contain multiple "ambush" scenery items that burst open the moment the player comes near the room center. Each scenery item destroyed should spawn a monster according to the normal ambush rules. The 5% powerup chance should still apply, even though the monster chance is now higher for all applicable scenery items in that room.
+- Let's introduce unoccupied rooms into the game - some rooms should generate no monsters at all and only contain scenery (based on the selected room theme).
+- Some of those empty rooms (15% chance) should be generated as "ambush rooms" - the rooms should contain multiple "ambush" scenery items that burst open the moment the player comes near the room center. Each scenery item destroyed should spawn a monster according to the normal ambush rules. The 5% powerup chance should still apply, even though the monster chance is now higher for all applicable scenery items in that room.
 
 * DONE Vending machines
 :LOGBOOK:
@@ -1564,6 +1565,8 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Astronaut
 - Spider-bot
 - Humanoid robot
+
+- Matching dead debris sprites for all of the above.
 
 * Agent missions
 - Collect RAM sticks
@@ -1625,6 +1628,7 @@ Use the sprites in scenery/vending/vending*.png and debris debris/vending*.png f
 - Some scenery objects should be placed only on walls as decorations
 - Doors on undiscovered rooms often have the background underneath them, it looks bad.
 - Summoned monsters show an explosion animation.
+- Debris scenery in undiscovered corridors is rendered even though the corridor isn't.
 * DONE Audio bugs
 :LOGBOOK:
 - State "DONE"       from              [2026-10-13 Tue 19:34]
@@ -1660,3 +1664,5 @@ Do not run the e2e tests. I'll do this as a last step.
 - app.ts is pretty huge, should be refactored into several smaller modules with dedicated function (doors, targetting, etc)
 - phaser renderer also deals with state updates
 - generation.ts is pretty huge, should be refactored into several smaller modules
+* Bugs
+- When a shooting walker is right at the security door, it doesn't attempt to break the door because it doesn't have a bash ability.

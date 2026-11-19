@@ -185,6 +185,7 @@ export interface Stair extends Point {
 export interface LootItem extends Point {
   id: string;
   roomId: number;
+  corridorId?: string;
   kind: LootKind;
   weapon?: WeaponSpec;
   weaponAmmo?: number | null;

@@ -712,7 +712,12 @@ function revealRoomsFromCorridor(x: number, y: number): void {
     const revealed = new Set(discovery.corridors);
     activateMonsters(monster => Boolean(monster.spawnCorridorId && revealed.has(monster.spawnCorridorId)));
     updateSecurityDoors();
-    if (updateFloorPortals()) renderInteractiveObjects();
+    if (currentDecorations.some(item => item.corridorId && revealed.has(item.corridorId) && !isSecurityDoor(item))) {
+      renderDecorations();
+    }
+    if (updateFloorPortals() || currentLoot.some(item => item.corridorId && revealed.has(item.corridorId))) {
+      renderInteractiveObjects();
+    }
   }
   for (const room of discovery.rooms) markVisited(room);
 }
@@ -1388,11 +1393,11 @@ function saveObstacleState(item: Decoration): void {
   });
 }
 
-function buildDecorations(layout: DungeonLayout, pageUrl: string): Decoration[] {
+function buildDecorations(layout: DungeonLayout, pageUrl: string, securityDoors: readonly SecurityDoor[]): Decoration[] {
   const pageIdentity = floorIdentity(pageUrl);
   return [
     ...createDecorations(layout, obstacleStateMapForPage(pageUrl), floorNumber(), wallFootprints,
-      currentAuthoredRooms ?? undefined),
+      currentAuthoredRooms ?? undefined, securityDoors),
     ...layout.nodes.flatMap((room) => {
       if (currentAuthoredRooms?.has(room.id)) return [];
       const pedestal = rewardPedestalForRoom(room, pageIdentity, wallFootprints);
@@ -1511,7 +1516,7 @@ function damageObstacle(item: Decoration, amount: number, bullet?: Bullet): void
     renderDecorations();
     if (currentPageUrl) {
       const floor = floorIdentity(currentPageUrl);
-      const ambush = sceneryAmbushOutcome(destroyedItem, floor);
+      const ambush = sceneryAmbushOutcome(destroyedItem, floor, floorNumber());
       const drops = createSceneryDrops([destroyedItem], floor, collectedLoot);
       const bonus = persistBonusDrop(destroyedItem);
       if (bonus) drops.push(bonus);
@@ -4636,7 +4641,7 @@ function renderGraph(
   const objects = buildInteractiveObjects(layout, pageUrl);
   currentStairs = objects.stairs;
   currentLoot = objects.loot;
-  currentDecorations = buildDecorations(layout, pageUrl);
+  currentDecorations = buildDecorations(layout, pageUrl, securityDoors);
   currentDecorations.push(...securityDoors);
   currentVendingMachines = currentDecorations.filter(item => item.vendingKind);
   vendingContacts.clear();

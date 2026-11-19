@@ -68,6 +68,7 @@ import {
   weaponLootForRoom,
   weaponPedestalForRoom,
   sceneryDropKindForSeed,
+  monsterSpecForSceneryAmbush,
 } from "../../src/client/domain/generation";
 import { coalesceLeaves, contentPagesForRoom, domToGraph } from "../../src/client/domain/graph";
 import { ARENA_ENTRANCE_KEEP_OUT_DISTANCE } from "../../src/client/domain/arena-entrances";
@@ -1308,7 +1309,7 @@ describe("deterministic room contents", () => {
       ],
     };
     for (const floor of [1, 10, 20]) {
-      const corridorItems = decorationSpecsForCorridor(link, floor);
+      const corridorItems = decorationSpecsForCorridor(link);
       expect(corridorItems.length).toBeGreaterThan(0);
       const items = [...rooms.flatMap(room => decorationSpecsForRoom(room, floor)), ...corridorItems];
       for (const item of items) {
@@ -1324,10 +1325,19 @@ describe("deterministic room contents", () => {
     const decorations = decorationSpecsForRoom(room);
     expect(decorations).toEqual(decorationSpecsForRoom(room));
     expect(decorations.length).toBeGreaterThanOrEqual(5);
-    expect(decorations.length).toBeLessThanOrEqual(7);
+    expect(decorations.length).toBeLessThanOrEqual(8);
     expect(decorations.filter(item => item.obstacle).length).toBeGreaterThanOrEqual(4);
     expect(new Set(decorations.map(item => `${item.x},${item.y}`)).size).toBe(decorations.length);
     expect(monsterSpecsForRoom(room)).toEqual([]);
+  });
+
+  it("uses the same pool of decorative debris in rooms and corridors", () => {
+    const roomDebris = Array.from({ length: 256 }, (_, index) => decorationSpecsForRoom({
+      ...room, lootSeed: stableHash(`room-debris-${index}`),
+    }).find(item => item.id.endsWith("::floor-debris")));
+    expect(roomDebris.every(item => item && !item.obstacle && !item.destructible && !item.dropKind)).toBe(true);
+    expect(new Set(roomDebris.map(item => item!.visual.normal.frames[0])))
+      .toEqual(new Set(SCENERY_DEFINITIONS.map(definition => definition.visual.normal.frames[0])));
   });
 
   it("uses deterministic configurable themes and keeps neighboring scenery separated", () => {
@@ -1623,7 +1633,7 @@ describe("deterministic room contents", () => {
     expect(monsterSpecsForRoom({ ...script, isBossArena: false }).some(monster => monster.bossKind)).toBe(false);
   });
 
-  it("populates only some long corridors and leaves short corridors empty", () => {
+  it("populates only some long corridors with monsters and keeps debris sparse in short corridors", () => {
     const source = node(0, null, 0, { isRoot: false });
     const target = node(1, 0, 1);
     const corridor = (length: number, id: string): LayoutLink => ({
@@ -1653,7 +1663,8 @@ describe("deterministic room contents", () => {
       expect(monsters.every(monster => monster.spawnCorridorId === longLink.id && !monster.active &&
         ["melee-light", "shooter-light"].includes(monster.kind))).toBe(true);
     }
-    expect(decorationSpecsForCorridor(shortLink, 1).length).toBeLessThan(decorationSpecsForCorridor(longLink, 1).length);
+    expect(decorationSpecsForCorridor(shortLink)).toHaveLength(0);
+    expect(decorationSpecsForCorridor(longLink)).toHaveLength(2);
   });
 
   it("spaces security doors along a shared fork and restores each door independently", () => {
@@ -1708,9 +1719,9 @@ describe("deterministic room contents", () => {
       width: WORLD_GEOMETRY.corridorHalfWidth * 2,
       points: [{ x: 0, y: 0 }, { x: 0, y: length }, { x: length / 2, y: length }],
     };
-    const decorations = decorationSpecsForCorridor(link, 4);
-    expect(decorations.length).toBeGreaterThan(3);
-    expect(decorations).toEqual(decorationSpecsForCorridor(link, 4));
+    const decorations = decorationSpecsForCorridor(link);
+    expect(decorations).toHaveLength(6);
+    expect(decorations).toEqual(decorationSpecsForCorridor(link));
     for (const [index, item] of decorations.entries()) {
       for (const previous of decorations.slice(0, index)) {
         expect(Math.hypot(item.x - previous.x, item.y - previous.y))
@@ -1730,6 +1741,71 @@ describe("deterministic room contents", () => {
           .toBeGreaterThanOrEqual((item.size + previous.size) / 2);
       }
     }
+  });
+
+  it("furnishes a usable branch even when the longest route in the fork has no long straight section", () => {
+    const s = ENVIRONMENT_SEGMENT_SIZE;
+    const source = node(0, null, 0, { x: -2 * s, y: 0 });
+    const early = node(1, 0, 1, { x: 2 * s, y: -5 * s });
+    const late = node(2, 0, 1, { x: 4 * s, y: 4 * s });
+    const fork = (target: GraphNode, x: number, y: number): LayoutLink => ({
+      id: `0->${target.id}`, source, target, direction: "E", targetDirection: y < 0 ? "S" : "N",
+      width: 2 * s, ownerRoomId: source.id, forkId: "shared", forkPointIndex: 1,
+      points: [{ x: 0, y: 0 }, { x: x * s, y: 0 }, { x: x * s, y: y * s }],
+    });
+    const earlyBranch = fork(early, 2, -3);
+    const lateBranch = fork(late, 4, 2);
+    const layout = { nodes: [source, early, late], links: [earlyBranch, lateBranch], hiddenCount: 0 };
+    const furnishings = buildDecorations(layout, new Map()).filter(item => item.id.endsWith("::furnishing"));
+    expect(furnishings).toEqual([expect.objectContaining({ corridorId: earlyBranch.id, y: -1.5 * s })]);
+  });
+
+  it("places movable furnishings beside a clear lane, away from doors, and restores their damage", () => {
+    const s = ENVIRONMENT_SEGMENT_SIZE;
+    const layouts = Array.from({ length: 40 }, (_, index) => {
+      const horizontal = index % 2 === 0;
+      const end = horizontal ? { x: 10 * s, y: 0 } : { x: 0, y: 10 * s };
+      const source = node(0, null, 0, { x: horizontal ? -2 * s : 0, y: horizontal ? 0 : -2 * s });
+      const target = node(1, 0, 1, { x: horizontal ? end.x + 2 * s : 0, y: horizontal ? 0 : end.y + 2 * s });
+      const link: LayoutLink = { id: `hall-${index}`, source, target, direction: horizontal ? "E" : "S",
+        ownerRoomId: source.id, width: 2 * s, points: [{ x: 0, y: 0 }, end] };
+      return { nodes: [source, target], links: [link], hiddenCount: 0 };
+    });
+    const furnishings = layouts.flatMap(layout => {
+      const doors = buildSecurityDoors(layout, new Map());
+      const walls = new WallRectIndex(buildWallFootprints(layout, doors));
+      const items = buildDecorations(layout, new Map(), 1, walls, undefined, doors)
+        .filter(item => item.id.endsWith("::furnishing"));
+      expect(items).toHaveLength(1);
+      for (const item of items) {
+        const link = layout.links[0]!;
+        const footprint = worldPoint(item, "footprintRadii");
+        const center = link.direction === "E" ? { x: item.x, y: 0 } : { x: 0, y: item.y };
+        for (const point of [...link.points, ...doors.map(door => door.position)]) {
+          expect(Math.hypot(center.x - point.x, center.y - point.y)).toBeGreaterThanOrEqual(CORRIDOR_ENCOUNTER_CLEARANCE);
+        }
+        expect(item.corridorId).toBe(link.id);
+        expect(pointInCorridor(item.x, item.y, link)).toBe(true);
+        expect(wallOverlapsEllipse(item, footprint, walls)).toBe(false);
+        expect(footprintsOverlap(item, footprint, center, MAX_REGULAR_MONSTER_FOOTPRINT)).toBe(false);
+        const state = new Map([[item.id, { hp: 0, destroyed: true }]]);
+        expect(buildDecorations(layout, state, 1, walls, undefined, doors).find(restored => restored.id === item.id))
+          .toEqual({ ...item, hp: 0, destroyed: true });
+      }
+      return items;
+    });
+    expect(furnishings.some(item => monsterSpecForSceneryAmbush(item, 1) !== null)).toBe(true);
+    expect(furnishings.some(item => monsterSpecForSceneryAmbush(item, 1) === null)).toBe(true);
+  });
+
+  it.each([[3, 1], [3, 2], [3, 3], [20, 2]])("furnishes generated floors sparsely and near the start (%i articles, seed %i)", (count, seed) => {
+    const html = `<body><nav>${Array.from({ length: count }, (_, i) => `<a href="/item-${i}">Item ${i}</a>`).join("")}</nav>
+      <main>${Array.from({ length: count }, (_, i) => `<article><h1>Article ${i}</h1><p>A paragraph</p></article>`).join("")}</main></body>`;
+    const layout = layoutOrthogonal(domToGraph(html, `https://example.com/fixture-${seed}`));
+    const furnishings = buildDecorations(layout, new Map()).filter(item => item.id.endsWith("::furnishing"));
+    expect(furnishings.length).toBeGreaterThanOrEqual(1);
+    expect(furnishings.length).toBeLessThanOrEqual(layout.nodes.length / 2);
+    expect(furnishings.some(item => layout.links.some(link => link.id === item.corridorId && link.source.depth <= 1))).toBe(true);
   });
 
   it("scales monster stats and includes sentries on deeper floors", () => {

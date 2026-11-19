@@ -1,4 +1,5 @@
 import { ENVIRONMENT_SEGMENT_SIZE, ROOM_HEIGHT, ROOM_WIDTH } from "../config";
+import { buildPhysicalSegments } from "../render/corridor-render-plan";
 import type {
   Decoration,
   EllipseRadii,
@@ -18,7 +19,7 @@ import type {
 import { stableHash } from "./hash";
 import { footprintsOverlap, pointInCorridor, pointInRoomFloor } from "./geometry";
 import {
-  CORRIDOR_MONSTER_MIN_LENGTH, corridorEncounterLinks, corridorEncounterPositionIsClear,
+  CORRIDOR_MONSTER_MIN_LENGTH, buildSecurityDoors, corridorEncounterLinks, corridorEncounterPositionIsClear,
   corridorKeepOutPoints, corridorRuns, type SecurityDoor,
 } from "./corridor-encounters";
 import { FloorGeometry } from "./floor-geometry";
@@ -269,6 +270,7 @@ export function bonusLootDrop(source: Monster | Decoration, namespace: string, s
   return {
     id: `${namespace}::${source.id}::bonus-drop`,
     roomId: source.roomId, x: source.x, y: source.y, kind,
+    ...(!monster && source.corridorId ? { corridorId: source.corridorId } : {}),
     weapon: kind === "weapon" ? monster ? weaponForMonster(source.kind, seed)
       : weaponForRoom({ tag: source.kind, title: source.definitionId, lootSeed: seed }) : undefined,
     weaponPlacement: kind === "weapon" ? "floor" : undefined,
@@ -452,73 +454,102 @@ export function decorationSpecsForRoom(
     });
   }
 
+  const debrisSeed = stableHash(`${room.lootSeed}|room-debris`);
+  const debris = SCENERY_DEFINITIONS[debrisSeed % SCENERY_DEFINITIONS.length]!;
+  const debrisPosition = slots.find(position => decorationFits(position, debris, room, [...decorations, ...spawners], walls));
+  if (debrisPosition) {
+    decorations.push({
+      ...debris, ...debrisPosition, id: `${room.id}::floor-debris`, roomId: room.id,
+      visualVariant: debrisSeed, maxHp: debris.hp, destroyed: false, dropKind: null,
+    });
+  }
   return [...decorations, ...spawners];
 }
 
-function pointAlongCorridor(link: LayoutLink, fraction: number, lateral = 0): Point {
-  const lengths = link.points.slice(1).map((point, index) =>
-    Math.hypot(point.x - link.points[index]!.x, point.y - link.points[index]!.y)
-  );
-  const total = lengths.reduce((sum, length) => sum + length, 0);
-  let remaining = total * Math.max(0, Math.min(1, fraction));
-  for (let index = 0; index < lengths.length; index += 1) {
-    const length = lengths[index]!;
-    if (remaining > length && index < lengths.length - 1) {
-      remaining -= length;
-      continue;
-    }
-    const start = link.points[index]!;
-    const end = link.points[index + 1]!;
-    const t = length ? remaining / length : 0;
-    const normalX = length ? -(end.y - start.y) / length : 0;
-    const normalY = length ? (end.x - start.x) / length : 0;
-    return {
-      x: start.x + (end.x - start.x) * t + normalX * lateral,
-      y: start.y + (end.y - start.y) * t + normalY * lateral,
-    };
-  }
-  return { ...link.points[link.points.length - 1]! };
-}
+type CorridorRun = ReturnType<typeof corridorRuns>[number];
+const CORRIDOR_DEBRIS_SPACING = 5 * ENVIRONMENT_SEGMENT_SIZE;
 
 export function decorationSpecsForCorridor(
-  link: LayoutLink, floor = 1,
+  link: LayoutLink,
   walls = new WallRectIndex(buildWallFootprints({ nodes: [link.source, link.target], links: [link], hiddenCount: 0 })),
+  runs = corridorRuns(link),
 ): Decoration[] {
-  if (link.direct) return [];
-  const seed = stableHash(`${link.source.lootSeed}|corridor|${link.target.id}|decor`);
-  const expected = corridorSegmentLength(link) * sceneryDensityForFloor(floor);
-  const count = Math.max(2, Math.floor(expected)) + (seed % 2);
-  const decorations: Decoration[] = [];
-  for (let index = 0; index < count; index += 1) {
-    const itemSeed = stableHash(`${seed}|${index}`);
-    const position = pointAlongCorridor(
-      link,
-      (index + 1) / (count + 1),
-      (index % 2 ? 1 : -1) * 26,
-    );
-    const definition = SCENERY_DEFINITIONS[itemSeed % SCENERY_DEFINITIONS.length]!;
-    if (decorations.some(item => corridorDecorationsOverlap(item, { ...position, size: definition.size }))) continue;
-    if (wallOverlapsEllipse(position, worldPoint(definition, "footprintRadii"), walls)) continue;
-    decorations.push({
-      ...definition,
-      id: `${link.id}::decor-${index}`,
-      roomId: link.ownerRoomId,
-      corridorId: link.id,
-      ...position,
-      visualVariant: itemSeed,
-      kind: "corridor-prop",
-      obstacle: false,
-      footprintRadii: definition.footprintRadii,
-      maxHp: definition.hp,
-      destroyed: false,
-      dropKind: definition.destructible ? sceneryDropKindForSeed(itemSeed, definition.definitionId) : null,
-    });
-  }
-  return decorations;
+  return runs.flatMap(({ start, end, length }) => {
+    const count = Math.round(length / CORRIDOR_DEBRIS_SPACING);
+    return Array.from({ length: count }, (_, index) => {
+      const id = `${link.id}::debris:${start.x}:${start.y}:${end.x}:${end.y}:${index}`;
+      const seed = stableHash(`${link.source.lootSeed}|${id}`);
+      const t = (index + 0.5) / count;
+      const side = (seed & 1) ? 26 : -26;
+      const position = {
+        x: start.x + (end.x - start.x) * t - (end.y - start.y) / length * side,
+        y: start.y + (end.y - start.y) * t + (end.x - start.x) / length * side,
+      };
+      const definition = SCENERY_DEFINITIONS[seed % SCENERY_DEFINITIONS.length]!;
+      return { ...definition, ...position, id, roomId: link.ownerRoomId, corridorId: link.id,
+        visualVariant: seed, kind: "corridor-prop", maxHp: definition.hp, destroyed: false, dropKind: null };
+    }).filter(item => !wallOverlapsEllipse(item, worldPoint(item, "footprintRadii"), walls));
+  });
 }
 
 function corridorDecorationsOverlap(left: Pick<Decoration, "x" | "y" | "size">, right: Pick<Decoration, "x" | "y" | "size">): boolean {
   return Math.hypot(left.x - right.x, left.y - right.y) < (left.size + right.size) / 2;
+}
+
+const CORRIDOR_FURNISHING_MIN_RUN = 3 * ENVIRONMENT_SEGMENT_SIZE;
+const CORRIDOR_FURNISHING_SPACING = 14 * ENVIRONMENT_SEGMENT_SIZE;
+const MIN_FURNISHING_SEPARATION = 3 * ENVIRONMENT_SEGMENT_SIZE;
+const CORRIDOR_FURNISHINGS: readonly DecorationDefinition[] = [
+  DECORATION_DEFINITIONS.crateCargo,
+  DECORATION_DEFINITIONS.crateAmmo,
+  DECORATION_DEFINITIONS.crateArmored,
+  DECORATION_DEFINITIONS.crateMedical,
+  DECORATION_DEFINITIONS.engineToolCart,
+  DECORATION_DEFINITIONS.luggageStack,
+  DECORATION_DEFINITIONS.palletJack,
+  DECORATION_DEFINITIONS.survivalCase,
+  DECORATION_DEFINITIONS.plantTeal,
+  DECORATION_DEFINITIONS.plantAmber,
+  DECORATION_DEFINITIONS.metalChair,
+];
+
+function corridorFurnishing(
+  link: LayoutLink, id: string, run: CorridorRun, seed: number, short: boolean,
+  walls: WallRectIndex, landmarks: readonly Point[], placed: readonly Decoration[],
+): Decoration | null {
+  const halfWidth = link.width ? link.width / 2 : WORLD_GEOMETRY.corridorHalfWidth;
+  const { start, end, length } = run;
+  const horizontal = start.y === end.y;
+  const steps = short ? 2 : Math.floor(length / (ENVIRONMENT_SEGMENT_SIZE / 2));
+  const slots = Array.from({ length: steps - 1 }, (_, i) => {
+    const fraction = (i + 1) / steps;
+    return { x: start.x + (end.x - start.x) * fraction, y: start.y + (end.y - start.y) * fraction };
+  }).filter(point => short
+    ? landmarks.every(other => Math.hypot(point.x - other.x, point.y - other.y) >= ENVIRONMENT_SEGMENT_SIZE)
+    : corridorEncounterPositionIsClear(point, landmarks));
+  const preferred = (seed >>> 8) % CORRIDOR_FURNISHINGS.length;
+  for (let i = 0; i < CORRIDOR_FURNISHINGS.length; i += 1) {
+    const definition = CORRIDOR_FURNISHINGS[(preferred + i) % CORRIDOR_FURNISHINGS.length]!;
+    const footprint = worldPoint(definition, "footprintRadii");
+    for (const { x, y } of slots) {
+      const acrossRadius = horizontal ? footprint.y : footprint.x;
+      const offset = halfWidth - acrossRadius - WORLD_GEOMETRY.wallThickness / 2 - 8;
+      // Leave a clear center lane, including for larger enemies.
+      if (offset - acrossRadius < MAX_REGULAR_MONSTER_FOOTPRINT + 8) continue;
+      const side = (seed & 1) === 0 ? offset : -offset;
+      for (const shift of [side, -side]) {
+        const position = { x: x + (horizontal ? 0 : shift), y: y + (horizontal ? shift : 0) };
+        if (wallOverlapsEllipse(position, footprint, walls) ||
+            placed.some(item => Math.hypot(item.x - position.x, item.y - position.y) < MIN_FURNISHING_SEPARATION)) continue;
+        return {
+          ...definition, ...position, id, roomId: link.ownerRoomId, corridorId: link.id,
+          visualVariant: seed, maxHp: definition.hp, destroyed: false,
+          dropKind: sceneryDropKindForSeed(seed, definition.definitionId),
+        };
+      }
+    }
+  }
+  return null;
 }
 
 function pointToSegmentDistance(point: Point, start: Point, end: Point): number {
@@ -596,6 +627,7 @@ export function buildDecorations(
   floor = 1,
   walls = new WallRectIndex(buildWallFootprints(layout)),
   authoredRooms: AuthoredRooms = new Map(),
+  securityDoors?: readonly SecurityDoor[],
 ): Decoration[] {
   const doorsByRoom = new Map<number, Point[]>();
   for (const link of layout.links) {
@@ -627,8 +659,38 @@ export function buildDecorations(
   });
   const corridorItems: Decoration[] = [];
   if (!layout.nodes.every(room => authoredRooms.has(room.id))) {
-    for (const link of layout.links) {
-      for (const item of decorationSpecsForCorridor(link, floor, walls)) {
+    const links = new Map(layout.links.map(link => [link.id, link]));
+    const sections = buildPhysicalSegments(layout).map(segment => {
+      const link = links.get(segment.ownerLinkId)!;
+      const entrance = link.points[0]!;
+      const distance = (point: Point): number => Math.hypot(point.x - entrance.x, point.y - entrance.y);
+      const [start, end] = distance(segment.start) <= distance(segment.end)
+        ? [segment.start, segment.end] : [segment.end, segment.start];
+      return { link, start, end, distance: distance(start), length: Math.hypot(end.x - start.x, end.y - start.y) };
+    });
+    const keepOut = corridorKeepOutPoints(layout);
+    const doorPositions = (securityDoors ?? buildSecurityDoors(layout, savedStates)).map(door => door.position);
+    const candidates = sections.filter(section => section.length >= 2 * ENVIRONMENT_SEGMENT_SIZE).map(section => {
+      const { link, start, end, length } = section;
+      const id = `${link.id}::${start.x}:${start.y}:${end.x}:${end.y}::furnishing`;
+      return { ...section, id, short: length < CORRIDOR_FURNISHING_MIN_RUN,
+        seed: stableHash(`${link.source.lootSeed}|${link.target.lootSeed}|${id}`) };
+    });
+    // Count shared trunks once, while allowing every branch and parallel hall to contribute.
+    const longLength = candidates.reduce((sum, candidate) => sum + (candidate.short ? 0 : candidate.length), 0);
+    let remaining = Math.max(1, Math.ceil(longLength / CORRIDOR_FURNISHING_SPACING));
+    candidates.sort((a, b) => Number(a.short) - Number(b.short) || a.link.source.depth - b.link.source.depth ||
+      a.distance - b.distance || a.seed - b.seed);
+    for (const section of candidates) {
+      const { link, id, seed, short, start, end } = section;
+      const landmarks = [start, end, ...(keepOut.get(link.id) ?? []), ...doorPositions];
+      const item = corridorFurnishing(link, id, section, seed, short, walls, landmarks, corridorItems);
+      if (!item) continue;
+      corridorItems.push(item);
+      if (--remaining === 0) break;
+    }
+    for (const section of sections) {
+      for (const item of decorationSpecsForCorridor(section.link, walls, [section])) {
         if (!corridorItems.some(placed => corridorDecorationsOverlap(placed, item))) corridorItems.push(item);
       }
     }
@@ -672,6 +734,7 @@ export function buildSceneryDrops(
       return {
         id: dropId,
         roomId: item.roomId,
+        ...(item.corridorId ? { corridorId: item.corridorId } : {}),
         x: item.x + Math.cos(angle) * radius,
         y: item.y + Math.sin(angle) * radius,
         kind: item.dropKind!,
@@ -690,16 +753,6 @@ const BOSS_ARENA_MONSTER_DENSITY_FACTOR = 0.3;
 
 function roomSegmentArea(room: GraphNode): number {
   return room.width * room.height / (ENVIRONMENT_SEGMENT_SIZE * ENVIRONMENT_SEGMENT_SIZE);
-}
-
-function corridorSegmentLength(link: LayoutLink): number {
-  let total = 0;
-  for (let index = 1; index < link.points.length; index += 1) {
-    const start = link.points[index - 1]!;
-    const end = link.points[index]!;
-    total += Math.hypot(end.x - start.x, end.y - start.y);
-  }
-  return total / ENVIRONMENT_SEGMENT_SIZE;
 }
 
 function monsterDensityForFloor(floor: number): number {
@@ -997,7 +1050,8 @@ export function monsterSpecsForCorridor(link: LayoutLink, floor = 1, keepOut = l
   });
 }
 
-const SCENERY_AMBUSH_KINDS = new Map<string, RegularMonsterKind>([
+const HEAVY_AMBUSH_KINDS = ["melee-heavy", "shooter-heavy"] as const;
+const SCENERY_AMBUSH_KINDS = new Map<string, RegularMonsterKind | readonly RegularMonsterKind[]>([
   ["crate-cargo", "melee-light"],
   ["crate-armored", "melee-light"],
   ["crate-ammo", "shooter-light"],
@@ -1006,21 +1060,27 @@ const SCENERY_AMBUSH_KINDS = new Map<string, RegularMonsterKind>([
   ["cargo-shelf", "melee-light"],
   ["tool-locker", "shooter-light"],
   ["personal-locker", "shooter-light"],
-  ["sealed-escape-capsule", "shooter-light"],
-  ["lifeboat-pod", "melee-light"],
+  ["sealed-escape-capsule", HEAVY_AMBUSH_KINDS],
+  ["lifeboat-pod", HEAVY_AMBUSH_KINDS],
+  ["server-rack", HEAVY_AMBUSH_KINDS],
+  ["plant-green", "melee-light"],
+  ["planter-divider", "shooter-light"],
 ]);
 
-export const SCENERY_AMBUSH_CHANCE = 0.10;
-export const SCENERY_AMBUSH_POWERUP_CHANCE = 0.02;
+const SCENERY_AMBUSH_BASE_PERCENT = 5;
+const SCENERY_AMBUSH_PER_FLOOR_PERCENT = 2;
+const SCENERY_AMBUSH_POWERUP_THRESHOLD = 0.98;
 
 export function sceneryAmbushOutcome(
   item: Pick<Decoration, "id" | "definitionId" | "destructible">,
   floorIdentity: string,
+  floor: number,
 ): "monster" | "powerup" | null {
   if (!item.destructible || !SCENERY_AMBUSH_KINDS.has(item.definitionId)) return null;
   const roll = stableHash(`${floorIdentity}|${item.id}|scenery-ambush`) / 0x1_0000_0000;
-  if (roll < SCENERY_AMBUSH_CHANCE) return "monster";
-  if (roll < SCENERY_AMBUSH_CHANCE + SCENERY_AMBUSH_POWERUP_CHANCE) return "powerup";
+  // Reserve the last 2% of the roll for a powerup, even on the deepest floors.
+  if (roll >= SCENERY_AMBUSH_POWERUP_THRESHOLD) return "powerup";
+  if (roll < (SCENERY_AMBUSH_BASE_PERCENT + floorDifficulty(floor) * SCENERY_AMBUSH_PER_FLOOR_PERCENT) / 100) return "monster";
   return null;
 }
 
@@ -1029,6 +1089,7 @@ export function sceneryAmbushPowerupDrop(item: Decoration, floorIdentity: string
   return {
     id,
     roomId: item.roomId,
+    ...(item.corridorId ? { corridorId: item.corridorId } : {}),
     x: item.x,
     y: item.y,
     kind: "powerup",
@@ -1038,11 +1099,13 @@ export function sceneryAmbushPowerupDrop(item: Decoration, floorIdentity: string
 }
 
 export function monsterSpecForSceneryAmbush(item: Decoration, floor: number): Monster | null {
-  const kind = SCENERY_AMBUSH_KINDS.get(item.definitionId);
-  if (!kind || !item.destructible) return null;
+  const kinds = SCENERY_AMBUSH_KINDS.get(item.definitionId);
+  if (!kinds || !item.destructible) return null;
   const id = `${item.id}::ambush`;
+  const seed = stableHash(`${id}|${floor}`);
+  const kind = typeof kinds === "string" ? kinds : kinds[(seed >>> 16) % kinds.length]!;
   return {
-    ...regularMonsterSpec(id, stableHash(`${id}|${floor}`), item.roomId, { x: item.x, y: item.y }, floor, "room", kind),
+    ...regularMonsterSpec(id, seed, item.roomId, { x: item.x, y: item.y }, floor, "room", kind),
     spawnSourceId: item.id,
     spawnCorridorId: item.corridorId,
     dropsLoot: false,

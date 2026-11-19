@@ -102,7 +102,7 @@ function validForkLink(link: LayoutLink): boolean {
   return link.forkId !== undefined && link.forkPointIndex !== undefined;
 }
 
-function buildPhysicalSegments(layout: DungeonLayout): CorridorSegmentPlan[] {
+export function buildPhysicalSegments(layout: DungeonLayout): CorridorSegmentPlan[] {
   const segments = new Map<string, CorridorSegmentPlan>();
   const addSegment = (segment: CorridorSegmentPlan): void => {
     if (pointEquals(segment.start, segment.end)) return;

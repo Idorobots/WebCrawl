@@ -2130,7 +2130,8 @@ export class PhaserRenderer {
     if (!scene) return;
     for (const item of items) {
       if (isSecurityDoor(item)) continue; // The two animated leaves and their bar belong to the corridor.
-      if (!visited.has(item.roomId) || (item.destroyed && !item.visual.destroyed?.length)) continue;
+      const revealed = item.corridorId ? this.visitedCorridors.has(item.corridorId) : visited.has(item.roomId);
+      if (!revealed || (item.destroyed && !item.visual.destroyed?.length)) continue;
       const state = this.decorationClip(item, performance.now());
       const asset = state.clip.frames[0]!;
       const sprite = this.illuminate(item.visual.animations?.spawn
@@ -2285,7 +2286,7 @@ export class PhaserRenderer {
     this.currentStairs = stairs;
     this.currentLoot = loot;
     this.currentLootAssets = lootAssets;
-    const visibleItems = loot.filter(item => visited.has(item.roomId));
+    const visibleItems = loot.filter(item => item.corridorId ? this.visitedCorridors.has(item.corridorId) : visited.has(item.roomId));
     const byDistance = (left: LootItem, right: LootItem): number =>
       Math.hypot(left.x - this.currentPlayer.x, left.y - this.currentPlayer.y) -
       Math.hypot(right.x - this.currentPlayer.x, right.y - this.currentPlayer.y);
@@ -2319,8 +2320,7 @@ export class PhaserRenderer {
     this.syncPortals(stairs, visited);
     const scene = this.scene;
     if (!scene) return;
-    for (const item of loot) {
-      if (!visited.has(item.roomId)) continue;
+    for (const item of visibleItems) {
       const layer = lootLayer(item);
       const depth = layer === "pedestal" ? yDepth(item.y, PEDESTAL_PICKUP_BIAS)
         : layer === "special" ? SPECIAL_PICKUP_DEPTH : PICKUP_DEPTH;

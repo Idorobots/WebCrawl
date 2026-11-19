@@ -2,7 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import type { SecurityDoor } from "../../src/client/domain/corridor-encounters";
 import { SECURITY_DOOR_MAX_HP, SECURITY_DOOR_RADIUS } from "../../src/client/domain/corridor-encounters";
 import { sceneryAmbushOutcome } from "../../src/client/domain/generation";
-import { WORLD_GEOMETRY } from "../../src/client/domain/world-specs";
+import { pointInCorridor } from "../../src/client/domain/geometry";
+import { DECORATION_DEFINITIONS, SCENERY_DEFINITIONS, WORLD_GEOMETRY } from "../../src/client/domain/world-specs";
 import { doorModuleStyles } from "../../src/client/render/corridor-render-plan";
 import { LIGHT_DETAIL_STORAGE_KEY } from "../../src/client/render/light-detail";
 import type { Decoration, DungeonLayout, Monster, Point, PowerupKind, WeaponKind } from "../../src/client/types";
@@ -58,15 +59,37 @@ const revisitFloor = (page: Page) => page.evaluate(async () => {
   await api.goBack();
 });
 
-test("corridor doors trap encounters, take projectile damage, and stay broken on return", async ({ page }) => {
+test("compound corridors reveal furnishings, rooms show debris, and security doors trap encounters", async ({ page }) => {
   test.setTimeout(90_000);
   const host = await openFixture(page);
   const initial = await page.evaluate(() => {
     const api = (window as unknown as TestWindow).__webcrawlTest;
     api.setPlayerInvulnerable(true);
     api.setMonsterAggroRadius(0);
-    return { doors: api.securityDoors(), monsters: api.monsters(), layout: api.layout() };
+    return { doors: api.securityDoors(), monsters: api.monsters(), layout: api.layout(), scenery: api.scenery() };
   });
+  const furnishing = initial.scenery.find(item => {
+    if (!item.id.endsWith("::furnishing")) return false;
+    const link = initial.layout.links.find(link => link.id === item.corridorId);
+    return link?.forkPointIndex !== undefined &&
+      pointInCorridor(item.x, item.y, { ...link, points: link.points.slice(link.forkPointIndex) });
+  });
+  expect(furnishing).toBeDefined();
+  const furnishingLink = initial.layout.links.find(link => link.id === furnishing!.corridorId)!;
+  const furnishingArt = Object.values(DECORATION_DEFINITIONS).find(definition => definition.definitionId === furnishing!.definitionId)!
+    .visual.normal.frames[0]!;
+  const sceneryVisible = ({ x, y }: Point, assets: string[]) => page.evaluate(({ x, y, assets }) =>
+    (window as unknown as TestWindow).__webcrawlScene.children.list.some(object => {
+      const container = object as import("phaser").GameObjects.Container;
+      return container.type === "Container" && container.visible && container.x === x && container.y === y &&
+        container.list.some(child => assets.includes((child as import("phaser").GameObjects.Image).texture?.key));
+    }), { x, y, assets: assets.map(asset => `asset:${asset}`) });
+  const furnishingVisible = () => sceneryVisible(furnishing!, [furnishingArt]);
+  expect(await furnishingVisible()).toBe(false);
+  const root = initial.layout.nodes.find(room => room.isRoot)!;
+  const roomDebris = initial.scenery.find(item => item.roomId === root.id && item.id.endsWith("::floor-debris"));
+  expect(roomDebris).toBeDefined();
+  await expect.poll(() => sceneryVisible(roomDebris!, SCENERY_DEFINITIONS.flatMap(definition => [...definition.visual.normal.frames]))).toBe(true);
   const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
   const door = initial.doors.find(item => initial.monsters.some(monster =>
     monster.spawnCorridorId === item.linkId && distance(monster, item.position) <= SECURITY_DOOR_RADIUS));
@@ -163,6 +186,8 @@ test("corridor doors trap encounters, take projectile damage, and stay broken on
     return Number(await host.getAttribute(`data-player-${axis}`));
   }).toBe(Math.round(door!.position[axis]));
 
+  await revealCorridor(furnishingLink);
+  await expect.poll(furnishingVisible).toBe(true);
   await revisitFloor(page);
   await expect(host).toHaveAttribute("data-floor", "1");
   await teleport(page, door!.position);
@@ -181,8 +206,8 @@ test("destroyed scenery spawns one ambush monster or one collectible powerup, wi
   const scenery = initial.scenery.filter(item => !item.corridorId &&
     !initial.layout.nodes.find(room => room.id === item.roomId)?.isBossArena);
   const floor = `${url}::floor-1`;
-  const ambush = scenery.find(item => sceneryAmbushOutcome(item, floor) === "monster");
-  const reward = scenery.find(item => sceneryAmbushOutcome(item, floor) === "powerup");
+  const ambush = scenery.find(item => sceneryAmbushOutcome(item, floor, 1) === "monster");
+  const reward = scenery.find(item => sceneryAmbushOutcome(item, floor, 1) === "powerup");
   expect(ambush).toBeDefined();
   expect(reward).toBeDefined();
   const room = initial.layout.nodes.find(room => room.id === ambush!.roomId)!;
@@ -199,7 +224,7 @@ test("destroyed scenery spawns one ambush monster or one collectible powerup, wi
   await destroyTwice(ambush!.id);
   await destroyTwice(reward!.id);
   await expect.poll(() => ambushMonsters(ambush!.id)).toEqual([expect.objectContaining({
-    kind: expect.stringMatching(/^(melee|shooter)-light$/), dead: false,
+    kind: expect.stringMatching(/^(melee|shooter)-(light|heavy)$/), dead: false,
   })]);
   expect(await ambushPowerups(ambush!.id)).toEqual([]);
   expect(await ambushMonsters(reward!.id)).toEqual([]);

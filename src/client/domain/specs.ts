@@ -2304,6 +2304,21 @@ export const OBSTACLE_DEFINITIONS: readonly DecorationDefinition[] = Object.valu
 export const SCENERY_DEFINITIONS: readonly DecorationDefinition[] = [
   DECORATION_DEFINITIONS.debrisCircuit,
   DECORATION_DEFINITIONS.debrisMetal,
+  ...[DEBRIS_ASSETS.servoMotors, DEBRIS_ASSETS.motor].map(asset => ({
+    ...DECORATION_DEFINITIONS.debrisMetal,
+    visual: { normal: clip([asset]), destroyed: [] },
+  })),
+  ...[
+    DEBRIS_ASSETS.redBarrelWreck,
+    DEBRIS_ASSETS.blueBarrelWreck,
+    DEBRIS_ASSETS.yellowBarrelWreck,
+    DEBRIS_ASSETS.turquoiseBarrelShards,
+    DEBRIS_ASSETS.mixedBarrelParts,
+  ].map(asset => ({
+    ...DECORATION_DEFINITIONS.debrisMetal,
+    definitionId: "debris-barrel",
+    visual: { normal: clip([asset]), destroyed: [] },
+  })),
   ...robotDebris.map(debris => ({
     definitionId: "debris-robot",
     hp: 1,
