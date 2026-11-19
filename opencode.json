@@ -12,7 +12,7 @@
       "rm *": "ask"
     },
     "webfetch": "ask",
-    "websearch": "ask",
-    "external_directory": "ask"
+    "websearch": "allow",
+    "external_directory": "allow"
   }
 }
